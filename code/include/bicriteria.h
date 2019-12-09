@@ -24,7 +24,8 @@ struct ThorupApprox {
     template<typename G>
     void sample_from_graph(const G &x, size_t samples, size_t iterations) {
         // Algorithm D, Thorup p.415
-        using Vertex = boost::graph_traits<Graph>::vertex_descriptor;
+        using Vertex = typename G::Vertex;
+        //using Vertex = graph_traits<Graph>::vertex_descriptor;
         // Let R = all nodes
         auto [start, end] = boost::nodes(x);
         std::vector<Vertex> R(start, end);
