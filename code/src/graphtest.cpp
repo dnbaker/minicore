@@ -1,6 +1,8 @@
 #include "graph.h"
 #include "parse.h"
 
+template<typename T> class TD;
+
 
 using namespace graph;
 
@@ -20,6 +22,12 @@ void dimacs_parse(const char *fn) {
         std::fprintf(stderr, "value: %f. s: %d. dest: %d\n", g[ed], index[src], index[dest]);
         //typename GraphTraits::edge_descriptor e;
         //std::fprintf(stderr, "edge weight: %f. edge id: %d\n", g[*ei], (int)*ei);
+    }
+    for(auto [vs, ve] = boost::vertices(g); vs != ve; ++vs) {
+        boost::graph_traits<Graph>::vertex_descriptor vind = *vs;
+        std::fprintf(stderr, "vd: %zu\n", size_t(vind));
+        //auto vind = *vs;
+        //TD<decltype(vind)> td;
     }
 }
 void csv_parse(const char *fn) {

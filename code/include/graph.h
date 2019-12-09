@@ -16,6 +16,8 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, EdgeProps, 
     template<typename...Args>
     Graph(Args &&... args): super(std::forward<Args>(args)...) {
     }
+    size_t num_edges() const {return boost::num_edges(*this);}
+    size_t num_vertices() const {return boost::num_vertices(*this);}
 };
 template<typename EdgeProps=float, typename VtxProps=boost::no_property,
          typename GraphProps=boost::no_property>
