@@ -26,8 +26,8 @@ struct ThorupApprox {
         // Algorithm D, Thorup p.415
         using Vertex = boost::graph_traits<Graph>::vertex_descriptor;
         // Let R = all nodes
-        auto start, end = boost::nodes(x);
-        R = std::vector<Vertex>(start, end);
+        auto [start, end] = boost::nodes(x);
+        std::vector<Vertex> R(start, end);
         // Maybe replace with hash set? Idk.
         for(size_t iter = 0; iter < iterations && R.size() > 0; ++iter) {
             // Sample ``samples'' samples.

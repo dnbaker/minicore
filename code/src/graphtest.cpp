@@ -29,6 +29,12 @@ void dimacs_parse(const char *fn) {
         //auto vind = *vs;
         //TD<decltype(vind)> td;
     }
+    for(const auto &e: g.edges()) {
+        //std::fprintf(stderr, "WOOO\n");
+    }
+    for(const auto &e: g.vertices()) {
+        //std::fprintf(stderr, "WOOO\n");
+    }
 }
 void csv_parse(const char *fn) {
     auto g = parse_nber<boost::undirectedS>(fn);
