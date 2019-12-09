@@ -1,5 +1,6 @@
 #pragma once
 #include "boost/graph/adjacency_list.hpp"
+#include "boost/graph/topological_sort.hpp"
 
 namespace graph {
 using boost::vecS;
@@ -126,6 +127,13 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, EdgeProps, 
     void for_each_vertex(const F &f) const {
         auto vertices = vertices();
         std::for_each(vertices.begin(), vertices.end(), f);
+    }
+    template<typename Allocator=std::allocator<Vertex>>
+    auto toposort() const {
+        std::vector<Vertex, Allocator> ret;
+        ret.reserve(num_vertices());
+        boost::topological_sort(*this, std::back_inserter(ret));
+        return ret;
     }
 };
 template<typename EdgeProps=float, typename VtxProps=boost::no_property,

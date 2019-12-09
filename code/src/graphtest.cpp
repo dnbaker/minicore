@@ -35,6 +35,12 @@ void dimacs_parse(const char *fn) {
     for(const auto &e: g.vertices()) {
         //std::fprintf(stderr, "WOOO\n");
     }
+    std::vector<typename Graph::Vertex> top;
+    try {
+        top = g.toposort();
+    } catch(const boost::not_a_dag &ex) {
+        std::fprintf(stderr, "Not a dag, can't topo sort\n");
+    }
 }
 void csv_parse(const char *fn) {
     auto g = parse_nber<boost::undirectedS>(fn);
