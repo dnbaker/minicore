@@ -1,5 +1,6 @@
 #include "graph.h"
 #include "parse.h"
+#include "bicriteria.h"
 
 template<typename T> class TD;
 
@@ -44,6 +45,13 @@ void dimacs_parse(const char *fn) {
 }
 void csv_parse(const char *fn) {
     auto g = parse_nber<boost::undirectedS>(fn);
+    using Graph = decltype(g);
+    std::vector<typename Graph::Vertex> top;
+    try {
+        top = g.toposort();
+    } catch(const boost::not_a_dag &ex) {
+        std::fprintf(stderr, "Not a dag, can't topo sort\n");
+    }
     using Graph = decltype(g);
     boost::graph_traits<decltype(g)>::edge_iterator ei, ei_end;
     typedef boost::graph_traits<Graph> GraphTraits;

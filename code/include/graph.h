@@ -1,8 +1,20 @@
 #pragma once
 #include "boost/graph/adjacency_list.hpp"
 #include "boost/graph/topological_sort.hpp"
+#include "robin_hood.h"
+#include "flat_hash_map/flat_hash_map.hpp"
 
 namespace graph {
+
+template<typename T, typename H = std::hash<T>, typename E = std::equal_to<T>, typename A = std::allocator<T> >
+using flat_hash_set = ska::flat_hash_set<T, H, E, A>;
+
+template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
+          typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>
+using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, MaxLoadFactor100>;
+
+// May replace with robin_hood if they implement this.
+
 using boost::vecS;
 using boost::undirectedS;
 using boost::directedS;
@@ -128,11 +140,28 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, EdgeProps, 
         auto vertices = vertices();
         std::for_each(vertices.begin(), vertices.end(), f);
     }
+    struct Deleter {
+        template<typename T>
+        void operator()(const T *x) const {
+            std::free(const_cast<void *>(static_cast<const void *>(x)));
+        }
+    };
     template<typename Allocator=std::allocator<Vertex>>
     auto toposort() const {
+        // TODO: consider doing it as
+#if 0
+        std::vector<Vertex, Allocator> ret(num_vertices());
+        auto rit = ret.rbegin();
+        // Or
+        // std::pair<std::unique_ptr<Vertex[], Deleter>, size_t> ret{static_cast<Vertex *>(std::malloc(num_vertices() * sizeof(Vertex))), num_vertices()};
+        // boost::topological_sort(*this, std::reverse_iterator<Vertex *>(ret.first.get() + ret.second));
+        boost::topological_sort(*this, rit);
+#else
         std::vector<Vertex, Allocator> ret;
         ret.reserve(num_vertices());
         boost::topological_sort(*this, std::back_inserter(ret));
+        std::reverse(ret.begin(), ret.end());
+#endif
         return ret;
     }
 };
