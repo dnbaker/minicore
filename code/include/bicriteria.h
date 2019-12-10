@@ -1,6 +1,8 @@
 #pragma once
 #include <cmath>
+#include <random>
 #include "graph.h"
+#include "aesctr/wy.h"
 
 namespace graph {
 
@@ -29,17 +31,29 @@ struct ThorupApprox {
         return samples;
     }
     template<typename G, typename C>
-    auto &sample_from_graph(const G &x, size_t samples, size_t iterations, C &container) {
+    auto &sample_from_graph(const G &x, size_t samples_per_round, size_t iterations, C &container) {
         // Algorithm D, Thorup p.415
         using Vertex = typename G::Vertex;
         //using Vertex = graph_traits<Graph>::vertex_descriptor;
         // Let R = all nodes
         auto [start, end] = x.vertices();
         flat_hash_set<Vertex> R(start, end);
+        flat_hash_set<Vertex> F;
+        wy::WyRand<uint64_t, 2> rng;
+        std::uniform_int_distribution<Vertex> dist;
+        size_t num_el = std::distance(start, end);
+        // TODO: consider using hash_set distribution for provide randomness for insertion to F.
         // Maybe replace with hash set? Idk.
         for(size_t iter = 0; iter < iterations && R.size() > 0; ++iter) {
-            // Sample ``samples'' samples.
-            // Compute distances
+            size_t last_size = F.size();
+            // Sample ``samples_per_round'' samples.
+            while(F.size() < std::min(num_el, last_size + samples_per_round)) {
+                Vertex ind;
+                do {ind = dist(rng);} while(!F.emplace(ind).second);
+            }
+            // Calculate F->R distances
+            // For each R, find its nearest neighbor in F
+            // Pick random t in R, remove from R all points with dist(x, F) <= dist(t, F)
             // Pick random t \in R, calculate distances, remove all R with dist(x, F) leq dist(x, R)
         }
     }

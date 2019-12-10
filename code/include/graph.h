@@ -140,12 +140,16 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, EdgeProps, 
         auto vertices = vertices();
         std::for_each(vertices.begin(), vertices.end(), f);
     }
-    struct Deleter {
-        template<typename T>
-        void operator()(const T *x) const {
-            std::free(const_cast<void *>(static_cast<const void *>(x)));
+    auto try_toposort() const {
+        using Type = decltype(this->toposort());
+        std::unique_ptr<Type> ret;
+        try {
+            ret.reset(new Type(toposort()));
+        } catch(const boost::not_a_dag &ex) {
+            // No sweat
         }
-    };
+        return ret;
+    }
     template<typename Allocator=std::allocator<Vertex>>
     auto toposort() const {
         // TODO: consider doing it as
