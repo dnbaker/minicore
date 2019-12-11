@@ -161,8 +161,13 @@ auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
         s = sp;
         sp.clear();
         std::vector<Vertex> best_vertices(k, static_cast<Vertex>(-1));
-        for(auto it = start; it != end; ++it) {
+        // Make the tree for each subset mapping best to the current solution
+        // Run the acyclic algorithm from http://www.cs.kent.edu/~dragan/ST/papers/GOLDMAN-71.pdf
+        // Optimal Center Location in Simple Networks
+        // This can be done in linear time with the size of the tree because it's acyclic
+        // and it's acyclic because it's a shortest paths tree
 #if 0
+        for(auto it = start; it != end; ++it) {
             Vertex cvert = *it;
             // Skip if item is a candidate center
             if(std::find(s.begin(), s.end(), cvert) != s.end()) continue;
@@ -173,8 +178,8 @@ auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
             if(best_vertices[index] == static_cast<Vertex>(-1)) {
                 best_vertices[index] = cvert;
             }
-#endif
         }
+#endif
         if(last_cost <= current_cost) break;
     }
 }
