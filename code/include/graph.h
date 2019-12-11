@@ -19,8 +19,9 @@ using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, Max
 
 #endif
 
-template<typename G>
-auto thorup_sample(G &x, unsigned k, uint64_t seed=0);
+template<typename... Args>
+std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor>
+thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed=0);
 
 #if 0
 template<typename WeightType>
@@ -34,8 +35,8 @@ using namespace boost;
 
 template<typename DirectedS=undirectedS, typename EdgeProps=float, typename VtxProps=boost::no_property,
          typename GraphProps=boost::no_property>
-struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, EdgeProps, GraphProps> {
-    using super = boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, EdgeProps, GraphProps>;
+struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, boost::property<boost::edge_weight_t, EdgeProps>, GraphProps> {
+    using super = boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, boost::property<boost::edge_weight_t, EdgeProps>, GraphProps>;
     using this_type = Graph<DirectedS, EdgeProps, VtxProps, GraphProps>;
 
     template<typename...Args>

@@ -4,3 +4,6 @@
 [submodule "code/aesctr"]
 	path = code/aesctr
 	url = https://github.com/dnbaker/aesctr
+[submodule "code/lemon"]
+	path = code/lemon
+	url = https://github.com/seqan/lemon

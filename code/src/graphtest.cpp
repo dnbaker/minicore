@@ -7,6 +7,7 @@ template<typename T> class TD;
 
 #define undirectedS bidirectionalS
 using namespace og;
+using namespace boost;
 
 auto dimacs_parse(const char *fn) {
     auto g = parse_dimacs_unweighted<boost::undirectedS>(fn);
@@ -17,11 +18,15 @@ auto dimacs_parse(const char *fn) {
     //typename boost::property_map<Graph, boost::edge_weight_t>::type weight = get(boost::edge_weight, g);
     //typename boost::property_map<Graph, boost::edge_weight_t>::type weightMap = 
     //               get(boost::edge_weigh_t, graph);
+    property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, g);
     for(std::tie(ei, ei_end) = boost::edges(g); ei != ei_end; ++ei) {
         auto ed = *ei;
         auto src = source(*ei, g);
         auto dest = target(*ei, g);
-        std::fprintf(stderr, "value: %f. s: %d. dest: %d\n", g[ed], index[src], index[dest]);
+        auto v = boost::get(boost::edge_weight_t(), g, *ei);
+        std::fprintf(stderr, "value: %f. s: %d. dest: %d\n", v, index[src], index[dest]);
+        boost::put(boost::edge_weight_t(), g, *ei, 1.37);
+        std::fprintf(stderr, "after value: %f. s: %d. dest: %d\n", boost::get(boost::edge_weight_t(), g, *ei), index[src], index[dest]);
         //typename GraphTraits::edge_descriptor e;
         //std::fprintf(stderr, "edge weight: %f. edge id: %d\n", g[*ei], (int)*ei);
     }
@@ -66,12 +71,12 @@ int main(int c, char **v) {
     if(input.find(".csv") != /*std::string::*/input.npos) {
         auto g = csv_parse(input.data());
         if(false) {
-            //g.thorup_sample(13);
+            g.thorup_sample(13);
         }
     } else {
         auto g = dimacs_parse(input.data());
         if(false) {
-            //g.thorup_sample(13);
+            g.thorup_sample(13);
         }
     }
 }
