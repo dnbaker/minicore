@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <cstring>
 
-namespace graph {
+namespace og {
 
 enum ParsedFiletype {
     DIMACS,
@@ -16,8 +16,8 @@ enum ParsedFiletype {
 };
 
 template<typename DirectedS, typename VtxProps=boost::no_property, typename GraphProps=boost::no_property>
-graph::Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(const char *fn) {
-    using GraphType = graph::Graph<DirectedS, float, VtxProps, GraphProps>;
+Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(const char *fn) {
+    using GraphType = Graph<DirectedS, float, VtxProps, GraphProps>;
     std::string line;
     std::ifstream ifs(fn);
     if(!std::getline(ifs, line)) throw 1;
@@ -50,8 +50,8 @@ graph::Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(con
 
 // #state1,place1,mi_to_place,state2,place2
 template<typename DirectedS, typename VtxProps=boost::no_property, typename GraphProps=boost::no_property, typename VtxIdType=uint64_t>
-graph::Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(const char *fn) {
-    using GraphType = graph::Graph<DirectedS, float, VtxProps, GraphProps>;
+Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(const char *fn) {
+    using GraphType = Graph<DirectedS, float, VtxProps, GraphProps>;
     GraphType ret;
     std::string line;
     std::ifstream ifs(fn);

@@ -4,7 +4,8 @@
 #include "graph.h"
 #include "aesctr/wy.h"
 
-namespace graph {
+namespace og {
+using namespace boost;
 
 template<typename G>
 auto &sample_from_graph(G &x, size_t samples_per_round, size_t iterations,
@@ -69,8 +70,11 @@ auto &sample_from_graph(G &x, size_t samples_per_round, size_t iterations,
         // Calculate F->R distances
         // (one Dijkstra call with synthetic node)
         boost::dijkstra_shortest_paths(x, synthetic_vertex,
-                                       boost::predecessor_map(boost::make_iterator_property_map(p.data(), boost::get(boost::vertex_index, x))).
+                                       distance_map(&distances[0]).predecessor_map(&p[0]));
+#if 0
+                                       predecessor_map(boost::make_iterator_property_map(p.data(), boost::get(boost::vertex_index, x))).
                                        distance_map(boost::make_iterator_property_map(&distances[0], boost::get(boost::vertex_index, x))));
+#endif
         auto el = R[rng() % R.size()];
         auto minv = distances[el];
         for(auto it = R.begin(), e = R.end(); it != e; ++it) {

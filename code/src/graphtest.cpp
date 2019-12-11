@@ -5,7 +5,8 @@
 template<typename T> class TD;
 
 
-using namespace graph;
+#define undirectedS bidirectionalS
+using namespace og;
 
 auto dimacs_parse(const char *fn) {
     auto g = parse_dimacs_unweighted<boost::undirectedS>(fn);
@@ -26,7 +27,7 @@ auto dimacs_parse(const char *fn) {
     }
     for(auto [vs, ve] = boost::vertices(g); vs != ve; ++vs) {
         boost::graph_traits<Graph>::vertex_descriptor vind = *vs;
-        std::fprintf(stderr, "vd: %zu\n", size_t(vind));
+        //std::fprintf(stderr, "vd: %zu\n", size_t(vind));
         //auto vind = *vs;
         //TD<decltype(vind)> td;
     }
@@ -65,12 +66,12 @@ int main(int c, char **v) {
     if(input.find(".csv") != /*std::string::*/input.npos) {
         auto g = csv_parse(input.data());
         if(false) {
-            g.thorup_sample(13);
+            //g.thorup_sample(13);
         }
     } else {
         auto g = dimacs_parse(input.data());
         if(false) {
-            g.thorup_sample(13);
+            //g.thorup_sample(13);
         }
     }
 }

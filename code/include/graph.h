@@ -6,7 +6,7 @@
 #include "boost/graph/dijkstra_shortest_paths.hpp"
 #include "boost/property_map/property_map.hpp"
 
-namespace graph {
+namespace og {
 
 template<typename T, typename H = std::hash<T>, typename E = std::equal_to<T>, typename A = std::allocator<T> >
 using flat_hash_set = ska::flat_hash_set<T, H, E, A>;
@@ -19,16 +19,18 @@ using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, Max
 
 #endif
 
-using boost::vecS;
-using boost::undirectedS;
-using boost::directedS;
-using boost::bidirectionalS;
-using boost::vertex_index;
-using boost::vertex_index_t;
-using boost::graph_traits;
-
 template<typename G>
 auto thorup_sample(G &x, unsigned k, uint64_t seed=0);
+
+#if 0
+template<typename WeightType>
+struct EdgeWeight<WeightType>: boost::property<boost::edge_weight_t, WeightType> {
+    using super = boost::property<boost::edge_weight_t, WeightType>;
+    template<typename T>
+    EdgeWeight(T x): boost::property<boost::edge_weight_t, WeightType>(x) {}
+};
+#endif
+using namespace boost;
 
 template<typename DirectedS=undirectedS, typename EdgeProps=float, typename VtxProps=boost::no_property,
          typename GraphProps=boost::no_property>
@@ -70,7 +72,7 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, EdgeProps, 
         return boost::add_edge(u, v, prop, *this);
     }
     auto thorup_sample(unsigned k, uint64_t seed=0) {
-        return ::graph::thorup_sample(*this, k, seed);
+        return ::og::thorup_sample(*this, k, seed);
     }
 
     struct Vertices {
