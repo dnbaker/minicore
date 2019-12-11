@@ -1,6 +1,3 @@
-[submodule "code/robin-hood-hashing"]
-	path = code/robin-hood-hashing
-	url = https://github.com/martinus/robin-hood-hashing/
 [submodule "code/flat_hash_map"]
 	path = code/flat_hash_map
 	url = https://github.com/skarupke/flat_hash_map

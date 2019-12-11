@@ -1,19 +1,23 @@
 #pragma once
 #include "boost/graph/adjacency_list.hpp"
 #include "boost/graph/topological_sort.hpp"
-#include "robin_hood.h"
+#include <boost/graph/graph_traits.hpp>
 #include "flat_hash_map/flat_hash_map.hpp"
+#include "boost/graph/dijkstra_shortest_paths.hpp"
+#include "boost/property_map/property_map.hpp"
 
 namespace graph {
 
 template<typename T, typename H = std::hash<T>, typename E = std::equal_to<T>, typename A = std::allocator<T> >
 using flat_hash_set = ska::flat_hash_set<T, H, E, A>;
+// May replace with robin_hood if they implement this.
 
+#if 0
 template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
           typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>
 using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, MaxLoadFactor100>;
 
-// May replace with robin_hood if they implement this.
+#endif
 
 using boost::vecS;
 using boost::undirectedS;
@@ -22,6 +26,9 @@ using boost::bidirectionalS;
 using boost::vertex_index;
 using boost::vertex_index_t;
 using boost::graph_traits;
+
+template<typename G>
+auto thorup_sample(G &x, unsigned k, uint64_t seed=0);
 
 template<typename DirectedS=undirectedS, typename EdgeProps=float, typename VtxProps=boost::no_property,
          typename GraphProps=boost::no_property>
@@ -40,9 +47,31 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, EdgeProps, 
     using vertex_iterator       = decltype(boost::vertices(std::declval<this_type>()).first);
     using vertex_const_iterator = decltype(boost::vertices(std::declval<std::add_const_t<this_type>>()).first);
     using adjacency_iterator    = typename graph_traits<Graph>::adjacency_iterator;
-    using Vertex                = typename graph_traits<Graph>::vertex_descriptor;
+    using vertex_descriptor     = typename graph_traits<Graph>::vertex_descriptor;
+    using edge_descriptor       = typename graph_traits<Graph>::edge_descriptor;
+
+    using Vertex                = vertex_descriptor;
+    using Edge                  = edge_descriptor;
+
     static_assert(std::is_same_v<edge_iterator, edge_const_iterator>, "are they tho?");
     static_assert(std::is_same_v<vertex_iterator, vertex_const_iterator>, "are they tho?");
+
+
+    vertex_descriptor add_vertex() {
+        return boost::add_vertex(*this);
+    }
+
+    template<typename...Args>
+    std::pair<edge_descriptor, bool> add_edge(Vertex u, Vertex v) {
+        return boost::add_edge(u, v, *this);
+    }
+    template<typename EProps>
+    std::pair<edge_descriptor, bool> add_edge(Vertex u, Vertex v, const EProps &prop) {
+        return boost::add_edge(u, v, prop, *this);
+    }
+    auto thorup_sample(unsigned k, uint64_t seed=0) {
+        return ::graph::thorup_sample(*this, k, seed);
+    }
 
     struct Vertices {
         vertex_iterator f_;

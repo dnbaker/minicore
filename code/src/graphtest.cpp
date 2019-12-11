@@ -7,7 +7,7 @@ template<typename T> class TD;
 
 using namespace graph;
 
-void dimacs_parse(const char *fn) {
+auto dimacs_parse(const char *fn) {
     auto g = parse_dimacs_unweighted<boost::undirectedS>(fn);
     using Graph = decltype(g);
     boost::graph_traits<decltype(g)>::edge_iterator ei, ei_end;
@@ -42,8 +42,9 @@ void dimacs_parse(const char *fn) {
     } catch(const boost::not_a_dag &ex) {
         std::fprintf(stderr, "Not a dag, can't topo sort\n");
     }
+    return g;
 }
-void csv_parse(const char *fn) {
+auto csv_parse(const char *fn) {
     auto g = parse_nber<boost::undirectedS>(fn);
     using Graph = decltype(g);
     std::vector<typename Graph::Vertex> top;
@@ -56,13 +57,20 @@ void csv_parse(const char *fn) {
     boost::graph_traits<decltype(g)>::edge_iterator ei, ei_end;
     typedef boost::graph_traits<Graph> GraphTraits;
     typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, g);
+    return g;
 }
 
 int main(int c, char **v) {
     std::string input = c == 1 ? "../dolphins.graph": const_cast<const char *>(v[1]);
     if(input.find(".csv") != /*std::string::*/input.npos) {
-        csv_parse(input.data());
+        auto g = csv_parse(input.data());
+        if(false) {
+            g.thorup_sample(13);
+        }
     } else {
-        dimacs_parse(input.data());
+        auto g = dimacs_parse(input.data());
+        if(false) {
+            g.thorup_sample(13);
+        }
     }
 }
