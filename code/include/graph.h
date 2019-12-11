@@ -19,10 +19,6 @@ using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, Max
 
 #endif
 
-template<typename... Args>
-std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor>
-thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed=0);
-
 #if 0
 template<typename WeightType>
 struct EdgeWeight<WeightType>: boost::property<boost::edge_weight_t, WeightType> {
@@ -71,9 +67,6 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, boost::prop
     template<typename EProps>
     std::pair<edge_descriptor, bool> add_edge(Vertex u, Vertex v, const EProps &prop) {
         return boost::add_edge(u, v, prop, *this);
-    }
-    auto thorup_sample(unsigned k, uint64_t seed=0) {
-        return ::og::thorup_sample(*this, k, seed);
     }
 
     struct Vertices {

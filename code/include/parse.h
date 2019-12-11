@@ -61,6 +61,7 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(const char *fn) {
     using edge_property_type = typename GraphType::edge_property_type;
     while(std::getline(ifs, line)) {
         if(line.empty() || line.front() == '#' || line.front() == '\n') continue;
+        line.erase(std::remove(line.begin(), line.end(), '"'), line.end());
         const char *s = line.data();
         VtxIdType val = VtxIdType(std::atoi(s)) << SHIFT;
         if((s = std::strchr(s, ',')) == nullptr) throw 1;

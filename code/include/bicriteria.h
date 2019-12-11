@@ -5,6 +5,20 @@
 #include "aesctr/wy.h"
 
 namespace og {
+namespace util {
+template<typename Graph>
+struct ScopedSyntheticVertex {
+    using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
+    Graph &ref_;
+    Vertex vtx_;
+    ScopedSyntheticVertex(Graph &ref): ref_(ref), vtx_(boost::add_vertex(ref_)) {}
+    Vertex get() const {return vtx_;}
+    ~ScopedSyntheticVertex() {
+        boost::remove_vertex(vtx_, ref_);
+    }
+};
+}
+namespace thorup {
 using namespace boost;
 
 template<typename ...Args>
@@ -44,7 +58,7 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
     using Graph = boost::adjacency_list<Args...>;
     using edge_descriptor = typename graph_traits<Graph>::edge_descriptor;
     typename property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, x);
-    using edge_weight_t = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<boost::adjacency_list<Args...>>()))>;
+    using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<boost::adjacency_list<Args...>>()))>;
     //
     // Algorithm D, Thorup p.415
     using Vertex = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
@@ -56,10 +70,11 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
     F.reserve(std::min(R.size(), iterations * samples_per_round));
     wy::WyRand<uint64_t, 2> rng(seed);
     size_t num_el = R.size();
-    auto synthetic_vertex = boost::add_vertex(x);
+    util::ScopedSyntheticVertex<Graph> vx(x);
+    auto synthetic_vertex = vx.get();
     // TODO: consider using hash_set distribution for provide randomness for insertion to F.
     // Maybe replace with hash set? Idk.
-    std::vector<edge_weight_t> distances(boost::num_vertices(x));
+    std::vector<edge_cost> distances(boost::num_vertices(x));
     std::vector<Vertex> p(boost::num_vertices(x));
     for(size_t iter = 0; iter < iterations && R.size() > 0; ++iter) {
         size_t last_size = F.size();
@@ -83,22 +98,87 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
         auto minv = distances[el];
         // remove all R with dist(x, F) leq dist(x, R)
         std::fprintf(stderr, "R size before: %zu\n", R.size());
-        R.erase(std::remove_if(R.begin(), R.end(), [&](auto x) {return distances[x] <= minv;}), R.end());
+        R.erase(std::remove_if(R.begin(), R.end(), [d=distances.data(),minv](auto x) {return d[x] <= minv;}), R.end());
         std::fprintf(stderr, "R size after: %zu\n", R.size());
-#if 0
-        for(auto it = R.begin(), e = R.end(); it != e; ++it) {
-            if(distances[*it] <= minv) {
-                std::swap(*it, *--e);
-                R.pop_back();
-                continue; // Don't increment, new value could be smaller
-            }
-            ++it;
-        }
-#endif
     }
-    boost::remove_vertex(synthetic_vertex, x);
     std::fprintf(stderr, "size: %zu\n", container.size());
     return container;
 }
+
+} // thorup
+using namespace thorup;
+
+namespace tnk {
+// Todo, Nakamura and Kudo
+// MLG '19, August 05, 2019, Anchorage, AK
+
+template<typename T, typename A>
+auto random_sample(const std::vector<T, A> &v, size_t n, uint64_t seed) {
+    wy::WyRand<uint64_t, 2> gen(seed);
+    std::vector<T> ret;
+    if(n >= v.size()) throw 1;
+    ret.reserve(n);
+    while(ret.size() < n) {
+        auto item = v[gen() % v.size()];
+        if(std::find(ret.begin(), ret.end(), item) == ret.end())
+            ret.push_back(item);
+    }
+    return ret;
+}
+
+
+template<typename ...Args>
+auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
+    using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<boost::adjacency_list<Args...>>()))>;
+    using Vertex    = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
+    using Edge      = typename boost::graph_traits<boost::adjacency_list<Args...>>::edge_descriptor;
+    using Graph     = decltype(x);
+    //Iteratively Decreasing NonCentrality
+    std::mt19937_64 mt(seed);
+    // TODO: check to make sure it's either bidir or undir, not dir
+    auto [start, end] = boost::vertices(x);
+
+    std::vector<Vertex> R(start, end);
+    std::vector<Vertex> sp = random_sample(R, k, mt()); // S' [IDNC:1]
+    std::vector<Vertex> s;                              // S  [IDNC:3]
+    s.reserve(k);
+    util::ScopedSyntheticVertex<Graph> vx(x);
+    auto synthetic_vertex = vx.get();
+    edge_cost last_cost = std::numeric_limits<edge_cost>::max(), current_cost = last_cost;
+    
+
+    // For holding output of SPF / Dijkstra with multiple roots
+    boost::clear_vertex(synthetic_vertex, x);
+    std::vector<edge_cost> distances(boost::num_vertices(x));
+    std::vector<Vertex> p(boost::num_vertices(x));
+
+    for(const auto vertex: sp)
+        boost::add_edge(synthetic_vertex, vertex, 0., x);
+    boost::dijkstra_shortest_paths(x, synthetic_vertex,
+                                   distance_map(&distances[0]).predecessor_map(&p[0]));
+    last_cost = std::accumulate(distances.begin(), distances.end(), static_cast<edge_cost>(0));
+    for(;;) {
+        s = sp;
+        sp.clear();
+        std::vector<Vertex> best_vertices(k, static_cast<Vertex>(-1));
+        for(auto it = start; it != end; ++it) {
+#if 0
+            Vertex cvert = *it;
+            // Skip if item is a candidate center
+            if(std::find(s.begin(), s.end(), cvert) != s.end()) continue;
+            Vertex parent = p[cvert];
+            typename std::vector<Vertex>::iterator itp;
+            while((itp = std::find(s.begin(), s.end(), cvert)) == s.end());
+            auto index = itp - s.begin();
+            if(best_vertices[index] == static_cast<Vertex>(-1)) {
+                best_vertices[index] = cvert;
+            }
+#endif
+        }
+        if(last_cost <= current_cost) break;
+    }
+}
+
+} // namespace tnk
 
 } // graph
