@@ -1,6 +1,7 @@
 #pragma once
 #include <cmath>
 #include <random>
+#include <thread>
 #include "graph.h"
 #include "aesctr/wy.h"
 
@@ -126,6 +127,37 @@ auto random_sample(const std::vector<T, A> &v, size_t n, uint64_t seed) {
     return ret;
 }
 
+#if 0
+template<typename Graph>
+typename boost::graph_traits<Graph>::vertex_descriptor
+goldman_1median(const Graph &x,
+                const std::vector<typename boost::graph_traits<Graph>::vertex_descriptor> &p,
+                typename boost::graph_traits<Graph>::vertex_descriptor source)
+{
+    typename boost::graph_traits<Graph>::vertex_descriptor ret;
+    throw std::runtime_error("Not implemented");
+    return ret;
+}
+#endif
+template<typename PVec, typename Graph>
+std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
+parallel_goldman_1median(const PVec &p, const PVec &s, const Graph &x) {
+    using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
+    std::vector<Vertex> ret;
+    // 1. Make trees (1 pass, serial, or each one parses the list)
+    // 2. Run goldman to get 1-medians
+    // 3. ??? Profit
+    std::vector<std::thread> threads;
+    threads.reserve(s.size());
+    throw std::runtime_error("Not implemented");
+#if 0
+    for(const auto source: s) {
+        threads.emplace_back(goldman_1median(x, p, s));
+    }
+#endif
+    for(auto &t: threads) t.join();
+    return ret;
+}
 
 template<typename ...Args>
 auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
@@ -160,7 +192,7 @@ auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
     for(;;) {
         s = sp;
         sp.clear();
-        std::vector<Vertex> best_vertices(k, static_cast<Vertex>(-1));
+        std::vector<Vertex> best_vertices = parallel_goldman_1median(p, x);
         // Make the tree for each subset mapping best to the current solution
         // Run the acyclic algorithm from http://www.cs.kent.edu/~dragan/ST/papers/GOLDMAN-71.pdf
         // Optimal Center Location in Simple Networks
