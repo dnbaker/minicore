@@ -22,6 +22,8 @@ thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed) {
     const double eps  = std::sqrt(logn);
     size_t samples_per_round = std::ceil(21. * k * logn / eps);
     size_t iterations_per_round = std::ceil(3 * logn);
+    std::fprintf(stderr, "samples per round: %zu\n", samples_per_round);
+    std::fprintf(stderr, "iterations per round: %zu\n", iterations_per_round);
     flat_hash_set<Vertex> samples;
     std::vector<Vertex> current_buffer;
     std::mt19937_64 mt(seed);
@@ -29,6 +31,7 @@ thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed) {
         sample_from_graph(x, samples_per_round, iterations_per_round, current_buffer, mt());
         samples.insert(current_buffer.begin(), current_buffer.end());
         current_buffer.clear();
+        std::fprintf(stderr, "Samples size after iter %zu/%zu: %zu\n", i, nr, samples.size());
     }
     current_buffer.assign(samples.begin(), samples.end());
     return current_buffer;
@@ -61,11 +64,11 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
     for(size_t iter = 0; iter < iterations && R.size() > 0; ++iter) {
         size_t last_size = F.size();
         // Sample ``samples_per_round'' samples.
-        for(size_t i = 0, e = std::min(samples_per_round, num_el - F.size()); i < e; ++i) {
+        for(size_t i = 0, e = samples_per_round; i < e && R.size(); ++i) {
             auto &r = R[rng() % R.size()];
             F.emplace_back(r);
-            std::swap(r, R.back()); // Move to the back
-            R.pop_back();           // Delete
+            //std::swap(r, R.back()); // Move to the back
+            //R.pop_back();           // Delete
         }
         // Add connections from R to all members of F with cost 0.
         boost::clear_vertex(synthetic_vertex, x);
@@ -79,16 +82,22 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
         auto el = R[rng() % R.size()];
         auto minv = distances[el];
         // remove all R with dist(x, F) leq dist(x, R)
+        std::fprintf(stderr, "R size before: %zu\n", R.size());
+        R.erase(std::remove_if(R.begin(), R.end(), [&](auto x) {return distances[x] <= minv;}), R.end());
+        std::fprintf(stderr, "R size after: %zu\n", R.size());
+#if 0
         for(auto it = R.begin(), e = R.end(); it != e; ++it) {
             if(distances[*it] <= minv) {
-                std::swap(*it, R.back());
+                std::swap(*it, *--e);
                 R.pop_back();
                 continue; // Don't increment, new value could be smaller
             }
             ++it;
         }
+#endif
     }
     boost::remove_vertex(synthetic_vertex, x);
+    std::fprintf(stderr, "size: %zu\n", container.size());
     return container;
 }
 

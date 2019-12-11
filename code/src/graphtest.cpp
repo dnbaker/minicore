@@ -70,13 +70,13 @@ int main(int c, char **v) {
     std::string input = c == 1 ? "../dolphins.graph": const_cast<const char *>(v[1]);
     if(input.find(".csv") != /*std::string::*/input.npos) {
         auto g = csv_parse(input.data());
-        if(false) {
-            g.thorup_sample(13);
-        }
+        auto sampled = g.thorup_sample(3);
+        std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
     } else {
         auto g = dimacs_parse(input.data());
-        if(false) {
-            g.thorup_sample(13);
-        }
+        //if(false) {
+        auto sampled = g.thorup_sample(3);
+        std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
+        //}
     }
 }
