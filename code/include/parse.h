@@ -35,7 +35,6 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(const char
         const char *s = line.data();
         if(!std::isdigit(*s)) continue;
         for(;;) {
-            std::fprintf(stderr, "Adding edge from %d to %d\n", id, std::atoi(s));
             //boost::add_edge(id, std::atoi(s), ret);
             boost::add_edge(id, std::atoi(s), static_cast<edge_property_type>(1.), ret);
 

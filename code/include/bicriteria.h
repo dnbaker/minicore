@@ -192,7 +192,7 @@ auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
     for(;;) {
         s = sp;
         sp.clear();
-        std::vector<Vertex> best_vertices = parallel_goldman_1median(p, x);
+        std::vector<Vertex> best_vertices = parallel_goldman_1median(p, s, x);
         // Make the tree for each subset mapping best to the current solution
         // Run the acyclic algorithm from http://www.cs.kent.edu/~dragan/ST/papers/GOLDMAN-71.pdf
         // Optimal Center Location in Simple Networks

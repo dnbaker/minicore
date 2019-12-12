@@ -7,3 +7,9 @@
 [submodule "code/lemon"]
 	path = code/lemon
 	url = https://github.com/seqan/lemon
+[submodule "code/robin-hood-hashing"]
+	path = code/robin-hood-hashing
+	url = https://github.com/martinus/robin-hood-hashing/
+[submodule "code/alias_sampler"]
+	path = code/alias_sampler
+	url = https://github.com/dnbaker/alias_sampler
