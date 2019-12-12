@@ -13,46 +13,103 @@ using hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, MaxLoadF
 inline namespace sampling {
 
 
-template<typename Container, typename FT=float, typename IT=std::uint32_t>
-auto calculate_sensitivities_and_sample(size_t npoints, const FT *costs, const IT *assignments, size_t ncenters, size_t points_to_sample, const FT *weights=nullptr, uint64_t seed=137) {
-    // TODO wrap this in a class?
-    std::vector<FT> weight_sums(ncenters);
-    std::vector<IT> center_counts(ncenters);
-    FT total_cost = 0.;
-    auto getweight = [weights](IT ind) {return weights ? weights[ind]: FT(1.);};
-    for(size_t i = 0; i < npoints; ++i) {
-        auto asn = assignments[i];
-        assert(ans < ncenters);
-        const auto w = getweight(i);
-        weight_sums[asn] += w; // If unweighted, weights are 1.
-        total_cost += w * costs[i];
-        ++center_counts[asn];
+template<typename FT=float, typename IT=std::uint32_t>
+struct CoresetSampler {
+    using Sampler = alias::AliasSampler<FT, wy::WyRand<IT, 2>, IT>;
+    std::unique_ptr<Sampler> sampler_;
+    std::unique_ptr<FT []>     probs_;
+    const FT                *weights_;
+    bool ready() const {return sampler_.get();}
+    struct Coreset {
+        std::unique_ptr<IT[]> indices_;
+        std::unique_ptr<FT[]> weights_;
+        size_t                      n_;
+        size_t size() const {return n_;}
+        Coreset(size_t n): indices_(std::make_unique<IT[]>(n)), weights_(std::make_unique<FT[]>(n)), n_(n) {}
+        struct iterator {
+            Coreset &ref_;
+            size_t index_;
+            iterator(Coreset &ref, size_t index): ref_(ref), index_(index) {}
+            using deref_type = std::pair<std::reference_wrapper<IT>, std::reference_wrapper<FT>>;
+            deref_type operator*() {
+                return deref_type(std::ref(ref_.indices_[index_]), std::ref(ref_.weights_[index_]));
+            }
+            bool operator==(iterator o) const {
+                return index_ == o.index_;
+            }
+            bool operator<(iterator o) const {
+                return index_ < o.index_;
+            }
+        };
+        struct const_iterator {
+            const Coreset &ref_;
+            size_t index_;
+            const_iterator(const Coreset &ref, size_t index): ref_(ref), index_(index) {}
+            using deref_type = std::pair<std::reference_wrapper<const IT>, std::reference_wrapper<const FT>>;
+            deref_type operator*() {
+                return deref_type(std::cref(ref_.indices_[index_]), std::cref(ref_.weights_[index_]));
+            }
+            bool operator==(const_iterator o) const {
+                return index_ == o.index_;
+            }
+            bool operator<(const_iterator o) const {
+                return index_ < o.index_;
+            }
+        };
+        auto begin() {
+            return iterator(*this, 0);
+        }
+        auto begin() const {
+            return const_iterator(*this, 0);
+        }
+        auto end() {
+            return iterator(*this, n_);
+        }
+        auto end() const {
+            return const_iterator(*this, n_);
+        }
+    };
+    
+    void make_sampler(size_t np, size_t ncenters,
+                      const FT *costs, const IT *assignments,
+                      const FT *weights=nullptr,
+                      uint64_t seed=137)
+    {
+        weights_ = weights;
+        std::vector<FT> weight_sums(ncenters);
+        std::vector<IT> center_counts(ncenters);
+        FT total_cost = 0.;
+        auto getweight = [weights](IT ind) {return weights ? weights[ind]: FT(1.);};
+            
+        for(size_t i = 0; i < np; ++i) {
+            auto asn = assignments[i];
+            assert(asn < ncenters);
+            const auto w = getweight(i);
+            weight_sums[asn] += w; // If unweighted, weights are 1.
+            total_cost += w * costs[i];
+            ++center_counts[asn];
+        }
+        total_cost *= 2.; // For division
+        auto tcinv = 1. / total_cost;
+        probs_.reset(std::make_unique<FT []>(np));
+        for(auto i = 0u; i < ncenters; ++i)
+            weight_sums[i] = 1./(2. * center_counts[i] * weight_sums[i]);
+        for(size_t i = 0; i < np; ++i) {
+            const auto w = getweight(i);
+            probs_[i] = w * (costs[i] * tcinv + weight_sums[assignments[i]]);
+        }
+        sampler_.reset(std::make_unique<Sampler>(probs_.get(), probs_.get() + np));
     }
-    total_cost *= 2.; // For division
-    auto tcinv = 1. / total_cost;
-    auto probs = std::make_unique<FT []>(npoints);
-    for(auto i = 0u; i < ncenters; ++i)
-        weight_sums[i] = 1./(2. * center_counts[i] * weight_sums[i]);
-    for(size_t i = 0; i < npoints; ++i) {
-        const auto w = getweight(i);
-        probs[i] = w * (costs[i] * tcinv + weight_sums[assignments[i]]);
+    Coreset sample(size_t n, uint64_t seed=0) {
+        Coreset ret(n);
+        sampler_(ret.indices_.get(), ret.indices_.get() + n, n ^ seed);
+        double nsamplinv = 1. / n;
+        auto getweight = [weights=weights_](IT ind) {return weights ? weights[ind]: FT(1.);};
+        for(size_t i = 0; i < n; ++i)
+            ret.weights_[i] = getweight(ret.indices_[i]) * nsamplinv / probs_[i];
+        return ret;
     }
-    alias_sampler<FT, IT, wy::WyHash<uint32_t, 2>> sampler(probs.get(), probs.get() + npoints, seed);
-    wy::WyRand<uint32_t, 2> rng(seed);
-    hash_map<IT, FT> samples;
-    samples.reserve(points_to_sample);
-    const FT nsamplinv = 1. / points_to_sample;
-    do {
-        auto ind = sampler();
-        auto assigned_weight = getweight(i) * nsamplinv / probs[ind];
-        auto it = samples.find(ind);
-        if(it == samples.end())
-            samples.emplace(ind, assigned_weight);
-        else
-            it->second += assigned_weight;
-    } while(samples.size() < points_to_sample);
-    return samples;
-}
+};
 
 
 
