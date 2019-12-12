@@ -1,6 +1,7 @@
 #pragma once
 #include "aesctr/wy.h"
 #include <vector>
+#include <map>
 #include "robin-hood-hashing/src/include/robin_hood.h"
 #include "alias_sampler/alias_sampler.h"
 
@@ -27,11 +28,28 @@ struct Coreset {
     Coreset(const Coreset &o): n_(o.n_) {
         indices_.reset(std::make_unique<IT[]>(n_));
         weights_.reset(std::make_unique<FT[]>(n_));
-        std::memcpy(&indices_[0], o.indices_[0], sizeof(IT) * n_);
-        std::memcpy(&weights_[0], o.weights_[0], sizeof(FT) * n_);
+        std::memcpy(&indices_[0], &o.indices_[0], sizeof(IT) * n_);
+        std::memcpy(&weights_[0], &o.weights_[0], sizeof(FT) * n_);
+    }
+    void compact(bool shrink_to_fit=false) {
+        std::map<std::pair<IT, FT>, uint32_t> m;
+        for(IT i = 0; i < n_; ++i) {
+            ++m[std::make_pair(indices_[i], weights_[i])];
+            //++m[std::make_pair(p.first, p.second)];
+        }
+        if(m.size() == n_) return;
+        auto it = &indices_[0];
+        auto wit = &weights_[0];
+        for(const auto &pair: m) {
+            *it++ = pair.first.first;
+            *wit++ = pair.second * pair.first.second; // Add the weights together
+        }
+        n_ = m.size();
+        if(shrink_to_fit) std::fprintf(stderr, "Note: not implemented. This shouldn't matter.\n");
     }
     Coreset(size_t n): indices_(std::make_unique<IT[]>(n)), weights_(std::make_unique<FT[]>(n)), n_(n) {}
     struct iterator {
+        // TODO: operator++, operator++(int), operator--
         Coreset &ref_;
         size_t index_;
         iterator(Coreset &ref, size_t index): ref_(ref), index_(index) {}
