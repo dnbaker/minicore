@@ -121,7 +121,7 @@ struct CoresetSampler {
     }
     Coreset<IT, FT> sample(size_t n, uint64_t seed=0) {
         Coreset<IT, FT> ret(n);
-        sampler_(ret.indices_.get(), ret.indices_.get() + n, n ^ seed);
+        sampler_->operator()(ret.indices_.get(), ret.indices_.get() + n, n ^ seed);
         double nsamplinv = 1. / n;
         for(size_t i = 0; i < n; ++i)
             ret.weights_[i] = getweight(ret.indices_[i]) * nsamplinv / probs_[i];

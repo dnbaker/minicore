@@ -13,5 +13,7 @@ int main() {
     std::vector<float> weights(npoints);
     for(auto &v: weights)       v = 1. / std::pow(float(std::rand()) / RAND_MAX, 2);
     sampler.make_sampler(npoints, ncenters, costs.data(), assignments.data(), weights.data(), 2);
+    auto sample = sampler.sample(20);
+    std::fprintf(stderr, "sample of 20 is of size %zu\n", sample.size());
     //if(0) sampler.make_sampler(10, 10, nullptr, nullptr);
 }
