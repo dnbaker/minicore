@@ -20,34 +20,43 @@ struct Coreset {
     /*
      * consists of only indices and weights
      */
-    std::unique_ptr<IT[]> indices_;
-    std::unique_ptr<FT[]> weights_;
-    size_t                      n_;
-    size_t size() const {return n_;}
+    std::vector<IT> indices_;
+    std::vector<FT> weights_;
+    size_t size() const {return indices_.size();}
     Coreset(Coreset &&o) = default;
-    Coreset(const Coreset &o): n_(o.n_) {
-        indices_.reset(std::make_unique<IT[]>(n_));
-        weights_.reset(std::make_unique<FT[]>(n_));
-        std::memcpy(&indices_[0], &o.indices_[0], sizeof(IT) * n_);
-        std::memcpy(&weights_[0], &o.weights_[0], sizeof(FT) * n_);
-    }
+    Coreset(const Coreset &o) = default;
     void compact(bool shrink_to_fit=false) {
         std::map<std::pair<IT, FT>, uint32_t> m;
-        for(IT i = 0; i < n_; ++i) {
+        for(IT i = 0; i < indices_.size(); ++i) {
             ++m[std::make_pair(indices_[i], weights_[i])];
             //++m[std::make_pair(p.first, p.second)];
         }
-        if(m.size() == n_) return;
+        if(m.size() == indices_.size()) return;
         auto it = &indices_[0];
         auto wit = &weights_[0];
         for(const auto &pair: m) {
             *it++ = pair.first.first;
             *wit++ = pair.second * pair.first.second; // Add the weights together
         }
-        n_ = m.size();
-        if(shrink_to_fit) std::fprintf(stderr, "Note: not implemented. This shouldn't matter.\n");
+        size_t newsz = it - &indices_[0];
+        indices_.resize(newsz);
+        weights_.resize(newsz);
+        if(shrink_to_fit) indices_.shrink_to_fit(), weights_.shrink_to_fit();
     }
-    Coreset(size_t n): indices_(std::make_unique<IT[]>(n)), weights_(std::make_unique<FT[]>(n)), n_(n) {}
+    std::vector<std::pair<IT, FT>> to_pairs() const {
+        std::vector<std::pair<IT, FT>> ret;
+        ret.reserve(size());
+        for(IT i = 0; i < size(); ++i)
+            ret.push_back(std::make_pair(indices_[i], weights_[i]));
+        return ret;
+    }
+    void show() {
+        for(size_t i = 0; i < indices_.size(); ++i) {
+            std::fprintf(stderr, "%zu: [%u/%g]\n", i, indices_[i], weights_[i]);
+        }
+    }
+    Coreset(size_t n): indices_(n), weights_(n) {}
+#if 0
     struct iterator {
         // TODO: operator++, operator++(int), operator--
         Coreset &ref_;
@@ -57,8 +66,21 @@ struct Coreset {
         deref_type operator*() {
             return deref_type(std::ref(ref_.indices_[index_]), std::ref(ref_.weights_[index_]));
         }
+        iterator(iterator &o): ref_(o.ref_), index_(o.index_) {}
+        iterator &operator++() {
+            ++index_;
+            return *this;
+        }
+        iterator operator++(int) {
+            iterator ret(*this);
+            ++index_;
+            return ret;
+        }
         bool operator==(iterator o) const {
             return index_ == o.index_;
+        }
+        bool operator!=(iterator o) const {
+            return index_ != o.index_;
         }
         bool operator<(iterator o) const {
             return index_ < o.index_;
@@ -72,8 +94,20 @@ struct Coreset {
         deref_type operator*() {
             return deref_type(std::cref(ref_.indices_[index_]), std::cref(ref_.weights_[index_]));
         }
+        const_iterator(const_iterator &o): ref_(o.ref_), index_(o.index_) {}
+        const_iterator &operator++() {
+            ++index_;
+            return *this;
+        }
+        const_iterator operator++(int) {
+            const_iterator ret(*this);
+            ++index_;
+        }
         bool operator==(const_iterator o) const {
             return index_ == o.index_;
+        }
+        bool operator!=(const_iterator o) const {
+            return index_ != o.index_;
         }
         bool operator<(const_iterator o) const {
             return index_ < o.index_;
@@ -86,11 +120,12 @@ struct Coreset {
         return const_iterator(*this, 0);
     }
     auto end() {
-        return iterator(*this, n_);
+        return iterator(*this, size());
     }
     auto end() const {
-        return const_iterator(*this, n_);
+        return const_iterator(*this, size());
     }
+#endif
 };
 
 template<typename FT=float, typename IT=std::uint32_t>
@@ -99,6 +134,7 @@ struct CoresetSampler {
     std::unique_ptr<Sampler> sampler_;
     std::unique_ptr<FT []>     probs_;
     const FT                *weights_;
+    size_t                        np_;
     bool ready() const {return sampler_.get();}
 
     CoresetSampler(CoresetSampler &&o) = default;
@@ -110,6 +146,7 @@ struct CoresetSampler {
                       const FT *weights=nullptr,
                       uint64_t seed=137)
     {
+        np_ = np;
         weights_ = weights;
         std::vector<FT> weight_sums(ncenters);
         std::vector<IT> center_counts(ncenters);
@@ -139,7 +176,9 @@ struct CoresetSampler {
     }
     Coreset<IT, FT> sample(size_t n, uint64_t seed=0) {
         Coreset<IT, FT> ret(n);
-        sampler_->operator()(ret.indices_.get(), ret.indices_.get() + n, n ^ seed);
+        sampler_->operator()(&ret.indices_[0], &ret.indices_[n], n ^ seed);
+        for(auto i = &ret.indices_[0]; i != &ret.indices_[n]; ++i)
+            assert(i - &ret.indices_[0] < np_);
         double nsamplinv = 1. / n;
         for(size_t i = 0; i < n; ++i)
             ret.weights_[i] = getweight(ret.indices_[i]) * nsamplinv / probs_[i];
