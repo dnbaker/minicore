@@ -6,22 +6,28 @@
 namespace clustering {
 
 template<typename C>
-using ContainedTypeFromIterator = std::decay_t<decltype(std::declval<C>()[0])>;
+using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
 
-template<typename Iter, typename FT=ContainedTypeFromIterator,
+template<typename FT, typename A>
+double sqrNorm(const std::vector<FT, A> &lhs, const std::vector<FT, A> &rhs) {
+    double s = 0.;
+    for(size_t i = 0; i < lhs.size(); ++i)
+        s += std::pow(lhs[i] - rhs[i], 2);
+    return s;
+}
+
+template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG>
 std::vector<IT>
-kmeanspp(Iter first, Iter end, std::vector<FT> &norms, RNG &rng, size_t k) {
+kmeanspp(Iter first, Iter end, RNG &rng, size_t k) {
     static_assert(std::is_arithmetic<FT>::value, "FT must be arithmetic");
-    norms.resize(std::distance(first, end));
-    size_t np = norms.size();
-    auto first = rng() % np;
-    std::vector<IT> centers{first};
+    size_t np = std::distance(first, end);
+    std::vector<IT> centers{IT(rng() % np)};
     std::vector<float> distances(np, std::numeric_limits<float>::max()), cdf(np);
     bool firstround = true;
     FT sumd2 = 0.;
     // TODO: keep track of previous centers so that we don't re-compare
-    while(ret.size() < k) {
+    while(centers.size() < k) {
         for(IT i = 0; i < np; ++i) {
             for(const auto c: centers) {
                 auto dist = (c == i) ? FT(0.): FT(sqrNorm(first[c], first[i]));
