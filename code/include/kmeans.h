@@ -24,11 +24,15 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k) {
     size_t np = std::distance(first, end);
     std::vector<IT> centers{IT(rng() % np)};
     std::vector<float> distances(np, std::numeric_limits<float>::max()), cdf(np);
+    std::vector<IT> assignments(np, IT(-1));
     bool firstround = true;
     FT sumd2 = 0.;
     // TODO: keep track of previous centers so that we don't re-compare
+    // (using assignments vector)
     while(centers.size() < k) {
+        // TODO: Parallelize
         for(IT i = 0; i < np; ++i) {
+            auto &lhs = first[i];
             for(const auto c: centers) {
                 auto dist = (c == i) ? FT(0.): FT(sqrNorm(first[c], first[i]));
                 auto &ldist = distances[i];
