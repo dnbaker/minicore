@@ -1,5 +1,5 @@
 import numpy as np
-    
+
 
 def idnc(e, v=None):
     if isinstance(v, int):

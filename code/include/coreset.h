@@ -1,16 +1,16 @@
 #pragma once
-#include "aesctr/wy.h"
 #include <vector>
 #include <map>
+#include "aesctr/wy.h"
 #include "robin-hood-hashing/src/include/robin_hood.h"
 #include "alias_sampler/alias_sampler.h"
 
-                                                                                                    
+
 
 namespace coresets {
-template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,                             
-          typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>                        
-using hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, MaxLoadFactor100>;        
+template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
+          typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>
+using hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, MaxLoadFactor100>;
 inline namespace sampling {
 
 template<typename IT, typename FT>
@@ -26,6 +26,7 @@ struct Coreset {
     Coreset(Coreset &&o) = default;
     Coreset(const Coreset &o) = default;
     void compact(bool shrink_to_fit=false) {
+        // TODO: replace with hash map and compact
         std::map<std::pair<IT, FT>, uint32_t> m;
         for(IT i = 0; i < indices_.size(); ++i) {
             ++m[std::make_pair(indices_[i], weights_[i])];
@@ -137,10 +138,10 @@ struct CoresetSampler {
     size_t                        np_;
     bool ready() const {return sampler_.get();}
 
-    CoresetSampler(CoresetSampler &&o) = default;
+    CoresetSampler(CoresetSampler &&o)      = default;
     CoresetSampler(const CoresetSampler &o) = delete;
     CoresetSampler(): weights_(nullptr) {}
-    
+
     void make_sampler(size_t np, size_t ncenters,
                       const FT *costs, const IT *assignments,
                       const FT *weights=nullptr,
@@ -153,6 +154,11 @@ struct CoresetSampler {
         FT total_cost = 0.;
 
         for(size_t i = 0; i < np; ++i) {
+            // TODO: vectorize?
+            // weight sums per assignment couldn't be vectorized,
+            // total costs could be
+            // Probably a 4-16x speedup on 1/3 of the cost
+            // So maybe like a ~30% speedup?
             auto asn = assignments[i];
             assert(asn < ncenters);
             const auto w = getweight(i);
