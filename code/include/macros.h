@@ -103,7 +103,7 @@
 #  endif
 #endif
 
-#if __has_cpp_attribute(no_unique_address)
+#if defined(__has_cpp_attribute) && __cplusplus >= __has_cpp_attribute(no_unique_address)
 #  define SK_NO_ADDRESS [[no_unique_address]]
 #else
 #  define SK_NO_ADDRESS

@@ -1,26 +1,25 @@
 #pragma once
-#include <vector>
-#include <map>
 #include <cassert>
-#include <atomic>
+#include <map>
 #include <mutex>
+#include <vector>
 #include "aesctr/wy.h"
 #include "macros.h"
 
+#if defined(USE_TBB)
+#include <execution>
+#  define inclusive_scan(x, y, z) inclusive_scan(::std::execution::par_unseq, x, y, z)
+#else
+#  define inclusive_scan(x, y, z) inclusive_scan(x, y, z)
+//#  define inclusive_scan(x, y, z) ::std::partial_sum(x, y, z)
+#endif
+
 namespace clustering {
+using std::inclusive_scan;
+using std::partial_sum;
 
 template<typename C>
 using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
-
-template<typename FT, typename A, typename OA>
-double sqrNorm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
-    double s = 0.;
-    for(size_t i = 0; i < lhs.size(); ++i) {
-        FT tmp = lhs[i] - rhs[i];
-        s += tmp * tmp;
-    }
-    return s;
-}
 
 
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
@@ -41,37 +40,31 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k) {
 #ifdef _OPENMP
         OMP_PRAGMA("omp parallel for reduction(+:sumd2)")
         for(size_t i = 0; i < np; ++i) {
-            double dist = sqrNorm(lhs, first[i]);
+            double dist = l2Dist(lhs, first[i]);
             distances[i] = dist;
             sumd2 += dist;
         }
 #else
         SK_UNROLL_8
         for(size_t i = 0; i < np; ++i) {
-            auto dist = sqrNorm(lhs, first[i]);
+            auto dist = l2Dist(lhs, first[i]);
             distances[i] = dist;
             sumd2 += dist;
         }
 #endif
         assert(distances[fc] == 0.);
-#ifdef _OPENMP
-        OMP_PRAGMA("omp parallel for")
-#else
-        SK_UNROLL_8
-#endif
-        for(IT i = 0; i < np; ++i)
-            cdf[i] = distances[i] / sumd2;
-        std::partial_sum(cdf.begin(), cdf.end(), cdf.begin());
-        cdf.back() = 1.;
+        inclusive_scan(distances.begin(), distances.end(), cdf.begin());
     }
-    std::fprintf(stderr, "first loop sum: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), FT(0)));
+#if VERBOSE_AF
+    std::fprintf(stderr, "first loop sum: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), double(0)));
+#endif
         
     // TODO: keep track of previous centers so that we don't re-compare
     // (using assignments vector)
     while(centers.size() < k) {
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
-        auto newc = std::lower_bound(cdf.begin(), cdf.end(), FT(rng()) / rng.max()) - cdf.begin();
+        auto newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * FT(rng()) / rng.max()) - cdf.begin();
         centers.push_back(newc);
         auto &lhs = first[newc];
         sumd2 -= distances[newc];
@@ -81,7 +74,7 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k) {
         for(IT i = 0; i < np; ++i) {
             auto &ldist = distances[i];
             //if(ldist == 0.) continue;
-            auto dist = FT(sqrNorm(lhs, first[i]));
+            auto dist = FT(l2Dist(lhs, first[i]));
             auto &lhs = first[i];
             if(dist < ldist) { // Only write if it changed
                 auto diff = dist - ldist;
@@ -91,19 +84,14 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k) {
             }
         }
         sumd2 = sum;
-        std::fprintf(stderr, "sumd2: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), FT(0)));
-        const auto sd2i = 1. / sumd2;
-#ifdef _OPENMP
-        OMP_PRAGMA("omp parallel for")
-#else
-        SK_UNROLL_8
+#if VERBOSE_AF
+        std::fprintf(stderr, "sumd2: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), double(0)));
 #endif
-        for(IT i = 0; i < np; ++i)
-            cdf[i] = distances[i] * sd2i; // Maybe SIMD later?
-        std::partial_sum(cdf.begin(), cdf.end(), cdf.begin());
-        cdf.back() = 1.;
+        inclusive_scan(distances.begin(), distances.end(), cdf.begin());
     }
     return centers;
 }
+
+#undef inclusive_scan
 
 } // clustering

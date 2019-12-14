@@ -9,7 +9,7 @@
 #define t std::chrono::high_resolution_clock::now
 
 #ifndef FLOAT_TYPE
-#define FLOAT_TYPE double
+#define FLOAT_TYPE float
 #endif
 
 int main(int argc, char *argv[]) {

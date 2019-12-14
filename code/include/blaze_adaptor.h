@@ -1,6 +1,7 @@
 #pragma once
 #include "blaze/Math.h"
 #include "macros.h"
+
 namespace blz {
 
 // These blaze adaptors exist for the purpose of
@@ -152,23 +153,96 @@ class CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     auto columniterator()       {return ColumnViewer(*this);}
     auto columniterator() const {return ConstColumnViewer(*this);}
 };
-template<typename FT, bool SO>
-INLINE double sqrNorm(const blaze::DynamicMatrix<FT, SO> &lhs, const blaze::DynamicMatrix<FT, SO> &rhs) {
-    return sqrNorm(rhs - lhs);
+
+#define DECL_DIST(norm) \
+template<typename FT, bool SO>\
+INLINE double norm##Dist(const blaze::DynamicVector<FT, SO> &lhs, const blaze::DynamicVector<FT, SO> &rhs) {\
+    return norm##Norm(rhs - lhs);\
+}\
+\
+template<typename FT, bool AF, bool PF, bool SO, bool OAF, bool OPF>\
+INLINE double norm##Dist(const blaze::CustomVector<FT, AF, PF, SO> &lhs,\
+                      const blaze::CustomVector<FT, OAF, OPF, SO> &rhs)\
+{\
+    return norm##Norm(rhs - lhs);\
+}\
+\
+template<typename FT, bool AF, bool PF, bool SO, bool OAF, bool OPF>\
+INLINE double norm##Dist(const blaze::CustomVector<FT, AF, PF, SO> &lhs,\
+                      const blaze::CustomVector<FT, OAF, OPF, !SO> &rhs)\
+{\
+    return norm##Norm(rhs - trans(lhs));\
+}\
+\
+template<typename MatType1, typename MatType2, bool SO, bool isDense, bool isDense2, bool isSymmetric>\
+INLINE double norm##Dist(const blaze::Row<MatType1, SO, isDense, isSymmetric> &lhs,\
+                      const blaze::Row<MatType2, SO, isDense2, isSymmetric> &rhs)\
+{\
+    return norm##Norm(rhs - lhs);\
+}\
+\
+template<typename MatType1, typename MatType2, bool SO, bool isDense, bool isDense2, bool isSymmetric>\
+INLINE double norm##Dist(const blaze::Column<MatType1, SO, isDense, isSymmetric> &lhs,\
+                      const blaze::Column<MatType2, SO, isDense2, isSymmetric> &rhs)\
+{\
+    return norm##Norm(rhs - lhs);\
+}
+DECL_DIST(l1)
+DECL_DIST(l2)
+DECL_DIST(sqr)
+DECL_DIST(l3)
+DECL_DIST(l4)
+DECL_DIST(max)
+DECL_DIST(inf)
+#undef DECL_DIST
+
+template<typename FT, typename A, typename OA>
+double l2Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+    assert(lhs.size() == rhs.size());
+    double s = 0.;
+    for(size_t i = 0; i < lhs.size(); ++i) {
+        FT tmp = lhs[i] - rhs[i];
+        s += tmp * tmp;
+    }
+    return s;
 }
 
-template<typename FT, bool AF, bool PF, bool SO, bool OAF, bool OPF>
-INLINE double sqrNorm(const blaze::CustomMatrix<FT, AF, PF, SO> &lhs,
-                      const blaze::CustomMatrix<FT, OAF, OPF, SO> &rhs)
-{
-    return sqrNorm(rhs - lhs);
+template<typename FT, typename A, typename OA>
+double l1Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+    assert(lhs.size() == rhs.size());
+    double ret = 0.;
+    for(size_t i = 0; i < lhs.size(); ++i) {
+        ret += std::abs(lhs[i] - rhs[i]);
+    }
+    return ret;
+}
+template<typename FT, typename A, typename OA>
+double l3Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+    assert(lhs.size() == rhs.size());
+    double ret = 0.;
+    for(size_t i = 0; i < lhs.size(); ++i) {
+        ret += std::pow(std::abs(lhs[i] - rhs[i]), 3.);
+    }
+    return ret;
+}
+template<typename FT, typename A, typename OA>
+double l4Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+    assert(lhs.size() == rhs.size());
+    double ret = 0.;
+    for(size_t i = 0; i < lhs.size(); ++i) {
+        ret += std::pow(lhs[i] - rhs[i], 4.);
+    }
+    return ret;
+}
+template<typename FT, typename A, typename OA>
+double maxNorm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+    assert(lhs.size() == rhs.size());
+    double ret = 0.;
+    for(size_t i = 0; i < lhs.size(); ++i) {
+        ret = std::max(std::abs(lhs[i] - rhs[i]));
+    }
+    return ret;
 }
 
-template<typename FT, bool AF, bool PF, bool SO, bool OAF, bool OPF>
-INLINE double sqrNorm(const blaze::CustomMatrix<FT, AF, PF, SO> &lhs,
-                      const blaze::CustomMatrix<FT, OAF, OPF, !SO> &rhs)
-{
-    return sqrNorm(rhs - trans(lhs));
-}
 using namespace blaze;
 }

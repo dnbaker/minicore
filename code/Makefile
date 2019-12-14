@@ -12,6 +12,10 @@ ifdef OMP
 CXXFLAGS += -fopenmp
 endif
 
+ifdef TBBDIR
+CXXFLAGS += -DUSE_TBB -L$(TBBDIR)/lib -I$(TBBDIR)/include -ltbb
+endif
+
 %: src/%.cpp $(wildcard include/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
