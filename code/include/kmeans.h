@@ -30,7 +30,7 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k) {
     static_assert(std::is_arithmetic<FT>::value, "FT must be arithmetic");
     size_t np = std::distance(first, end);
     std::vector<IT> centers;
-    std::vector<double> distances(np, 0.), cdf(np);
+    std::vector<FT> distances(np, 0.), cdf(np);
     std::vector<IT> assignments(np, IT(-1));
     bool firstround = true;
     double sumd2 = 0.;
@@ -39,11 +39,10 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k) {
         centers.push_back(fc);
         auto &lhs = first[centers.front()];
 #ifdef _OPENMP
-        OMP_PRAGMA("omp parallel for")
+        OMP_PRAGMA("omp parallel for reduction(+:sumd2)")
         for(size_t i = 0; i < np; ++i) {
             double dist = sqrNorm(lhs, first[i]);
             distances[i] = dist;
-            #pragma omp atomic
             sumd2 += dist;
         }
 #else
@@ -65,7 +64,6 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k) {
         std::partial_sum(cdf.begin(), cdf.end(), cdf.begin());
         cdf.back() = 1.;
     }
-    //assert(sumd2 == std::accumulate(distances.begin(), distances.end(), FT(0)));
     std::fprintf(stderr, "first loop sum: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), FT(0)));
         
     // TODO: keep track of previous centers so that we don't re-compare
