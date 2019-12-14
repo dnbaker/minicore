@@ -8,6 +8,10 @@ CXXFLAGS+=-O3 -std=$(STD) -march=native $(INCLUDE) -ftemplate-backtrace-limit=0
 EX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
 all: $(EX)
 
+ifdef OMP
+CXXFLAGS += -fopenmp
+endif
+
 %: src/%.cpp $(wildcard include/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@
 

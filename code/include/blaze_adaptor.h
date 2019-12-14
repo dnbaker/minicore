@@ -121,5 +121,23 @@ class CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     auto columniterator()       {return ColumnViewer(*this);}
     auto columniterator() const {return ConstColumnViewer(*this);}
 };
+template<typename FT, bool SO>
+INLINE double sqrNorm(const blaze::DynamicMatrix<FT, SO> &lhs, const blaze::DynamicMatrix<FT, SO> &rhs) {
+    return sqrNorm(rhs - lhs);
+}
+
+template<typename FT, bool AF, bool PF, bool SO, bool OAF, bool OPF>
+INLINE double sqrNorm(const blaze::CustomMatrix<FT, AF, PF, SO> &lhs,
+                      const blaze::CustomMatrix<FT, OAF, OPF, SO> &rhs)
+{
+    return sqrNorm(rhs - lhs);
+}
+
+template<typename FT, bool AF, bool PF, bool SO, bool OAF, bool OPF>
+INLINE double sqrNorm(const blaze::CustomMatrix<FT, AF, PF, SO> &lhs,
+                      const blaze::CustomMatrix<FT, OAF, OPF, !SO> &rhs)
+{
+    return sqrNorm(rhs - trans(lhs));
+}
 using namespace blaze;
 }
