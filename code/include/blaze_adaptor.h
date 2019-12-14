@@ -247,5 +247,37 @@ inline double maxDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &
 template<typename FT, typename A, typename OA>
 inline double infDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {return maxDist(lhs, rhs);}
 
+struct L1Norm {
+    template<typename C1, typename C2>
+    constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+        return l1Dist(lhs, rhs);
+    }
+};
+struct L2Norm {
+    template<typename C1, typename C2>
+    constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+        return l2Dist(lhs, rhs);
+    }
+};
+struct L3Norm {
+    template<typename C1, typename C2>
+    constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+        return l3Dist(lhs, rhs);
+    }
+};
+struct L4Norm {
+    template<typename C1, typename C2>
+    constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+        return l4Dist(lhs, rhs);
+    }
+};
+struct maxNormFunctor {
+    template<typename C1, typename C2>
+    constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+        return maxDist(lhs, rhs);
+    }
+};
+struct infNormFunction: maxNormFunctor{};
+
 using namespace blaze;
 }
