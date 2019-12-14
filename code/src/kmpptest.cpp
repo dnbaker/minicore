@@ -10,7 +10,7 @@ int main() {
         for(auto &e: stuff.back()) e = double(std::rand()) / RAND_MAX;
     }
     auto start = t();
-    auto centers = clustering::kmeanspp(stuff.begin(), stuff.end(), gen, 13);
+    auto centers = clustering::kmeanspp(stuff.begin(), stuff.end(), gen, 25);
     auto stop = t();
     std::fprintf(stderr, "Time: %zu\n", size_t((stop - start).count()));
 }
