@@ -1,37 +1,68 @@
 #pragma once
 #include "blaze/Math.h"
+#include "macros.h"
 namespace blz {
 
 // These blaze adaptors exist for the purpose of
 // providing a pair of iterators.
 template<typename this_type>
 struct row_iterator_t {
-    auto index() const {return rownum;}
     size_t rownum;
     this_type &ref_;
+
+    auto index() const {return rownum;}
     row_iterator_t &operator++() {++rownum; return *this;}
+    row_iterator_t &operator--() {--rownum; return *this;}
+    row_iterator_t operator++(int) {
+        row_iterator_t ret{rownum, ref_};
+        ++rownum;
+        return ret;
+    }
+    row_iterator_t operator--(int) {
+        row_iterator_t ret{rownum, ref_};
+        --rownum;
+        return ret;
+    }
     bool operator==(row_iterator_t o) const {return o.rownum == rownum;}
     bool operator!=(row_iterator_t o) const {return o.rownum != rownum;}
     bool operator<(row_iterator_t o) const {return o.rownum < rownum;}
     bool operator<=(row_iterator_t o) const {return o.rownum <= rownum;}
     bool operator>(row_iterator_t o) const {return o.rownum > rownum;}
     bool operator>=(row_iterator_t o) const {return o.rownum >= rownum;}
+    auto operator[](size_t index) const {
+        return row(ref_, index + rownum);
+    }
     auto operator*() const {
         return row(ref_, rownum);
     }
 };
 template<typename this_type>
 struct column_iterator_t {
-    auto index() const {return columnnum;}
     size_t columnnum;
     this_type &ref_;
+
+    auto index() const {return columnnum;}
     column_iterator_t &operator++() {++columnnum; return *this;}
+    column_iterator_t &operator--() {--columnnum; return *this;}
+    column_iterator_t operator++(int) {
+        column_iterator_t ret{columnnum, ref_};
+        ++columnnum;
+        return ret;
+    }
+    column_iterator_t operator--(int) {
+        column_iterator_t ret{columnnum, ref_};
+        --columnnum;
+        return ret;
+    }
     bool operator==(column_iterator_t o) const {return o.columnnum == columnnum;}
     bool operator!=(column_iterator_t o) const {return o.columnnum != columnnum;}
     bool operator<(column_iterator_t o) const {return o.columnnum < columnnum;}
     bool operator<=(column_iterator_t o) const {return o.columnnum <= columnnum;}
     bool operator>(column_iterator_t o) const {return o.columnnum > columnnum;}
     bool operator>=(column_iterator_t o) const {return o.columnnum >= columnnum;}
+    auto operator[](size_t index) const {
+        return column(ref_, index + columnnum);
+    }
     auto operator*() const {
         return column(ref_, columnnum);
     }
@@ -52,27 +83,27 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
         row_iterator start_, end_;
         RowViewer(this_type &ref): start_{0, ref}, end_{ref.rows(), ref} {}
         auto begin() const {return start_;}
-        auto &end()  const {return end_;}
+        const auto &end()  const {return end_;}
     };
     struct ConstRowViewer {
         const_row_iterator start_, end_;
         ConstRowViewer(const this_type &ref): start_{0, ref}, end_{ref.rows(), ref} {}
         auto begin() const {return start_;}
-        auto &end()  const {return end_;}
+        const auto &end()  const {return end_;}
     };
     struct ColumnViewer {
         auto index() const {return start_.columnnum;}
         column_iterator start_, end_;
         ColumnViewer(this_type &ref): start_{0, ref}, end_{ref.columns(), ref} {}
         auto begin() const {return start_;}
-        auto &end()  const {return end_;}
+        const auto &end()  const {return end_;}
     };
     struct ConstColumnViewer {
         auto index() const {return start_.columnnum;}
         column_iterator start_, end_;
         ConstColumnViewer(const this_type &ref): start_{0, ref}, end_{ref.columns(), ref} {}
         auto begin() const {return start_;}
-        auto &end()  const {return end_;}
+        const auto &end()  const {return end_;}
     };
     auto rowiterator()       {return RowViewer(*this);}
     auto rowiterator() const {return ConstRowViewer(*this);}

@@ -33,8 +33,8 @@ int main(int argc, char *argv[]) {
     auto start = t();
     auto centers = clustering::kmeanspp(ptr, ptr + n, gen, npoints);
     auto stop = t();
-    std::fprintf(stderr, "Time: %zu\n", size_t((stop - start).count()));
-    for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
+    std::fprintf(stderr, "Time: %gs\n", double((stop - start).count()) / 1e9);
+    //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
     std::destroy_n(ptr, n);
     std::free(ptr);
 }
