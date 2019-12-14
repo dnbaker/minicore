@@ -30,6 +30,7 @@ struct row_iterator_t {
     bool operator<=(row_iterator_t o) const {return o.rownum <= rownum;}
     bool operator>(row_iterator_t o) const {return o.rownum > rownum;}
     bool operator>=(row_iterator_t o) const {return o.rownum >= rownum;}
+    std::ptrdiff_t operator-(row_iterator_t o) const {return rownum - o.rownum;}
     auto operator[](size_t index) const {
         return row(ref_, index + rownum);
     }
@@ -37,6 +38,7 @@ struct row_iterator_t {
         return row(ref_, rownum);
     }
 };
+
 template<typename this_type>
 struct column_iterator_t {
     size_t columnnum;
@@ -61,6 +63,7 @@ struct column_iterator_t {
     bool operator<=(column_iterator_t o) const {return o.columnnum <= columnnum;}
     bool operator>(column_iterator_t o) const {return o.columnnum > columnnum;}
     bool operator>=(column_iterator_t o) const {return o.columnnum >= columnnum;}
+    std::ptrdiff_t operator-(column_iterator_t o) const {return columnnum - o.columnnum;}
     auto operator[](size_t index) const {
         return column(ref_, index + columnnum);
     }

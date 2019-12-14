@@ -28,7 +28,7 @@ template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
 std::vector<IT>
 kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    size_t np = std::distance(first, end);
+    size_t np = end - first;
     std::vector<IT> centers;
     std::vector<FT> distances(np, 0.), cdf(np);
     //std::vector<IT> assignments(np, IT(-1));
@@ -36,7 +36,7 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     {
         auto fc = rng() % np;
         centers.push_back(fc);
-        auto &lhs = first[centers.front()];
+        const auto &lhs = first[centers.front()];
 #ifdef _OPENMP
         OMP_PRAGMA("omp parallel for reduction(+:sumd2)")
         for(size_t i = 0; i < np; ++i) {
@@ -64,7 +64,7 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
         // add new element
         auto newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * double(rng()) / rng.max()) - cdf.begin();
         centers.push_back(newc);
-        auto &lhs = first[newc];
+        const auto &lhs = first[newc];
         sumd2 -= distances[newc];
         distances[newc] = 0.;
         double sum = sumd2;
@@ -85,6 +85,21 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
         inclusive_scan(distances.begin(), distances.end(), cdf.begin());
     }
     return centers;
+}
+template<typename FT, bool SO,
+         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
+std::vector<IT>
+kmeanspp(blaze::DynamicMatrix<FT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true) {
+    std::vector<IT> ret;
+    auto blzview = reinterpret_cast<blz::DynamicMatrix<FT, SO> &>(mat);
+    if(rowwise) {
+        auto rowit = blzview.rowiterator();
+        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm);
+    } else { // columnwise
+        auto columnit = blzview.columniterator();
+        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm);
+    }
+    return ret;
 }
 
 #undef inclusive_scan

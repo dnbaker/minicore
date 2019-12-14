@@ -21,6 +21,7 @@ int main(int argc, char *argv[]) {
     std::srand(0);
     size_t n = argc == 1 ? 100000: std::atoi(argv[1]);
     size_t npoints = argc <= 2 ? 50: std::atoi(argv[2]);
+    size_t nd = argc <= 3 ? 40: std::atoi(argv[3]);
     auto ptr = static_cast<std::vector<FLOAT_TYPE> *>(std::malloc(n * sizeof(std::vector<FLOAT_TYPE>)));
     //std::unique_ptr<std::vector<FLOAT_TYPE>[]> stuff(n);
     wy::WyRand<uint32_t, 2> gen;
@@ -32,8 +33,15 @@ int main(int argc, char *argv[]) {
     }
     std::fprintf(stderr, "generated\n");
     auto start = t();
+    blaze::DynamicMatrix<FLOAT_TYPE> mat(n, nd);
+    OMP_PRAGMA("omp parallel for")
+    for(auto i = 0u; i < n; ++i) {
+        auto r = row(mat, i);
+        std::memcpy(&r[0], &ptr[i][0], sizeof(FLOAT_TYPE) * nd);
+    }
     auto centers = clustering::kmeanspp(ptr, ptr + n, gen, npoints);
     auto kc = clustering::fp_kcenter(ptr, ptr + n, gen, npoints);
+    auto centers2 = clustering::kmeanspp(mat, gen, npoints, blz::L1Norm());
     auto stop = t();
     std::fprintf(stderr, "Time: %gs\n", double((stop - start).count()) / 1e9);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);

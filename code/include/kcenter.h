@@ -20,7 +20,7 @@ template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
 std::vector<IT>
 fp_kcenter(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     static_assert(std::is_arithmetic<FT>::value, "FT must be arithmetic");
-    size_t np = std::distance(first, end);
+    size_t np = end - first;
     std::vector<IT> centers;
     std::vector<FT> distances(np, 0.), cdf(np);
     {
