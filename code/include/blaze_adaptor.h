@@ -196,8 +196,9 @@ DECL_DIST(max)
 DECL_DIST(inf)
 #undef DECL_DIST
 
+// TODO: replace manual, naive implementations with blaze::CustomVector.
 template<typename FT, typename A, typename OA>
-double l2Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline double l2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     assert(lhs.size() == rhs.size());
     double s = 0.;
     for(size_t i = 0; i < lhs.size(); ++i) {
@@ -208,7 +209,7 @@ double l2Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
 }
 
 template<typename FT, typename A, typename OA>
-double l1Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline double l1Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     assert(lhs.size() == rhs.size());
     double ret = 0.;
     for(size_t i = 0; i < lhs.size(); ++i) {
@@ -217,7 +218,7 @@ double l1Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     return ret;
 }
 template<typename FT, typename A, typename OA>
-double l3Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline double l3Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     assert(lhs.size() == rhs.size());
     double ret = 0.;
     for(size_t i = 0; i < lhs.size(); ++i) {
@@ -226,7 +227,7 @@ double l3Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     return ret;
 }
 template<typename FT, typename A, typename OA>
-double l4Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline double l4Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     assert(lhs.size() == rhs.size());
     double ret = 0.;
     for(size_t i = 0; i < lhs.size(); ++i) {
@@ -235,7 +236,7 @@ double l4Norm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     return ret;
 }
 template<typename FT, typename A, typename OA>
-double maxNorm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline double maxDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     assert(lhs.size() == rhs.size());
     double ret = 0.;
     for(size_t i = 0; i < lhs.size(); ++i) {
@@ -243,6 +244,8 @@ double maxNorm(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     }
     return ret;
 }
+template<typename FT, typename A, typename OA>
+inline double infDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {return maxDist(lhs, rhs);}
 
 using namespace blaze;
 }

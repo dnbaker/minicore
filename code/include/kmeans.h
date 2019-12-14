@@ -5,18 +5,19 @@
 #include <vector>
 #include "aesctr/wy.h"
 #include "macros.h"
+#include "blaze_adaptor.h"
 
 #if defined(USE_TBB)
 #include <execution>
 #  define inclusive_scan(x, y, z) inclusive_scan(::std::execution::par_unseq, x, y, z)
 #else
-#  define inclusive_scan(x, y, z) inclusive_scan(x, y, z)
-//#  define inclusive_scan(x, y, z) ::std::partial_sum(x, y, z)
+#  define inclusive_scan(x, y, z) ::std::partial_sum(x, y, z)
 #endif
 
 namespace clustering {
 using std::inclusive_scan;
 using std::partial_sum;
+using blz::l2Dist;
 
 template<typename C>
 using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
