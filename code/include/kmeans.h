@@ -17,14 +17,14 @@
 namespace clustering {
 using std::inclusive_scan;
 using std::partial_sum;
-using blz::L2Norm;
+using blz::sqrL2Norm;
 
 template<typename C>
 using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
 
 
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
-         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
+         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 std::vector<IT>
 kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
@@ -87,7 +87,7 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     return centers;
 }
 template<typename FT, bool SO,
-         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
+         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 std::vector<IT>
 kmeanspp(blaze::DynamicMatrix<FT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true) {
     std::vector<IT> ret;

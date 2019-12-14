@@ -12,14 +12,14 @@ struct row_iterator_t {
     this_type &ref_;
 
     auto index() const {return rownum;}
-    row_iterator_t &operator++() {++rownum; return *this;}
-    row_iterator_t &operator--() {--rownum; return *this;}
-    row_iterator_t operator++(int) {
+    INLINE row_iterator_t &operator++() {++rownum; return *this;}
+    INLINE row_iterator_t &operator--() {--rownum; return *this;}
+    INLINE row_iterator_t operator++(int) {
         row_iterator_t ret{rownum, ref_};
         ++rownum;
         return ret;
     }
-    row_iterator_t operator--(int) {
+    INLINE row_iterator_t operator--(int) {
         row_iterator_t ret{rownum, ref_};
         --rownum;
         return ret;
@@ -208,7 +208,23 @@ inline double l2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &r
         FT tmp = lhs[i] - rhs[i];
         s += tmp * tmp;
     }
+    return std::sqrt(s);
+}
+
+template<typename FT, typename A, typename OA>
+inline double sqrL2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+    assert(lhs.size() == rhs.size());
+    double s = 0.;
+    for(size_t i = 0; i < lhs.size(); ++i) {
+        FT tmp = lhs[i] - rhs[i];
+        s += tmp * tmp;
+    }
     return s;
+}
+
+template<typename FT, typename A, typename OA>
+INLINE double sqrDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+    return sqrL2Dist(lhs, rhs);
 }
 
 template<typename FT, typename A, typename OA>
@@ -252,31 +268,37 @@ inline double infDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &
 
 struct L1Norm {
     template<typename C1, typename C2>
-    constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
         return l1Dist(lhs, rhs);
     }
 };
 struct L2Norm {
     template<typename C1, typename C2>
-    constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
         return l2Dist(lhs, rhs);
+    }
+};
+struct sqrL2Norm {
+    template<typename C1, typename C2>
+    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+        return sqrDist(lhs, rhs);
     }
 };
 struct L3Norm {
     template<typename C1, typename C2>
-    constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
         return l3Dist(lhs, rhs);
     }
 };
 struct L4Norm {
     template<typename C1, typename C2>
-    constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
         return l4Dist(lhs, rhs);
     }
 };
 struct maxNormFunctor {
     template<typename C1, typename C2>
-    constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
         return maxDist(lhs, rhs);
     }
 };
