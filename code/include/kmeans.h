@@ -43,6 +43,7 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k) {
         }
         sumd2 = sum;
         auto sd2i = 1. / sumd2;
+        SK_UNROLL_8
         OMP_PRAGMA("omp parallel for")
         for(IT i = 0; i < np; ++i)
             cdf[i] = distances[i] * sd2i; // Maybe SIMD later?
@@ -69,7 +70,9 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k) {
             }
         }
         auto sd2i = 1. / sumd2;
+        //OMP_PRAGMA("omp parallel for")
         OMP_PRAGMA("omp parallel for")
+        SK_UNROLL_8
         for(IT i = 0; i < np; ++i)
             cdf[i] = distances[i] * sd2i; // Maybe SIMD later?
         std::partial_sum(cdf.begin(), cdf.end(), cdf.begin());
