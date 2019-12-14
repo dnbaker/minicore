@@ -1,5 +1,5 @@
 
-INCLUDE_PATHS=. include /usr/local/Cellar/boost/1.71.0/include/
+INCLUDE_PATHS=. include /usr/local/Cellar/boost/1.71.0/include/ blaze
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 CXX?=g++
 STD?=c++17

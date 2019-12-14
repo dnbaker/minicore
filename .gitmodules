@@ -13,3 +13,6 @@
 [submodule "code/alias_sampler"]
 	path = code/alias_sampler
 	url = https://github.com/dnbaker/alias_sampler
+[submodule "code/blaze"]
+	path = code/blaze
+	url = https://dnbaker@bitbucket.org/blaze-lib/blaze.git
