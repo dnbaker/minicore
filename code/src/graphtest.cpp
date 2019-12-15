@@ -1,6 +1,7 @@
 #include "graph.h"
 #include "parse.h"
 #include "bicriteria.h"
+#include "coreset.h"
 
 template<typename T> class TD;
 
@@ -8,6 +9,48 @@ template<typename T> class TD;
 #define undirectedS bidirectionalS
 using namespace og;
 using namespace boost;
+
+auto dimacs_official_parse(std::string input) {
+    og::Graph<undirectedS> g;
+    std::ifstream ifs(input);
+    std::string graphtype;
+    size_t nnodes = 0, nedges = 0;
+    for(std::string line; std::getline(ifs, line);) {
+        if(line.empty()) continue;
+        switch(line.front()) {
+            case 'c': break; // nothing
+            case 'p': {
+                const char *p = line.data() + 2, *p2 = ++p;
+                while(!std::isspace(*p2)) ++p2;
+                graphtype = std::string(p, p2 - p);
+                std::fprintf(stderr, "graphtype: %s\n", graphtype.data());
+                p = p2 + 1;
+                nnodes = std::strtoull(p, nullptr, 10);
+                for(size_t i = 0; i < nnodes; ++i)
+                    boost::add_vertex(g); // Add all the vertices
+                if((p2 = std::strchr(p, ' ')) == nullptr) throw 1;
+                p = p2 + 1;
+                nedges = std::strtoull(p, nullptr, 10);
+                std::fprintf(stderr, "n: %zu. m: %zu\n", nnodes, nedges);
+                break;
+            }
+            case 'a': {
+                assert(nnodes);
+                char *strend;
+                const char *p = line.data() + 2;
+                size_t lhs = std::strtoull(p, &strend, 10);
+                p = strend + 1;
+                size_t rhs = std::strtoull(p, &strend, 10);
+                p = strend + 1;
+                double dist = std::atof(p);
+                boost::add_edge(lhs, rhs, dist, g);
+                break;
+            }
+            default: std::fprintf(stderr, "Unexpected: this line! (%s)\n", line.data()); throw 1;
+        }
+    }
+    return g;
+}
 
 auto dimacs_parse(const char *fn) {
     auto g = parse_dimacs_unweighted<boost::undirectedS>(fn);
@@ -68,60 +111,33 @@ auto csv_parse(const char *fn) {
     using Graph = decltype(g);
     boost::graph_traits<decltype(g)>::edge_iterator ei, ei_end;
     typedef boost::graph_traits<Graph> GraphTraits;
+    GraphTraits gt;
+    std::fprintf(stderr, "%p\n", (void *)&gt);
     typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, g);
     return g;
 }
 
 int main(int c, char **v) {
     std::string input = c == 1 ? "../dolphins.graph": const_cast<const char *>(v[1]);
-    if(input.find(".csv") != /*std::string::*/input.npos) {
-        auto g = csv_parse(input.data());
-        auto sampled = thorup_sample(g, 3, 0);
-        std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
-    } else if(input.find(".gr") != input.npos && input.find(".graph") == input.npos) {
-        std::ifstream ifs(input);
-        og::Graph<undirectedS> dimacs_official;
-        std::string graphtype;
-        size_t nnodes = 0, nedges = 0;
-        for(std::string line; std::getline(ifs, line);) {
-            const char *p = line.data();
-            if(line.empty()) continue;
-            switch(line.front()) {
-                case 'c': break; // nothing
-                case 'p': {
-                    const char *p = line.data() + 2, *p2 = ++p;
-                    while(!std::isspace(*p2)) ++p2;
-                    graphtype = std::string(p, p2 - p);
-                    std::fprintf(stderr, "graphtype: %s\n", graphtype.data());
-                    p = p2 + 1;
-                    nnodes = std::strtoull(p, nullptr, 10);
-                    for(size_t i = 0; i < nnodes; ++i)
-                        boost::add_vertex(dimacs_official); // Add all the vertices
-                    if((p2 = std::strchr(p, ' ')) == nullptr) throw 1;
-                    p = p2 + 1;
-                    nedges = std::strtoull(p, nullptr, 10);
-                }
-                break;
-                case 'a': {
-                    assert(nnodes);
-                    char *strend;
-                    const char *p = line.data() + 2;
-                    size_t lhs = std::strtoull(p, &strend, 10);
-                    p = strend + 1;
-                    size_t rhs = std::strtoull(p, &strend, 10);
-                    p = strend + 1;
-                    double dist = std::atof(p);
-                    boost::add_edge(lhs, rhs, dist, dimacs_official);
-                }
-                default: std::fprintf(stderr, "Unexpected: this line! (%s)\n", line.data()); throw 1;
-            }
-        }
+    og::Graph<undirectedS> g;
+    if(input.find(".csv") != std::string::npos) {
+        g = csv_parse(input.data());
+    } else if(input.find(".gr") != std::string::npos && input.find(".graph") == std::string::npos) {
+        g = dimacs_official_parse(input);
     } else {
         // DIMACS, non-official
-        auto g = dimacs_parse(input.data());
+        g = dimacs_parse(input.data());
         //if(false) {
-        auto sampled = thorup_sample(g, 3, 0);
-        std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
         //}
     }
+    uint64_t seed = 1337;
+    //min(log2(n)^(2.5), 3000)
+    size_t nsampled_max = std::min(std::ceil(std::pow(std::log2(boost::num_vertices(g)), 2.5)), 3000.);
+    auto sampled = thorup_sample(g, 10, seed, nsampled_max); // 0 is the seed, 500 is the maximum sampled size
+    std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
+    auto [costs, assignments] = get_costs(g, sampled);
+    coresets::CoresetSampler<float, uint32_t> sampler;
+    // TODO: make assignments real
+    sampler.make_sampler(costs.size(), sampled.size(), costs.data(), assignments.data());
+    auto sampled_cs = sampler.sample(50);
 }

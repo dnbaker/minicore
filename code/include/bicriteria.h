@@ -108,6 +108,26 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
     return container;
 }
 
+template<typename... Args>
+auto get_costs(boost::adjacency_list<Args...> &x, const std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor> &container) {
+    using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<boost::adjacency_list<Args...>>()))>;
+    using Graph = boost::adjacency_list<Args...>;
+    using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
+    util::ScopedSyntheticVertex<Graph> vx(x);
+    std::vector<edge_cost> costs(boost::num_vertices(x));
+    std::vector<Vertex> p(boost::num_vertices(x));
+    std::vector<uint32_t> assignments(boost::num_vertices(x));
+    auto synthetic_vertex = vx.get();
+    for(const auto vtx: container) {
+        boost::add_edge(synthetic_vertex, vtx, 0., x);
+    }
+    boost::dijkstra_shortest_paths(x, synthetic_vertex,
+                                   distance_map(&costs[0]).predecessor_map(&p[0]));
+    std::fprintf(stderr, "Warning: assignments are not real here.\n");
+    for(size_t i = 0; i < assignments.size(); ++i) assignments[i] = i % container.size();
+    return std::make_pair(costs, assignments);
+}
+
 } // thorup
 using namespace thorup;
 
@@ -160,6 +180,7 @@ parallel_goldman_1median(const PVec &p, const PVec &s, const Graph &x) {
     for(auto &t: threads) t.join();
     return ret;
 }
+
 
 template<typename ...Args>
 auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
