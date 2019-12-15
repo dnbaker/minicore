@@ -8,4 +8,4 @@ It includes methods for approximate, bicriteria solutions as well as sampling al
 
 1. Boost, specifically the Boost Graph Library.
 2. A compiler supporting C++17. We could remove this requirement without much work.
-3. We currently use std::thread for parallelism; we may use OpenMP in the future.
+3. We conditionally use OpenMP. This is enabled with the setting of the OMP variable.
