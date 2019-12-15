@@ -1,4 +1,4 @@
-# Contents
+# Contents [![Build Status](https://travis-ci.com/dnbaker/fgc.svg?branch=master)](https://travis-ci.com/dnbaker/fgc)
 
 1. [graph](#Graph)
     1. Wrappers for boost::graph
