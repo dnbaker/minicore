@@ -119,6 +119,23 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     auto columniterator() const {return ConstColumnViewer(*this);}
 };
 
+template<typename FT, bool SO>
+auto rowiterator(blaze::DynamicMatrix<FT, SO> &o) {
+    return reinterpret_cast<blz::DynamicMatrix<FT, SO> &>(o).rowiterator();
+}
+template<typename FT, bool SO>
+auto rowiterator(const blaze::DynamicMatrix<FT, SO> &o) {
+    return reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(o).rowiterator();
+}
+template<typename FT, bool SO>
+auto columniterator(blaze::DynamicMatrix<FT, SO> &o) {
+    return reinterpret_cast<blz::DynamicMatrix<FT, SO> &>(o).columniterator();
+}
+template<typename FT, bool SO>
+auto columniterator(const blaze::DynamicMatrix<FT, SO> &o) {
+    return reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(o).columniterator();
+}
+
 template< typename Type, bool AF, bool PF, bool SO >
 class CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     using super = blaze::CustomMatrix<Type, AF, PF, SO>;
@@ -160,6 +177,23 @@ class CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     auto columniterator()       {return ColumnViewer(*this);}
     auto columniterator() const {return ConstColumnViewer(*this);}
 };
+
+template<typename FT, bool AF, bool PF, bool SO>
+auto rowiterator(blaze::CustomMatrix<FT, AF, PF, SO> &o) {
+    return reinterpret_cast<blz::CustomMatrix<FT, AF, PF, SO> &>(o).rowiterator();
+}
+template<typename FT, bool AF, bool PF, bool SO>
+auto rowiterator(const blaze::CustomMatrix<FT, AF, PF, SO> &o) {
+    return reinterpret_cast<const blz::CustomMatrix<FT, AF, PF, SO> &>(o).rowiterator();
+}
+template<typename FT, bool AF, bool PF, bool SO>
+auto columniterator(blaze::CustomMatrix<FT, AF, PF, SO> &o) {
+    return reinterpret_cast<blz::CustomMatrix<FT, AF, PF, SO> &>(o).columniterator();
+}
+template<typename FT, bool AF, bool PF, bool SO>
+auto columniterator(const blaze::CustomMatrix<FT, AF, PF, SO> &o) {
+    return reinterpret_cast<const blz::CustomMatrix<FT, AF, PF, SO> &>(o).columniterator();
+}
 
 #define DECL_DIST(norm) \
 template<typename FT, bool SO>\

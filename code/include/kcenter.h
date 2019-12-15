@@ -67,7 +67,7 @@ namespace outliers {
 */
 
 namespace detail {
-template<typename IT=std::uint32_t, typename Container=std::vector<::std::uint32_t>,
+template<typename IT=std::uint32_t, typename Container=std::vector<std::pair<double, IT>>,
          typename Cmp=std::greater<>>
 struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
     // priority queue providing access to underlying constainer with getc()
@@ -84,12 +84,14 @@ struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
 
 
 template<typename IT>
-struct bicritera_result_t: public std::tuple<std::vector<IT>, std::vector<IT>, std::vector<IT>, double> {
-    using super = std::tuple<std::vector<IT>, std::vector<IT>, std::vector<IT>, double>;
+struct bicritera_result_t: public std::tuple<std::vector<IT>, std::vector<IT>, std::vector<std::pair<double, IT>>, double> {
+    using super = std::tuple<std::vector<IT>, std::vector<IT>, std::vector<std::pair<double, IT>>, double>;
     template<typename...Args>
     bicritera_result_t(Args &&...args): super(std::forward<Args>(args)...) {}
     auto &centers() {return std::get<0>(*this);}
     auto &assignments() {return std::get<1>(*this);}
+    // alias
+    auto &labels() {return assignments();}
     auto &outliers() {return std::get<2>(*this);}
     double outlier_threshold() const {return std::get<3>(*this);}
     size_t num_centers() const {return centers().size();}
@@ -110,8 +112,10 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                    double gamma=0.001, size_t t = 100, double eta=0.01,
                    const Norm &norm=Norm())
 {
+    std::fprintf(stderr, "Note: the value k (%zu) is not used in this function or the algorithm\n", k);
     // Step 1: constants
-    auto np = end - first;
+    assert(end > first);
+    size_t np = end - first;
     const size_t z = std::ceil(gamma * np);
     const size_t samplechunksize = std::ceil(std::log(1./eta) / (1 - gamma));
     const size_t farthestchunksize = std::ceil((1 + eps) * z);
@@ -135,7 +139,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < np; ++i) {
         const auto &ref = first[ret[i]];
-        double dist = norm(ref, first[ret.first()]);
+        double dist = norm(ref, first[ret.front()]);
         double newdist;
         IT label = 0; // This label is an index into the ret vector, rather than the actual index
         for(size_t j = 1, e = ret.size(); j < e; ++j) {
@@ -162,7 +166,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     std::vector<IT> random_samples(samplechunksize);
     // modulo without a div/mod instruction, much faster
     schism::Schismatic<IT> div(farthestchunksize); // pq size
-    for(size_t j = 0;;) {
+    for(size_t j = 0;j < t;++j) {
         // Sample 'samplechunksize' points from pq into random_samples.
         // Sample them
         size_t rsi = 0;
@@ -174,11 +178,14 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                 rsp[rsi++] = index;
         } while(rsi < samplechunksize);
         // random_samples now contains indexes *into pq*
-        std::transform(rsp, rsp + rsi, rsp, [pqi=pq.getc().data()](auto x) {return pqi[x];});
+        std::transform(rsp, rsp + rsi, rsp,
+            [pqi=pq.getc().data()](auto x) {
+            return pqi[x].second;
+        });
         // random_samples now contains indexes *into original dataset*
 
         // Insert into solution
-        ret.insert(rsp, rsp + rsi);
+        ret.insert(ret.end(), rsp, rsp + rsi);
 
         // compare each point against all of the new points
         pq.getc().clear(); // empty priority queue
@@ -248,7 +255,12 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
 #endif
     }
     const double minmaxdist = pq.top().first;
-    return bicritera_result_t{ret, labels, std::move(pq.getc()), minmaxdist};
+    bicritera_result_t<IT> bicret;
+    bicret.centers() = std::move(ret);
+    bicret.labels() = std::move(labels);
+    bicret.outliers() = std::move(pq.getc());
+    std::get<3>(bicret) = minmaxdist;
+    return bicret;
     // center ids, label assignments for all points besides outliers, outliers, and the distance of the closest excluded point
 } // kcenter_bicriteria
 
@@ -310,8 +322,8 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 coresets::IndexCoreset<IT, FT>
-kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
-                double rho,
+kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double mu=.1,
+                double rho=1.5,
                 double gamma=0.001, double eta=0.01, const Norm &norm=Norm()) {
     // rho is 'D' for R^D (http://www.wisdom.weizmann.ac.il/~robi/teaching/2014b-SeminarGeometryAlgorithms/lecture1.pdf)
     // in Euclidean space, as worst-case, but usually better in real data with structure.
@@ -319,8 +331,13 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
     const size_t np = end - first;
     size_t L = std::ceil(std::pow(2. / mu, rho) * k);
     size_t nrounds = std::ceil((L + std::sqrt(L)) / (1. - eta));
-    auto [centers, labels, outliers, rtilde] = kcenter_bicriteria(first, end, rng, k, eps,
-                                                                  gamma, L, eta, norm);
+    auto bic = kcenter_bicriteria(first, end, rng, k, eps,
+                                  gamma, nrounds, eta, norm);
+    double rtilde = bic.outlier_threshold();
+    std::fprintf(stderr, "outlier threshold: %f\n", rtilde);
+    auto &centers = bic.centers();
+    auto &labels = bic.labels();
+    auto &outliers = bic.outliers();
     //std::vector<size_t> counts(centers.size());
     coresets::hash_map<IT, uint32_t> counts;
     counts.reserve(centers.size());
@@ -329,7 +346,7 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
     for(const auto outlier: outliers) {
         // TODO: consider using a reduction method + index reassignment for more parallelized summation
         SK_UNROLL_8
-        while(i < outlier) {
+        while(i < outlier.second) {
              ++counts[labels[i++]];
         }
         ++i; // skip the outliers
@@ -338,7 +355,7 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
          ++counts[labels[i++]];
     coresets::IndexCoreset<IT, FT> ret(centers.size() + outliers.size());
     for(i = 0; i < outliers.size(); ++i) {
-        ret.indices_[i] = outliers[i];
+        ret.indices_[i] = outliers[i].second;
         ret.weights_[i] = 1.;
     }
     for(const auto &pair: counts) {

@@ -42,6 +42,11 @@ int main(int argc, char *argv[]) {
     auto centers = clustering::kmeanspp(ptr, ptr + n, gen, npoints);
     auto kc = clustering::kcenter_greedy_2approx(ptr, ptr + n, gen, npoints);
     auto centers2 = clustering::kmeanspp(mat, gen, npoints, blz::L1Norm());
+    auto matrowit = blz::rowiterator(mat);
+    if(0) {
+        auto cs = clustering::outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), gen, 3, 0.5);
+        auto csmat = index2matrix(cs, mat);
+    }
     auto stop = t();
     std::fprintf(stderr, "Time: %gs\n", double((stop - start).count()) / 1e9);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);

@@ -37,19 +37,22 @@ struct MatrixCoreset {
 };
 
 template<typename FT, typename IT, typename MatrixType>
-auto index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat, bool rowwise) {
+MatrixCoreset<MatrixType, FT>
+index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
+             bool rowwise=(blaze::StorageOrder_v<MatrixType> == blaze::rowMajor))
+{
     auto weights = ic.weights_;
     MatrixType ret;
     if(rowwise) {
-        auto rows = rows(mat, ic.indices_);
+        auto rows = blaze::rows(mat, ic.indices_);
         ret.resize(rows.rows(), rows.columns());
         ret = rows;
     } else {
-        auto columns = columns(mat, ic.indices_);
+        auto columns = blaze::columns(mat, ic.indices_);
         ret.resize(columns.rows(), columns.columns());
         ret = columns;
     }
-    return MatrixCoreset<MatrixType, FT>{std::move(ret), std:move(weights), rowwise};
+    return MatrixCoreset<MatrixType, FT>{std::move(ret), std::move(weights), rowwise};
 } // index2matrix
 
 } // coresets
