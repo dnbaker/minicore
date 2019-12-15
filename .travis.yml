@@ -19,7 +19,6 @@ script:
   - ./coreset_test
   - ./btest
   - ./kmpptest
-  - ./graphtest
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:
