@@ -45,13 +45,13 @@ Greedy Strategy Works for k-Center Clustering with Outliers and Coreset Construc
     1. Note: storage is external.
 `IndexCoreset<IT, FT>`, where IT is index type (integral) and FT is weight type (floating point)
 
-## `matrix_coreset.h`
+## matrix\_coreset.h
 
 `MatrixCoreset<MatType, FT>` (Matrix Type, weight type (floating point)
 Constructed from an IndexCoreset and a Matrix, simply concatenates both matrices and weight vectors.
 Can be reduced using coreset construction.
 
-## `blaze_adaptor.h`
+## blaze\_adaptor.h
 
 #### Wrappers
 wrappers in the blz namespace for blaze::DynamicMatrix and blaze::CustomMatrix, with `rowiterator()` and `columniterator()`
