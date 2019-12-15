@@ -31,8 +31,8 @@ std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex
 thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed) {
     using Vertex = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
     // Algorithm E, Thorup p.418
-    const size_t n = boost::num_vertices(x),
-                 m = boost::num_edges(x);
+    const size_t n = boost::num_vertices(x);
+    //m = boost::num_edges(x);
     const double logn = std::log2(n);
     const double eps  = std::sqrt(logn);
     size_t samples_per_round = std::ceil(21. * k * logn / eps);
@@ -57,8 +57,8 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
                         std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor> &container, uint64_t seed)
 {
     using Graph = boost::adjacency_list<Args...>;
-    using edge_descriptor = typename graph_traits<Graph>::edge_descriptor;
-    typename property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, x);
+    //using edge_descriptor = typename graph_traits<Graph>::edge_descriptor;
+    //typename property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, x);
     using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<boost::adjacency_list<Args...>>()))>;
     //
     // Algorithm D, Thorup p.415
@@ -70,7 +70,7 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
     auto &F = container;
     F.reserve(std::min(R.size(), iterations * samples_per_round));
     wy::WyRand<uint64_t, 2> rng(seed);
-    size_t num_el = R.size();
+    //size_t num_el = R.size();
     util::ScopedSyntheticVertex<Graph> vx(x);
     auto synthetic_vertex = vx.get();
     // TODO: consider using hash_set distribution for provide randomness for insertion to F.
@@ -78,7 +78,7 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
     std::vector<edge_cost> distances(boost::num_vertices(x));
     std::vector<Vertex> p(boost::num_vertices(x));
     for(size_t iter = 0; iter < iterations && R.size() > 0; ++iter) {
-        size_t last_size = F.size();
+        //size_t last_size = F.size();
         // Sample ``samples_per_round'' samples.
         for(size_t i = 0, e = samples_per_round; i < e && R.size(); ++i) {
             auto &r = R[rng() % R.size()];
@@ -163,7 +163,7 @@ template<typename ...Args>
 auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
     using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<boost::adjacency_list<Args...>>()))>;
     using Vertex    = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
-    using Edge      = typename boost::graph_traits<boost::adjacency_list<Args...>>::edge_descriptor;
+    //using Edge      = typename boost::graph_traits<boost::adjacency_list<Args...>>::edge_descriptor;
     using Graph     = decltype(x);
     //Iteratively Decreasing NonCentrality
     std::mt19937_64 mt(seed);

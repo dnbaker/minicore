@@ -68,7 +68,7 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(const char *fn) {
         auto it = loc2id.find(val);
         if(it == loc2id.end()) {
             it = loc2id.emplace(val, loc2id.size()).first;
-            auto vid = boost::add_vertex(ret);
+            //auto vid = boost::add_vertex(ret);
             ids.push_back(val);
             assert(loc2id[val] == ids.size() - 1);
             assert(ids.back() == val);
@@ -83,7 +83,7 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(const char *fn) {
         if(rit == loc2id.end()) {
             rit = loc2id.emplace(endval, loc2id.size()).first;
             ids.push_back(endval);
-            auto vid = boost::add_vertex(ret);
+            //auto vid = boost::add_vertex(ret);
             assert(loc2id[endval] == ids.size() - 1);
             assert(ids.back() == endval);
             //assert(vid == ids.back());

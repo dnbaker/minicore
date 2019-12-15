@@ -13,9 +13,8 @@ install:
   - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 60 --slave /usr/bin/g++ g++ /usr/bin/g++-7
 script:
   - cd code || echo "already in code"
-  - make coreset_test graphtest btest kmpptest
+  - make coreset_test btest kmpptest
   - ./coreset_test
-  - ./graphtest
   - ./btest
   - ./kmpptest
 notifications:

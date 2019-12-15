@@ -24,7 +24,7 @@ auto dimacs_parse(const char *fn) {
         auto src = source(*ei, g);
         auto dest = target(*ei, g);
         auto v = boost::get(boost::edge_weight_t(), g, *ei);
-        std::fprintf(stderr, "value: %f. s: %d. dest: %d\n", v, index[src], index[dest]);
+        std::fprintf(stderr, "[%d] value: %f. s: %d. dest: %d\n", ed, v, index[src], index[dest]);
         boost::put(boost::edge_weight_t(), g, *ei, 1.37);
         std::fprintf(stderr, "after value: %f. s: %d. dest: %d\n", boost::get(boost::edge_weight_t(), g, *ei), index[src], index[dest]);
         //typename GraphTraits::edge_descriptor e;
@@ -32,6 +32,7 @@ auto dimacs_parse(const char *fn) {
     }
     for(auto [vs, ve] = boost::vertices(g); vs != ve; ++vs) {
         boost::graph_traits<Graph>::vertex_descriptor vind = *vs;
+        ++vind;
         //std::fprintf(stderr, "vd: %zu\n", size_t(vind));
         //auto vind = *vs;
         //TD<decltype(vind)> td;
@@ -40,6 +41,7 @@ auto dimacs_parse(const char *fn) {
         //std::fprintf(stderr, "WOOO\n");
     }
     for(const auto &e: g.vertices()) {
+        (void)e;
         //std::fprintf(stderr, "WOOO\n");
     }
     std::vector<typename Graph::Vertex> top;

@@ -5,7 +5,7 @@ int main() {
     blz::DynamicMatrix<float> mat(3, 2);
     for(unsigned i = 0; i < mat.rows(); ++i)
         for(unsigned j = 0; j < mat.columns(); ++j)
-            mat(i, j) = std::pow(j, i), std::fprintf(stderr, "%zu/%zu: %f\n", i, j, mat(i, j));
+            mat(i, j) = std::pow(j, i), std::fprintf(stderr, "%u/%u: %f\n", i, j, mat(i, j));
     for(const auto row: mat.rowiterator()) {
         std::cout << row << '\n';
     }
