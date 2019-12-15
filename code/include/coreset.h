@@ -8,11 +8,9 @@
 
 
 namespace coresets {
-#if 0
 template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
           typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>
 using hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, MaxLoadFactor100>;
-#endif
 inline namespace sampling {
 
 template<typename IT, typename FT>

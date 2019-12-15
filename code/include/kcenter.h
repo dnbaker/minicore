@@ -11,7 +11,7 @@ using flat_hash_set = ska::flat_hash_set<T, H, E, A>;
 using std::partial_sum;
 using blz::L2Norm;
 
-// Replace 
+// Replace
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 std::vector<IT>
@@ -40,7 +40,7 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
 #endif
         assert(distances[fc] == 0.);
     }
-        
+
     while(centers.size() < k) {
         auto newc = std::max_element(distances.begin(), distances.end()) - distances.begin();
         centers.push_back(newc);
@@ -255,19 +255,20 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
 // Algorithm 3 (coreset construction)
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-Coreset<IT, FT> 
+coresets::Coreset<IT, FT>
 kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
                 double rho,
                 double gamma=0.001, double eta=0.01, const Norm &norm=Norm()) {
     // rho is 'D' for R^D (http://www.wisdom.weizmann.ac.il/~robi/teaching/2014b-SeminarGeometryAlgorithms/lecture1.pdf)
     // in Euclidean space, as worst-case, but usually better in real data with structure.
     assert(mu > 0. && mu <= 1.);
+    const size_t np = end - first;
     size_t L = std::ceil(std::pow(2. / mu, rho) * k);
     size_t nrounds = std::ceil((L + std::sqrt(L)) / (1. - eta));
     auto [centers, labels, outliers, rtilde] = kcenter_bicriteria(first, end, rng, k, eps,
                                                                   gamma, L, eta, norm);
     //std::vector<size_t> counts(centers.size());
-    flat_hash_map<IT, uint32_t> counts;
+    coresets::hash_map<IT, uint32_t> counts;
     counts.reserve(centers.size());
     throw std::runtime_error("this does not account for ignoring the Z > r");
     size_t i = 0;
@@ -279,7 +280,7 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
     }
     while(i < np)
          ++counts[labels[i++]];
-    Coreset<IT, FT> ret(centers.size() + outliers.size());
+    coresets::Coreset<IT, FT> ret(centers.size() + outliers.size());
     for(i = 0; i < outliers.size(); ++i) {
         ret.indices_[i] = outliers[i];
         ret.weights_[i] = 1.;
