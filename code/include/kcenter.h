@@ -1,5 +1,6 @@
 #pragma once
 #include "kmeans.h"
+#include "coreset.h"
 #include "alias_sampler/div.h"
 #include "flat_hash_map/flat_hash_map.hpp"
 #include <queue>
@@ -87,7 +88,7 @@ struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
 
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-std::vector<IT>
+std::tuple<std::vector<IT>, std::vctor<IT>, double>
 kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                    double gamma=0.001, size_t t = 100, double eta=0.01,
                    const Norm &norm=Norm())
@@ -98,6 +99,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     const size_t samplechunksize = std::ceil(std::log(1./eta) / (1 - gamma));
     const size_t farthestchunksize = std::ceil((1 + eps) * z);
     std::vector<IT> ret;
+    std::vector<IT> labels(np);
     ret.reserve(samplechunksize);
     std::vector<FT> distances(np);
     // randomly select 'log(1/eta) / (1 - eps)' vertices from X and add them to E.
@@ -118,11 +120,15 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         const auto &ref = first[ret[i]];
         double dist = norm(ref, first[ret.first()]);
         double newdist;
+        IT label = 0; // This label is an index into the ret vector, rather than the actual index
         for(size_t j = 1, e = ret.size(); j < e; ++j) {
-            if((newdist = norm(ref, first[ret[j]])) < dist)
+            if((newdist = norm(ref, first[ret[j]])) < dist) {
+                label = j;
                 dist = newdist;
+            }
         }
         distances[i] = dist;
+        labels[i] = ret[label];
         if(pq.empty() || dist > pq.top().first) {
             const auto p = std::make_pair(dist, i);
             OMP_PRAGMA("omp critical")
@@ -166,11 +172,13 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
             const auto &ref = first[i];
             double dist = distances[i];
             double newdist;
+            IT label = labels[i];
             for(size_t j = 0; j < rsi; ++j) {
                 if((newdist = norm(ref, first[rsp[j]])) < dist)
-                    dist = newdist;
+                    dist = newdist, label = rsp[j];
             }
             distances[i] = dist;
+            labels[i] = label;
             if(pq.empty() || dist > pq.top().first) {
                 const auto p = std::make_pair(dist, i);
                 OMP_PRAGMA("omp critical")
@@ -188,7 +196,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         // to technically only do 't' rounds
         // Now fill the next priority queue
     }
-    return ret;
+    return std::make_tuple(ret, labels, pq.top().first); // center ids, label assignments for all points, and the distance of the closest excluded point
 } // kcenter_bicriteria
 
 /*
@@ -245,7 +253,39 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
     } while(ret.size() < k);
     return ret;
 }// kcenter_greedy_2approx_outliers
-// TODO: Algorithm 3 (coresets)
+// Algorithm 3 (coreset construction)
+template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
+Coreset<IT, FT> 
+kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
+                double rho,
+                double gamma=0.001, double eta=0.01, const Norm &norm=Norm()) {
+    // rho is 'D' for R^D (http://www.wisdom.weizmann.ac.il/~robi/teaching/2014b-SeminarGeometryAlgorithms/lecture1.pdf)
+    // in Euclidean space, as worst-case, but usually better in real data with structure.
+    assert(mu > 0. && mu <= 1.);
+    size_t L = std::ceil(std::pow(2. / mu, rho) * k);
+    size_t nrounds = std::ceil((L + std::sqrt(L)) / (1. - eta));
+    auto [centers, labels, rtilde] = kcenter_bicriteria(first, end, rng, k, eps,
+                                                        gamma, L, eta, norm);
+    std::sort(centers.begin(), centers.end());
+    //std::vector<size_t> counts(centers.size());
+    flat_hash_map<IT, uint32_t> counts;
+    counts.reserve(centers.size());
+    throw std::runtime_error("this does not account for ignoring the Z > r");
+    for(size_t i = 0; i < np; ++counts[labels[i++]]);
+    Coreset<IT, FT> ret; // Add the ones of distance > r to coreset with weight = 1, add others to coreset with weight = # points mapping to it.
+    
+#if 0
+Denote by r the maximum distance between E and X by
+excluding the farthest 2z vertices, after the final round of Algorithm 1.
+3. Let Xr = {p | p ∈ X and d(p,E) ≤ r ̃}.
+4. For each vertex p ∈ Xr ̃, assign it to its nearest neighbor in E; for each vertex q ∈ E, let its weight be the
+number of vertices assigning to it.
+5. Add X \Xr ̃ to E; each vertex of X \Xr ̃ has weight 1.
+Output E as the coreset.
+
+#endif
+}
 }// namespace outliers
 
 } // clustering
