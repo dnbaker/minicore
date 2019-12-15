@@ -26,12 +26,15 @@ struct row_iterator_t {
     }
     bool operator==(row_iterator_t o) const {return o.rownum == rownum;}
     bool operator!=(row_iterator_t o) const {return o.rownum != rownum;}
-    bool operator<(row_iterator_t o) const {return o.rownum < rownum;}
-    bool operator<=(row_iterator_t o) const {return o.rownum <= rownum;}
-    bool operator>(row_iterator_t o) const {return o.rownum > rownum;}
-    bool operator>=(row_iterator_t o) const {return o.rownum >= rownum;}
+    bool operator<(row_iterator_t o) const {
+        return rownum < o.rownum;
+    }
+    bool operator<=(row_iterator_t o) const {return rownum <= o.rownum;}
+    bool operator>(row_iterator_t o) const {return rownum > o.rownum;}
+    bool operator>=(row_iterator_t o) const {return rownum >= o.rownum;}
     std::ptrdiff_t operator-(row_iterator_t o) const {return rownum - o.rownum;}
     auto operator[](size_t index) const {
+        //std::fprintf(stderr, "index: %zu. rownum: %zu. nrows: %zu\n", index, rownum, ref_.rows());
         assert(index + rownum < ref_.rows());
         return row(ref_, index + rownum);
     }
@@ -61,10 +64,10 @@ struct column_iterator_t {
     }
     bool operator==(column_iterator_t o) const {return o.columnnum == columnnum;}
     bool operator!=(column_iterator_t o) const {return o.columnnum != columnnum;}
-    bool operator<(column_iterator_t o) const {return o.columnnum < columnnum;}
-    bool operator<=(column_iterator_t o) const {return o.columnnum <= columnnum;}
-    bool operator>(column_iterator_t o) const {return o.columnnum > columnnum;}
-    bool operator>=(column_iterator_t o) const {return o.columnnum >= columnnum;}
+    bool operator<(column_iterator_t o) const {return columnnum < o.columnnum;}
+    bool operator<=(column_iterator_t o) const {return columnnum <= o.columnnum;}
+    bool operator>(column_iterator_t o) const {return columnnum > o.columnnum;}
+    bool operator>=(column_iterator_t o) const {return columnnum >= o.columnnum;}
     std::ptrdiff_t operator-(column_iterator_t o) const {return columnnum - o.columnnum;}
     auto operator[](size_t index) const {
         assert(index + columnnum < ref_.columns());

@@ -123,6 +123,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     std::vector<IT> labels(np);
     ret.reserve(samplechunksize);
     std::vector<FT> distances(np);
+    std::fprintf(stderr, "Inserting first set\n");
     // randomly select 'log(1/eta) / (1 - eps)' vertices from X and add them to E.
     while(ret.size() < samplechunksize) {
         // Assuming that this is relatively small and we can take bad asymptotic complexity
@@ -135,10 +136,11 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     }
     detail::fpq<IT> pq;
     pq.reserve(farthestchunksize + 1);
+    std::fprintf(stderr, "About to fill pq at first\n");
     // Fill the priority queue from the first set
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < np; ++i) {
-        const auto &ref = first[ret[i]];
+        const auto &ref = first[i];
         double dist = norm(ref, first[ret.front()]);
         double newdist;
         IT label = 0; // This label is an index into the ret vector, rather than the actual index
@@ -163,9 +165,11 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
             }
         }
     }
+    std::fprintf(stderr, "Generated first pq\n");
     std::vector<IT> random_samples(samplechunksize);
     // modulo without a div/mod instruction, much faster
     schism::Schismatic<IT> div(farthestchunksize); // pq size
+    assert(samplechunksize >= 1.);
     for(size_t j = 0;j < t;++j) {
         // Sample 'samplechunksize' points from pq into random_samples.
         // Sample them
@@ -182,6 +186,8 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
             [pqi=pq.getc().data()](auto x) {
             return pqi[x].second;
         });
+        for(size_t i = 0; i < rsi; ++i)
+            assert(rsp[i] < np);
         // random_samples now contains indexes *into original dataset*
 
         // Insert into solution
@@ -312,7 +318,8 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
         }
 
         // Sample point
-        newc = pq.getc()[rng() % farthestchunksize];
+        newc = pq.getc()[rng() % farthestchunksize].second;
+        assert(newc < np);
         ret.push_back(newc);
         pq.getc().clear();
     } while(ret.size() < k);
@@ -341,7 +348,6 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double
     //std::vector<size_t> counts(centers.size());
     coresets::hash_map<IT, uint32_t> counts;
     counts.reserve(centers.size());
-    throw std::runtime_error("this does not account for ignoring the Z > r");
     size_t i = 0;
     for(const auto outlier: outliers) {
         // TODO: consider using a reduction method + index reassignment for more parallelized summation

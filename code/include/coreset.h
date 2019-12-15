@@ -6,7 +6,7 @@
 #include "alias_sampler/alias_sampler.h"
 #include "macros.h"
 #ifdef _OPENMP
-  #include <omp.h>
+#  include <omp.h>
 #endif
 
 
@@ -155,9 +155,9 @@ struct CoresetSampler {
         weights_ = weights;
         std::vector<FT> weight_sums(ncenters);
         std::vector<IT> center_counts(ncenters);
-        FT total_cost = 0.;
+        double total_cost = 0.;
 
-        OMP_PRAGMA("parallel for reduction(+:total_cost")
+        OMP_PRAGMA("omp parallel for reduction(+:total_cost)")
         for(size_t i = 0; i < np; ++i) {
             // TODO: vectorize?
             // weight sums per assignment couldn't be vectorized,
@@ -168,7 +168,7 @@ struct CoresetSampler {
             assert(asn < ncenters);
             const auto w = getweight(i);
             weight_sums[asn] += w; // If unweighted, weights are 1.
-            OMP_PRAGMA("omp pragma atomic")
+            OMP_PRAGMA("omp atomic")
             ++center_counts[asn];
             total_cost += w * costs[i];
         }

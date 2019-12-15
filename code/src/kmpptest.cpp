@@ -12,6 +12,18 @@
 #ifndef FLOAT_TYPE
 #define FLOAT_TYPE float
 #endif
+template<typename Mat, typename RNG>
+void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {
+    auto matrowit = blz::rowiterator(mat);
+    auto start = t();
+    auto cs = clustering::outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), rng, npoints, eps);
+    auto stop = t();
+    std::fprintf(stderr, "kcenter coreset took %gs\n", double((stop - start).count()) / 1e9);
+    start = t();
+    auto csmat = index2matrix(cs, mat);
+    stop = t();
+    std::fprintf(stderr, "kcenter compacting to coreset took %gs\n", double((stop - start).count()) / 1e9);
+}
 
 int main(int argc, char *argv[]) {
 #ifdef _OPENMP
@@ -22,6 +34,7 @@ int main(int argc, char *argv[]) {
     size_t n = argc == 1 ? 100000: std::atoi(argv[1]);
     size_t npoints = argc <= 2 ? 50: std::atoi(argv[2]);
     size_t nd = argc <= 3 ? 40: std::atoi(argv[3]);
+    double eps = 0.1;
     auto ptr = static_cast<std::vector<FLOAT_TYPE> *>(std::malloc(n * sizeof(std::vector<FLOAT_TYPE>)));
     //std::unique_ptr<std::vector<FLOAT_TYPE>[]> stuff(n);
     wy::WyRand<uint32_t, 2> gen;
@@ -42,13 +55,9 @@ int main(int argc, char *argv[]) {
     auto centers = clustering::kmeanspp(ptr, ptr + n, gen, npoints);
     auto kc = clustering::kcenter_greedy_2approx(ptr, ptr + n, gen, npoints);
     auto centers2 = clustering::kmeanspp(mat, gen, npoints, blz::L1Norm());
-    auto matrowit = blz::rowiterator(mat);
-    if(0) {
-        auto cs = clustering::outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), gen, 3, 0.5);
-        auto csmat = index2matrix(cs, mat);
-    }
     auto stop = t();
-    std::fprintf(stderr, "Time: %gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "Time for kmeans++: %gs\n", double((stop - start).count()) / 1e9);
+    test_kccs(mat, gen, npoints, eps);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
     std::destroy_n(ptr, n);
     std::free(ptr);
