@@ -77,3 +77,20 @@ while its application to graph metrics is from [Braverman, Huang, Jiang, Krauthg
 
 We use the [Thorup](https://epubs.siam.org/doi/pdf/10.1137/S0097539701388884) paper [from 2005](https://sci-hub.se/10.1137/s0097539701388884)
 for an initial graph bicriteria approximation.
+
+### TODO
+
+1. K-means
+  1. Use k-means++ result to generate coreset
+  2. Implement weighted k-means clustering
+    1. Use Lloyd's algorithm
+2. Sparse graph K-median
+  1. Implement weighted k-median clustering on graph.
+    2. Algorithm: http://homepage.divms.uiowa.edu/~kvaradar/sp2016/scribe\_week5.pdf
+    3. Runtime: n^2k^3log(n / eps)
+      1. Eventually unsuitable for large n, necessitating the use of these coresets
+3. K-center
+  1. Test accuracy of k-center, debug partitioned version
+  2. Use coreset for clustering
+4. Python bindings
+  1. This will use the blaze::CustomMatrix interface.
