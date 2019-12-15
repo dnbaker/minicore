@@ -29,6 +29,7 @@ int main(int argc, char *argv[]) {
 #ifdef _OPENMP
     auto nt = std::thread::hardware_concurrency();
     omp_set_num_threads(nt);
+    std::fprintf(stderr, "%d threads used\n", nt);
 #endif
     std::srand(0);
     size_t n = argc == 1 ? 100000: std::atoi(argv[1]);

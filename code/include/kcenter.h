@@ -117,13 +117,12 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     assert(end > first);
     size_t np = end - first;
     const size_t z = std::ceil(gamma * np);
-    const size_t samplechunksize = std::ceil(std::log(1./eta) / (1 - gamma));
-    const size_t farthestchunksize = std::ceil((1 + eps) * z);
+    size_t farthestchunksize = std::ceil((1 + eps) * z),
+           samplechunksize = std::ceil(std::log(1./eta) / (1 - gamma));
     std::vector<IT> ret;
     std::vector<IT> labels(np);
     ret.reserve(samplechunksize);
     std::vector<FT> distances(np);
-    std::fprintf(stderr, "Inserting first set\n");
     // randomly select 'log(1/eta) / (1 - eps)' vertices from X and add them to E.
     while(ret.size() < samplechunksize) {
         // Assuming that this is relatively small and we can take bad asymptotic complexity
@@ -134,9 +133,10 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     if(samplechunksize > 100) {
         std::fprintf(stderr, "Warning: with samplechunksize %zu, it may end up taking a decent amount of time. Consider swapping this in for a hash set.", samplechunksize);
     }
+    if(samplechunksize > farthestchunksize)
+        farthestchunksize = samplechunksize;
     detail::fpq<IT> pq;
     pq.reserve(farthestchunksize + 1);
-    std::fprintf(stderr, "About to fill pq at first\n");
     // Fill the priority queue from the first set
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < np; ++i) {
@@ -165,13 +165,12 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
             }
         }
     }
-    std::fprintf(stderr, "Generated first pq\n");
     std::vector<IT> random_samples(samplechunksize);
     // modulo without a div/mod instruction, much faster
     schism::Schismatic<IT> div(farthestchunksize); // pq size
     assert(samplechunksize >= 1.);
     for(size_t j = 0;j < t;++j) {
-        std::fprintf(stderr, "j: %zu/%zu\n", j, t);
+        //std::fprintf(stderr, "j: %zu/%zu\n", j, t);
         // Sample 'samplechunksize' points from pq into random_samples.
         // Sample them
         size_t rsi = 0;
@@ -183,6 +182,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                 rsp[rsi++] = index;
         } while(rsi < samplechunksize);
         // random_samples now contains indexes *into pq*
+        assert(pq.getc().data());
         std::transform(rsp, rsp + rsi, rsp,
             [pqi=pq.getc().data()](auto x) {
             return pqi[x].second;
@@ -201,12 +201,18 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
 #if defined(_OPENMP) && defined(PARTITIONED_COMPUTATION) && PARTITIONED_COMPUTATION
         // This can be partitioned/parallelized and merged
         // Something like
-        unsigned nt = omp_get_num_threads();
+        unsigned nt;
+        OMP_PRAGMA("omp parallel")
+        {
+            OMP_PRAGMA("omp single")
+            nt = omp_get_num_threads();
+        }
         std::vector<detail::fpq<IT>> queues(nt);
+        //std::fprintf(stderr, "queues created %zu\n", queues.size());
         OMP_PRAGMA("omp parallel for")
         for(size_t i = 0; i < np; ++i) {
             auto tid = omp_get_thread_num();
-            auto &local_pq = queues[tid];
+            auto &local_pq = queues.at(tid);
             const auto &ref = first[i];
             double dist = distances[i];
             double newdist;
@@ -224,9 +230,8 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                 // TODO: avoid filling it all the way by checking size but it's probably not worth it
                     local_pq.pop();
             }
-            std::fprintf(stderr, "finishing iteration\n");
+            //std::fprintf(stderr, "finishing iteration %zu/%zu\n", i, np);
         }
-        std::fprintf(stderr, "finished iteratios, now mering\n");
         // Merge local priority_queues
         for(const auto &local_pq: queues) {
             for(const auto v: local_pq.getc()) {

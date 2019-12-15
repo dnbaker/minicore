@@ -90,7 +90,7 @@ for an initial graph bicriteria approximation.
     3. Runtime: n^2k^3log(n / eps)
       1. Eventually unsuitable for large n, necessitating the use of these coresets
 3. K-center
-  1. Test accuracy of k-center, debug partitioned version
+  1. Test accuracy of k-center method on real data
   2. Use coreset for clustering
 4. Python bindings
   1. This will use the blaze::CustomMatrix interface.
