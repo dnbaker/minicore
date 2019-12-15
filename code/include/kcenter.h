@@ -1,6 +1,6 @@
 #pragma once
 #include "kmeans.h"
-#include "coreset.h"
+#include "matrix_coreset.h"
 #include "alias_sampler/div.h"
 #include "flat_hash_map/flat_hash_map.hpp"
 #include <queue>
@@ -11,7 +11,11 @@ using flat_hash_set = ska::flat_hash_set<T, H, E, A>;
 using std::partial_sum;
 using blz::L2Norm;
 
-// Replace
+/*
+ *
+ * Greedy, provable 2-approximate solution
+ * T. F. Gonzalez. Clustering to minimize the maximum intercluster distance. Theoretical Computer Science, 38:293-306, 1985.
+ */
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 std::vector<IT>
@@ -78,6 +82,19 @@ struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
 } // detail
 
 
+
+template<typename IT>
+struct bicritera_result_t: public std::tuple<std::vector<IT>, std::vector<IT>, std::vector<IT>, double> {
+    using super = std::tuple<std::vector<IT>, std::vector<IT>, std::vector<IT>, double>;
+    template<typename...Args>
+    bicritera_result_t(Args &&...args): super(std::forward<Args>(args)...) {}
+    auto &centers() {return std::get<0>(*this);}
+    auto &assignments() {return std::get<1>(*this);}
+    auto &outliers() {return std::get<2>(*this);}
+    double outlier_threshold() const {return std::get<3>(*this);}
+    size_t num_centers() const {return centers().size();}
+};
+
 /*
 // Algorithm 1 from the above DYW paper
 // Z = # outliers
@@ -87,8 +104,8 @@ struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
 */
 
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
-         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-std::tuple<std::vector<IT>, std::vector<IT>, std::vector<IT>, double>
+         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
+bicritera_result_t<IT>
 kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                    double gamma=0.001, size_t t = 100, double eta=0.01,
                    const Norm &norm=Norm())
@@ -165,7 +182,44 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
 
         // compare each point against all of the new points
         pq.getc().clear(); // empty priority queue
+        // Fill priority queue
         OMP_PRAGMA("omp parallel for")
+#if PARTITIONED_COMPUTATION
+        // This can be partitioned/parallelized and merged
+        // Something like
+        unsigned nt = omp_get_num_threads();
+        std::vector<detail::fqc> queues(nt);
+        for(size_t i = 0; i < np; ++i) {
+            auto tid = omp_get_thread_num();
+            auto &local_pq = queues[tid];
+            const auto &ref = first[i];
+            double dist = distances[i];
+            double newdist;
+            IT label = labels[i];
+            for(size_t j = 0; j < rsi; ++j) {
+                if((newdist = norm(ref, first[rsp[j]])) < dist)
+                    dist = newdist, label = rsp[j];
+            }
+            distances[i] = dist;
+            labels[i] = label;
+            if(local_pq.empty() || dist > local_pq.top().first) {
+                const auto p = std::make_pair(dist, i);
+                local_pq.push(p);
+                if(local_pq.size() > farthestchunksize)
+                // TODO: avoid filling it all the way by checking size but it's probably not worth it
+                    local_pq.pop();
+            }
+        }
+        // Merge local priority_queues
+        for(const auto &local_pq: queues) {
+            for(const auto v: local_pq.getc()) {
+                if(pq.empty() || v.first > pq.top().first) {
+                    pq.push(v);
+                    if(pq.size() > farthestchunksize) pq.pop();
+                }
+            }
+        }
+#else
         for(size_t i = 0; i < np; ++i) {
             const auto &ref = first[i];
             double dist = distances[i];
@@ -191,11 +245,11 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                 }
             }
         }
-        // to technically only do 't' rounds
-        // Now fill the next priority queue
+#endif
     }
     const double minmaxdist = pq.top().first;
-    return std::make_tuple(ret, labels, std::move(pq.getc()), minmaxdist); // center ids, label assignments for all points, and the distance of the closest excluded point
+    return bicritera_result_t{ret, labels, std::move(pq.getc()), minmaxdist};
+    // center ids, label assignments for all points besides outliers, outliers, and the distance of the closest excluded point
 } // kcenter_bicriteria
 
 /*
@@ -255,7 +309,7 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
 // Algorithm 3 (coreset construction)
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-coresets::Coreset<IT, FT>
+coresets::IndexCoreset<IT, FT>
 kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
                 double rho,
                 double gamma=0.001, double eta=0.01, const Norm &norm=Norm()) {
@@ -273,6 +327,8 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
     throw std::runtime_error("this does not account for ignoring the Z > r");
     size_t i = 0;
     for(const auto outlier: outliers) {
+        // TODO: consider using a reduction method + index reassignment for more parallelized summation
+        SK_UNROLL_8
         while(i < outlier) {
              ++counts[labels[i++]];
         }
@@ -280,7 +336,7 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
     }
     while(i < np)
          ++counts[labels[i++]];
-    coresets::Coreset<IT, FT> ret(centers.size() + outliers.size());
+    coresets::IndexCoreset<IT, FT> ret(centers.size() + outliers.size());
     for(i = 0; i < outliers.size(); ++i) {
         ret.indices_[i] = outliers[i];
         ret.weights_[i] = 1.;
@@ -289,16 +345,6 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
         ret.weights_[i] = pair.second;
         ret.indices_[i] = pair.first;
     }
-#if 0
-Denote by r the maximum distance between E and X by
-excluding the farthest 2z vertices, after the final round of Algorithm 1.
-3. Let Xr = {p | p ∈ X and d(p,E) ≤ r ̃}.
-4. For each vertex p ∈ Xr ̃, assign it to its nearest neighbor in E; for each vertex q ∈ E, let its weight be the
-number of vertices assigning to it.
-5. Add X \Xr ̃ to E; each vertex of X \Xr ̃ has weight 1.
-Output E as the coreset.
-
-#endif
     return ret;
 }
 }// namespace outliers

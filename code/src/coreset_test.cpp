@@ -1,7 +1,7 @@
 #include "include/coreset.h"
 
 int main() {
-    coresets::Coreset<uint32_t, float> cs(100);
+    coresets::IndexCoreset<uint32_t, float> cs(100);
     coresets::CoresetSampler<float, uint32_t> sampler;
     size_t npoints = 10000;
     std::vector<uint32_t> assignments(npoints);
