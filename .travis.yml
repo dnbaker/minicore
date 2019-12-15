@@ -7,6 +7,7 @@ addons:
     - ubuntu-toolchain-r-test
     packages:
     - g++-9
+    - libboost-all-dev
 env:
   - CXX=g++-9
 install:
@@ -14,10 +15,11 @@ install:
   - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 60 --slave /usr/bin/g++ g++ /usr/bin/g++-9
 script:
   - cd code || echo "already in code"
-  - make coreset_test btest kmpptest
+  - make coreset_test btest kmpptest graphtest
   - ./coreset_test
   - ./btest
   - ./kmpptest
+  - ./graphtest
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:
