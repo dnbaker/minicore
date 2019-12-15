@@ -32,9 +32,11 @@ struct row_iterator_t {
     bool operator>=(row_iterator_t o) const {return o.rownum >= rownum;}
     std::ptrdiff_t operator-(row_iterator_t o) const {return rownum - o.rownum;}
     auto operator[](size_t index) const {
+        assert(index + rownum < ref_.rows());
         return row(ref_, index + rownum);
     }
     auto operator*() const {
+        assert(rownum < ref_.rows());
         return row(ref_, rownum);
     }
 };
@@ -65,9 +67,11 @@ struct column_iterator_t {
     bool operator>=(column_iterator_t o) const {return o.columnnum >= columnnum;}
     std::ptrdiff_t operator-(column_iterator_t o) const {return columnnum - o.columnnum;}
     auto operator[](size_t index) const {
+        assert(index + columnnum < ref_.columns());
         return column(ref_, index + columnnum);
     }
     auto operator*() const {
+        assert(columnnum < ref_.columns());
         return column(ref_, columnnum);
     }
 };
@@ -266,6 +270,13 @@ inline double maxDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &
 template<typename FT, typename A, typename OA>
 inline double infDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {return maxDist(lhs, rhs);}
 
+template<typename Base>
+struct sqrBaseNorm: public Base {
+    template<typename C1, typename C2>
+    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+        return std::pow(Base::operator()(lhs, rhs), 2);
+    }
+};
 struct L1Norm {
     template<typename C1, typename C2>
     INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
@@ -303,6 +314,10 @@ struct maxNormFunctor {
     }
 };
 struct infNormFunction: maxNormFunctor{};
+struct sqrL1Norm: sqrBaseNorm<L1Norm> {};
+struct sqrL3Norm: sqrBaseNorm<L3Norm> {};
+struct sqrL4Norm: sqrBaseNorm<L4Norm> {};
+struct sqrMaxNorm: sqrBaseNorm<maxNormFunctor> {};
 
 using namespace blaze;
 }
