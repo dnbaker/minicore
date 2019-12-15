@@ -7,7 +7,7 @@ addons:
     - ubuntu-toolchain-r-test
     packages:
     - g++-9
-    - libboost-all-dev
+    - libboost-graph-dev
 env:
   - CXX=g++-9
 install:
