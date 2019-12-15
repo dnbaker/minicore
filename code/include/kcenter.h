@@ -88,7 +88,7 @@ struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
 
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-std::tuple<std::vector<IT>, std::vctor<IT>, double>
+std::tuple<std::vector<IT>, std::vector<IT>, std::vector<IT>, double>
 kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                    double gamma=0.001, size_t t = 100, double eta=0.01,
                    const Norm &norm=Norm())
@@ -163,8 +163,6 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         // Insert into solution
         ret.insert(rsp, rsp + rsi);
 
-        if(++j == t) break; // to do only 't' rounds
-
         // compare each point against all of the new points
         pq.getc().clear(); // empty priority queue
         OMP_PRAGMA("omp parallel for")
@@ -196,7 +194,8 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         // to technically only do 't' rounds
         // Now fill the next priority queue
     }
-    return std::make_tuple(ret, labels, pq.top().first); // center ids, label assignments for all points, and the distance of the closest excluded point
+    const double minmaxdist = pq.top().first;
+    return std::make_tuple(ret, labels, std::move(pq.getc()), minmaxdist); // center ids, label assignments for all points, and the distance of the closest excluded point
 } // kcenter_bicriteria
 
 /*
@@ -265,16 +264,30 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps, double mu,
     assert(mu > 0. && mu <= 1.);
     size_t L = std::ceil(std::pow(2. / mu, rho) * k);
     size_t nrounds = std::ceil((L + std::sqrt(L)) / (1. - eta));
-    auto [centers, labels, rtilde] = kcenter_bicriteria(first, end, rng, k, eps,
-                                                        gamma, L, eta, norm);
-    std::sort(centers.begin(), centers.end());
+    auto [centers, labels, outliers, rtilde] = kcenter_bicriteria(first, end, rng, k, eps,
+                                                                  gamma, L, eta, norm);
     //std::vector<size_t> counts(centers.size());
     flat_hash_map<IT, uint32_t> counts;
     counts.reserve(centers.size());
     throw std::runtime_error("this does not account for ignoring the Z > r");
-    for(size_t i = 0; i < np; ++counts[labels[i++]]);
-    Coreset<IT, FT> ret; // Add the ones of distance > r to coreset with weight = 1, add others to coreset with weight = # points mapping to it.
-    
+    size_t i = 0;
+    for(const auto outlier: outliers) {
+        while(i < outlier) {
+             ++counts[labels[i++]];
+        }
+        ++i; // skip the outliers
+    }
+    while(i < np)
+         ++counts[labels[i++]];
+    Coreset<IT, FT> ret(centers.size() + outliers.size());
+    for(i = 0; i < outliers.size(); ++i) {
+        ret.indices_[i] = outliers[i];
+        ret.weights_[i] = 1.;
+    }
+    for(const auto &pair: counts) {
+        ret.weights_[i] = pair.second;
+        ret.indices_[i] = pair.first;
+    }
 #if 0
 Denote by r the maximum distance between E and X by
 excluding the farthest 2z vertices, after the final round of Algorithm 1.
@@ -285,6 +298,7 @@ number of vertices assigning to it.
 Output E as the coreset.
 
 #endif
+    return ret;
 }
 }// namespace outliers
 
