@@ -6,9 +6,10 @@
       1. Still missing the final algorithm for k-median, but this will likely soon be done with the local search with swaps method.
 2. [coresets](#coreseth)
     1. `CoresetSampler` contains methods for building an importance sampling framework, performing sampling, and reweighting.
-    2. Coreset contains a vector of indices and a vector of weights.
+    2. IndexCoreset contains a vector of indices and a vector of weights.
     3. Methods for reducing are incomplete, but the software is general enough that this will not be particularly difficult.
         1. Each kind of coreset will likely need a different sort of merge/reduce, as our Coreset only has indices, not the data itself.
+    4. [MatrixCoreset](#matrix_coreseth) creates a composable coreset managing its own memory from an IndexCoreset and a matrix.
 3. [kcenter problem](#kcenterh)
 4. [k-metric proble](#kmeansh)
 5. [blaze-lib row/column iterator wrappers](#blaze_adaptorh)
