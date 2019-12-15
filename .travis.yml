@@ -7,10 +7,12 @@ addons:
     sources:
     - ubuntu-toolchain-r-test
     packages:
-    - g++-7
+    - g++-8
+env:
+  - CXX=g++-8
 install:
   - git submodule sync
-  - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 60 --slave /usr/bin/g++ g++ /usr/bin/g++-7
+  - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 60 --slave /usr/bin/g++ g++ /usr/bin/g++-8
 script:
   - cd code || echo "already in code"
   - make coreset_test btest kmpptest
