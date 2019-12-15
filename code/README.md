@@ -25,6 +25,11 @@ bicriteria.h contains implementations from the Thorup 2005 paper on fast approxi
 
 kcenter 2-approximation (farthest point)
 
+Algorithm from:
+```
+T. F. Gonzalez. Clustering to minimize the maximum intercluster distance. Theoretical Computer Science, 38:293-306, 1985.
+```
+
 Algorithms from:
 ```
 Hu Ding, Haikuo Yu, Zixiu Wang  
@@ -32,7 +37,7 @@ Greedy Strategy Works for k-Center Clustering with Outliers and Coreset Construc
 ```
 1. kcenter with outiers, 2-approximation
 2. kcenter bicriteria approximation
-3. kcenter with outliers coreset construction (uses previous methods as a subroutine)
+3. kcenter with outliers coreset construction (uses Algorithm 2 as a subroutine)
 
 ## kmeans.h
 
@@ -59,3 +64,16 @@ functions allowing range-based loops over the the rows or columns of a matrix.
 
 #### Norm structs
 structs providing distances under given norms (effectively distance oracles), use in `kmeans.h`
+
+
+## References
+
+The k-center 2-approximation is [Gonzalez's](https://www.sciencedirect.com/science/article/pii/0304397585902245)
+[algorithm](https://sci-hub.se/10.1016/0304-3975\(85\)90224-5).
+The k-center clustering, 2-approximation, and coreset *with outliers* is [Ding, Yu, and Wang](https://arxiv.org/abs/1901.08219).
+
+The importance sampling framework we use is from the [Braverman, Feldman, and Lang](https://arxiv.org/abs/1612.00889) paper from 2016,
+while its application to graph metrics is from [Braverman, Huang, Jiang, Krauthgamer, and Wu](https://arxiv.org/abs/1907.04733).
+
+We use the [Thorup](https://epubs.siam.org/doi/pdf/10.1137/S0097539701388884) paper [from 2005](https://sci-hub.se/10.1137/s0097539701388884)
+for an initial graph bicriteria approximation.
