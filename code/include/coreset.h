@@ -134,7 +134,7 @@ struct IndexCoreset {
 };
 
 template<typename FT=float, typename IT=std::uint32_t>
-struct IndexCoresetSampler {
+struct CoresetSampler {
     using Sampler = alias::AliasSampler<FT, wy::WyRand<IT, 2>, IT>;
     std::unique_ptr<Sampler> sampler_;
     std::unique_ptr<FT []>     probs_;
@@ -142,9 +142,9 @@ struct IndexCoresetSampler {
     size_t                        np_;
     bool ready() const {return sampler_.get();}
 
-    IndexCoresetSampler(IndexCoresetSampler &&o)      = default;
-    IndexCoresetSampler(const IndexCoresetSampler &o) = delete;
-    IndexCoresetSampler(): weights_(nullptr) {}
+    CoresetSampler(CoresetSampler &&o)      = default;
+    CoresetSampler(const CoresetSampler &o) = delete;
+    CoresetSampler(): weights_(nullptr) {}
 
     void make_sampler(size_t np, size_t ncenters,
                       const FT *costs, const IT *assignments,
