@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
         std::memcpy(&r[0], &ptr[i][0], sizeof(FLOAT_TYPE) * nd);
     }
     auto centers = clustering::kmeanspp(ptr, ptr + n, gen, npoints);
-    auto kc = clustering::fp_kcenter(ptr, ptr + n, gen, npoints);
+    auto kc = clustering::kcenter_greedy_2approx(ptr, ptr + n, gen, npoints);
     auto centers2 = clustering::kmeanspp(mat, gen, npoints, blz::L1Norm());
     auto stop = t();
     std::fprintf(stderr, "Time: %gs\n", double((stop - start).count()) / 1e9);

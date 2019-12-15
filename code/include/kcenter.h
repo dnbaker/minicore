@@ -14,7 +14,8 @@ using blz::L2Norm;
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 std::vector<IT>
-fp_kcenter(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
+kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm())
+{
     static_assert(sizeof(typename RNG::result_type) == sizeof(IT), "IT must have the same size as the result type of the RNG");
     // Greedy 2-approximation
     static_assert(std::is_arithmetic<FT>::value, "FT must be arithmetic");
@@ -50,7 +51,7 @@ fp_kcenter(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
         }
     }
     return centers;
-} // fp_kcenter
+} // kcenter_greedy_2approx
 
 namespace outliers {
 
@@ -77,13 +78,13 @@ struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
 
 
 /*
+// Algorithm 1 from the above DYW paper
 // Z = # outliers
 // \mu = quality of coreset
 // size of coreset: 2z + O((2/\mu)^p k)
 // \gamma = z / n
 */
 
-// Algorithm 1
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 std::vector<IT>
@@ -170,12 +171,12 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                     dist = newdist;
             }
             distances[i] = dist;
-            if(dist > pq.top().first) {
+            if(pq.empty() || dist > pq.top().first) {
                 const auto p = std::make_pair(dist, i);
                 OMP_PRAGMA("omp critical")
                 {
                     // Check again after getting the lock in case it's changed
-                    if(dist > pq.top().first) {
+                    if(pq.empty() || dist > pq.top().first) {
                         pq.push(p);
                         if(pq.size() > farthestchunksize)
                         // TODO: avoid filling it all the way by checking size but it's probably not worth it
@@ -188,7 +189,63 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         // Now fill the next priority queue
     }
     return ret;
-}
-}// outliers
+} // kcenter_bicriteria
+
+/*
+// Algorithm 2 from the above DYW paper
+// Z = # outliers
+// \gamma = z / n
+*/
+
+template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
+std::vector<IT>
+kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double eps,
+                                double gamma=0.001,
+                                const Norm &norm=Norm())
+{
+    const size_t np = end - first;
+    const size_t z = std::ceil(gamma * np);
+    size_t farthestchunksize = std::ceil((1. + eps) * z);
+    detail::fpq<IT> pq;
+    pq.reserve(farthestchunksize + 1);
+    std::vector<IT> ret;
+    std::vector<FT> distances(np, std::numeric_limits<FT>::max());
+    ret.reserve(k);
+    auto newc = rng() % np;
+    ret.push_back(newc);
+    do {
+        const auto &newel = first[newc];
+        // Fill pq
+        OMP_PRAGMA("omp parallel for")
+        for(size_t i = 0; i < np; ++i) {
+            const auto &ref = first[i];
+            double dist = distances[i];
+            double newdist;
+            if((newdist = norm(first[i], newel)) < dist) {
+                dist = newdist;
+            }
+            distances[i] = dist;
+            if(pq.empty() || dist > pq.top().first) {
+                const auto p = std::make_pair(dist, i);
+                OMP_PRAGMA("omp critical")
+                {
+                    if(pq.empty() || dist > pq.top().first) {
+                        pq.push(p);
+                        if(pq.size() > farthestchunksize) pq.pop();
+                    }
+                }
+            }
+        }
+
+        // Sample point
+        newc = pq.getc()[rng() % farthestchunksize];
+        ret.push_back(newc);
+        pq.getc().clear();
+    } while(ret.size() < k);
+    return ret;
+}// kcenter_greedy_2approx_outliers
+// TODO: Algorithm 3 (coresets)
+}// namespace outliers
 
 } // clustering
