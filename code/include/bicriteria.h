@@ -28,10 +28,11 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
 
 template<typename... Args>
 std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor>
-thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed) {
+thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, double maxfrac=1.) {
     using Vertex = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
     // Algorithm E, Thorup p.418
     const size_t n = boost::num_vertices(x);
+    size_t max_sampled = std::ceil(maxfrac * n);
     //m = boost::num_edges(x);
     const double logn = std::log2(n);
     const double eps  = std::sqrt(logn);
@@ -46,6 +47,7 @@ thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed) {
         sample_from_graph(x, samples_per_round, iterations_per_round, current_buffer, mt());
         samples.insert(current_buffer.begin(), current_buffer.end());
         current_buffer.clear();
+        if(samples.size() > max_sampled) break;
         std::fprintf(stderr, "Samples size after iter %zu/%zu: %zu\n", i, nr, samples.size());
     }
     current_buffer.assign(samples.begin(), samples.end());

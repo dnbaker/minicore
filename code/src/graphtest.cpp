@@ -78,7 +78,46 @@ int main(int c, char **v) {
         auto g = csv_parse(input.data());
         auto sampled = thorup_sample(g, 3, 0);
         std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
+    } else if(input.find(".gr") != input.npos && input.find(".graph") == input.npos) {
+        std::ifstream ifs(input);
+        og::Graph<undirectedS> dimacs_official;
+        std::string graphtype;
+        size_t nnodes = 0, nedges = 0;
+        for(std::string line; std::getline(ifs, line);) {
+            const char *p = line.data();
+            if(line.empty()) continue;
+            switch(line.front()) {
+                case 'c': break; // nothing
+                case 'p': {
+                    const char *p = line.data() + 2, *p2 = ++p;
+                    while(!std::isspace(*p2)) ++p2;
+                    graphtype = std::string(p, p2 - p);
+                    std::fprintf(stderr, "graphtype: %s\n", graphtype.data());
+                    p = p2 + 1;
+                    nnodes = std::strtoull(p, nullptr, 10);
+                    for(size_t i = 0; i < nnodes; ++i)
+                        boost::add_vertex(dimacs_official); // Add all the vertices
+                    if((p2 = std::strchr(p, ' ')) == nullptr) throw 1;
+                    p = p2 + 1;
+                    nedges = std::strtoull(p, nullptr, 10);
+                }
+                break;
+                case 'a': {
+                    assert(nnodes);
+                    char *strend;
+                    const char *p = line.data() + 2;
+                    size_t lhs = std::strtoull(p, &strend, 10);
+                    p = strend + 1;
+                    size_t rhs = std::strtoull(p, &strend, 10);
+                    p = strend + 1;
+                    double dist = std::atof(p);
+                    boost::add_edge(lhs, rhs, dist, dimacs_official);
+                }
+                default: std::fprintf(stderr, "Unexpected: this line! (%s)\n", line.data()); throw 1;
+            }
+        }
     } else {
+        // DIMACS, non-official
         auto g = dimacs_parse(input.data());
         //if(false) {
         auto sampled = thorup_sample(g, 3, 0);

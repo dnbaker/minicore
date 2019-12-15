@@ -20,5 +20,15 @@ endif
 %: src/%.cpp $(wildcard include/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
+%pg: src/%.cpp $(wildcard include/*.h)
+	$(CXX) $(CXXFLAGS) $< -pg -o $@
+
+%pgf: src/%.cpp $(wildcard include/*.h)
+	$(CXX) $(CXXFLAGS) $< -pg -fopenmp -o $@
+
+%f: src/%.cpp $(wildcard include/*.h)
+	$(CXX) $(CXXFLAGS) $< -fopenmp -o $@
+
+
 clean:
 	rm -f $(EX)

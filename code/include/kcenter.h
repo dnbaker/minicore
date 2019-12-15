@@ -171,6 +171,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     schism::Schismatic<IT> div(farthestchunksize); // pq size
     assert(samplechunksize >= 1.);
     for(size_t j = 0;j < t;++j) {
+        std::fprintf(stderr, "j: %zu/%zu\n", j, t);
         // Sample 'samplechunksize' points from pq into random_samples.
         // Sample them
         size_t rsi = 0;
@@ -196,12 +197,13 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         // compare each point against all of the new points
         pq.getc().clear(); // empty priority queue
         // Fill priority queue
-        OMP_PRAGMA("omp parallel for")
-#if PARTITIONED_COMPUTATION
+#define PARTITIONED_COMPUTATION 0
+#if defined(_OPENMP) && defined(PARTITIONED_COMPUTATION) && PARTITIONED_COMPUTATION
         // This can be partitioned/parallelized and merged
         // Something like
         unsigned nt = omp_get_num_threads();
-        std::vector<detail::fqc> queues(nt);
+        std::vector<detail::fpq<IT>> queues(nt);
+        OMP_PRAGMA("omp parallel for")
         for(size_t i = 0; i < np; ++i) {
             auto tid = omp_get_thread_num();
             auto &local_pq = queues[tid];
@@ -222,7 +224,9 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                 // TODO: avoid filling it all the way by checking size but it's probably not worth it
                     local_pq.pop();
             }
+            std::fprintf(stderr, "finishing iteration\n");
         }
+        std::fprintf(stderr, "finished iteratios, now mering\n");
         // Merge local priority_queues
         for(const auto &local_pq: queues) {
             for(const auto v: local_pq.getc()) {
@@ -233,6 +237,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
             }
         }
 #else
+        OMP_PRAGMA("omp parallel for")
         for(size_t i = 0; i < np; ++i) {
             const auto &ref = first[i];
             double dist = distances[i];
@@ -329,7 +334,7 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 coresets::IndexCoreset<IT, FT>
-kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double mu=.1,
+kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double mu=.5,
                 double rho=1.5,
                 double gamma=0.001, double eta=0.01, const Norm &norm=Norm()) {
     // rho is 'D' for R^D (http://www.wisdom.weizmann.ac.il/~robi/teaching/2014b-SeminarGeometryAlgorithms/lecture1.pdf)
