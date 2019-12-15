@@ -2,6 +2,7 @@
 #include <cassert>
 #include <map>
 #include <mutex>
+#include <numeric>
 #include <vector>
 #include "aesctr/wy.h"
 #include "macros.h"

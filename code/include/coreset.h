@@ -186,7 +186,7 @@ struct CoresetSampler {
         Coreset<IT, FT> ret(n);
         sampler_->operator()(&ret.indices_[0], &ret.indices_[n], n ^ seed);
         for(auto i = &ret.indices_[0]; i != &ret.indices_[n]; ++i)
-            assert(i - &ret.indices_[0] < np_);
+            assert(size_t(i - &ret.indices_[0]) < np_);
         double nsamplinv = 1. / n;
         for(size_t i = 0; i < n; ++i)
             ret.weights_[i] = getweight(ret.indices_[i]) * nsamplinv / probs_[i];

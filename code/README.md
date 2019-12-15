@@ -13,6 +13,7 @@
 4. [k-metric proble](#kmeans.h)
 
 
+
 ## Graph
 
 graph.h contains a wrapper for `boost::adjacency_list` tailored for k-median and other optimal transport problems.
