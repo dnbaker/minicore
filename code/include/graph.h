@@ -7,7 +7,7 @@
 #include "boost/property_map/property_map.hpp"
 #include "robin-hood-hashing/src/include/robin_hood.h"
 
-namespace og {
+namespace fgc {
 
 template<typename T, typename H = std::hash<T>, typename E = std::equal_to<T>, typename A = std::allocator<T> >
 using flat_hash_set = ska::flat_hash_set<T, H, E, A>;

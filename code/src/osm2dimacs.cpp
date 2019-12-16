@@ -41,6 +41,7 @@
 #include <osmium/handler/node_locations_for_ways.hpp>
 #include <unordered_set>
 #include <vector>
+#include <cinttypes>
 
 // The type of index used. This must match the include file above
 using index_type = osmium::index::map::FlexMem<osmium::unsigned_object_id_type, osmium::Location>;
@@ -106,10 +107,7 @@ int main(int argc, char* argv[]) {
 
         // Apply input data to first the location handler and then our own handler
         osmium::apply(reader, location_handler, road_length_handler);
-#if 0
-        std::vector<id_int_t> ids;
-        ids.reserve(location_handler.node_ids_.size());
-#endif
+
         id_int_t assigned_id = 0;
         std::unordered_map<id_int_t, id_int_t> reassigner;
         reassigner.reserve(road_length_handler.node_ids_.size());
@@ -121,12 +119,11 @@ int main(int argc, char* argv[]) {
                      road_length_handler.node_ids_.size(), road_length_handler.edges_.size());
         for(const auto id: road_length_handler.node_ids_) {
             reassigner[id] = assigned_id;
-            std::fprintf(ofp, "c %lld->%lld\n", id, assigned_id);
-            ++assigned_id;
+            std::fprintf(ofp, "c %" PRId64 "->%" PRId64 "\n", id, assigned_id++);
         }
         for(const auto &edge: road_length_handler.edges_) {
             auto lhs = reassigner[edge.lhs_], rhs = reassigner[edge.rhs_];
-            std::fprintf(ofp, "a %lld %lld %g\n", lhs, rhs, edge.dist_);
+            std::fprintf(ofp, "a %" PRId64 " %" PRId64 " %g\n", lhs, rhs, edge.dist_);
         }
 
         // Output the length. The haversine function calculates it in meters,

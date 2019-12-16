@@ -5,7 +5,7 @@
 #include "graph.h"
 #include "aesctr/wy.h"
 
-namespace og {
+namespace fgc {
 namespace util {
 template<typename Graph>
 struct ScopedSyntheticVertex {
@@ -18,7 +18,7 @@ struct ScopedSyntheticVertex {
         boost::remove_vertex(vtx_, ref_);
     }
 };
-}
+} // namespace util
 namespace thorup {
 using namespace boost;
 
@@ -253,4 +253,4 @@ auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
 
 } // namespace tnk
 
-} // graph
+} // namespace fgc
