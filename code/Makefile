@@ -1,5 +1,5 @@
 
-INCLUDE_PATHS=. include /usr/local/Cellar/boost/1.71.0/include/ blaze
+INCLUDE_PATHS=. include /usr/local/Cellar/boost/1.71.0/include/ blaze libosmium/include protozero/include
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 CXX?=g++
 STD?=c++17
@@ -11,12 +11,6 @@ all: $(EX)
 
 ifdef OMP
 CXXFLAGS += -fopenmp
-endif
-
-OSINC=
-ifdef OSDIR
-# Replace this for your machine
-OSINC+=-I$(OSDIR)/include -I$(OSDIR)/libexec/include
 endif
 
 ifdef TBBDIR

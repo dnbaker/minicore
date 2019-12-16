@@ -8,7 +8,9 @@ addons:
     packages:
     - g++-9
     - libboost-graph-dev
-    - libosmium-dev
+    - libboost-dev
+    - libexpat1-dev
+    - libbz2-dev
 env:
   - CXX=g++-9
 install:

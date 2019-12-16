@@ -16,3 +16,6 @@
 [submodule "code/blaze"]
 	path = code/blaze
 	url = https://dnbaker@bitbucket.org/blaze-lib/blaze.git
+[submodule "code/protozero"]
+	path = code/protozero
+	url = https://github.com/mapbox/protozero
