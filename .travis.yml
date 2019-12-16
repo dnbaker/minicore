@@ -8,6 +8,7 @@ addons:
     packages:
     - g++-9
     - libboost-graph-dev
+    - libosmium-dev
 env:
   - CXX=g++-9
 install:
@@ -15,7 +16,7 @@ install:
   - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 60 --slave /usr/bin/g++ g++ /usr/bin/g++-9
 script:
   - cd code || echo "already in code"
-  - make coreset_test btest kmpptest graphtest
+  - make coreset_test btest kmpptest graphtest osm2dimacs
   - ./coreset_test
   - ./btest
   - ./kmpptest

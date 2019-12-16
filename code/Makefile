@@ -13,9 +13,11 @@ ifdef OMP
 CXXFLAGS += -fopenmp
 endif
 
-OSDIR=/usr/local/Cellar/libosmium/2.15.4
+OSINC=
+ifdef OSDIR
 # Replace this for your machine
-OSINC=-I$(OSDIR)/include -I$(OSDIR)/libexec/include
+OSINC+=-I$(OSDIR)/include -I$(OSDIR)/libexec/include
+endif
 
 ifdef TBBDIR
 CXXFLAGS += -DUSE_TBB -L$(TBBDIR)/lib -I$(TBBDIR)/include -ltbb
