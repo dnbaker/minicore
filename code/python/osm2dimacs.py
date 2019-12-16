@@ -37,7 +37,7 @@ class RoadLengthHandler(o.SimpleHandler):
                 # print(len(w.nodes), w.nodes)
                 nn = len(w.nodes)
                 for node in w.nodes:
-                    self.nodes.add(nodes.ref)
+                    self.nodes.add(node.ref)
                 #fn = w.nodes[0]
                 #print(dir(fn))
                 # print("lat: %s. lon: %s. x: %s. y: %x" % (fn.lat, fn.lon, fn.x, fn.y))
@@ -74,7 +74,7 @@ def main(osmfile):
     # ng1 = [n for n, count in h.nodes.items() if count > 1]
     ofp = open(sys.argv[2], "w") if len(sys.argv) > 2 else sys.stdout
     print_header(ofp, h)
-    nodeset = list(h.nodes.keys())
+    nodeset = list(h.nodes)
     nodeset.sort()
     nodeid_d = {}
     for node_ind, node_ref in enumerate(nodeset):
