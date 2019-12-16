@@ -31,7 +31,7 @@ endif
 
 osm2dimacs: src/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
-        $(OSINC) \
+        $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@
 
 clean:
