@@ -5,6 +5,7 @@
 #include "flat_hash_map/flat_hash_map.hpp"
 #include "boost/graph/dijkstra_shortest_paths.hpp"
 #include "boost/property_map/property_map.hpp"
+#include "robin-hood-hashing/src/include/robin_hood.h"
 
 namespace og {
 
@@ -12,12 +13,9 @@ template<typename T, typename H = std::hash<T>, typename E = std::equal_to<T>, t
 using flat_hash_set = ska::flat_hash_set<T, H, E, A>;
 // May replace with robin_hood if they implement this.
 
-#if 0
 template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
           typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>
 using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, MaxLoadFactor100>;
-
-#endif
 
 #if 0
 template<typename WeightType>

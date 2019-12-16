@@ -123,8 +123,20 @@ auto get_costs(boost::adjacency_list<Args...> &x, const std::vector<typename boo
     }
     boost::dijkstra_shortest_paths(x, synthetic_vertex,
                                    distance_map(&costs[0]).predecessor_map(&p[0]));
-    std::fprintf(stderr, "Warning: assignments are not real here.\n");
-    for(size_t i = 0; i < assignments.size(); ++i) assignments[i] = i % container.size();
+    typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, x);
+    using v_int_t = decltype(index[p[0]]);
+    flat_hash_map<v_int_t, uint32_t> pid2ind;
+    for(size_t i = 0; i < container.size(); ++i)
+        pid2ind[index[container[i]]] = i;
+    // This could be slow, but whatever.
+    for(size_t i = 0; i < p.size(); ++i) {
+        auto parent = p[i], newparent = p[index[parent]];
+        while(newparent != synthetic_vertex) {
+            parent = newparent;
+            newparent = p[index[parent]];
+        }
+        assignments[i] = pid2ind[index[parent]];
+    }
     return std::make_pair(costs, assignments);
 }
 

@@ -26,7 +26,7 @@ using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])
 
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
-std::vector<IT>
+std::pair<std::vector<IT>, std::vector<FT>>
 kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
     size_t np = end - first;
@@ -85,13 +85,13 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
 #endif
         inclusive_scan(distances.begin(), distances.end(), cdf.begin());
     }
-    return centers;
+    return std::make_pair(std::move(centers), std::move(distances));
 }
 template<typename FT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
-std::vector<IT>
+auto
 kmeanspp(blaze::DynamicMatrix<FT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true) {
-    std::vector<IT> ret;
+    std::pair<std::vector<IT>, std::vector<FT>> ret;
     auto blzview = reinterpret_cast<blz::DynamicMatrix<FT, SO> &>(mat);
     if(rowwise) {
         auto rowit = blzview.rowiterator();

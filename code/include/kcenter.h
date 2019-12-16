@@ -117,6 +117,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     assert(end > first);
     size_t np = end - first;
     const size_t z = std::ceil(gamma * np);
+    std::fprintf(stderr, "z: %zu\n", z);
     size_t farthestchunksize = std::ceil((1 + eps) * z),
            samplechunksize = std::ceil(std::log(1./eta) / (1 - gamma));
     std::vector<IT> ret;
@@ -133,8 +134,10 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     if(samplechunksize > 100) {
         std::fprintf(stderr, "Warning: with samplechunksize %zu, it may end up taking a decent amount of time. Consider swapping this in for a hash set.", samplechunksize);
     }
-    if(samplechunksize > farthestchunksize)
-        farthestchunksize = samplechunksize;
+    if(samplechunksize > farthestchunksize) {
+        std::fprintf(stderr, "samplecc is %zu (> fcs %zu). changing gcs to scc + z (%zu)\n", samplechunksize, farthestchunksize, samplechunksize + z);
+        farthestchunksize = samplechunksize + z;
+    }
     detail::fpq<IT> pq;
     pq.reserve(farthestchunksize + 1);
     // Fill the priority queue from the first set

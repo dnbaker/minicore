@@ -133,8 +133,13 @@ int main(int c, char **v) {
     uint64_t seed = 1337;
     //min(log2(n)^(2.5), 3000)
     size_t nsampled_max = std::min(std::ceil(std::pow(std::log2(boost::num_vertices(g)), 2.5)), 3000.);
-    auto sampled = thorup_sample(g, 10, seed, nsampled_max); // 0 is the seed, 500 is the maximum sampled size
+    if(nsampled_max > boost::num_vertices(g))
+        nsampled_max = boost::num_vertices(g) / 2;
+    double frac = nsampled_max / double(boost::num_vertices(g));
+    auto sampled = thorup_sample(g, 10, seed, frac); // 0 is the seed, 500 is the maximum sampled size
     std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
+    if(sampled.size() > boost::num_vertices(g) / 2)
+        sampled.erase(sampled.begin() + sampled.size() / 2, sampled.end());
     auto [costs, assignments] = get_costs(g, sampled);
     coresets::CoresetSampler<float, uint32_t> sampler;
     // TODO: make assignments real
