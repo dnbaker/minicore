@@ -23,6 +23,7 @@ def distance(c1, c2):
     return 2.0 * EARTH_RADIUS_IN_METERS * asin(sqrt(lath + tmp * lonh));
 
 
+#  TODO: convert this to C++
 
 class RoadLengthHandler(o.SimpleHandler):
     def __init__(self):

@@ -13,6 +13,10 @@ ifdef OMP
 CXXFLAGS += -fopenmp
 endif
 
+OSDIR=/usr/local/Cellar/libosmium/2.15.4
+# Replace this for your machine
+OSINC=-I$(OSDIR)/include -I$(OSDIR)/libexec/include
+
 ifdef TBBDIR
 CXXFLAGS += -DUSE_TBB -L$(TBBDIR)/lib -I$(TBBDIR)/include -ltbb
 endif
@@ -29,6 +33,10 @@ endif
 %f: src/%.cpp $(wildcard include/*.h)
 	$(CXX) $(CXXFLAGS) $< -fopenmp -o $@
 
+osm2dimacs: src/osm2dimacs.cpp
+	$(CXX) $(CXXFLAGS) \
+        $(OSINC) \
+        $< -lz -lbz2 -lexpat -o $@
 
 clean:
 	rm -f $(EX)
