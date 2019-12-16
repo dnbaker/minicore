@@ -19,3 +19,6 @@
 [submodule "code/protozero"]
 	path = code/protozero
 	url = https://github.com/mapbox/protozero
+[submodule "code/libosmium"]
+	path = code/libosmium
+	url = https://github.com/osmcode/libosmium
