@@ -1,7 +1,5 @@
 """
-Compute the total length of highways in an osm file.
 
-Shows how to extract the geometry of a way.
 """
 import osmium as o
 import sys
@@ -31,7 +29,7 @@ class RoadLengthHandler(o.SimpleHandler):
         super(RoadLengthHandler, self).__init__()
         self.length = 0.0
         self.edge_tups = []
-        self.nodes = Counter()
+        self.nodes = set()
 
     def way(self, w):
         if 'highway' in w.tags:
@@ -39,7 +37,7 @@ class RoadLengthHandler(o.SimpleHandler):
                 # print(len(w.nodes), w.nodes)
                 nn = len(w.nodes)
                 for node in w.nodes:
-                    self.nodes[node.ref] += 1
+                    self.nodes.add(nodes.ref)
                 #fn = w.nodes[0]
                 #print(dir(fn))
                 # print("lat: %s. lon: %s. x: %s. y: %x" % (fn.lat, fn.lon, fn.x, fn.y))
@@ -81,6 +79,7 @@ def main(osmfile):
     nodeid_d = {}
     for node_ind, node_ref in enumerate(nodeset):
         nodeid_d[node_ref] = node_ind
+        ofp.write("c %d->%d\n" % (node_ref, node_ind))
     for lhs, rhs, dist in h.edge_tups:
         print("a %d %d %f" % (nodeid_d[lhs], nodeid_d[rhs], dist / 1000), file=ofp)
     #for tup in h.edge_tups:
