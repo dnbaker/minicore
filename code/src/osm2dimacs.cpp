@@ -50,7 +50,7 @@ using location_handler_type = osmium::handler::NodeLocationsForWays<index_type>;
 
 // This handler only implements the way() function, we are not interested in
 // any other objects.
-using id_int_t = long long int;
+using id_int_t = osmium::object_id_type;
 struct RoadLengthHandler : public osmium::handler::Handler {
 
     double length = 0;
@@ -71,7 +71,6 @@ struct RoadLengthHandler : public osmium::handler::Handler {
         node_ids_.insert(nodes[nodes.size() - 1].ref());
         for(size_t i = 0, e = nodes.size() - 1; i < e; ++i) {
             auto id = nodes[i].ref();
-            static_assert(std::is_same_v<decltype(id), long long int>, "must be");
             node_ids_.insert(id);
             //auto dist = osmium::geom::haversine::distance(nodes[i], nodes[i + 1]);
             auto dist = osmium::geom::haversine::distance(nodes[i].location(), nodes[i + 1].location());
