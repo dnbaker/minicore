@@ -106,7 +106,7 @@ kmeanspp(const blaze::DynamicMatrix<FT, SO> &mat, RNG &rng, size_t k, const Norm
 }
 
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double>
-void lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
+double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
                      CMatrixType &centers, MatrixType &data,
                      const WFT *weights=nullptr)
 {
@@ -135,7 +135,8 @@ void lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         row(centers, i) /= counts[i];
     }
     // 2. Assign centers
-    OMP_PRAGMA("omp parallel for")
+    double total_loss = 0.;
+    OMP_PRAGMA("omp parallel for reduction(+:total_loss)")
     for(size_t i = 0; i < nr; ++i) {
         auto dr = row(data, i);
         auto dist = std::numeric_limits<double>::max();
@@ -147,6 +148,25 @@ void lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
                 label = j;
             }
         }
+        total_loss += getw(i) * dist;
+    }
+    return total_loss;
+}
+
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double>
+void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
+                     CMatrixType &centers, MatrixType &data,
+                     double tolerance=.001, size maxiter=-1,
+                     const WFT *weights=nullptr)
+{
+    if(tolerance < 0.) throw 1;
+    double oldloss = lloyd_iteration(assignments, counts, centers, data, weights);
+    size_t iternum = 0;
+    for(;;) {
+        double newloss = lloyd_iteration(assignments, counts, centers, data, weights);
+        if(std::abs(oldloss - newloss) / oldloss < tolerance || iternum++ == maxiter) return;
+        oldloss = newloss;
+        std::fprintf(stderr, "loss at %zu: %g\n", iternum, oldloss);
     }
 }
 
