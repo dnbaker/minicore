@@ -83,7 +83,7 @@ for an initial graph bicriteria approximation.
 ### TODO
 
 1. K-means
-    1. Extensions for other metrics
+    1. Extensions for other metrics (https://arxiv.org/abs/1309.7109)
 2. Metric K-median
     1. Implement weighted k-median clustering on graph using local search heuristics
         a. Algorithm: http://homepage.divms.uiowa.edu/~kvaradar/sp2016/scribe\_week5.pdf
