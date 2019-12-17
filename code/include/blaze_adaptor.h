@@ -111,7 +111,7 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     };
     struct ConstColumnViewer {
         auto index() const {return start_.columnnum;}
-        column_iterator start_, end_;
+        const_column_iterator start_, end_;
         ConstColumnViewer(const this_type &ref): start_{0, ref}, end_{ref.columns(), ref} {}
         auto begin() const {return start_;}
         const auto &end()  const {return end_;}

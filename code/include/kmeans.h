@@ -5,8 +5,7 @@
 #include <numeric>
 #include <vector>
 #include "aesctr/wy.h"
-#include "macros.h"
-#include "blaze_adaptor.h"
+#include "matrix_coreset.h"
 
 #if defined(USE_TBB)
 #include <execution>
@@ -16,6 +15,7 @@
 #endif
 
 namespace clustering {
+
 using std::inclusive_scan;
 using std::partial_sum;
 using blz::sqrL2Norm;
@@ -23,6 +23,10 @@ using blz::sqrL2Norm;
 template<typename C>
 using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
 
+
+/*
+ * TODO: Adapt using https://arxiv.org/pdf/1309.7109.pdf for arbitrary distances
+ */
 
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
@@ -90,9 +94,9 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
 template<typename FT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 auto
-kmeanspp(blaze::DynamicMatrix<FT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true) {
+kmeanspp(const blaze::DynamicMatrix<FT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true) {
     std::pair<std::vector<IT>, std::vector<FT>> ret;
-    auto blzview = reinterpret_cast<blz::DynamicMatrix<FT, SO> &>(mat);
+    const auto &blzview = reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(mat);
     if(rowwise) {
         auto rowit = blzview.rowiterator();
         ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm);
@@ -103,6 +107,51 @@ kmeanspp(blaze::DynamicMatrix<FT, SO> &mat, RNG &rng, size_t k, const Norm &norm
     return ret;
 }
 
+
+template<typename Iter,
+         typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>,
+         typename FT=ContainedTypeFromIterator<Iter>>
+auto kmeans_coreset(Iter start, Iter end,
+                    size_t k, RNG &rng,
+                    size_t cs_size,
+                    const FT *weights=nullptr) {
+    auto [centers, sqdists] = kmeanspp(start, end, rng, k, sqrL2Norm());
+    using sq_t = typename decltype(sqdists)::value_type;
+    coresets::CoresetSampler<sq_t, IT> cs;
+    size_t np = end - start;
+    std::vector<IT> assignments(np);
+    // Get assignments
+    OMP_PRAGMA("parallel for")
+    for(size_t i = 0; i < np; ++i) {
+        double minv = std::numeric_limits<double>::max();
+        unsigned assign_index;
+        for(unsigned j = 0; j < centers.size(); ++j) {
+            double newdist;
+            if((newdist = blz::l2Dist(start[i], start[centers[j]])) < minv) {
+                minv = newdist;
+                assign_index = j;
+            }
+        }
+        sqdists[i] = minv;
+        assignments[i] = assign_index;
+    }
+    cs.make_sampler(np, centers.size(), sqdists.data(), assignments.data(), weights,
+                    /*seed=*/rng());
+    coresets::IndexCoreset<IT, sq_t> ics(cs.sample(cs_size, rng()));
+    return ics;
+}
+template<typename FT, bool SO,
+         typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>>
+auto kmeans_matrix_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RNG &rng, size_t cs_size,
+                           const FT *weights=nullptr, bool rowwise=true)
+{
+    if(!rowwise) throw std::runtime_error("Not implemented");
+    const auto &blzview = reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(mat);
+    auto ics = kmeans_coreset(blzview.rowiterator().begin(), blzview.rowiterator().end(),
+                              k, rng, cs_size, weights);
+    coresets::MatrixCoreset<blaze::DynamicMatrix<FT, SO>, FT> csmat = index2matrix(ics, mat);
+    return csmat;
+}
 #undef inclusive_scan
 
 } // clustering
