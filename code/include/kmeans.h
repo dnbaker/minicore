@@ -59,7 +59,6 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
 #if VERBOSE_AF
     std::fprintf(stderr, "first loop sum: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), double(0)));
 #endif
-        
     std::vector<IT> assignments(np);
     while(centers.size() < k) {
         // At this point, the cdf has been prepared, and we are ready to sample.
@@ -106,6 +105,51 @@ kmeanspp(const blaze::DynamicMatrix<FT, SO> &mat, RNG &rng, size_t k, const Norm
     return ret;
 }
 
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double>
+void lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
+                     CMatrixType &centers, MatrixType &data,
+                     const WFT *weights=nullptr)
+{
+    static_assert(std::is_floating_point_v<WFT>, "WTF must be floating point for weighted kmeans");
+    // make sure this is only rowwise/rowMajor
+    assert(counts.size() == centers.rows());
+    assert(centers.columns() == data.columns());
+    // 1. Gets means of assignments
+    centers = static_cast<typename CMatrixType::ElementType_t>(0.);
+    const size_t nc = centers.columns(), nr = data.rows();
+    auto getw = [weights](size_t ind) {
+        return weights ? weights[ind]: WFT(1.);
+    };
+    // TODO: parallelize (one thread per center, maybe?)
+    for(size_t i = 0; i < nr; ++i) {
+        assert(assignments[i] < centers.size());
+        auto asn = assignments[i];
+        auto dr = row(data, i);
+        auto cr = row(centers, asn);
+        const auto w = getw(i);
+        cr += (dr * w);
+        counts[asn] += w;
+    }
+    for(size_t i = 0; i < centers.rows(); ++i) {
+        assert(counts[i]);
+        row(centers, i) /= counts[i];
+    }
+    // 2. Assign centers
+    OMP_PRAGMA("omp parallel for")
+    for(size_t i = 0; i < nr; ++i) {
+        auto dr = row(data, i);
+        auto dist = std::numeric_limits<double>::max();
+        double newdist;
+        unsigned label = -1;
+        for(size_t j = 0; j < centers.rows(); ++j) {
+            if((newdist = sqrL2Dist(dr, row(centers, i))) < dist) {
+                dist = newdist;
+                label = j;
+            }
+        }
+    }
+}
+
 
 template<typename Iter,
          typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>,
@@ -115,6 +159,7 @@ auto kmeans_coreset(Iter start, Iter end,
                     size_t cs_size,
                     const FT *weights=nullptr) {
     auto [centers, assignments, sqdists] = kmeanspp(start, end, rng, k, sqrL2Norm());
+    
     using sq_t = typename decltype(sqdists)::value_type;
     coresets::CoresetSampler<sq_t, IT> cs;
     size_t np = end - start;

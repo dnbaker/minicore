@@ -1,4 +1,4 @@
-# Contents [![Build Status](https://travis-ci.com/dnbaker/fgc.svg?branch=master)](https://travis-ci.com/dnbaker/fgc)
+# Contents [![Build Status](https://travis-ci.com/dnbaker/fgc.svg?token=nzWL3kpck4ymqu9SdesD&branch=master)](https://travis-ci.com/dnbaker/fgc)
 
 1. [graph](#Graph)
     1. Wrappers for boost::graph
@@ -84,7 +84,7 @@ for an initial graph bicriteria approximation.
     1. Implement weighted k-means clustering
         1. Use Lloyd's algorithm
     2. Extensions for other metrics
-2. Sparse graph K-median
+2. Metric K-median
     1. Implement weighted k-median clustering on graph.
         a. Algorithm: http://homepage.divms.uiowa.edu/~kvaradar/sp2016/scribe\_week5.pdf
         b. Runtime: n^2+
