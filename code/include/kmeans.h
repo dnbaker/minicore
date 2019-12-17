@@ -156,7 +156,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double>
 void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
                      CMatrixType &centers, MatrixType &data,
-                     double tolerance=.001, size maxiter=-1,
+                     double tolerance=.001, size_t maxiter=-1,
                      const WFT *weights=nullptr)
 {
     if(tolerance < 0.) throw 1;
