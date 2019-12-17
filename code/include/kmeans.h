@@ -148,6 +148,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
                 label = j;
             }
         }
+        assignments[i] = label;
         total_loss += getw(i) * dist;
     }
     return total_loss;
