@@ -42,6 +42,8 @@ Greedy Strategy Works for k-Center Clustering with Outliers and Coreset Construc
 ## kmeans.h
 
 1. k-means++ initialization scheme (for the purposes of an approximate solution for importance sampling)
+2. k-means coreset construction using the above approximation
+3. Weighted Lloyd's algorithm
 
 
 ## coreset.h
@@ -81,16 +83,14 @@ for an initial graph bicriteria approximation.
 ### TODO
 
 1. K-means
-    1. Implement weighted k-means clustering
-        1. Use Lloyd's algorithm
-    2. Extensions for other metrics
+    1. Extensions for other metrics
 2. Metric K-median
-    1. Implement weighted k-median clustering on graph.
+    1. Implement weighted k-median clustering on graph using local search heuristics
         a. Algorithm: http://homepage.divms.uiowa.edu/~kvaradar/sp2016/scribe\_week5.pdf
         b. Runtime: n^2+
-    2. Jain/Navirazi
+    2. Jain/Vazirani UFL & k-median
 3. K-center
     1. Test accuracy of k-center method on real data
-    2. Use coreset for clustering
+    2. Use coreset for clustering solutions
 4. Python bindings
     1. This will use the blaze::CustomMatrix interface to speak to Numpy and (maybe Torch?)
