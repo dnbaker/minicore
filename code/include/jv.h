@@ -1,6 +1,8 @@
 #pragma once
 #ifndef JAIN_VAZIRANI_H__
 #define JAIN_VAZIRANI_H__
+#include <queue>
+#include <vector>
 #include "graph.h"
 #include "blaze_adaptor.h"
 
@@ -36,9 +38,17 @@ namespace fgc {
 struct FacilityInfo {
     size_t ncities_ = 0; // number of cities contributing
     size_t t_ = std::numeric_limits<size_t>::max();       // expected time
+    size_t id_; //
     INLINE bool operator<(FacilityInfo o) const {
         return t_ < o.t_;
     }
+};
+struct FacPQ: std::priority_queue<FacilityInfo, std::vector<FacilityInfo>> {
+    using super = std::priority_queue<FacilityInfo, std::vector<FacilityInfo>>;
+    template<typename...Args>
+    FacPQ(Args &&...args): super(std::forward<Args>(args)...) {}
+    auto       &getc()       {return this->c;}
+    const auto &getc() const {return this->c;}
 };
 
 /*
@@ -67,10 +77,13 @@ auto jain_vazirani_ufl(Graph &x,
     std::sort(edges.begin(), edges.end(), [&weightmap](auto lhs, auto rhs) {
         return weightmap[lhs] < weightmap[rhs];
     });
-    // We can think of αj as the amount of money client j is willing to contribute to the solution
+    // We can think of αj as the amount of money client j i willing to contribute to the solution
     // and βij as clien j's contribution towards opening facility . From lecture5 ^ above.
     double alphas(n);
     blaze::DynamicMatrix<float> betas(nf, n);
+    FacPQ pq;
+    for(size_t i = 0; i < candidates.size(); ++i)
+        pq.push(FacilityInfo{0, std::numeric_limits<size_t>::max(), i});
 } // jain_vazirani_ufl
 
 auto jain_vazirani_kmedian(Graph &x,
