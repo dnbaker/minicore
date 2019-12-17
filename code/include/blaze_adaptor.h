@@ -1,6 +1,6 @@
 #pragma once
 #include "blaze/Math.h"
-#include "macros.h"
+#include "./shared.h"
 
 namespace blz {
 

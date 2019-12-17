@@ -3,9 +3,9 @@
 #include <random>
 #include <thread>
 #include "graph.h"
-#include "aesctr/wy.h"
 
 namespace fgc {
+using namespace shared;
 namespace util {
 template<typename Graph>
 struct ScopedSyntheticVertex {

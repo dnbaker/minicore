@@ -2,12 +2,9 @@
 #include "kmeans.h"
 #include "matrix_coreset.h"
 #include "alias_sampler/div.h"
-#include "flat_hash_map/flat_hash_map.hpp"
 #include <queue>
 
 namespace clustering {
-template<typename T, typename H = std::hash<T>, typename E = std::equal_to<T>, typename A = std::allocator<T> >
-using flat_hash_set = ska::flat_hash_set<T, H, E, A>;
 using std::partial_sum;
 using blz::L2Norm;
 
@@ -359,7 +356,7 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double
     auto &labels = bic.labels();
     auto &outliers = bic.outliers();
     //std::vector<size_t> counts(centers.size());
-    coresets::hash_map<IT, uint32_t> counts;
+    coresets::flat_hash_map<IT, uint32_t> counts;
     counts.reserve(centers.size());
     size_t i = 0;
     for(const auto outlier: outliers) {

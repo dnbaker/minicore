@@ -1,10 +1,7 @@
 #pragma once
 #include <cassert>
-#include <map>
 #include <mutex>
 #include <numeric>
-#include <vector>
-#include "aesctr/wy.h"
 #include "matrix_coreset.h"
 
 #if defined(USE_TBB)

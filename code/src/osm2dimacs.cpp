@@ -1,22 +1,6 @@
 /*
 
-  EXAMPLE osmium_road_length
-
-  Calculate the length of the road network (everything tagged `highway=*`)
-  from the given OSM file.
-
-  DEMONSTRATES USE OF:
-  * file input
-  * location indexes and the NodeLocationsForWays handler
-  * length calculation on the earth using the haversine function
-
-  SIMPLER EXAMPLES you might want to understand first:
-  * osmium_read
-  * osmium_count
-  * osmium_pub_names
-
-  LICENSE
-  The code in this example file is released into the Public Domain.
+ Creates a DIMACS sp .gr file from an OSM file.
 
 */
 
@@ -85,7 +69,10 @@ struct RoadLengthHandler : public osmium::handler::Handler {
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " OSMFILE\n";
+        std::cerr << "Usage: " << argv[0] << " OSMFILE <output ? output: stdout>\n";
+        std::cerr << "Consumes an osm file and emits a DIMACS .gr file which can then be used.\n"
+                  << "which ultimately could be transformed into a graph parser, but\n"
+                  << "I see no reason to not just let it be a preprocessing step\n";
         std::exit(1);
     }
     std::FILE *ofp = argc < 3 ? stdout: std::fopen(argv[2], "w");

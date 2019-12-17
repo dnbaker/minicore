@@ -1,21 +1,14 @@
 #pragma once
 #include "boost/graph/adjacency_list.hpp"
 #include "boost/graph/topological_sort.hpp"
-#include <boost/graph/graph_traits.hpp>
-#include "flat_hash_map/flat_hash_map.hpp"
+#include "boost/graph/graph_traits.hpp"
 #include "boost/graph/dijkstra_shortest_paths.hpp"
 #include "boost/property_map/property_map.hpp"
-#include "robin-hood-hashing/src/include/robin_hood.h"
+#include "shared.h"
 
 namespace fgc {
 
-template<typename T, typename H = std::hash<T>, typename E = std::equal_to<T>, typename A = std::allocator<T> >
-using flat_hash_set = ska::flat_hash_set<T, H, E, A>;
 // May replace with robin_hood if they implement this.
-
-template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
-          typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>
-using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, MaxLoadFactor100>;
 
 #if 0
 template<typename WeightType>

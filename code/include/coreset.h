@@ -1,10 +1,8 @@
 #pragma once
 #include <vector>
 #include <map>
-#include "aesctr/wy.h"
-#include "robin-hood-hashing/src/include/robin_hood.h"
 #include "alias_sampler/alias_sampler.h"
-#include "macros.h"
+#include "shared.h"
 #ifdef _OPENMP
 #  include <omp.h>
 #endif
@@ -13,9 +11,7 @@
 
 namespace coresets {
 
-template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
-          typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>
-using hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, MaxLoadFactor100>;
+using namespace shared;
 
 template<typename IT, typename FT>
 struct IndexCoreset {
