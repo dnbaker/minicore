@@ -16,9 +16,11 @@ using namespace shared;
 enum SensitivityMethod: int {
     BRAVERMAN_FELDMAN_LANG,
     FELDMAN_LANGBERG,
+    LUCIC_FAULKNER_KRAUSE_FELDMAN,
     // aliases
     BFL=BRAVERMAN_FELDMAN_LANG,
-    FL=FELDMAN_LANGBERG
+    FL=FELDMAN_LANGBERG,
+    LFKF=LUCIC_FAULKNER_KRAUSE_FELDMAN
 };
 
 template<typename IT, typename FT>
@@ -92,7 +94,6 @@ struct CoresetSampler {
     std::unique_ptr<Sampler> sampler_;
     std::unique_ptr<FT []>     probs_;
 
-    SensitivityMethod sm_ = BRAVERMAN_FELDMAN_LANG;
     const FT                *weights_;
     size_t                        np_;
     bool ready() const {return sampler_.get();}
@@ -101,41 +102,82 @@ struct CoresetSampler {
     CoresetSampler(const CoresetSampler &o) = delete;
     CoresetSampler(): weights_(nullptr) {}
 
-    void make_sampler(size_t np, size_t ncenters,
+    void make_gmm_sampler(size_t np, size_t ncenters,
                       const FT *costs, const IT *assignments,
                       const FT *weights=nullptr,
                       uint64_t seed=137,
-                      SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG)
+                      double alpha_est=0.)
     {
+        // Note: this takes actual distances and then squares them.
+        // ensure that the costs provided are L2Norm, not sqrL2Norm.
+        // From Training Gaussian Mixture Models at Scale via Coresets
+        // http://www.jmlr.org/papers/volume18/15-506/15-506.pdf
         np_ = np;
         weights_ = weights;
-        std::vector<FT> weight_sums(ncenters);
+        std::vector<FT> weight_sums(ncenters), weighted_cost_sums(ncenters);
+        std::vector<FT> sqcosts(ncenters);
         std::vector<IT> center_counts(ncenters);
         double total_cost = 0.;
-        sm_ = sens;
 
         // TODO: vectorize
         // Sketch: check for SSE2/AVX2/AVX512
         //         if weights is null,
         //         set a vector via Space::set1()
         //
-#if 0
-// #ifdef VECTOR_WIDTH
-        /* under construction */
-        static constexpr unsigned nelem_per_vector =
-            VECTOR_WIDTH == unsigned(VECTOR_WIDTH / sizeof(FT));
-        using VTP = typename VT<FT>::type;
-        VTP
-        const VTP *vw = reinterpret_cast<
         OMP_PRAGMA("omp parallel for reduction(+:total_cost)")
-        for(size_t i = 0; i < np / VECTOR_WIDTH; ++i) {
-            VT v(/*load vector */)
-            /* get assignments */
-            /* add weight sum */
+        for(size_t i = 0; i < np; ++i) {
+            // TODO: vectorize?
+            // weight sums per assignment couldn't be vectorized,
+            // total costs could be
+            // Probably a 4-16x speedup on 1/3 of the cost
+            // So maybe like a ~30% speedup?
+            auto asn = assignments[i];
+            assert(asn < ncenters);
+            const auto w = getweight(i); 
+            auto cost = costs[i] * costs[i]; // d^2(x, A)
+            auto wcost = w * cost;
+            OMP_PRAGMA("omp atomic")
+            weighted_cost_sums[asn] += wcost;
+            OMP_PRAGMA("omp atomic")
+            weight_sums[asn] += w; // If unweighted, weights are 1.
+            OMP_PRAGMA("omp atomic")
+            ++center_counts[asn];
+            total_cost += wcost;
+            sqcosts[i] = cost;
         }
-        for(size_t i = (np / VECTOR_WIDTH) * VECTOR_WIDTH;i < np; ++i) {
+        OMP_PRAGMA("omp parallel for")
+        for(size_t i = 0; i < np; ++i) {
+            this->probs_[i] = alpha_est * getweight(i) * (sqcosts[i] + weighted_cost_sums[assignments[i]] / weight_sums[assignments[i]])
+                        + 2. * total_cost / weight_sums[assignments[i]];
         }
-#else
+        auto si = 1. / std::accumulate(&this->probs_[0], this->probs_.get() + np, 0.);
+        OMP_PRAGMA("omp parallel for")
+        for(size_t i = 0; i < np; ++i)
+            this->probs_[i] *= si;
+        sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
+    }
+    void make_sampler(size_t np, size_t ncenters,
+                      const FT *costs, const IT *assignments,
+                      const FT *weights=nullptr,
+                      uint64_t seed=137,
+                      SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG,
+                      double alpha_est=0.)
+    {
+        if(sens == LUCIC_FAULKNER_KRAUSE_FELDMAN) {
+            make_gmm_sampler(np, ncenters, costs, assignments, weights, seed, alpha_est);
+            return;
+        }
+        np_ = np;
+        weights_ = weights;
+        std::vector<FT> weight_sums(ncenters);
+        std::vector<IT> center_counts(ncenters);
+        double total_cost = 0.;
+
+        // TODO: vectorize
+        // Sketch: check for SSE2/AVX2/AVX512
+        //         if weights is null,
+        //         set a vector via Space::set1()
+        //
         OMP_PRAGMA("omp parallel for reduction(+:total_cost)")
         for(size_t i = 0; i < np; ++i) {
             // TODO: vectorize?
@@ -149,11 +191,11 @@ struct CoresetSampler {
 
             OMP_PRAGMA("omp atomic")
             weight_sums[asn] += w; // If unweighted, weights are 1.
+            OMP_PRAGMA("omp atomic")
             ++center_counts[asn];
             total_cost += w * costs[i];
         }
-#endif
-        const bool is_feldman = (sm_ == FELDMAN_LANGBERG);
+        const bool is_feldman = (sens == FELDMAN_LANGBERG);
         if(is_feldman)
             total_cost *= 2.; // For division
         const auto tcinv = 1. / total_cost;
