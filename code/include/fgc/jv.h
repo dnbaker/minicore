@@ -71,16 +71,17 @@ auto jain_vazirani_ufl(Graph &x,
     using Edge = typename Graph::edge_descriptor;
     const size_t n = x.num_vertices(), m = x.num_edges();
     size_t nf = candidates.size();
-    // Sort edges by weight
+    // Sort edges by weight [JV 2.4]
     std::vector<Edge> edges(x.edges().begin(), x.edges().end());
     typename property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, x);
     std::sort(edges.begin(), edges.end(), [&weightmap](auto lhs, auto rhs) {
         return weightmap[lhs] < weightmap[rhs];
     });
     // We can think of αj as the amount of money client j i willing to contribute to the solution
-    // and βij as clien j's contribution towards opening facility . From lecture5 ^ above.
-    double alphas(n);
+    // and βij as clietn j's contribution towards opening facility . From lecture5 ^ above.
+    std::vector<float> alphas(n);
     blaze::DynamicMatrix<float> betas(nf, n);
+    // Place them in heap... somehow update?
     FacPQ pq;
     for(size_t i = 0; i < candidates.size(); ++i)
         pq.push(FacilityInfo{0, std::numeric_limits<size_t>::max(), i});

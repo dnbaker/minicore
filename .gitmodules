@@ -22,3 +22,6 @@
 [submodule "code/libosmium"]
 	path = code/libosmium
 	url = https://github.com/osmcode/libosmium
+[submodule "code/pybind11"]
+	path = code/pybind11
+	url = https://github.com/pybind/pybind11

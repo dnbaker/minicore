@@ -172,6 +172,7 @@ void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
 }
 
 
+
 template<typename Iter,
          typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>,
          typename FT=ContainedTypeFromIterator<Iter>>
