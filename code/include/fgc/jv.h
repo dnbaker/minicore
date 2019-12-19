@@ -71,6 +71,17 @@ auto jain_vazirani_ufl(Graph &x,
     using Edge = typename Graph::edge_descriptor;
     const size_t n = x.num_vertices(), m = x.num_edges();
     size_t nf = candidates.size();
+    blaze::DynamicMatrix<float> c(nf, n);
+    OMP_PRAGMA("omp parallel for")
+    for(size_t i = 0; i < candidates.size(); ++i) {
+        auto edge = candidates[i];
+        auto r = row(c, i);
+        std::vector<typename Graph::vertex_descriptor> p(n);
+        boost::dijkstra_shortest_paths(x, edge,
+                                       distance_map(&r[0]).predecessor_map(&p[0]));
+        // Now the row c(r, i) has the distances from candidate facility candidates[i] to
+        // all nodes.
+    }
     // Sort edges by weight [JV 2.4]
     std::vector<Edge> edges(x.edges().begin(), x.edges().end());
     typename property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, x);
