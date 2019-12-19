@@ -96,16 +96,21 @@ auto jain_vazirani_ufl(Graph &x,
     FacPQ pq;
     for(size_t i = 0; i < candidates.size(); ++i)
         pq.push(FacilityInfo{0, std::numeric_limits<size_t>::max(), i});
+    std::vector<typename Graph::vertex_descriptor> answer;
+    return answer;
 } // jain_vazirani_ufl
 
+template<typename Graph>
 auto jain_vazirani_kmedian(Graph &x,
                            const std::vector<typename Graph::vertex_descriptor> &candidates,
                            size_t k) {
     double minval = 0.;
     auto edge_iterator_pair = x.edges();
     typename property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, x);
-    double maxval = weightmap[*std::max_element(edge_iterator_pair.fist, edge_iterator_pair.second,
-                                      [](auto x) {return weightmap[x];})] * x.num_vertices();
+    auto maxelit = std::max_element(edge_iterator_pair.begin(), edge_iterator_pair.end(),
+                                    [&weightmap](auto x, auto y) {return weightmap[x] < weightmap[y];});
+    double maxcost = weightmap[*maxelit];
+    double maxval = maxcost * x.num_vertices();
     auto ubound = jain_vazirani_ufl(x, candidates, 0); // Opens all facilities
     auto lbound = jain_vazirani_ufl(x, candidates, maxval);
     while(std::min(k - ubound.size(), lbound.size() - k) < k / 2) {
