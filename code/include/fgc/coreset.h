@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <map>
+#define ALIAS_THREADSAFE 1
 #include "alias_sampler/alias_sampler.h"
 #include "shared.h"
 #ifdef _OPENMP
@@ -14,9 +15,9 @@ namespace coresets {
 using namespace shared;
 
 enum SensitivityMethod: int {
-    BRAVERMAN_FELDMAN_LANG,
-    FELDMAN_LANGBERG,
-    LUCIC_FAULKNER_KRAUSE_FELDMAN,
+    BRAVERMAN_FELDMAN_LANG, // 2016, New Frameowkrs
+    FELDMAN_LANGBERG,       // 2011, Unified Framework
+    LUCIC_FAULKNER_KRAUSE_FELDMAN, // 2017, Training Gaussian Mixture Models at Scale
     // aliases
     BFL=BRAVERMAN_FELDMAN_LANG,
     FL=FELDMAN_LANGBERG,
@@ -112,6 +113,8 @@ struct CoresetSampler {
         // ensure that the costs provided are L2Norm, not sqrL2Norm.
         // From Training Gaussian Mixture Models at Scale via Coresets
         // http://www.jmlr.org/papers/volume18/15-506/15-506.pdf
+        // Note: this can be expanded to general probability measures.
+        // I should to generalize this, such as for negative binomial and/or fancier functions
         np_ = np;
         weights_ = weights;
         std::vector<FT> weight_sums(ncenters), weighted_cost_sums(ncenters);
@@ -222,11 +225,36 @@ struct CoresetSampler {
     auto getweight(size_t ind) const {
         return weights_ ? weights_[ind]: static_cast<FT>(1.);
     }
-    IndexCoreset<IT, FT> sample(size_t n, uint64_t seed=0) {
+    IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0) {
+        if(!sampler_.get()) throw 1;
+        sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
-        sampler_->operator()(&ret.indices_[0], &ret.indices_[n], n ^ seed);
+#ifdef ALIAS_THREADSAFE
+        auto ptr = &ret.indices_[0];
+        size_t end = (n / 8) * 8;
+        OMP_PRAGMA("omp parallel for")
+        for(size_t i = 0; i < end; i += 8) {
+            ptr[i + 0] = sampler_->sample();
+            ptr[i + 1] = sampler_->sample();
+            ptr[i + 2] = sampler_->sample();
+            ptr[i + 3] = sampler_->sample();
+            ptr[i + 4] = sampler_->sample();
+            ptr[i + 5] = sampler_->sample();
+            ptr[i + 6] = sampler_->sample();
+            ptr[i + 7] = sampler_->sample();
+        }
+        while(end < n)
+            ptr[end++] = sampler_->sample();
+#else
+        SK_UNROLL_8
+        for(size_t i = 0; i < n; ++i) {
+            ret.indices_[i] = sampler_->sample();
+        }
+#endif
+#ifndef NDEBUG
         for(auto i = &ret.indices_[0]; i != &ret.indices_[n]; ++i)
             assert(size_t(i - &ret.indices_[0]) < np_);
+#endif
         double nsamplinv = 1. / n;
         OMP_PRAGMA("omp parallel for")
         for(size_t i = 0; i < n; ++i)
