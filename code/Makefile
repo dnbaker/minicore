@@ -17,16 +17,16 @@ ifdef TBBDIR
 CXXFLAGS += -DUSE_TBB -L$(TBBDIR)/lib -I$(TBBDIR)/include -ltbb
 endif
 
-%: src/%.cpp $(wildcard include/*.h)
+%: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
-%pg: src/%.cpp $(wildcard include/*.h)
+%pg: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg -o $@
 
-%pgf: src/%.cpp $(wildcard include/*.h)
+%pgf: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg -fopenmp -o $@
 
-%f: src/%.cpp $(wildcard include/*.h)
+%f: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -fopenmp -o $@
 
 osm2dimacs: src/osm2dimacs.cpp

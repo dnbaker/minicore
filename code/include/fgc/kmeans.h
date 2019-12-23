@@ -89,6 +89,8 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     }
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
 }
+
+
 template<typename FT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 auto
