@@ -7,6 +7,7 @@ namespace fgc {
 
 template<typename FT=float, bool SO=blaze::rowMajor>
 struct GMM {
+    // Related: Laplacian
     unsigned                    k_;
     blz::DynamicMatrix<FT, SO> mu_;
     blz::DynamicMatrix<FT, SO> pi_;
