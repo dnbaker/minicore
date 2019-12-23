@@ -1,4 +1,5 @@
 #include "blaze_adaptor.h"
+#include "gmm.h"
 #include <iostream>
 
 int main() {
@@ -24,5 +25,10 @@ int main() {
     std::cout << r2;
     std::fprintf(stderr, "pointers: %p, %p\n", (void *)&r1[0], (void *)&r2[0]);
     std::fprintf(stderr, "rdiff norm: %f\n", blz::sqrDist(r1, r2));
+    fgc::GMM gm(5, 20);
+    if(0) {
+        gm.logprob(r1, 1);
+        gm.logprob(r2, r1);
+    }
     //std::fprintf(stderr, "cdiff norm: %f\n", blz::sqrDist(column(mat, 1), column(mat, 0)));
 }
