@@ -25,3 +25,6 @@
 [submodule "code/pybind11"]
 	path = code/pybind11
 	url = https://github.com/pybind/pybind11
+[submodule "code/pdqsort"]
+	path = code/pdqsort
+	url = https://github.com/orlp/pdqsort
