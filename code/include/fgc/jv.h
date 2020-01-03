@@ -115,6 +115,8 @@ auto jain_vazirani_ufl(Graph &x,
         for(size_t ci = 0; ci < n; ++ci) {
             if(!city_connected[ci]) {
                 alphas[ci] += diff;
+                if(alphas[ci] == cost)
+                    city_connected[city] = true;
                 // And then how do I update Bij?
             }
         }
