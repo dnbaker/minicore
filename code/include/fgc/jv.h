@@ -83,12 +83,28 @@ auto jain_vazirani_ufl(Graph &x,
         // all nodes.
     }
     // Sort edges by weight [JV 2.4]
+#if 0
     std::vector<Edge> edges(x.edges().begin(), x.edges().end());
     typename property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, x);
     std::sort(edges.begin(), edges.end(), [&weightmap](auto lhs, auto rhs) {
         return weightmap[lhs] < weightmap[rhs];
     });
-    // We can think of αj as the amount of money client j i willing to contribute to the solution
+#endif
+    const size_t nedges = candidates.size() * n;
+    // tuple implicitly selects edges with lowest costs
+    auto edges = std::make_unique<std::tuple<float, uint32_t, uint32_t>[]>(nedges);
+    OMP_PRAGMA("omp parallel for")
+    for(size_t i = 0; i < candidates.size(); ++i) {
+        auto r = row(c, i);
+        for(size_t j = 0; j < m; ++m) {
+            edges[i * candidates.size() + j] = {r[j], i, j};
+        }
+    }
+    std::sort(&edges[0], &edges[nedges]);
+    // Add bitvectors --
+    // one for (edge is tight)
+    // one for (facility is open)
+    // We can think of αj as th amount of money client j i willing to contribute to the solution
     // and βij as clietn j's contribution towards opening facility . From lecture5 ^ above.
     std::vector<float> alphas(n);
     blaze::DynamicMatrix<float> betas(nf, n);
