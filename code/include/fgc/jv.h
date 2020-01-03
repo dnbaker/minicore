@@ -101,6 +101,8 @@ auto jain_vazirani_ufl(Graph &x,
     // and βij as clietn j's contribution towards opening facility . From lecture5 ^ above.
     std::vector<float> alphas(n);
     blaze::DynamicMatrix<float> betas(nf, n);
+    auto &v = alphas;
+    auto &w = betas;
     // Place them in heap... somehow update?
     size_t i = 0;
     std::vector<bool> city_connected(n, false);
@@ -110,12 +112,12 @@ auto jain_vazirani_ufl(Graph &x,
         if(city_connected[city]) continue;
         auto facility = std::get<1>(edge);
         auto cost = std::get<0>(edge);
-        auto diff = cost - alphas[city];
+        auto diff = cost - v[city];
         city_connected[city] = true;
         for(size_t ci = 0; ci < n; ++ci) {
             if(!city_connected[ci]) {
-                alphas[ci] += diff;
-                if(alphas[ci] == cost)
+                v[ci] += diff;
+                if(v[ci] == cost)
                     city_connected[city] = true;
                 // And then how do I update Bij?
             }
