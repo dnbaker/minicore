@@ -89,7 +89,7 @@ auto jain_vazirani_ufl(Graph &x,
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < candidates.size(); ++i) {
         auto r = row(c, i);
-        for(size_t j = 0; j < m; ++m) {
+        for(size_t j = 0; j < m; ++j) {
             edges[i * candidates.size() + j] = {r[j], i, j};
         }
     }
