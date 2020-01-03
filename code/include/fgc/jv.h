@@ -110,7 +110,15 @@ auto jain_vazirani_ufl(Graph &x,
         if(city_connected[city]) continue;
         auto facility = std::get<1>(edge);
         auto cost = std::get<0>(edge);
-        alphas[city] += cost;
+        auto diff = cost - alphas[city];
+        city_connected[city] = true;
+        for(size_t ci = 0; ci < n; ++ci) {
+            if(!city_connected[ci]) {
+                alphas[ci] += diff;
+                // And then how do I update Bij?
+            }
+        }
+        ++i;
         // And then how do we update beta?
     }
 #if 0
