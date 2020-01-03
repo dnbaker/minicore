@@ -102,9 +102,22 @@ auto jain_vazirani_ufl(Graph &x,
     std::vector<float> alphas(n);
     blaze::DynamicMatrix<float> betas(nf, n);
     // Place them in heap... somehow update?
+    size_t i = 0;
+    std::vector<bool> city_connected(n, false);
+    while(i < nedges) {
+        auto edge = edges[i];
+        auto city = std::get<2>(edge);
+        if(city_connected[city]) continue;
+        auto facility = std::get<1>(edge);
+        auto cost = std::get<0>(edge);
+        alphas[city] += cost;
+        // And then how do we update beta?
+    }
+#if 0
     FacPQ pq;
     for(size_t i = 0; i < candidates.size(); ++i)
         pq.push(FacilityInfo{0, std::numeric_limits<size_t>::max(), i});
+#endif
     std::vector<typename Graph::vertex_descriptor> answer;
     return answer;
 } // jain_vazirani_ufl
