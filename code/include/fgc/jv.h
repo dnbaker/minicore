@@ -83,13 +83,6 @@ auto jain_vazirani_ufl(Graph &x,
         // all nodes.
     }
     // Sort edges by weight [JV 2.4]
-#if 0
-    std::vector<Edge> edges(x.edges().begin(), x.edges().end());
-    typename property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, x);
-    std::sort(edges.begin(), edges.end(), [&weightmap](auto lhs, auto rhs) {
-        return weightmap[lhs] < weightmap[rhs];
-    });
-#endif
     const size_t nedges = candidates.size() * n;
     // tuple implicitly selects edges with lowest costs
     auto edges = std::make_unique<std::tuple<float, uint32_t, uint32_t>[]>(nedges);
