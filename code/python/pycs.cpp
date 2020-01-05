@@ -6,7 +6,7 @@ using FNA =  py::array_t<float, py::array::c_style | py::array::forcecast>;
 using DNA =  py::array_t<double, py::array::c_style | py::array::forcecast>;
 using INA =  py::array_t<uint32_t, py::array::c_style | py::array::forcecast>;
 
-void init_ex1(py::module &m) {
+void init_coreset(py::module &m) {
     py::class_<CSType>(m, "CoresetSampler")
     .def(py::init<>())
     .def("make_sampler", [](
@@ -15,11 +15,8 @@ void init_ex1(py::module &m) {
         py::buffer_info buf1 = costs.request(), asb = assignments.request();
         if(buf1.ndim != 1) throw std::runtime_error("buffer must have one dimension (reshape if necessary)");
         float *wp = nullptr;
-        auto p = pybind11::cast<FNA>(weights);
-        if(p) {
-            auto bufp = p.request();
-            wp = (float *)bufp.ptr;
-        }
+        if(auto p(pybind11::cast<FNA>(weights)); p)
+            wp = static_cast<float *>(p.request().ptr);
         cs.make_sampler(ncenters, costs.shape(0), (float *)buf1.ptr, (uint32_t *)asb.ptr, wp, seed);
     });
 }

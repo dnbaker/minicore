@@ -152,6 +152,14 @@ auto columniterator(const blaze::DynamicMatrix<FT, SO> &o) {
     return reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(o).columniterator();
 }
 
+template<typename FT, bool SO=blaze::rowMajor>
+using DM = DynamicMatrix<FT, SO>;
+template<typename FT, bool TF=blaze::columnVector>
+using DV = blaze::DynamicVector<FT, TF>;
+
+template<typename FT, bool AF=blaze::unaligned, bool PF=blaze::unpadded, bool SO=blaze::rowMajor>
+using CM = DynamicMatrix<FT, AF, PF, SO>;
+
 template< typename Type, bool AF, bool PF, bool SO >
 class CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     using super = blaze::CustomMatrix<Type, AF, PF, SO>;

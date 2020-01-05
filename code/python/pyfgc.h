@@ -5,4 +5,4 @@
 #include "fgc/matrix_coreset.h"
 namespace py = pybind11;
 void init_ex1(py::module &);
-void init_ex2(py::module &);
+void init_coreset(py::module &);

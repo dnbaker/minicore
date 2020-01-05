@@ -5,6 +5,7 @@
 #include <vector>
 #include "graph.h"
 #include "blaze_adaptor.h"
+#include "jv_solver.h"
 
 /*
  * Implementation of method of Jain-Vazirani for Metric k-median clustering
@@ -82,6 +83,7 @@ auto jain_vazirani_ufl(Graph &x,
         // Now the row c(r, i) has the distances from candidate facility candidates[i] to
         // all nodes.
     }
+#if 0
     // Sort edges by weight [JV 2.4]
     const size_t nedges = candidates.size() * n;
     // tuple implicitly selects edges with lowest costs
@@ -131,6 +133,7 @@ auto jain_vazirani_ufl(Graph &x,
         pq.push(FacilityInfo{0, std::numeric_limits<size_t>::max(), i});
 #endif
     std::vector<typename Graph::vertex_descriptor> answer;
+#endif
     return answer;
 } // jain_vazirani_ufl
 
