@@ -7,8 +7,8 @@ false = False
 
 np.random.seed(13)
 
-nf = 5
-nc = 200
+nf = 15
+nc = 1000
 
 city_locs = np.power(np.random.standard_cauchy((nc, 2)).astype(np.float64) + np.random.normal(size=(nc,2)), 2)
 f_locs = np.power(np.random.standard_cauchy((nf, 2)).astype(np.float64) + np.random.normal(size=(nf,2)), 2)
@@ -17,6 +17,14 @@ c = np.array([[np.linalg.norm(f - c) for c in city_locs] for f in f_locs])
 assert np.all(c > 0)
 
 f_costs = np.array([10.] * nf)
+
+
+### TODO: 1. measure the actual cost of the solution.
+###       2. Plug this into C++ code base.
+###       3. Get coresets.
+###       4. Sanity check: naive graphs (straight line, maybe circles)
+###
+
 
 print("costs:", c.astype(np.int32))
 print("costs to open facilities: ", f_costs.astype(np.int32))
@@ -59,12 +67,12 @@ maxalph = 0.
 
 # Phase 1
 while S:
-    print("S [size: %u] : %s. nfac temp open: %d" % (len(S), S, len(tos)))
+    print("S [size: %u]. nfac temp open: %d" % (len(S), len(tos)))
     # Get minimum cost to make an edge go tight
     # We go through them in order, so it's easy
     mincostedge = etop()        # edge of minimum cost
     minedgecost = mincostedge[0] - maxalph # how much to increment to make that edge go tight
-    print("mincostedge cost: %f. alpha inc: %f (maxalph: %f)" % (mincostedge[0], minedgecost, maxalph))
+    #print("mincostedge cost: %f. alpha inc: %f (maxalph: %f)" % (mincostedge[0], minedgecost, maxalph))
 
     # Get minimum cost to open a facility
     minfaccost = np.inf
@@ -74,7 +82,7 @@ while S:
         assert cost_to_open >= 0.
         if cost_to_open < minfaccost:
             minfaccost = cost_to_open
-            print("mfc: %f" % minfaccost)
+            #print("mfc: %f" % minfaccost)
             minfacind = fid
         # Cost = cost_fac - sum(willignness to pay for fid)
     if minedgecost < minfaccost:
@@ -87,26 +95,23 @@ while S:
     maxalph += inc
     # print("increment: %f" % inc)
     to_remove = set()
-    if not tighten_edge:
-        print("Sum of contributions before: %f" % np.sum(w[minfacind,:]))
+    #if not tighten_edge:
+    #    print("Sum of contributions before: %f" % np.sum(w[minfacind,:]))
     for s in S: 
         v[s] += inc
         assert v[s] == maxalph  # Meaning we don't necessarily have to update all the alphas until we remove them from the pool
         for fid in range(nf):
             if v[s] >= c[fid,s]:
                 istight[fid,s] = true
-                print("s is tight: %d" % s)
+                #print("s is tight: %d" % s)
                 if fid in tos:
                     to_remove.add(s)
             # w[i,j] := max(0., v[j] - c[j][i]); in other words, w[j,i] is how much client i 
             oldw = w[fid,s]
-            w[fid,s] = max(0., v[s] - c[fid,s])
+            w[fid,s] = max(0., maxalph - c[fid,s])
             diff = w[fid,s] - oldw
             if diff > 0:
                 print("contributions increased by %f" % diff)
-            #print("for fid %d and s %d, v is %f and cost is %f. w[fid,s]: %f" % (fid, s, v[s], c[fid,s], w[fid,s]))
-            #if fid == minfacind:
-            #    print("sum for mfi: %f. Cost to open: %f" % (np.sum(w[minfacind,:]), f_costs[minfacind]))
     if not tighten_edge:
         assert minfacind >= 0
         print("minfacind: %d. cost to open: %f. sum of contributions: %f" % (minfacind, f_costs[minfacind], np.sum(w[minfacind,:])))
