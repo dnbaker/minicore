@@ -57,6 +57,9 @@ def calculate_cost(*, c, of, f_costs):
         of :=          set of open facilities
         f_costs := cost of opening facilities
     '''
+    if not len(of):
+        print("Infinite cost", file=sys.stderr)
+        return np.inf
     # Sum of minimum cost for open facilities for all cities
     assert len(np.min(c[of,:], axis=0)) == nc
     ccosts = np.sum(np.min(c[of,:], axis=0))
