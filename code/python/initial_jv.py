@@ -8,10 +8,10 @@ false = False
 np.random.seed(13)
 
 nf = 15
-nc = 1000
+nc = 300
 
-city_locs = np.power(np.random.standard_cauchy((nc, 2)).astype(np.float64) + np.random.normal(size=(nc,2)), 2)
-f_locs = np.power(np.random.standard_cauchy((nf, 2)).astype(np.float64) + np.random.normal(size=(nf,2)), 2)
+city_locs = np.power(np.abs(np.random.standard_cauchy((nc, 2)).astype(np.float64) + np.random.normal(size=(nc,2))), .3)
+f_locs = np.power(np.abs(np.random.standard_cauchy((nf, 2)).astype(np.float64) + np.random.normal(size=(nf,2))), .3)
 
 c = np.array([[np.linalg.norm(f - c) for c in city_locs] for f in f_locs])
 assert np.all(c > 0)
@@ -49,6 +49,21 @@ edges.sort(key=lambda x: -x[0])
 etop = lambda: edges[-1]
 epop = lambda: edges.pop()
 assert all(edges[i][0] >= edges[i + 1][0] for i in range(nc * nf - 1))
+
+
+def calculate_cost(*, c, of, f_costs):
+    '''
+    calculate_cost:
+        c  :=            cost matrix (nf, nc)
+        of :=          set of open facilities
+        f_costs := cost of opening facilities
+    '''
+    # Sum of minimum cost for open facilities for all cities
+    assert len(np.min(c[of,:], axis=0)) == nc
+    ccosts = np.sum(np.min(c[of,:], axis=0))
+    fcosts = np.sum(f_costs[of])
+    print(f"fcosts: {fcosts}. ccosts: {ccosts}.")
+    return fcosts + ccosts
 
 
 def get_cost_to_open(*, w, c, fid, v, f_costs,s):
@@ -139,6 +154,9 @@ while S:
 
 # Phase 2: electric boogaloo
 
+cost = calculate_cost(c=c, of=np.array(sorted(tos)), f_costs=f_costs)
+print("Cost of solution after pruning: %f" % (cost))
+
 tempopen = list(tos)
 for fac in tempopen:
     assert sum(w[fac,:] >= 0.)
@@ -157,12 +175,18 @@ while 1:
     if to_remove:
         tempopen = list(set(tempopen) - to_remove)
     if not tempopen: break
-    random.shuffle(tempopen)
+    picked = random.choice(range(len(tempopen)))
+    lastadded = tempopen[picked]
+    tempopen[picked] = tempopen[-1]
     lastadded = tempopen.pop()
     tprime.add(lastadded)
 
 t = tprime
 print("Set: %s" % t)
+cost = calculate_cost(c=c, of=np.array(sorted(t)), f_costs=f_costs)
+print("Cost of solution after pruning: %f" % (cost))
+print("cost of solution of all facilities: %f" % calculate_cost(c=c, of=np.array(list(range(nf))), f_costs=f_costs))
+print("cost of solution of one random facility: %f" % calculate_cost(c=c, of=np.array([random.choice(range(nf))]), f_costs=f_costs))
 
 
 
