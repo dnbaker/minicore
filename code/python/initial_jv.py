@@ -1,7 +1,6 @@
 import numpy as np
 import random
 
-''' Be a bad person and use C++ keywords '''
 true = True
 false = False
 
