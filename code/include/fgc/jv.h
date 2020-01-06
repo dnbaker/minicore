@@ -69,10 +69,9 @@ auto jain_vazirani_kmedian(Graph &x,
                            unsigned k)
 {
     // candidates consists of a vector of potential facility centers.
-    double cost_ubound = 0.;
-    using Edge = typename Graph::edge_descriptor;
+    //using Edge = typename Graph::edge_descriptor;
     const size_t n = x.num_vertices(), m = x.num_edges();
-    size_t nf = candidates.size();
+    //size_t nf = candidates.size();
     blaze::DynamicMatrix<float> c(nf, n);
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < candidates.size(); ++i) {
@@ -83,19 +82,13 @@ auto jain_vazirani_kmedian(Graph &x,
                                        distance_map(&r[0]).predecessor_map(&p[0]));
         // Now the row c(r, i) has the distances from candidate facility candidates[i] to
         // all nodes.
-        double maxinrow = *std::max_element(r.begin(), r.end());
-        OMP_PRAGMA("omp atomic")
-        cost_ubound = std::max(cost_ubound, maxinrow);
     }
-    cost_ubound *= n;
-    double cost_lbound = 0.;
     // maxcost = (maxcostedgecost * num_cities)
     
     NaiveJVSolver<float> jvs(c.rows(), c.columns(), 0.);
-    jvs.setup(c);
-    auto oneopen = jvs.ufl(c, cost_ubound);
-    auto allopen = jvs.ufl(c, cost_lbound);
-    return oneopen; // This is wrong, I'm just trying to get it to compile.
+    return jvs.kmedian(c, k, true);
+    //auto oneopen = jvs.ufl(c, cost_ubound);
+    //auto allopen = jvs.ufl(c, cost_lbound);
 } // jain_vazirani_ufl
 
 #if 0

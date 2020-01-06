@@ -54,7 +54,7 @@ struct NaiveJVSolver {
         for(size_t i = 0; i < mat.rows(); ++i) {
             auto p = &edges_[i * mat.columns()];
             for(size_t j = 0; j < mat.columns(); ++j) {
-                edges_[j] = {mat(i, j), i, j};
+                p[j] = {mat(i, j), i, j};
             }
         }
         pdqsort(&edges_[0], &edges_[edges_.size()], [](const auto x, const auto y) {return x.cost() > y.cost();});
@@ -110,6 +110,28 @@ struct NaiveJVSolver {
         phase1(mat);
         return phase2(mat);
     }
+    template<typename MatType>
+    auto kmedian(const MatType &mat, unsigned k, bool perform_setup=false) {
+        if(perform_setup) setup(mat);
+        // Uncapacited Facility Location problem with facility cost = faccost
+        double maxcost = mat.columns() * max(mat);
+        double mincost = 0.;
+        double medcost = maxcost / 2;
+        //auto ubound = ufl(mat, maxcost);
+        //auto lbound = ufl(mat, mincost);
+        auto med = ufl(mat, medcost);
+        while(med.size() != k) {
+            if(med.size() == k) break;
+            if(med.size() > k)
+                mincost = medcost; // med has too many, increase cost.
+            else
+                maxcost = medcost; // med has too few, lower cost.
+            medcost = (mincost + maxcost) / 2.;
+            med = ufl(mat, medcost);
+        }
+        return med;
+    }
+    
     std::pair<uint32_t, double> min_tightening_cost() const {
         auto edge = edges_.back();
         return std::make_pair(edge.di(), edge.cost() - maxalph_);
@@ -158,7 +180,7 @@ struct NaiveJVSolver {
             } else tighten = false, inc = openinc;
             perform_increment(inc, to_remove, mat);
             if(!tighten) {
-                auto fc = facility_cost_;
+                //auto fc = facility_cost_;
                 tempopen_.insert(bestfac);
                 nottempopen_.erase(bestfac);
                 for(const auto item: S) {
