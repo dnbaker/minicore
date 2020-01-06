@@ -1,10 +1,14 @@
 
+
 INCLUDE_PATHS=. include /usr/local/Cellar/boost/1.71.0/include/ blaze libosmium/include protozero/include
+ifdef BOOST_DIR
+INCLUDE_PATHS+= $(BOOST_DIR)
+endif
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 CXX?=g++
 STD?=c++17
 WARNINGS+=-Wall -Wextra
-CXXFLAGS+=-O0 -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) #-ftemplate-backtrace-limit=0
+CXXFLAGS+=-O3 -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) #-ftemplate-backtrace-limit=0
 
 EX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
 all: $(EX)
