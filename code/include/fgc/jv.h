@@ -70,8 +70,8 @@ auto jain_vazirani_kmedian(Graph &x,
 {
     // candidates consists of a vector of potential facility centers.
     //using Edge = typename Graph::edge_descriptor;
-    const size_t n = x.num_vertices(), m = x.num_edges();
-    //size_t nf = candidates.size();
+    const size_t n = x.num_vertices();
+    size_t nf = candidates.size();
     blaze::DynamicMatrix<float> c(nf, n);
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < candidates.size(); ++i) {
