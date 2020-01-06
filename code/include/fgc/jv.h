@@ -64,11 +64,12 @@ struct FacPQ: std::priority_queue<FacilityInfo, std::vector<FacilityInfo>> {
  * Implemented with additional commentary from https://www.cs.cmu.edu/~anupamg/adv-approx/lecture5.pdf
  */
 template<typename Graph>
-auto jain_vazirani_ufl(Graph &x,
-                       const std::vector<typename Graph::vertex_descriptor> &candidates,
-                       double total_cost)
+auto jain_vazirani_kmedian(Graph &x,
+                           const std::vector<typename Graph::vertex_descriptor> &candidates,
+                           unsigned k)
 {
     // candidates consists of a vector of potential facility centers.
+    double cost_ubound = 0.;
     using Edge = typename Graph::edge_descriptor;
     const size_t n = x.num_vertices(), m = x.num_edges();
     size_t nf = candidates.size();
@@ -82,61 +83,22 @@ auto jain_vazirani_ufl(Graph &x,
                                        distance_map(&r[0]).predecessor_map(&p[0]));
         // Now the row c(r, i) has the distances from candidate facility candidates[i] to
         // all nodes.
+        double maxinrow = *std::max_element(r.begin(), r.end());
+        OMP_PRAGMA("omp atomic")
+        cost_ubound = std::max(cost_ubound, maxinrow);
     }
-#if 0
-    // Sort edges by weight [JV 2.4]
-    const size_t nedges = candidates.size() * n;
-    // tuple implicitly selects edges with lowest costs
-    auto edges = std::make_unique<std::tuple<float, uint32_t, uint32_t>[]>(nedges);
-    OMP_PRAGMA("omp parallel for")
-    for(size_t i = 0; i < candidates.size(); ++i) {
-        auto r = row(c, i);
-        for(size_t j = 0; j < m; ++j) {
-            edges[i * candidates.size() + j] = {r[j], i, j};
-        }
-    }
-    std::sort(&edges[0], &edges[nedges]);
-    // Add bitvectors --
-    // one for (edge is tight)
-    // one for (facility is open)
-    // We can think of αj as th amount of money client j i willing to contribute to the solution
-    // and βij as clietn j's contribution towards opening facility . From lecture5 ^ above.
-    std::vector<float> alphas(n);
-    blaze::DynamicMatrix<float> betas(nf, n);
-    auto &v = alphas;
-    auto &w = betas;
-    // Place them in heap... somehow update?
-    size_t i = 0;
-    std::vector<bool> city_connected(n, false);
-    while(i < nedges) {
-        auto edge = edges[i];
-        auto city = std::get<2>(edge);
-        if(city_connected[city]) continue;
-        auto facility = std::get<1>(edge);
-        auto cost = std::get<0>(edge);
-        auto diff = cost - v[city];
-        city_connected[city] = true;
-        for(size_t ci = 0; ci < n; ++ci) {
-            if(!city_connected[ci]) {
-                v[ci] += diff;
-                if(v[ci] == cost)
-                    city_connected[city] = true;
-                // And then how do I update Bij?
-            }
-        }
-        ++i;
-        // And then how do we update beta?
-    }
-#if 0
-    FacPQ pq;
-    for(size_t i = 0; i < candidates.size(); ++i)
-        pq.push(FacilityInfo{0, std::numeric_limits<size_t>::max(), i});
-#endif
-    std::vector<typename Graph::vertex_descriptor> answer;
-#endif
-    return answer;
+    cost_ubound *= n;
+    double cost_lbound = 0.;
+    // maxcost = (maxcostedgecost * num_cities)
+    
+    NaiveJVSolver<float> jvs(c.rows(), c.columns(), 0.);
+    jvs.setup(c);
+    auto oneopen = jvs.ufl(c, cost_ubound);
+    auto allopen = jvs.ufl(c, cost_lbound);
+    return oneopen; // This is wrong, I'm just trying to get it to compile.
 } // jain_vazirani_ufl
 
+#if 0
 template<typename Graph>
 auto jain_vazirani_kmedian(Graph &x,
                            const std::vector<typename Graph::vertex_descriptor> &candidates,
@@ -156,6 +118,7 @@ auto jain_vazirani_kmedian(Graph &x,
         throw std::runtime_error("NotImplemented");
     }
 } // jain_vazirani_kmedian
+#endif
 
 
 } // namespace fgc
