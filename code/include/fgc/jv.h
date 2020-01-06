@@ -3,6 +3,7 @@
 #define JAIN_VAZIRANI_H__
 #include <queue>
 #include <vector>
+#include <iostream>
 #include "graph.h"
 #include "blaze_adaptor.h"
 #include "jv_solver.h"
@@ -84,10 +85,13 @@ std::vector<typename Graph::vertex_descriptor>
         // Now the row c(r, i) has the distances from candidate facility candidates[i] to
         // all nodes.
     }
+    std::cerr << "cost matrix: " << c << '\n';
     // maxcost = (maxcostedgecost * num_cities)
     
     NaiveJVSolver<float> jvs(c.rows(), c.columns(), 0.);
+    std::fprintf(stderr, "made jv solver.\n");
     auto tmp = jvs.kmedian(c, k, true);
+    std::fflush(stderr);
     std::vector<typename Graph::vertex_descriptor> ret; ret.reserve(tmp.size());
     for(const auto v: tmp) ret.push_back(v);
     return ret;
