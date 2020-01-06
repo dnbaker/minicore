@@ -1,6 +1,5 @@
 
-
-INCLUDE_PATHS=. include /usr/local/Cellar/boost/1.71.0/include/ blaze libosmium/include protozero/include
+INCLUDE_PATHS=. include include/fgc /usr/local/Cellar/boost/1.71.0/include/ blaze libosmium/include protozero/include
 ifdef BOOST_DIR
 INCLUDE_PATHS+= $(BOOST_DIR)
 endif
@@ -21,16 +20,16 @@ ifdef TBBDIR
 CXXFLAGS += -DUSE_TBB -L$(TBBDIR)/lib -I$(TBBDIR)/include -ltbb
 endif
 
-%: src/%.cpp $(wildcard include/*.h)
+%: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
-%pg: src/%.cpp $(wildcard include/*.h)
+%pg: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg -o $@
 
-%pgf: src/%.cpp $(wildcard include/*.h)
+%pgf: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg -fopenmp -o $@
 
-%f: src/%.cpp $(wildcard include/*.h)
+%f: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -fopenmp -o $@
 
 osm2dimacs: src/osm2dimacs.cpp

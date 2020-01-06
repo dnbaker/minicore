@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <cstring>
 
-namespace og {
+namespace fgc {
 
 enum ParsedFiletype {
     DIMACS,

@@ -7,11 +7,11 @@ template<typename T> class TD;
 
 
 #define undirectedS bidirectionalS
-using namespace og;
+using namespace fgc;
 using namespace boost;
 
 auto dimacs_official_parse(std::string input) {
-    og::Graph<undirectedS> g;
+    fgc::Graph<undirectedS> g;
     std::ifstream ifs(input);
     std::string graphtype;
     size_t nnodes = 0, nedges = 0;
@@ -129,7 +129,7 @@ auto csv_parse(const char *fn) {
 
 int main(int c, char **v) {
     std::string input = c == 1 ? "../dolphins.graph": const_cast<const char *>(v[1]);
-    og::Graph<undirectedS> g;
+    fgc::Graph<undirectedS> g;
     if(input.find(".csv") != std::string::npos) {
         g = csv_parse(input.data());
     } else if(input.find(".gr") != std::string::npos && input.find(".graph") == std::string::npos) {

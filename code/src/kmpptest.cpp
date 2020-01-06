@@ -73,6 +73,10 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "Time for kmeans++ on L1 norm on matrix: %gs\n", double((stop - start).count()) / 1e9);
     test_kccs(mat, gen, npoints, eps);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
+    start = t();
+    auto kmppmcs = clustering::kmeans_matrix_coreset(mat, npoints, gen, npoints * 2);
+    stop = t();
+    std::fprintf(stderr, "Time for kmeans++ matrix coreset: %gs\n", double((stop - start).count()) / 1e9);
     std::destroy_n(ptr, n);
     std::free(ptr);
 }

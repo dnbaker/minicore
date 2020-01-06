@@ -1,4 +1,5 @@
 #include "blaze_adaptor.h"
+#include "gmm.h"
 #include <iostream>
 
 int main() {
@@ -9,15 +10,25 @@ int main() {
     for(const auto row: mat.rowiterator()) {
         std::cout << row << '\n';
     }
+/*
     const blz::DynamicMatrix<float> matcp(mat);
     for(const auto row: matcp.rowiterator()) {
         std::cout << row << '\n';
     }
+*/
     for(const auto column: mat.columniterator()) {
         std::cout << column << '\n';
     }
     auto r1 = row(mat, 1);
     auto r2 = row(mat, 2);
+    std::cout << r1;
+    std::cout << r2;
+    std::fprintf(stderr, "pointers: %p, %p\n", (void *)&r1[0], (void *)&r2[0]);
     std::fprintf(stderr, "rdiff norm: %f\n", blz::sqrDist(r1, r2));
-    std::fprintf(stderr, "cdiff norm: %f\n", blz::sqrDist(column(mat, 1), column(mat, 0)));
+    fgc::GMM gm(5, 20);
+    if(0) {
+        gm.logprob(r1, 1);
+        gm.logprob(r2, r1);
+    }
+    //std::fprintf(stderr, "cdiff norm: %f\n", blz::sqrDist(column(mat, 1), column(mat, 0)));
 }

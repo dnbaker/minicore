@@ -1,6 +1,6 @@
 #pragma once
 #include "blaze/Math.h"
-#include "macros.h"
+#include "./shared.h"
 
 namespace blz {
 
@@ -79,6 +79,18 @@ struct column_iterator_t {
     }
 };
 
+#define DOFUNC(fn) auto fn() const {return (~*this).fn();}
+#define ADD_FUNCS\
+    DOFUNC(rows)\
+    DOFUNC(spacing)\
+    DOFUNC(size)\
+    DOFUNC(capacity)\
+    DOFUNC(isNan)\
+    DOFUNC(isSquare)\
+    DOFUNC(isSymmetric)\
+    DOFUNC(isLower)\
+    DOFUNC(isUnilower)\
+    DOFUNC(columns)
 
 template<typename FT, bool SO=blaze::rowMajor>
 struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
@@ -111,7 +123,7 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     };
     struct ConstColumnViewer {
         auto index() const {return start_.columnnum;}
-        column_iterator start_, end_;
+        const_column_iterator start_, end_;
         ConstColumnViewer(const this_type &ref): start_{0, ref}, end_{ref.columns(), ref} {}
         auto begin() const {return start_;}
         const auto &end()  const {return end_;}
@@ -120,6 +132,7 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     auto rowiterator() const {return ConstRowViewer(*this);}
     auto columniterator()       {return ColumnViewer(*this);}
     auto columniterator() const {return ConstColumnViewer(*this);}
+    ADD_FUNCS
 };
 
 template<typename FT, bool SO>
@@ -179,7 +192,10 @@ class CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     auto rowiterator() const {return ConstRowViewer(*this);}
     auto columniterator()       {return ColumnViewer(*this);}
     auto columniterator() const {return ConstColumnViewer(*this);}
+    ADD_FUNCS
 };
+#undef ADD_FUNCS
+#undef DOFUNC
 
 template<typename FT, bool AF, bool PF, bool SO>
 auto rowiterator(blaze::CustomMatrix<FT, AF, PF, SO> &o) {

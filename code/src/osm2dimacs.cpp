@@ -1,22 +1,6 @@
 /*
 
-  EXAMPLE osmium_road_length
-
-  Calculate the length of the road network (everything tagged `highway=*`)
-  from the given OSM file.
-
-  DEMONSTRATES USE OF:
-  * file input
-  * location indexes and the NodeLocationsForWays handler
-  * length calculation on the earth using the haversine function
-
-  SIMPLER EXAMPLES you might want to understand first:
-  * osmium_read
-  * osmium_count
-  * osmium_pub_names
-
-  LICENSE
-  The code in this example file is released into the Public Domain.
+ Creates a DIMACS sp .gr file from an OSM file.
 
 */
 
@@ -41,6 +25,7 @@
 #include <osmium/handler/node_locations_for_ways.hpp>
 #include <unordered_set>
 #include <vector>
+#include <cinttypes>
 
 // The type of index used. This must match the include file above
 using index_type = osmium::index::map::FlexMem<osmium::unsigned_object_id_type, osmium::Location>;
@@ -84,7 +69,10 @@ struct RoadLengthHandler : public osmium::handler::Handler {
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " OSMFILE\n";
+        std::cerr << "Usage: " << argv[0] << " OSMFILE <output ? output: stdout>\n";
+        std::cerr << "Consumes an osm file and emits a DIMACS .gr file which can then be used.\n"
+                  << "which ultimately could be transformed into a graph parser, but\n"
+                  << "I see no reason to not just let it be a preprocessing step\n";
         std::exit(1);
     }
     std::FILE *ofp = argc < 3 ? stdout: std::fopen(argv[2], "w");
@@ -106,10 +94,7 @@ int main(int argc, char* argv[]) {
 
         // Apply input data to first the location handler and then our own handler
         osmium::apply(reader, location_handler, road_length_handler);
-#if 0
-        std::vector<id_int_t> ids;
-        ids.reserve(location_handler.node_ids_.size());
-#endif
+
         id_int_t assigned_id = 0;
         std::unordered_map<id_int_t, id_int_t> reassigner;
         reassigner.reserve(road_length_handler.node_ids_.size());
@@ -121,12 +106,11 @@ int main(int argc, char* argv[]) {
                      road_length_handler.node_ids_.size(), road_length_handler.edges_.size());
         for(const auto id: road_length_handler.node_ids_) {
             reassigner[id] = assigned_id;
-            std::fprintf(ofp, "c %lld->%lld\n", id, assigned_id);
-            ++assigned_id;
+            std::fprintf(ofp, "c %" PRId64 "->%" PRId64 "\n", id, assigned_id++);
         }
         for(const auto &edge: road_length_handler.edges_) {
             auto lhs = reassigner[edge.lhs_], rhs = reassigner[edge.rhs_];
-            std::fprintf(ofp, "a %lld %lld %g\n", lhs, rhs, edge.dist_);
+            std::fprintf(ofp, "a %" PRId64 " %" PRId64 " %g\n", lhs, rhs, edge.dist_);
         }
 
         // Output the length. The haversine function calculates it in meters,

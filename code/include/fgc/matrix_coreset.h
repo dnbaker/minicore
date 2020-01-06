@@ -36,13 +36,13 @@ struct MatrixCoreset {
     }
 };
 
-template<typename FT, typename IT, typename MatrixType>
+template<typename FT, typename IT, typename MatrixType, typename CMatrixType=blaze::DynamicMatrix<FT>>
 MatrixCoreset<MatrixType, FT>
 index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
              bool rowwise=(blaze::StorageOrder_v<MatrixType> == blaze::rowMajor))
 {
     auto weights = ic.weights_;
-    MatrixType ret;
+    CMatrixType ret;
     if(rowwise) {
         auto rows = blaze::rows(mat, ic.indices_);
         ret.resize(rows.rows(), rows.columns());

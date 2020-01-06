@@ -1,4 +1,4 @@
-# Contents [![Build Status](https://travis-ci.com/dnbaker/fgc.svg?branch=master)](https://travis-ci.com/dnbaker/fgc)
+# Contents [![Build Status](https://travis-ci.com/dnbaker/fgc.svg?token=nzWL3kpck4ymqu9SdesD&branch=master)](https://travis-ci.com/dnbaker/fgc)
 
 1. [graph](#Graph)
     1. Wrappers for boost::graph
@@ -42,6 +42,8 @@ Greedy Strategy Works for k-Center Clustering with Outliers and Coreset Construc
 ## kmeans.h
 
 1. k-means++ initialization scheme (for the purposes of an approximate solution for importance sampling)
+2. k-means coreset construction using the above approximation
+3. Weighted Lloyd's algorithm
 
 
 ## coreset.h
@@ -81,16 +83,14 @@ for an initial graph bicriteria approximation.
 ### TODO
 
 1. K-means
-  1. Use k-means++ result to generate coreset
-  2. Implement weighted k-means clustering
-    1. Use Lloyd's algorithm
-2. Sparse graph K-median
-  1. Implement weighted k-median clustering on graph.
-    2. Algorithm: http://homepage.divms.uiowa.edu/~kvaradar/sp2016/scribe\_week5.pdf
-    3. Runtime: n^2k^3log(n / eps)
-      1. Eventually unsuitable for large n, necessitating the use of these coresets
+    1. Extensions for other metrics (https://arxiv.org/abs/1309.7109)
+2. Metric K-median
+    1. Implement weighted k-median clustering on graph using local search heuristics
+        a. Algorithm: http://homepage.divms.uiowa.edu/~kvaradar/sp2016/scribe\_week5.pdf
+        b. Runtime: n^2+
+    2. Jain/Vazirani UFL & k-median
 3. K-center
-  1. Test accuracy of k-center method on real data
-  2. Use coreset for clustering
+    1. Test accuracy of k-center method on real data
+    2. Use coreset for clustering solutions
 4. Python bindings
-  1. This will use the blaze::CustomMatrix interface.
+    1. This will use the blaze::CustomMatrix interface to speak to Numpy and (maybe Torch?)
