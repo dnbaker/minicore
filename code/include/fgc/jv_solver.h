@@ -96,12 +96,8 @@ struct NaiveJVSolver {
     double calculate_cost(const MatType &mat, const CT &open_facilities) const {
         if(open_facilities.empty()) return std::numeric_limits<double>::max();
         double faccost = open_facilities.size() * facility_cost_;
-        auto oit = open_facilities.begin();
-        blz::DV<FT> mincosts = row(mat, *oit);
-        while(++oit != open_facilities.end())
-            mincosts = min(mincosts, row(mat, *oit));
-        double ccost = sum(mincosts);
-        return ccost + faccost;
+        double citycost = blz::sum(blz::min<blz::columnwise>(rows(mat, open_facilities, blaze::unchecked)));
+        return citycost + faccost;
     }
     template<typename MatType>
     auto ufl(const MatType &mat, double faccost) {
@@ -128,6 +124,7 @@ struct NaiveJVSolver {
                 maxcost = medcost; // med has too few, lower cost.
             medcost = (mincost + maxcost) / 2.;
             med = ufl(mat, medcost);
+            std::fprintf(stderr, "Solution cost: %f\n", calculate_cost(mat, med));
         }
         return med;
     }

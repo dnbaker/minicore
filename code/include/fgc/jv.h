@@ -64,9 +64,10 @@ struct FacPQ: std::priority_queue<FacilityInfo, std::vector<FacilityInfo>> {
  * Implemented with additional commentary from https://www.cs.cmu.edu/~anupamg/adv-approx/lecture5.pdf
  */
 template<typename Graph>
-auto jain_vazirani_kmedian(Graph &x,
-                           const std::vector<typename Graph::vertex_descriptor> &candidates,
-                           unsigned k)
+std::vector<typename Graph::vertex_descriptor>
+    jain_vazirani_kmedian(Graph &x,
+                          const std::vector<typename Graph::vertex_descriptor> &candidates,
+                          unsigned k)
 {
     // candidates consists of a vector of potential facility centers.
     //using Edge = typename Graph::edge_descriptor;
@@ -86,7 +87,10 @@ auto jain_vazirani_kmedian(Graph &x,
     // maxcost = (maxcostedgecost * num_cities)
     
     NaiveJVSolver<float> jvs(c.rows(), c.columns(), 0.);
-    return jvs.kmedian(c, k, true);
+    auto tmp = jvs.kmedian(c, k, true);
+    std::vector<typename Graph::vertex_descriptor> ret; ret.reserve(tmp.size());
+    for(const auto v: tmp) ret.push_back(v);
+    return ret;
     //auto oneopen = jvs.ufl(c, cost_ubound);
     //auto allopen = jvs.ufl(c, cost_lbound);
 } // jain_vazirani_ufl

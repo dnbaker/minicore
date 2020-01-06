@@ -2,6 +2,7 @@
 #include "parse.h"
 #include "bicriteria.h"
 #include "coreset.h"
+#include "jv.h"
 
 template<typename T> class TD;
 
@@ -148,9 +149,9 @@ int main(int c, char **v) {
     double frac = nsampled_max / double(boost::num_vertices(g));
     auto sampled = thorup_sample(g, 10, seed, frac); // 0 is the seed, 500 is the maximum sampled size
     std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
-    if(sampled.size() > boost::num_vertices(g) / 2)
-        sampled.erase(sampled.begin() + sampled.size() / 2, sampled.end());
-    auto [costs, assignments] = get_costs(g, sampled);
+    auto med_solution =  fgc::jain_vazirani_kmedian(g, sampled, 10);
+    std::fprintf(stderr, "med solution size: %zu\n", med_solution.size());
+    auto [costs, assignments] = get_costs(g, med_solution);
     coresets::CoresetSampler<float, uint32_t> sampler;
     // TODO: make assignments real
     sampler.make_sampler(costs.size(), sampled.size(), costs.data(), assignments.data());
