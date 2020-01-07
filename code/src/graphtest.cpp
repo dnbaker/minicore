@@ -44,7 +44,9 @@ auto dimacs_official_parse(std::string input) {
                 size_t rhs = std::strtoull(p, &strend, 10);
                 p = strend + 1;
                 double dist = std::atof(p);
-                boost::add_edge(lhs, rhs, dist, g);
+                assert(lhs >= 1);
+                assert(rhs >= 1);
+                boost::add_edge(lhs - 1, rhs - 1, dist, g);
                 break;
             }
             default: std::fprintf(stderr, "Unexpected: this line! (%s)\n", line.data()); throw std::runtime_error("");
