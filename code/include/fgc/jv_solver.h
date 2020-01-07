@@ -28,6 +28,7 @@ template<typename FT>
 struct NaiveJVSolver {
     // Complexity: something like F^2N + N^2F
     // Much slower than it should be
+    using DefIT = long unsigned int;
     blz::DM<FT> w_;
     blz::DV<FT> v_;
     blz::DV<uint32_t> numconnected_, numtight_;
@@ -40,7 +41,11 @@ struct NaiveJVSolver {
     }
     void reset(double newfacility_cost) {
         if(newfacility_cost) facility_cost_ = newfacility_cost;
-        reset(w_); reset(v_); reset(numconnected_);
+        w_ = FT(0);
+        //((blaze::DynamicMatrix<FT> &)w_) = FT(0);
+        v_ = FT(0);
+        numconnected_ = 0;
+        numtight_ = 0;
         maxalph_ = 0;
         nottempopen_.clear();
         for(size_t i = 0; i < w_.rows(); ++i) nottempopen_.insert(i);
@@ -66,8 +71,8 @@ struct NaiveJVSolver {
         nottempopen_.clear();
         for(size_t i = 0; i < mat.rows(); ++i) nottempopen_.insert(i);
     }
-    template<typename MatType>
-    std::vector<uint64_t> phase2(const MatType &mat) { // Electric Boogaloo
+    template<typename MatType, typename IType=DefIT>
+    std::vector<IType> phase2(const MatType &mat) { // Electric Boogaloo
         wy::WyRand<uint32_t, 2> rng(mat.rows());
         std::vector<uint32_t> tov(tempopen_.begin(), tempopen_.end());
         std::vector<uint32_t> to_remove;
@@ -75,7 +80,7 @@ struct NaiveJVSolver {
         auto la = tov[lai];
         std::swap(tov[lai], tov.back());
         tov.pop_back();
-        std::vector<uint64_t> ret{la};
+        std::vector<IType> ret{la};
         while(tov.size()) {
             auto r = row(mat, la);
             for(size_t i = 0; i < mat.columns(); ++i) {
@@ -102,23 +107,25 @@ struct NaiveJVSolver {
         double citycost = blz::sum(blz::min<blz::columnwise>(rows(mat, open_facilities, blaze::unchecked)));
         return citycost + faccost;
     }
-    template<typename MatType>
-    std::vector<uint64_t> ufl(const MatType &mat, double faccost) {
+    template<typename MatType, typename IType=DefIT>
+    std::vector<IType> ufl(const MatType &mat, double faccost) {
         // Uncapacited Facility Location problem with facility cost = faccost
-        facility_cost_ = faccost;
+        this->reset(faccost);
         for(const auto edge: edges_) {
             char buf[30];
             edge.sprintf(buf);
             std::fprintf(stderr, "edge: %s|\n", buf);
             //std::fputc('\n');
         }
+        assert(nottempopen_.size() == w_.rows());
+        assert(tempopen_.size() == 0);
+        std::fprintf(stderr, "##Starting phase1 with faccost %.12g\n", faccost);
         phase1(mat);
-        return phase2(mat);
+        return phase2<MatType, IType>(mat);
     }
-    template<typename MatType>
-    std::vector<uint64_t> kmedian(const MatType &mat, unsigned k, bool perform_setup=false) {
+    template<typename MatType, typename IType=DefIT>
+    std::vector<IType> kmedian(const MatType &mat, unsigned k, bool perform_setup=false) {
         if(perform_setup) setup(mat);
-        // Uncapacited Facility Location problem with facility cost = faccost
         double maxcost = mat.columns() * max(mat);
         if(std::isinf(maxcost)) {
             maxcost = std::numeric_limits<double>::min();
@@ -133,15 +140,18 @@ struct NaiveJVSolver {
         //auto ubound = ufl(mat, maxcost);
         //auto lbound = ufl(mat, mincost);
         auto med = ufl(mat, medcost);
+        std::fprintf(stderr, "##first solution: %zu (want k %u)\n", med.size(), k);
+        size_t roundnum = 0;
         while(med.size() != k) {
+            std::fprintf(stderr, "##round %zu\n", ++roundnum);
             if(med.size() == k) break;
             if(med.size() > k)
                 mincost = medcost; // med has too many, increase cost.
             else
                 maxcost = medcost; // med has too few, lower cost.
             medcost = (mincost + maxcost) / 2.;
-            med = ufl(mat, medcost);
-            std::fprintf(stderr, "Solution cost: %f\n", calculate_cost(mat, med));
+            med = ufl<MatType, IType>(mat, medcost);
+            std::fprintf(stderr, "Solution cost: %f. size: %zu\n", calculate_cost(mat, med), med.size());
         }
         return med;
     }
@@ -185,6 +195,8 @@ struct NaiveJVSolver {
         auto &S(S_);
         S.clear(); S.reserve(v_.size());
         for(size_t i = 0; i < v_.size(); S.insert(i++));
+        assert(nottempopen_.size() == w_.rows());
+        assert(w_.rows());
         std::vector<uint32_t> to_remove;
         std::fprintf(stderr, "Filled S\n");
         size_t nz = 0;
@@ -194,7 +206,7 @@ struct NaiveJVSolver {
         }
         std::fprintf(stderr, "nz: %zu\n", nz);
         while(S.size()) {
-            std::fprintf(stderr, "Size of S: %zu\n", S.size());
+            std::fprintf(stderr, "Size of S: %zu. nto size: %zu. tos: %zu\n", S.size(), nottempopen_.size(), tempopen_.size());
             //std::fprintf(stderr, "getting min tight cost\n");
             auto [bestedge, tightinc] = min_tightening_cost();
             //std::fprintf(stderr, "got min tight cost\n");
@@ -208,19 +220,24 @@ struct NaiveJVSolver {
             perform_increment(inc, to_remove, mat);
             std::fprintf(stderr, "new alpha: %g\n", maxalph_);
             if(tighten) {
-                while(edges_.back().cost() == maxalph_)
-                    edges_.pop_back();
+                //std::fprintf(stderr, "tightening. Try and maybe fail\n");
+                if(edges_.size())
+                    while(edges_.back().cost() == maxalph_)
+                        edges_.pop_back();
             } else {
                 //auto fc = facility_cost_;
                 tempopen_.insert(bestfac);
                 nottempopen_.erase(bestfac);
+                std::fprintf(stderr, "Inserting bestfac %u. nto size %zu. tempopen size: %zu\n", bestfac, nottempopen_.size(), tempopen_.size());
                 for(const auto item: S) {
+                    assert(v_.size() && v_.size() > item);
                     if(v_.at(item) >= mat(bestfac, item)) // && std::find(to_remove.begin(), to_remove.end(), s) != to_remove.end())
                         to_remove.push_back(item);
                 }
-            } 
-            for(const auto item: to_remove)
+            }
+            for(const auto item: to_remove) {
                 S.erase(item);
+            }
         }
     }
 };

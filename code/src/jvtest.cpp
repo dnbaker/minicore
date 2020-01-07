@@ -30,4 +30,7 @@ int main() {
     njv.setup(dists);
     auto res = njv.ufl(dists, 1.5);
     std::fprintf(stderr, "res size: %zu\n", res.size());
+    for(int i = 100000; i--; std::fputc('-', stderr));
+    auto kmedsol = njv.kmedian(dists, 5);
+    assert(kmedsol.size() == 5);
 }

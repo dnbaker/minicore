@@ -102,6 +102,10 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     struct const_row_iterator: public row_iterator_t<const this_type> {};
     struct column_iterator: public column_iterator_t<this_type> {};
     struct const_column_iterator: public column_iterator_t<const this_type> {};
+    template<typename...Args> this_type &operator=(Args &&...args) {
+        ((super &)*this).operator=(std::forward<Args>(args)...);
+        return *this;
+    }
     struct RowViewer {
         row_iterator start_, end_;
         RowViewer(this_type &ref): start_{0, ref}, end_{ref.rows(), ref} {}
@@ -162,6 +166,10 @@ class CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     struct const_row_iterator: public row_iterator_t<const this_type> {};
     struct column_iterator: public column_iterator_t<this_type> {};
     struct const_column_iterator: public column_iterator_t<const this_type> {};
+    template<typename...Args> this_type &operator=(Args &&...args) {
+        ((super &)*this).operator=(std::forward<Args>(args)...);
+        return *this;
+    }
     struct RowViewer {
         row_iterator start_, end_;
         RowViewer(this_type &ref): start_{0, ref}, end_{ref.rows(), ref} {}

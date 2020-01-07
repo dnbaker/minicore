@@ -89,12 +89,14 @@ std::vector<typename Graph::vertex_descriptor>
     // maxcost = (maxcostedgecost * num_cities)
     
     NaiveJVSolver<float> jvs(c.rows(), c.columns(), 0.);
-    std::fprintf(stderr, "made jv solver.\n");
+#if 0
     auto tmp = jvs.kmedian(c, k, true);
-    std::fflush(stderr);
     std::vector<typename Graph::vertex_descriptor> ret; ret.reserve(tmp.size());
     for(const auto v: tmp) ret.push_back(v);
     return ret;
+#else
+    return jvs.kmedian(c, k, true);
+#endif
     //auto oneopen = jvs.ufl(c, cost_ubound);
     //auto allopen = jvs.ufl(c, cost_lbound);
 } // jain_vazirani_ufl
