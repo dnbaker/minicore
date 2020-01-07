@@ -19,6 +19,9 @@ struct edgetup: public std::tuple<double, uint32_t, uint32_t> {
     auto &fi() {return std::get<1>(*this);}
     auto di() const {return std::get<2>(*this);}
     auto &di() {return std::get<2>(*this);}
+    auto sprintf(char *buf) const {
+        return std::sprintf(buf, "%f:%u:%u", cost(), fi(), di());
+    }
 };
 
 template<typename FT>
@@ -64,7 +67,7 @@ struct NaiveJVSolver {
         for(size_t i = 0; i < mat.rows(); ++i) nottempopen_.insert(i);
     }
     template<typename MatType>
-    auto phase2(const MatType &mat) { // Electric Boogaloo
+    std::vector<uint64_t> phase2(const MatType &mat) { // Electric Boogaloo
         wy::WyRand<uint32_t, 2> rng(mat.rows());
         std::vector<uint32_t> tov(tempopen_.begin(), tempopen_.end());
         std::vector<uint32_t> to_remove;
@@ -72,7 +75,7 @@ struct NaiveJVSolver {
         auto la = tov[lai];
         std::swap(tov[lai], tov.back());
         tov.pop_back();
-        std::vector<uint32_t> ret{la};
+        std::vector<uint64_t> ret{la};
         while(tov.size()) {
             auto r = row(mat, la);
             for(size_t i = 0; i < mat.columns(); ++i) {
@@ -100,17 +103,31 @@ struct NaiveJVSolver {
         return citycost + faccost;
     }
     template<typename MatType>
-    auto ufl(const MatType &mat, double faccost) {
+    std::vector<uint64_t> ufl(const MatType &mat, double faccost) {
         // Uncapacited Facility Location problem with facility cost = faccost
         facility_cost_ = faccost;
+        for(const auto edge: edges_) {
+            char buf[30];
+            edge.sprintf(buf);
+            std::fprintf(stderr, "edge: %s|\n", buf);
+            //std::fputc('\n');
+        }
         phase1(mat);
         return phase2(mat);
     }
     template<typename MatType>
-    auto kmedian(const MatType &mat, unsigned k, bool perform_setup=false) {
+    std::vector<uint64_t> kmedian(const MatType &mat, unsigned k, bool perform_setup=false) {
         if(perform_setup) setup(mat);
         // Uncapacited Facility Location problem with facility cost = faccost
         double maxcost = mat.columns() * max(mat);
+        if(std::isinf(maxcost)) {
+            maxcost = std::numeric_limits<double>::min();
+            for(const auto r: blz::rowiterator(mat)) {
+                for(const auto v: r)
+                    if(!std::isinf(v) && v > maxcost)
+                        maxcost = v;
+            }
+        }
         double mincost = 0.;
         double medcost = maxcost / 2;
         //auto ubound = ufl(mat, maxcost);
@@ -141,8 +158,10 @@ struct NaiveJVSolver {
             auto nsupport = std::accumulate(row(w_, fid).begin(), row(w_, fid).end(), size_t(0), [](auto x, auto y) {return x + y >= 0.;});
             if(nsupport == 0) return std::make_pair(-1u, std::numeric_limits<double>::max());
             auto availsum = std::accumulate(row(w_, fid).begin(), row(w_, fid).end(), 0.);
+            std::fprintf(stderr, "rowsum: %f. facility cost: %f\n", availsum, facility_cost_);
             auto diff = facility_cost_ - availsum;
             auto cost = nsupport ? diff / nsupport: std::numeric_limits<double>::max();
+            std::fprintf(stderr, "diff: %g. cost: %g\n", diff, cost);
             if(cost < mincost) mincost = cost, ind = fid;
         }
         return std::make_pair(ind, mincost);
@@ -168,7 +187,14 @@ struct NaiveJVSolver {
         for(size_t i = 0; i < v_.size(); S.insert(i++));
         std::vector<uint32_t> to_remove;
         std::fprintf(stderr, "Filled S\n");
+        size_t nz = 0;
+        while(edges_.back().cost() == 0.) {
+            ++nz;
+            edges_.pop_back();
+        }
+        std::fprintf(stderr, "nz: %zu\n", nz);
         while(S.size()) {
+            std::fprintf(stderr, "Size of S: %zu\n", S.size());
             //std::fprintf(stderr, "getting min tight cost\n");
             auto [bestedge, tightinc] = min_tightening_cost();
             //std::fprintf(stderr, "got min tight cost\n");
@@ -181,7 +207,10 @@ struct NaiveJVSolver {
             std::fprintf(stderr, "inc: %g. open: %g. tighten: %g\n", inc, openinc, tightinc);
             perform_increment(inc, to_remove, mat);
             std::fprintf(stderr, "new alpha: %g\n", maxalph_);
-            if(!tighten) {
+            if(tighten) {
+                while(edges_.back().cost() == maxalph_)
+                    edges_.pop_back();
+            } else {
                 //auto fc = facility_cost_;
                 tempopen_.insert(bestfac);
                 nottempopen_.erase(bestfac);
@@ -189,7 +218,7 @@ struct NaiveJVSolver {
                     if(v_.at(item) >= mat(bestfac, item)) // && std::find(to_remove.begin(), to_remove.end(), s) != to_remove.end())
                         to_remove.push_back(item);
                 }
-            }
+            } 
             for(const auto item: to_remove)
                 S.erase(item);
         }

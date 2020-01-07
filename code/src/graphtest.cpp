@@ -29,7 +29,7 @@ auto dimacs_official_parse(std::string input) {
                 nnodes = std::strtoull(p, nullptr, 10);
                 for(size_t i = 0; i < nnodes; ++i)
                     boost::add_vertex(g); // Add all the vertices
-                if((p2 = std::strchr(p, ' ')) == nullptr) throw 1;
+                if((p2 = std::strchr(p, ' ')) == nullptr) throw std::runtime_error(std::string("Failed to parse file at ") + input);
                 p = p2 + 1;
                 nedges = std::strtoull(p, nullptr, 10);
                 std::fprintf(stderr, "n: %zu. m: %zu\n", nnodes, nedges);
@@ -47,7 +47,7 @@ auto dimacs_official_parse(std::string input) {
                 boost::add_edge(lhs, rhs, dist, g);
                 break;
             }
-            default: std::fprintf(stderr, "Unexpected: this line! (%s)\n", line.data()); throw 1;
+            default: std::fprintf(stderr, "Unexpected: this line! (%s)\n", line.data()); throw std::runtime_error("");
         }
     }
     return g;
@@ -65,7 +65,6 @@ auto dimacs_parse(const char *fn) {
     //property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, g);
     //std::fprintf(stderr, "address: %p. index: %p\n", (void *)&weightmap, (void *)&index);
     for(std::tie(ei, ei_end) = boost::edges(g); ei != ei_end; ++ei) {
-        auto ed = *ei;
         auto src = source(*ei, g);
         auto dest = target(*ei, g);
         auto v = boost::get(boost::edge_weight_t(), g, *ei);
@@ -129,7 +128,7 @@ auto csv_parse(const char *fn) {
 }
 
 int main(int c, char **v) {
-    std::string input = c == 1 ? "../dolphins.graph": const_cast<const char *>(v[1]);
+    std::string input = c == 1 ? "../data/dolphins.graph": const_cast<const char *>(v[1]);
     fgc::Graph<undirectedS> g;
     if(input.find(".csv") != std::string::npos) {
         g = csv_parse(input.data());
@@ -149,11 +148,21 @@ int main(int c, char **v) {
     double frac = nsampled_max / double(boost::num_vertices(g));
     auto sampled = thorup_sample(g, 10, seed, frac); // 0 is the seed, 500 is the maximum sampled size
     std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
+#if MED_FINISHED
     auto med_solution =  fgc::jain_vazirani_kmedian(g, sampled, 10);
     std::fprintf(stderr, "med solution size: %zu\n", med_solution.size());
     auto [costs, assignments] = get_costs(g, med_solution);
+#else
+    if(sampled.size() > boost::num_vertices(g) / 2)
+        sampled.erase(sampled.begin() + sampled.size() / 2, sampled.end());
+    auto [costs, assignments] = get_costs(g, sampled);
+#endif
     coresets::CoresetSampler<float, uint32_t> sampler;
     // TODO: make assignments real
+#if MED_FINISHED
     sampler.make_sampler(costs.size(), sampled.size(), costs.data(), assignments.data());
+#else
+    sampler.make_sampler(costs.size(), sampled.size(), costs.data(), assignments.data());
+#endif
     auto sampled_cs = sampler.sample(50);
 }

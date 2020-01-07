@@ -20,7 +20,7 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(const char
     using GraphType = Graph<DirectedS, float, VtxProps, GraphProps>;
     std::string line;
     std::ifstream ifs(fn);
-    if(!std::getline(ifs, line)) throw 1;
+    if(!std::getline(ifs, line)) throw std::runtime_error(std::string("Failed to read from file ") + fn);
     unsigned nnodes = std::atoi(line.data());
     if(!nnodes) throw 2;
     auto p = std::strchr(line.data(), ' ') + 1;
@@ -63,7 +63,7 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(const char *fn) {
         line.erase(std::remove(line.begin(), line.end(), '"'), line.end());
         const char *s = line.data();
         VtxIdType val = VtxIdType(std::atoi(s)) << SHIFT;
-        if((s = std::strchr(s, ',')) == nullptr) throw 1;
+        if((s = std::strchr(s, ',')) == nullptr) throw std::runtime_error(std::string("Failed to parse from fn") + fn);
         val |= std::atoi(++s);
         auto it = loc2id.find(val);
         if(it == loc2id.end()) {
