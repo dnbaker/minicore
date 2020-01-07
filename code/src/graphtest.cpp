@@ -7,7 +7,6 @@
 template<typename T> class TD;
 
 
-#define undirectedS bidirectionalS
 using namespace fgc;
 using namespace boost;
 
