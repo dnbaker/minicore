@@ -1,5 +1,10 @@
 
-INCLUDE_PATHS=. include include/fgc /usr/local/Cellar/boost/1.71.0/include/ blaze libosmium/include protozero/include
+INCLUDE_PATHS=. include include/fgc blaze libosmium/include protozero/include
+
+ifdef BOOST_DIR
+INCLUDE_PATHS += $(BOOST_DIR)
+endif
+
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 CXX?=g++
 STD?=c++17

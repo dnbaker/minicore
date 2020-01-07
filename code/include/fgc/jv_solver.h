@@ -32,7 +32,7 @@ struct NaiveJVSolver {
     double facility_cost_, maxalph_;
     std::unordered_set<uint32_t> S_, tempopen_, nottempopen_;
     NaiveJVSolver(size_t nf, size_t nc, double fc=1.):
-        w_(nf, nc, 0), v_(nc, 0), numconnected_(nf, 0), numtight_(nf, 0), edges_(nf * nc), facility_cost_(fc)
+        w_(nf, nc, 0), v_(nc, 0), numconnected_(nf, 0), numtight_(nf, 0), edges_(nf * nc), facility_cost_(fc), maxalph_(0)
     {
     }
     void reset(double newfacility_cost) {
@@ -130,6 +130,7 @@ struct NaiveJVSolver {
     }
     
     std::pair<uint32_t, double> min_tightening_cost() const {
+        if(edges_.empty()) return std::make_pair(uint32_t(-1), std::numeric_limits<double>::max());
         auto edge = edges_.back();
         return std::make_pair(edge.di(), edge.cost() - maxalph_);
     }
@@ -166,22 +167,26 @@ struct NaiveJVSolver {
         S.clear(); S.reserve(v_.size());
         for(size_t i = 0; i < v_.size(); S.insert(i++));
         std::vector<uint32_t> to_remove;
+        std::fprintf(stderr, "Filled S\n");
         while(S.size()) {
+            //std::fprintf(stderr, "getting min tight cost\n");
             auto [bestedge, tightinc] = min_tightening_cost();
+            //std::fprintf(stderr, "got min tight cost\n");
             auto [bestfac, openinc]   = min_opening_cost();
-            double inc;
+            //std::fprintf(stderr, "got min opening cost\n");
             bool tighten = true;
-            if(tightinc < openinc) {
-                inc = tightinc;
-                edges_.pop_back();
-            } else tighten = false, inc = openinc;
+            if(tightinc < openinc) edges_.pop_back();
+            else tighten = false;
+            const double inc = std::min(tightinc, openinc);
+            std::fprintf(stderr, "inc: %g. open: %g. tighten: %g\n", inc, openinc, tightinc);
             perform_increment(inc, to_remove, mat);
+            std::fprintf(stderr, "new alpha: %g\n", maxalph_);
             if(!tighten) {
                 //auto fc = facility_cost_;
                 tempopen_.insert(bestfac);
                 nottempopen_.erase(bestfac);
                 for(const auto item: S) {
-                    if(v_[item] >= mat(bestfac, item)) // && std::find(to_remove.begin(), to_remove.end(), s) != to_remove.end())
+                    if(v_.at(item) >= mat(bestfac, item)) // && std::find(to_remove.begin(), to_remove.end(), s) != to_remove.end())
                         to_remove.push_back(item);
                 }
             }
