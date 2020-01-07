@@ -95,7 +95,7 @@ std::vector<typename Graph::vertex_descriptor>
     for(const auto v: tmp) ret.push_back(v);
     return ret;
 #else
-    return jvs.kmedian(c, k, true);
+    return jvs.kmedian(c, k);
 #endif
     //auto oneopen = jvs.ufl(c, cost_ubound);
     //auto allopen = jvs.ufl(c, cost_lbound);

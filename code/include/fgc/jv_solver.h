@@ -128,8 +128,8 @@ struct NaiveJVSolver {
         return phase2<MatType, IType>(mat);
     }
     template<typename MatType, typename IType=DefIT>
-    std::vector<IType> kmedian(const MatType &mat, unsigned k, bool perform_setup=false) {
-        if(perform_setup) setup(mat);
+    std::vector<IType> kmedian(const MatType &mat, unsigned k, unsigned maxrounds=1000) {
+        setup(mat);
         double maxcost = mat.columns() * max(mat);
         if(std::isinf(maxcost)) {
             maxcost = std::numeric_limits<double>::min();
@@ -156,6 +156,9 @@ struct NaiveJVSolver {
             medcost = (mincost + maxcost) / 2.;
             med = ufl<MatType, IType>(mat, medcost);
             std::fprintf(stderr, "Solution cost: %f. size: %zu\n", calculate_cost(mat, med), med.size());
+            if(roundnum > maxrounds) {
+                break;
+            }
         }
         return med;
     }
