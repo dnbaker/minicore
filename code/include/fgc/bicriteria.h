@@ -118,22 +118,33 @@ auto get_costs(boost::adjacency_list<Args...> &x, const std::vector<typename boo
     std::vector<Vertex> p(boost::num_vertices(x));
     std::vector<uint32_t> assignments(boost::num_vertices(x));
     auto synthetic_vertex = vx.get();
+    std::fprintf(stderr, "container size: %zu\n", container.size());
     for(const auto vtx: container) {
+        std::fprintf(stderr, "vtx id: %u\n", unsigned(vtx));
         boost::add_edge(synthetic_vertex, vtx, 0., x);
     }
+    boost::add_edge(synthetic_vertex, synthetic_vertex, 0., x);
+    std::fprintf(stderr, "About to call dijkstra\n");
     boost::dijkstra_shortest_paths(x, synthetic_vertex,
                                    distance_map(&costs[0]).predecessor_map(&p[0]));
+    std::fprintf(stderr, "dijkstra finished\n");
     typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, x);
     using v_int_t = decltype(index[p[0]]);
     flat_hash_map<v_int_t, uint32_t> pid2ind;
     for(size_t i = 0; i < container.size(); ++i)
         pid2ind[index[container[i]]] = i;
+    std::fprintf(stderr, "About to do the last step\n");
     // This could be slow, but whatever.
     for(size_t i = 0; i < p.size(); ++i) {
         auto parent = p[i], newparent = p[index[parent]];
+        std::fprintf(stderr, "Node %zu has parent %u and cost %f\n", i, unsigned(parent), float(costs[i]));
+        if(parent == newparent && parent != synthetic_vertex) {
+            throw std::runtime_error("Unconnected node, fix this");
+        }
         while(newparent != synthetic_vertex) {
             parent = newparent;
             newparent = p[index[parent]];
+            std::fprintf(stderr, "parent: %u. synthetic vtx: %u\n", unsigned(parent), unsigned(synthetic_vertex));
         }
         assignments[i] = pid2ind[index[parent]];
     }

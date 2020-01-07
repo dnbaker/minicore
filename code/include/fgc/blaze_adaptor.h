@@ -389,6 +389,29 @@ struct sqrL1Norm: sqrBaseNorm<L1Norm> {};
 struct sqrL3Norm: sqrBaseNorm<L3Norm> {};
 struct sqrL4Norm: sqrBaseNorm<L4Norm> {};
 struct sqrMaxNorm: sqrBaseNorm<maxNormFunctor> {};
+template<typename F, typename IT=std::uint32_t, size_t N=16>
+auto indices_if(const F &func, size_t n) {
+    blaze::SmallArray<IT, N> ret;
+    for(IT i = 0; i < n; ++i)
+        if(func(i)) ret.pushBack(i);
+    return ret;
+}
+
+template<typename M, typename F, typename IT=std::uint32_t>
+auto rows_if(const M &mat, const F &func) {
+    auto wrapfunc = [&](auto x) -> bool {return func(row(mat, x, blaze::unchecked));};
+    return rows(mat,
+                indices_if<decltype(wrapfunc),IT>(wrapfunc, // predicate
+                                                  mat.rows())); // nrow
+}
+
+template<typename M, typename F, typename IT=std::uint32_t>
+auto columns_if(const M &mat, const F &func) {
+    auto wrapfunc = [&](auto x) -> bool {return func(column(mat, x, blaze::unchecked));};
+    return columns(mat, // matrix
+                   indices_if<decltype(wrapfunc), IT>(wrapfunc, // predicate
+                                                      mat.columns())); // ncol
+}
 
 using namespace blaze;
 }

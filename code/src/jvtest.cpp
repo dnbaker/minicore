@@ -27,7 +27,7 @@ int main() {
     blaze::DynamicMatrix<float> facilities = rows(points, iv);
     assert(facilities.rows() == 20);
     blaze::DynamicMatrix<float> dists(facilities.rows(), points.rows());
-    #pragma omp parallel for
+    OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < facilities.rows(); ++i)
         for(size_t j = 0; j < points.rows(); ++j)
             dists(i, j) = blz::l2Dist(row(facilities, i), row(points, j));

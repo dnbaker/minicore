@@ -3,6 +3,7 @@
 #include "boost/graph/topological_sort.hpp"
 #include "boost/graph/graph_traits.hpp"
 #include "boost/graph/dijkstra_shortest_paths.hpp"
+#include "boost/graph/connected_components.hpp"
 #include "boost/property_map/property_map.hpp"
 #include "shared.h"
 

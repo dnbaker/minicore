@@ -8,6 +8,7 @@ template<typename T> class TD;
 
 
 #define undirectedS bidirectionalS
+#define MED_FINISHED 1
 using namespace fgc;
 using namespace boost;
 
@@ -148,21 +149,34 @@ int main(int c, char **v) {
     double frac = nsampled_max / double(boost::num_vertices(g));
     auto sampled = thorup_sample(g, 10, seed, frac); // 0 is the seed, 500 is the maximum sampled size
     std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
+    std::vector<uint32_t> ccomp(boost::num_vertices(g));
+    auto ncomp = boost::connected_components(g, &ccomp[0]);
+    std::fprintf(stderr, "ncomp: %u\n", ncomp);
 #if MED_FINISHED
     auto med_solution =  fgc::jain_vazirani_kmedian(g, sampled, 10);
     std::fprintf(stderr, "med solution size: %zu\n", med_solution.size());
+    if(ncomp != 1) {
+        std::fprintf(stderr, "not connected\n");
+        return 0;
+    }
     auto [costs, assignments] = get_costs(g, med_solution);
 #else
     if(sampled.size() > boost::num_vertices(g) / 2)
         sampled.erase(sampled.begin() + sampled.size() / 2, sampled.end());
+    if(ncomp != 1) {
+        std::fprintf(stderr, "not connected\n");
+        return 0;
+    }
     auto [costs, assignments] = get_costs(g, sampled);
 #endif
     coresets::CoresetSampler<float, uint32_t> sampler;
+    std::fprintf(stderr, "constructed sampler\n");
     // TODO: make assignments real
 #if MED_FINISHED
     sampler.make_sampler(costs.size(), sampled.size(), costs.data(), assignments.data());
 #else
     sampler.make_sampler(costs.size(), sampled.size(), costs.data(), assignments.data());
 #endif
+    std::fprintf(stderr, "made sampler\n");
     auto sampled_cs = sampler.sample(50);
 }

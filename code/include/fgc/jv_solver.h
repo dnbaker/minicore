@@ -73,9 +73,12 @@ struct NaiveJVSolver {
         for(size_t i = 0; i < mat.rows(); ++i) nottempopen_.insert(i);
     }
     template<typename MatType, typename IType=DefIT>
-    std::vector<IType> phase2(const MatType &mat) { // Electric Boogaloo
+    std::vector<IType> phase2() { // Electric Boogaloo
         std::fprintf(stderr, "tos: ntos: %zu/%zu\n", tempopen_.size(), nottempopen_.size());
-        wy::WyRand<uint32_t, 2> rng(mat.rows());
+        double sum = blaze::sum(w_);
+        uint64_t seed;
+        std::memcpy(&seed, &sum, sizeof(seed));
+        wy::WyRand<uint32_t, 2> rng(seed);
         std::vector<uint32_t> tov(tempopen_.begin(), tempopen_.end());
         std::vector<uint32_t> to_remove;
         auto lai = rng() % tov.size();
@@ -84,21 +87,24 @@ struct NaiveJVSolver {
         tov.pop_back();
         std::vector<IType> ret{la};
         while(tov.size()) {
-            auto r = row(mat, la);
-            for(size_t i = 0; i < mat.columns(); ++i) {
+            auto r = row(w_, la);
+            for(size_t i = 0; i < w_.columns(); ++i) {
                 if(r[i] > 0.) {
-                    for(size_t j = 0; j < mat.rows(); ++j)
-                        if(mat(j, i) > 0.)
+                    for(size_t j = 0; j < w_.rows(); ++j)
+                        if(w_(j, i) > 0.)
                             to_remove.push_back(j);
                 }
             }
             for(const auto item: to_remove)
                 tempopen_.erase(item);
-            to_remove.clear();
+            tov.assign(tempopen_.begin(), tempopen_.end());
             if(tempopen_.empty()) break;
+            to_remove.clear();
             auto ci = rng() % tov.size();
-            auto cv = tov[ci];
-            ret.push_back(cv);
+            la = tov[ci];
+            std::swap(tov[ci], tov.back());
+            tov.pop_back();
+            ret.push_back(la);
         }
         return ret;
     }
@@ -125,10 +131,10 @@ struct NaiveJVSolver {
         assert(tempopen_.size() == 0);
         std::fprintf(stderr, "##Starting phase1 with faccost %.12g\n", faccost);
         phase1(mat);
-        return phase2<MatType, IType>(mat);
+        return phase2<MatType, IType>();
     }
     template<typename MatType, typename IType=DefIT>
-    std::vector<IType> kmedian(const MatType &mat, unsigned k, unsigned maxrounds=1000) {
+    std::vector<IType> kmedian(const MatType &mat, unsigned k, unsigned maxrounds=50) {
         setup(mat);
         double maxcost = mat.columns() * max(mat);
         if(std::isinf(maxcost)) {
