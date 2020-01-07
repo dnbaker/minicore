@@ -8,7 +8,6 @@ template<typename T> class TD;
 
 
 #define undirectedS bidirectionalS
-#define MED_FINISHED 1
 using namespace fgc;
 using namespace boost;
 
@@ -59,17 +58,17 @@ auto dimacs_parse(const char *fn) {
     using Graph = decltype(g);
     boost::graph_traits<decltype(g)>::edge_iterator ei, ei_end;
     //typedef boost::graph_traits<Graph> GraphTraits;
-    typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, g);
+    //typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, g);
     //typename boost::property_map<Graph, boost::edge_weight_t>::type weight = get(boost::edge_weight, g);
     //typename boost::property_map<Graph, boost::edge_weight_t>::type weightMap = 
     //               get(boost::edge_weigh_t, graph);
     //property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, g);
     //std::fprintf(stderr, "address: %p. index: %p\n", (void *)&weightmap, (void *)&index);
     for(std::tie(ei, ei_end) = boost::edges(g); ei != ei_end; ++ei) {
-        auto src = source(*ei, g);
-        auto dest = target(*ei, g);
-        auto v = boost::get(boost::edge_weight_t(), g, *ei);
+        //auto src = source(*ei, g);
+        //auto dest = target(*ei, g);
 #if VERBOSE_AF
+        auto v = boost::get(boost::edge_weight_t(), g, *ei);
         std::fprintf(stderr, "[%p] value: %f. s: %d. dest: %d\n", (void *)&ed, v, unsigned(index[src]), unsigned(index[dest]));
 #endif
         boost::put(boost::edge_weight_t(), g, *ei, 1. / (double(std::rand()) / RAND_MAX));
@@ -124,7 +123,7 @@ auto csv_parse(const char *fn) {
     GraphTraits gt;
     std::fprintf(stderr, "%p\n", (void *)&gt);
 #endif
-    typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, g);
+    //typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, g);
     return g;
 }
 
@@ -141,6 +140,12 @@ int main(int c, char **v) {
         //if(false) {
         //}
     }
+    std::vector<uint32_t> ccomp(boost::num_vertices(g));
+    unsigned ncomp = boost::connected_components(g, &ccomp[0]);
+    if(ncomp != 1) {
+        std::fprintf(stderr, "not connected. ncomp: %u\n", ncomp);
+        return 1;
+    }
     uint64_t seed = 1337;
     //min(log2(n)^(2.5), 3000)
     size_t nsampled_max = std::min(std::ceil(std::pow(std::log2(boost::num_vertices(g)), 2.5)), 3000.);
@@ -149,37 +154,29 @@ int main(int c, char **v) {
     double frac = nsampled_max / double(boost::num_vertices(g));
     auto sampled = thorup_sample(g, 10, seed, frac); // 0 is the seed, 500 is the maximum sampled size
     std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
-    std::vector<uint32_t> ccomp(boost::num_vertices(g));
-    auto ncomp = boost::connected_components(g, &ccomp[0]);
     std::fprintf(stderr, "ncomp: %u\n", ncomp);
+#if VERBOSE_AF
     for(const auto v: sampled) {
         std::vector<double> distances(boost::num_vertices(g));
         boost::dijkstra_shortest_paths(g, v, distance_map(&distances[0]));
         std::fprintf(stderr, "v %zu has max distance %f\n", size_t(v), *std::max_element(distances.begin(), distances.end()));
     }
-#if MED_FINISHED
+#endif
+#if 1
     auto med_solution =  fgc::jain_vazirani_kmedian(g, sampled, 10);
     for(const auto v: med_solution) assert(std::find(sampled.begin(), sampled.end(), v) != sampled.end());
     std::fprintf(stderr, "med solution size: %zu\n", med_solution.size());
-    if(ncomp != 1) {
-        std::fprintf(stderr, "not connected\n");
-        return 0;
-    }
     auto [costs, assignments] = get_costs(g, med_solution);
 #else
     if(sampled.size() > boost::num_vertices(g) / 2)
         sampled.erase(sampled.begin() + sampled.size() / 2, sampled.end());
-    if(ncomp != 1) {
-        std::fprintf(stderr, "not connected\n");
-        return 0;
-    }
     auto [costs, assignments] = get_costs(g, sampled);
 #endif
     coresets::CoresetSampler<float, uint32_t> sampler;
     std::fprintf(stderr, "constructed sampler\n");
     // TODO: make assignments real
-#if MED_FINISHED
-    sampler.make_sampler(costs.size(), sampled.size(), costs.data(), assignments.data());
+#if 1
+    sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data());
 #else
     sampler.make_sampler(costs.size(), sampled.size(), costs.data(), assignments.data());
 #endif

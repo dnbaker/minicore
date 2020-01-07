@@ -4,6 +4,13 @@
 #include "macros.h"
 #include "flat_hash_map/flat_hash_map.hpp"
 
+#if defined(USE_TBB)
+#include <execution>
+#  define inclusive_scan(x, y, z) inclusive_scan(::std::execution::par_unseq, x, y, z)
+#else
+#  define inclusive_scan(x, y, z) ::std::partial_sum(x, y, z)
+#endif
+
 namespace shared {
 template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
           typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>

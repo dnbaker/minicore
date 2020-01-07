@@ -8,8 +8,9 @@ int main() {
         fgc::jain_vazirani_kmedian(g, vxs, 15);
     }
     std::fprintf(stderr, "Getting here only checks compilation, not correctness, of JV draft.\n");
-    size_t dim = 20;
-    size_t np = 200;
+    size_t dim = 50;
+    size_t np = 1000;
+    unsigned k = 15, nf = dim;
     blaze::DynamicMatrix<float> points(np, dim);
 #if 0
     std::mt19937_64 mt;
@@ -21,11 +22,11 @@ int main() {
     randomize(points);
     points = 1. / points;
     std::set<int> indices;
-    while(indices.size() < 20)
+    while(indices.size() < nf)
         indices.insert(std::rand() % points.rows());
     std::vector<int> iv(indices.begin(), indices.end());
     blaze::DynamicMatrix<float> facilities = rows(points, iv);
-    assert(facilities.rows() == 20);
+    assert(facilities.rows() == dim);
     blaze::DynamicMatrix<float> dists(facilities.rows(), points.rows());
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < facilities.rows(); ++i)
@@ -35,7 +36,6 @@ int main() {
     njv.setup(dists);
     auto res = njv.ufl(dists, 1.5);
     std::fprintf(stderr, "res size: %zu\n", res.size());
-    for(int i = 100000; i--; std::fputc('-', stderr));
-    auto kmedsol = njv.kmedian(dists, 5);
-    assert(kmedsol.size() == 5);
+    auto kmedsol = njv.kmedian(dists, k);
+    assert(kmedsol.size() == k);
 }

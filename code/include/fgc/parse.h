@@ -28,7 +28,6 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(const char
     unsigned nedges = std::atoi(p);
     if(!nedges) throw 2;
     GraphType ret(nnodes);
-    unsigned lastv = std::atoi(std::strchr(p + 1, ' '));
     unsigned id = 0;
     using edge_property_type = typename decltype(ret)::edge_property_type;
     while(std::getline(ifs, line)) {

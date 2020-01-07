@@ -97,15 +97,18 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
         boost::dijkstra_shortest_paths(x, synthetic_vertex,
                                        distance_map(&distances[0]).predecessor_map(&p[0]));
         // Pick random t in R, remove from R all points with dist(x, F) <= dist(t, F)
-        for(const auto v: distances) if(v == std::numeric_limits<edge_cost>::max()) {
-            throw std::runtime_error("Infinite distance");
-        }
         auto el = R[rng() % R.size()];
         auto minv = distances[el];
         std::fprintf(stderr, "minv: %f\n", minv);
         // remove all R with dist(x, F) leq dist(x, R)
         std::fprintf(stderr, "R size before: %zu\n", R.size());
+#ifdef USE_TBB
+        R.erase(std::remove_if(std::execution::par_unseq, R.begin(), R.end(), [d=distances.data(),minv](auto x) {return d[x] <= minv;}), R.end());
+#elif __cplusplus > 201703uL
+        std::erase_if(R, [d=distances.data(),minv](auto x) {return d[x] <= minv;});
+#else
         R.erase(std::remove_if(R.begin(), R.end(), [d=distances.data(),minv](auto x) {return d[x] <= minv;}), R.end());
+#endif
         std::fprintf(stderr, "R size after: %zu\n", R.size());
     }
     std::fprintf(stderr, "size: %zu\n", container.size());
@@ -135,7 +138,6 @@ auto get_costs(boost::adjacency_list<Args...> &x, const std::vector<typename boo
     flat_hash_map<v_int_t, uint32_t> pid2ind;
     for(size_t i = 0; i < container.size(); ++i)
         pid2ind[index[container[i]]] = i;
-    std::fprintf(stderr, "About to do the last step\n");
     // This could be slow, but whatever.
     for(size_t i = 0; i < p.size(); ++i) {
         auto parent = p[i], newparent = p[index[parent]];

@@ -4,12 +4,6 @@
 #include <numeric>
 #include "matrix_coreset.h"
 
-#if defined(USE_TBB)
-#include <execution>
-#  define inclusive_scan(x, y, z) inclusive_scan(::std::execution::par_unseq, x, y, z)
-#else
-#  define inclusive_scan(x, y, z) ::std::partial_sum(x, y, z)
-#endif
 
 namespace clustering {
 
