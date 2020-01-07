@@ -9,13 +9,17 @@ int main() {
     }
     std::fprintf(stderr, "Getting here only checks compilation, not correctness, of JV draft.\n");
     size_t dim = 20;
-    size_t np = 1000;
+    size_t np = 200;
     blaze::DynamicMatrix<float> points(np, dim);
+#if 0
     std::mt19937_64 mt;
     std::uniform_real_distribution<float> urd;
     for(auto r: blz::rowiterator(points))
         for(auto &v: r)
             v = urd(mt);
+#endif
+    randomize(points);
+    points = 1. / points;
     std::set<int> indices;
     while(indices.size() < 20)
         indices.insert(std::rand() % points.rows());
@@ -23,6 +27,7 @@ int main() {
     blaze::DynamicMatrix<float> facilities = rows(points, iv);
     assert(facilities.rows() == 20);
     blaze::DynamicMatrix<float> dists(facilities.rows(), points.rows());
+    #pragma omp parallel for
     for(size_t i = 0; i < facilities.rows(); ++i)
         for(size_t j = 0; j < points.rows(); ++j)
             dists(i, j) = blz::l2Dist(row(facilities, i), row(points, j));

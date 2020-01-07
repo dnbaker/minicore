@@ -33,6 +33,7 @@ struct NaiveJVSolver {
     blz::DV<FT> v_;
     blz::DV<uint32_t> numconnected_, numtight_;
     std::vector<edgetup> edges_;
+    size_t edgeindex_ = 0;
     double facility_cost_, maxalph_;
     std::unordered_set<uint32_t> S_, tempopen_, nottempopen_;
     NaiveJVSolver(size_t nf, size_t nc, double fc=1.):
@@ -73,6 +74,7 @@ struct NaiveJVSolver {
     }
     template<typename MatType, typename IType=DefIT>
     std::vector<IType> phase2(const MatType &mat) { // Electric Boogaloo
+        std::fprintf(stderr, "tos: ntos: %zu/%zu\n", tempopen_.size(), nottempopen_.size());
         wy::WyRand<uint32_t, 2> rng(mat.rows());
         std::vector<uint32_t> tov(tempopen_.begin(), tempopen_.end());
         std::vector<uint32_t> to_remove;
@@ -111,12 +113,14 @@ struct NaiveJVSolver {
     std::vector<IType> ufl(const MatType &mat, double faccost) {
         // Uncapacited Facility Location problem with facility cost = faccost
         this->reset(faccost);
+#if 0
         for(const auto edge: edges_) {
             char buf[30];
             edge.sprintf(buf);
             std::fprintf(stderr, "edge: %s|\n", buf);
             //std::fputc('\n');
         }
+#endif
         assert(nottempopen_.size() == w_.rows());
         assert(tempopen_.size() == 0);
         std::fprintf(stderr, "##Starting phase1 with faccost %.12g\n", faccost);
@@ -143,7 +147,7 @@ struct NaiveJVSolver {
         std::fprintf(stderr, "##first solution: %zu (want k %u)\n", med.size(), k);
         size_t roundnum = 0;
         while(med.size() != k) {
-            std::fprintf(stderr, "##round %zu\n", ++roundnum);
+            std::fprintf(stderr, "##round %zu. current size: %zu\n", ++roundnum, med.size());
             if(med.size() == k) break;
             if(med.size() > k)
                 mincost = medcost; // med has too many, increase cost.
@@ -157,8 +161,8 @@ struct NaiveJVSolver {
     }
     
     std::pair<uint32_t, double> min_tightening_cost() const {
-        if(edges_.empty()) return std::make_pair(uint32_t(-1), std::numeric_limits<double>::max());
-        auto edge = edges_.back();
+        if(edgeindex_ == size_t(-1)) return std::make_pair(uint32_t(-1), std::numeric_limits<double>::max());
+        auto edge = edges_[edgeindex_];
         return std::make_pair(edge.di(), edge.cost() - maxalph_);
     }
     std::pair<uint32_t, double> min_opening_cost() const {
@@ -168,10 +172,10 @@ struct NaiveJVSolver {
             auto nsupport = std::accumulate(row(w_, fid).begin(), row(w_, fid).end(), size_t(0), [](auto x, auto y) {return x + y >= 0.;});
             if(nsupport == 0) return std::make_pair(-1u, std::numeric_limits<double>::max());
             auto availsum = std::accumulate(row(w_, fid).begin(), row(w_, fid).end(), 0.);
-            std::fprintf(stderr, "rowsum: %f. facility cost: %f\n", availsum, facility_cost_);
+            //std::fprintf(stderr, "rowsum: %f. facility cost: %f\n", availsum, facility_cost_);
             auto diff = facility_cost_ - availsum;
             auto cost = nsupport ? diff / nsupport: std::numeric_limits<double>::max();
-            std::fprintf(stderr, "diff: %g. cost: %g\n", diff, cost);
+            //std::fprintf(stderr, "diff: %g. cost: %g\n", diff, cost);
             if(cost < mincost) mincost = cost, ind = fid;
         }
         return std::make_pair(ind, mincost);
@@ -198,32 +202,33 @@ struct NaiveJVSolver {
         assert(nottempopen_.size() == w_.rows());
         assert(w_.rows());
         std::vector<uint32_t> to_remove;
-        std::fprintf(stderr, "Filled S\n");
         size_t nz = 0;
-        while(edges_.back().cost() == 0.) {
+        edgeindex_ = edges_.size();
+        while(edges_[edgeindex_].cost() == 0.) {
             ++nz;
-            edges_.pop_back();
+            --edgeindex_;
         }
         std::fprintf(stderr, "nz: %zu\n", nz);
         while(S.size()) {
-            std::fprintf(stderr, "Size of S: %zu. nto size: %zu. tos: %zu\n", S.size(), nottempopen_.size(), tempopen_.size());
+            //std::fprintf(stderr, "Size of S: %zu. nto size: %zu. tos: %zu\n", S.size(), nottempopen_.size(), tempopen_.size());
             //std::fprintf(stderr, "getting min tight cost\n");
             auto [bestedge, tightinc] = min_tightening_cost();
             //std::fprintf(stderr, "got min tight cost\n");
             auto [bestfac, openinc]   = min_opening_cost();
             //std::fprintf(stderr, "got min opening cost\n");
             bool tighten = true;
-            if(tightinc < openinc) edges_.pop_back();
+            if(tightinc < openinc) --edgeindex_;
             else tighten = false;
             const double inc = std::min(tightinc, openinc);
-            std::fprintf(stderr, "inc: %g. open: %g. tighten: %g\n", inc, openinc, tightinc);
+            //std::fprintf(stderr, "inc: %g. open: %g. tighten: %g\n", inc, openinc, tightinc);
             perform_increment(inc, to_remove, mat);
-            std::fprintf(stderr, "new alpha: %g\n", maxalph_);
+            //std::fprintf(stderr, "new alpha: %g\n", maxalph_);
             if(tighten) {
                 //std::fprintf(stderr, "tightening. Try and maybe fail\n");
-                if(edges_.size())
-                    while(edges_.back().cost() == maxalph_)
-                        edges_.pop_back();
+                if(edges_.size()) {
+                    while(edges_[edgeindex_].cost() == maxalph_)
+                        --edgeindex_;
+                }
             } else {
                 //auto fc = facility_cost_;
                 tempopen_.insert(bestfac);
