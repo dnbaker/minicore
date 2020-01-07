@@ -134,7 +134,7 @@ struct NaiveJVSolver {
         return phase2<MatType, IType>();
     }
     template<typename MatType, typename IType=DefIT>
-    std::vector<IType> kmedian(const MatType &mat, unsigned k, unsigned maxrounds=50) {
+    std::vector<IType> kmedian(const MatType &mat, unsigned k, unsigned maxrounds=500) {
         setup(mat);
         double maxcost = mat.columns() * max(mat);
         if(std::isinf(maxcost)) {
@@ -217,7 +217,7 @@ struct NaiveJVSolver {
             ++nz;
             --edgeindex_;
         }
-        std::fprintf(stderr, "nz: %zu\n", nz);
+        //std::fprintf(stderr, "nz: %zu\n", nz);
         while(S.size()) {
             //std::fprintf(stderr, "Size of S: %zu. nto size: %zu. tos: %zu\n", S.size(), nottempopen_.size(), tempopen_.size());
             //std::fprintf(stderr, "getting min tight cost\n");
@@ -242,7 +242,7 @@ struct NaiveJVSolver {
                 //auto fc = facility_cost_;
                 tempopen_.insert(bestfac);
                 nottempopen_.erase(bestfac);
-                std::fprintf(stderr, "Inserting bestfac %u. nto size %zu. tempopen size: %zu\n", bestfac, nottempopen_.size(), tempopen_.size());
+                //std::fprintf(stderr, "Inserting bestfac %u. nto size %zu. tempopen size: %zu\n", bestfac, nottempopen_.size(), tempopen_.size());
                 for(const auto item: S) {
                     assert(v_.size() && v_.size() > item);
                     if(v_.at(item) >= mat(bestfac, item)) // && std::find(to_remove.begin(), to_remove.end(), s) != to_remove.end())

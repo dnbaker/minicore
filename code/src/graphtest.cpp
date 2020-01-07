@@ -72,7 +72,7 @@ auto dimacs_parse(const char *fn) {
 #if VERBOSE_AF
         std::fprintf(stderr, "[%p] value: %f. s: %d. dest: %d\n", (void *)&ed, v, unsigned(index[src]), unsigned(index[dest]));
 #endif
-        boost::put(boost::edge_weight_t(), g, *ei, 1.37);
+        boost::put(boost::edge_weight_t(), g, *ei, 1. / (double(std::rand()) / RAND_MAX));
 #if VERBOSE_AF
         std::fprintf(stderr, "after value: %f. s: %d. dest: %d\n", boost::get(boost::edge_weight_t(), g, *ei), unsigned(index[src]), unsigned(index[dest]));
 #endif
@@ -152,8 +152,14 @@ int main(int c, char **v) {
     std::vector<uint32_t> ccomp(boost::num_vertices(g));
     auto ncomp = boost::connected_components(g, &ccomp[0]);
     std::fprintf(stderr, "ncomp: %u\n", ncomp);
+    for(const auto v: sampled) {
+        std::vector<double> distances(boost::num_vertices(g));
+        boost::dijkstra_shortest_paths(g, v, distance_map(&distances[0]));
+        std::fprintf(stderr, "v %zu has max distance %f\n", size_t(v), *std::max_element(distances.begin(), distances.end()));
+    }
 #if MED_FINISHED
     auto med_solution =  fgc::jain_vazirani_kmedian(g, sampled, 10);
+    for(const auto v: med_solution) assert(std::find(sampled.begin(), sampled.end(), v) != sampled.end());
     std::fprintf(stderr, "med solution size: %zu\n", med_solution.size());
     if(ncomp != 1) {
         std::fprintf(stderr, "not connected\n");

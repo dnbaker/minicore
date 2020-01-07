@@ -4,6 +4,7 @@
 #include <string>
 #include <climits>
 #include <unordered_map>
+#include <iostream>
 #include <cstring>
 
 namespace fgc {
@@ -28,21 +29,22 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(const char
     if(!nedges) throw 2;
     GraphType ret(nnodes);
     unsigned lastv = std::atoi(std::strchr(p + 1, ' '));
-    std::fprintf(stderr, "lastv: %d. (Don't know what this means, honestly.)\n", lastv);
     unsigned id = 0;
     using edge_property_type = typename decltype(ret)::edge_property_type;
     while(std::getline(ifs, line)) {
         const char *s = line.data();
         if(!std::isdigit(*s)) continue;
+        //boost::add_edge(id, id, 0., ret);
+        //std::fprintf(stderr, "added edge from %zu to %zu\n", size_t(id), size_t(id));
         for(;;) {
-            //boost::add_edge(id, std::atoi(s), ret);
-            boost::add_edge(id, std::atoi(s), static_cast<edge_property_type>(1.), ret);
+            auto newv = std::atoi(s) - 1;
+            boost::add_edge(id, newv, static_cast<edge_property_type>(1.), ret);
 
-            if((s = std::strchr(s, ' ')) == nullptr) break;
-            ++s;
+            if((s = std::strchr(s, ' ')) == nullptr || !std::isdigit(*++s)) break;
         }
         ++id;
     }
+    std::cout << line << '\n';
     std::fprintf(stderr, "num edges: %zu. num vertices: %zu\n", boost::num_edges(ret), boost::num_vertices(ret));
     return ret;
 }
