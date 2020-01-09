@@ -1,4 +1,6 @@
 #pragma once
+#ifndef FGC_KMEANS_H__
+#define FGC_KMEANS_H__
 #include <cassert>
 #include <mutex>
 #include <numeric>
@@ -153,7 +155,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double>
 void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
                      CMatrixType &centers, MatrixType &data,
-                     double tolerance=.001, size_t maxiter=-1,
+                     double tolerance=0., size_t maxiter=-1,
                      const WFT *weights=nullptr)
 {
     if(tolerance < 0.) throw 1;
@@ -215,6 +217,20 @@ auto kmeans_matrix_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RN
     coresets::MatrixCoreset<blaze::DynamicMatrix<FT, SO>, FT> csmat = index2matrix(ics, mat);
     return csmat;
 }
-#undef inclusive_scan
+
+// TODO: 1. get run kmeans clustering on MatrixCoreset
+//       2. Use this for better coreset construction (since coreset size is dependent on the approximation ratio)
+//       3. Generate new solution
+//       4. Iterate over this
+//       5. ???
+//       6. PROFIT
+//       Why?
+//       The solution is 1 + eps accurate, with the error being 1/eps^2
+//       We can effectively remove the log(n) approximation 
+//       ratio from
+//       Epilogue.
+//       7. Add mmap accessor
+
 
 } // namespace clustering
+#endif // FGC_KMEANS_H__

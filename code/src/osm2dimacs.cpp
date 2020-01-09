@@ -24,6 +24,7 @@
 // For the NodeLocationForWays handler
 #include <osmium/handler/node_locations_for_ways.hpp>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 #include <cinttypes>
 

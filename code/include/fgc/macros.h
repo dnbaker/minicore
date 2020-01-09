@@ -3,7 +3,6 @@
 #define SKETCH_MACROS_H__
 
 
-
 // INLINE
 #ifndef INLINE
 #  if __GNUC__ || __clang__
@@ -82,14 +81,14 @@
 #ifndef SK_UNROLL
 #  define SK_UNROLL _Pragma("message \"The macro, it does nothing\"")
    // Don't use SK_UNROLL, it only tells you if these below macros are defined.
-#  ifdef __GNUC__
+#  if defined(__GNUC__) && !defined(__clang__)
 #    define SK_UNROLL_4  _Pragma("GCC unroll 4")
 #    define SK_UNROLL_8  _Pragma("GCC unroll 8")
 #    define SK_UNROLL_16 _Pragma("GCC unroll 16")
 #    define SK_UNROLL_32 _Pragma("GCC unroll 32")
 #    define SK_UNROLL_64 _Pragma("GCC unroll 64")
-#  elif defined(__CUDACC__)
-#    define SK_UNROLL_4  _Pragma("GCC unroll 4")
+#  elif defined(__CUDACC__) || defined(__clang__)
+#    define SK_UNROLL_4  _Pragma("unroll 4")
 #    define SK_UNROLL_8  _Pragma("unroll 8")
 #    define SK_UNROLL_16 _Pragma("unroll 16")
 #    define SK_UNROLL_32 _Pragma("unroll 32")

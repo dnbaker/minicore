@@ -1,3 +1,4 @@
+#pragma once
 #ifndef FGC_KMEDIAN_H__
 #define FGC_KMEDIAN_H__
 #include "kmeans.h"

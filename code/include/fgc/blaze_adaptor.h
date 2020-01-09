@@ -108,27 +108,27 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     }
     struct RowViewer {
         row_iterator start_, end_;
-        RowViewer(this_type &ref): start_{0, ref}, end_{ref.rows(), ref} {}
+        RowViewer(this_type &ref): start_{{0, ref}}, end_{{ref.rows(), ref}} {}
         auto begin() const {return start_;}
         const auto &end()  const {return end_;}
     };
     struct ConstRowViewer {
         const_row_iterator start_, end_;
-        ConstRowViewer(const this_type &ref): start_{0, ref}, end_{ref.rows(), ref} {}
+        ConstRowViewer(const this_type &ref): start_{{0, ref}}, end_{{ref.rows(), ref}} {}
         auto begin() const {return start_;}
         const auto &end()  const {return end_;}
     };
     struct ColumnViewer {
         auto index() const {return start_.columnnum;}
         column_iterator start_, end_;
-        ColumnViewer(this_type &ref): start_{0, ref}, end_{ref.columns(), ref} {}
+        ColumnViewer(this_type &ref): start_{{0, ref}}, end_{{ref.columns(), ref}} {}
         auto begin() const {return start_;}
         const auto &end()  const {return end_;}
     };
     struct ConstColumnViewer {
         auto index() const {return start_.columnnum;}
         const_column_iterator start_, end_;
-        ConstColumnViewer(const this_type &ref): start_{0, ref}, end_{ref.columns(), ref} {}
+        ConstColumnViewer(const this_type &ref): start_{{0, ref}}, end_{{ref.columns(), ref}} {}
         auto begin() const {return start_;}
         const auto &end()  const {return end_;}
     };
@@ -172,27 +172,27 @@ class CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     }
     struct RowViewer {
         row_iterator start_, end_;
-        RowViewer(this_type &ref): start_{0, ref}, end_{ref.rows(), ref} {}
+        RowViewer(this_type &ref): start_{{0, ref}}, end_{ref.rows(), ref} {}
         auto begin() const {return start_;}
         auto &end()  const {return end_;}
     };
     struct ConstRowViewer {
         const_row_iterator start_, end_;
-        ConstRowViewer(const this_type &ref): start_{0, ref}, end_{ref.rows(), ref} {}
+        ConstRowViewer(const this_type &ref): start_{{0, ref}}, end_{ref.rows(), ref} {}
         auto begin() const {return start_;}
         auto &end()  const {return end_;}
     };
     struct ColumnViewer {
         auto index() const {return start_.columnnum;}
         column_iterator start_, end_;
-        ColumnViewer(this_type &ref): start_{0, ref}, end_{ref.columns(), ref} {}
+        ColumnViewer(this_type &ref): start_{{0, ref}}, end_{ref.columns(), ref} {}
         auto begin() const {return start_;}
         auto &end()  const {return end_;}
     };
     struct ConstColumnViewer {
         auto index() const {return start_.columnnum;}
         column_iterator start_, end_;
-        ConstColumnViewer(const this_type &ref): start_{0, ref}, end_{ref.columns(), ref} {}
+        ConstColumnViewer(const this_type &ref): start_{{0, ref}}, end_{ref.columns(), ref} {}
         auto begin() const {return start_;}
         auto &end()  const {return end_;}
     };

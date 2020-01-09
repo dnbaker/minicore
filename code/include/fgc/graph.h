@@ -139,23 +139,23 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, boost::prop
     }
     template<typename F>
     void for_each_edge(const F &f) {
-        auto edges = edges();
-        std::for_each(edges.begin(), edges.end(), f);
+        auto e = edges();
+        std::for_each(e.begin(), e.end(), f);
     }
     template<typename F>
     void for_each_edge(const F &f) const {
-        auto edges = edges();
-        std::for_each(edges.begin(), edges.end(), f);
+        auto e = edges();
+        std::for_each(e.begin(), e.end(), f);
     }
     template<typename F>
     void for_each_vertex(const F &f) {
-        auto vertices = vertices();
-        std::for_each(vertices.begin(), vertices.end(), f);
+        auto v = vertices();
+        std::for_each(v.begin(), v.end(), f);
     }
     template<typename F>
     void for_each_vertex(const F &f) const {
-        auto vertices = vertices();
-        std::for_each(vertices.begin(), vertices.end(), f);
+        auto v = vertices();
+        std::for_each(v.begin(), v.end(), f);
     }
     auto try_toposort() const {
         using Type = decltype(this->toposort());
