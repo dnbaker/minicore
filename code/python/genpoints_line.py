@@ -84,4 +84,4 @@ else:
 print(f"c Auto-generated with {sys.argv[0]}, dim={dim}, npoints={npoints}")
 print(f"p sp {npoints} {len(dists)}")
 for d, start, end in zip(dists, connections[0], connections[1]):
-    print(f"a {start} {end} {d}")
+    print(f"a {start + 1} {end + 1} {d}")

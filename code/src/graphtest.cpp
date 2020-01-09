@@ -10,6 +10,8 @@ template<typename T> class TD;
 using namespace fgc;
 using namespace boost;
 
+#define undirectedS bidirectionalS
+
 auto dimacs_official_parse(std::string input) {
     fgc::Graph<undirectedS> g;
     std::ifstream ifs(input);

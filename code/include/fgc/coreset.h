@@ -103,7 +103,9 @@ struct CoresetSampler {
     bool ready() const {return sampler_.get();}
 
     bool operator==(const CoresetSampler &o) const {
+#if VERBOSE_AF
         std::fprintf(stderr, "np: %zu/%zu\n", np_, o.np_);
+#endif
         return np_ == o.np_ &&
                        std::equal(probs_.get(), probs_.get() + np_, o.probs_.get()) &&
                       ((weights_.get() == nullptr && o.weights_.get() == nullptr) || // Both are nullptr or
@@ -134,7 +136,9 @@ struct CoresetSampler {
     void write(gzFile fp) const {
         uint64_t n = np_;
         gzwrite(fp, &n, sizeof(n));
+#if VERBOSE_AF
         std::fprintf(stderr, "Writing %zu\n", size_t(n));
+#endif
         gzwrite(fp, &seed_, sizeof(seed_));
         gzwrite(fp, &probs_[0], sizeof(probs_[0]) * np_);
         uint32_t weights_present = weights_ ? 1337: 0;
@@ -156,7 +160,9 @@ struct CoresetSampler {
     void read(gzFile fp) {
         uint64_t n;
         gzread(fp, &n, sizeof(n));
+#if VERBOSE_AF
         std::fprintf(stderr, "Reading %zu\n", size_t(n));
+#endif
         np_ = n;
         gzread(fp, &seed_, sizeof(seed_));
         probs_.reset(new FT[n]);
