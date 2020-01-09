@@ -4,6 +4,7 @@
 #define ALIAS_THREADSAFE 1
 #include "alias_sampler/alias_sampler.h"
 #include "shared.h"
+#include <zlib.h>
 #ifdef _OPENMP
 #  include <omp.h>
 #endif
@@ -94,14 +95,68 @@ struct CoresetSampler {
     using Sampler = alias::AliasSampler<FT, wy::WyRand<IT, 2>, IT>;
     std::unique_ptr<Sampler> sampler_;
     std::unique_ptr<FT []>     probs_;
+    std::unique_ptr<FT []>   weights_;
 
-    const FT                *weights_;
     size_t                        np_;
+    uint64_t                    seed_ = 1337;
     bool ready() const {return sampler_.get();}
 
     CoresetSampler(CoresetSampler &&o)      = default;
     CoresetSampler(const CoresetSampler &o) = delete;
     CoresetSampler(): weights_(nullptr) {}
+
+    void write(gzFile fp) const {
+        uint64_t n = np_;
+        gzwrite(fp, &n, sizeof(n));
+        gzwrite(fp, &seed_, sizeof(seed_));
+        gzwrite(fp, &probs_[0], sizeof(probs_[0]) * np_);
+        uint32_t weights_present = weights_ ? 1337: 0;
+        gzwrite(fp, &weights_present, sizeof(weights_present));
+        if(weights_)
+            gzwrite(fp, &weights_[0], sizeof(weights_[0]) * np_);
+    }
+    void write(std::FILE *fp) const {
+        auto fd = ::fileno(fp);
+        uint64_t n = np_;
+        ::write(fd, &n, sizeof(n));
+        ::write(fd, &seed_, sizeof(seed_));
+        ::write(fd, &probs_[0], sizeof(probs_[0]) * np_);
+        uint32_t weights_present = weights_ ? 1337: 0;
+        ::write(fd, &weights_present, sizeof(weights_present));
+        if(weights_)
+            ::write(fd, &weights_[0], sizeof(weights_[0]) * np_);
+    }
+    void read(gzFile fp) {
+        uint64_t n;
+        gzread(fp, &n, sizeof(n));
+        gzread(fp, &seed_, sizeof(seed_));
+        probs_.reset(new FT[n]);
+        gzread(fp, &probs_[0], sizeof(FT) * n);
+        uint32_t weights_present;
+        gzread(fp, &weights_present, sizeof(weights_present));
+        if(weights_present) {
+            assert(weights_present == 1337);
+            weights_.reset(new FT[n]);
+            gzread(fp, &weights_[0], sizeof(FT) * n);
+        }
+        sampler_.reset(new Sampler(probs_.get(), probs_.get() + n, seed_));
+    }
+    void read(std::FILE *fp) {
+        uint64_t n;
+        auto fd = ::fileno(fp);
+        ::read(fd, &n, sizeof(n));
+        ::read(fd, &seed_, sizeof(seed_));
+        probs_.reset(new FT[n]);
+        ::read(fd, &probs_[0], sizeof(FT) * n);
+        uint32_t weights_present;
+        ::read(fd, &weights_present, sizeof(weights_present));
+        if(weights_present) {
+            assert(weights_present == 1337);
+            weights_.reset(new FT[n]);
+            ::read(fd, &weights_[0], sizeof(FT) * n);
+        }
+        sampler_.reset(new Sampler(probs_.get(), probs_.get() + n, seed_));
+    }
 
     void make_gmm_sampler(size_t np, size_t ncenters,
                       const FT *costs, const IT *assignments,
@@ -116,7 +171,10 @@ struct CoresetSampler {
         // Note: this can be expanded to general probability measures.
         // I should to generalize this, such as for negative binomial and/or fancier functions
         np_ = np;
-        weights_ = weights;
+        if(weights) {
+            weights_.reset(new FT[np]);
+            std::memcpy(&weights_[0], weights, sizeof(FT) * np);
+        } else weights_.release();
         std::vector<FT> weight_sums(ncenters), weighted_cost_sums(ncenters);
         std::vector<FT> sqcosts(ncenters);
         std::vector<IT> center_counts(ncenters);
@@ -166,12 +224,16 @@ struct CoresetSampler {
                       SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG,
                       double alpha_est=0.)
     {
+        seed_ = seed;
         if(sens == LUCIC_FAULKNER_KRAUSE_FELDMAN) {
             make_gmm_sampler(np, ncenters, costs, assignments, weights, seed, alpha_est);
             return;
         }
         np_ = np;
-        weights_ = weights;
+        if(weights) {
+            weights_.reset(new FT[np]);
+            std::memcpy(&weights_[0], weights, sizeof(FT) * np);
+        } else weights_.release();
         std::vector<FT> weight_sums(ncenters);
         std::vector<IT> center_counts(ncenters);
         double total_cost = 0.;
@@ -217,7 +279,7 @@ struct CoresetSampler {
                 weight_sums[i] = 1./(2. * center_counts[i] * weight_sums[i]);
             OMP_PRAGMA("omp parallel for")
             for(size_t i = 0; i < np; ++i) {
-                probs_[i] = getweight(i) * (costs[i] * tcinv + weight_sums[assignments[i]]);
+                probs_[i] = getweight(i) * (costs[i] * tcinv + weight_sums[assignments[i]]); // Am I propagating weights correctly?
             }
             sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
         }
@@ -227,6 +289,7 @@ struct CoresetSampler {
     }
     IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0) {
         if(!sampler_.get()) throw 1;
+        seed = seed ? seed: seed_;
         sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
 #ifdef ALIAS_THREADSAFE

@@ -8,7 +8,7 @@ endif
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 CXX?=g++
 STD?=c++17
-WARNINGS+=-Wall -Wextra
+WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -pedantic -Wunused-variable -Wno-attributes
 OPT?=O3
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) #-ftemplate-backtrace-limit=0
 

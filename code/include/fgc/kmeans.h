@@ -159,13 +159,19 @@ void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
                      const WFT *weights=nullptr)
 {
     if(tolerance < 0.) throw 1;
-    double oldloss = lloyd_iteration(assignments, counts, centers, data, weights);
     size_t iternum = 0;
+    double oldloss = std::numeric_limits<double>::max(), newloss;
+    for(;;) {
+        newloss = lloyd_iteration(assignments, counts, centers, data, weights);
+        if(iternum++ == maxiter || std::abs(oldloss - newloss) < tolerance)
+            break;
+        std::fprintf(stderr, "new loss at %zu: %g. old loss: %g\n", iternum, newloss, oldloss);
+        oldloss = newloss;
+    }
     for(;;) {
         double newloss = lloyd_iteration(assignments, counts, centers, data, weights);
         if(std::abs(oldloss - newloss) / oldloss < tolerance || iternum++ == maxiter) return;
         oldloss = newloss;
-        std::fprintf(stderr, "loss at %zu: %g\n", iternum, oldloss);
     }
 }
 
