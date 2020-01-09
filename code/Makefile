@@ -10,7 +10,8 @@ CXX?=g++
 STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -pedantic -Wunused-variable -Wno-attributes
 OPT?=O3
-CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) #-ftemplate-backtrace-limit=0
+LDFLAGS+=-lz
+CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LDFLAGS) #-ftemplate-backtrace-limit=0
 
 EX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
 all: $(EX)

@@ -183,4 +183,7 @@ int main(int c, char **v) {
 #endif
     std::fprintf(stderr, "made sampler\n");
     auto sampled_cs = sampler.sample(50);
+    std::FILE *ofp = std::fopen("sampler.out", "wb");
+    sampler.write(ofp);
+    std::fclose(ofp);
 }

@@ -96,18 +96,45 @@ struct CoresetSampler {
     std::unique_ptr<Sampler> sampler_;
     std::unique_ptr<FT []>     probs_;
     std::unique_ptr<FT []>   weights_;
-
     size_t                        np_;
     uint64_t                    seed_ = 1337;
+
+
     bool ready() const {return sampler_.get();}
+
+    bool operator==(const CoresetSampler &o) const {
+        std::fprintf(stderr, "np: %zu/%zu\n", np_, o.np_);
+        return np_ == o.np_ &&
+                       std::equal(probs_.get(), probs_.get() + np_, o.probs_.get()) &&
+                      ((weights_.get() == nullptr && o.weights_.get() == nullptr) || // Both are nullptr or
+                        std::equal(weights_.get(), weights_.get() + np_, o.weights_.get())); // They're both the same
+    }
 
     CoresetSampler(CoresetSampler &&o)      = default;
     CoresetSampler(const CoresetSampler &o) = delete;
-    CoresetSampler(): weights_(nullptr) {}
+    CoresetSampler(std::string s) {
+        gzFile ifp = gzopen(s.data(), "rb");
+        this->read(ifp);
+        gzclose(ifp);
+    }
+    CoresetSampler() {}
 
+    void write(const std::string &s) const {
+        gzFile fp = gzopen(s.data(), "wb");
+        if(!fp) throw std::runtime_error("Failed to open file");
+        this->write(fp);
+        gzclose(fp);
+    }
+    void read(const std::string &s) const {
+        gzFile fp = gzopen(s.data(), "rb");
+        if(!fp) throw std::runtime_error("Failed to open file");
+        this->read(fp);
+        gzclose(fp);
+    }
     void write(gzFile fp) const {
         uint64_t n = np_;
         gzwrite(fp, &n, sizeof(n));
+        std::fprintf(stderr, "Writing %zu\n", size_t(n));
         gzwrite(fp, &seed_, sizeof(seed_));
         gzwrite(fp, &probs_[0], sizeof(probs_[0]) * np_);
         uint32_t weights_present = weights_ ? 1337: 0;
@@ -129,6 +156,8 @@ struct CoresetSampler {
     void read(gzFile fp) {
         uint64_t n;
         gzread(fp, &n, sizeof(n));
+        std::fprintf(stderr, "Reading %zu\n", size_t(n));
+        np_ = n;
         gzread(fp, &seed_, sizeof(seed_));
         probs_.reset(new FT[n]);
         gzread(fp, &probs_[0], sizeof(FT) * n);
@@ -324,6 +353,7 @@ struct CoresetSampler {
             ret.weights_[i] = getweight(ret.indices_[i]) * nsamplinv / probs_[i];
         return ret;
     }
+    size_t size() const {return np_;}
 };
 
 
