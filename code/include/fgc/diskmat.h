@@ -7,7 +7,7 @@
 #include "blaze/Math.h"
 namespace fgc {
 
-template<typename VT, bool SO=blaze::rowMajor>
+template<typename VT, bool SO=blaze::rowMajor, bool isPadded=blaze::padded>
 struct DiskMat {
     size_t nr_, nc_;
     using mmapper = mio::mmap_sink;
@@ -20,7 +20,7 @@ struct DiskMat {
     //            -- I should allocate a little extra space for full optimization
 
     static constexpr bool AF = blaze::unaligned;
-    static constexpr bool PF = blaze::unpadded;
+    static constexpr bool PF = isPadded;
     using MatType = blaze::CustomMatrix<VT, AF, PF, SO>;
     MatType mat_;
     std::string path_;
@@ -31,7 +31,8 @@ struct DiskMat {
         std::swap_ranges(ptr, ptr + sizeof(*this), optr);
     }
     DiskMat(size_t nr, size_t nc, std::string path, size_t offset=0): nr_(nr), nc_(nc), path_(path) {
-        const size_t nb = nr_ * nc_ * sizeof(VT), total_nb = nb + offset;
+        size_t nperrow = isPadded ? size_t(blaze::nextMultiple(nc_, blaze::SIMDTrait<VT>::size)): nc_;
+        const size_t nb = nr_ * nperrow * sizeof(VT), total_nb = nb + offset;
         const char *fn = path.data();
         std::FILE *fp = fopen(fn, "a+");
         if(!fp) throw 1;
@@ -46,20 +47,16 @@ struct DiskMat {
         }
         auto filesize = st.st_size;
         if(size_t(filesize) < total_nb) {
-            static constexpr size_t chunk_size = 1u << 16;
-            std::vector<char> td(chunk_size, 0);
-            for(size_t i = (total_nb - filesize) / chunk_size; i--;)
-                ::write(fd, td.data(), chunk_size);
+            ::ftruncate(fd, total_nb);
             ::fstat(fd, &st);
-            if(total_nb != size_t(st.st_size)) {
-                ::write(fd, td.data(), total_nb - st.st_size);
-                ::fstat(fd, &st);
-                assert(size_t(st.st_size) == total_nb);
-            }
         }
         assert(size_t(st.st_size) >= total_nb);
         ms_.reset(new mmapper(fd, offset, nb));
-        mat_ = MatType((VT *)ms_->data(), nr, nc);
+        if constexpr(!isPadded) {
+            mat_ = MatType((VT *)ms_->data(), nr, nc);
+        } else {
+            mat_ = MatType((VT *)ms_->data(), nr, nc, nperrow);
+        }
     }
     ~DiskMat() {
         if(delete_file_) {
