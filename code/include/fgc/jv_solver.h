@@ -62,14 +62,13 @@ struct NaiveJVSolver {
         OMP_PRAGMA("omp parallel for")
         for(size_t i = 0; i < mat.rows(); ++i) {
             auto p = &edges_[i * mat.columns()];
+            auto r = row(mat, i);
             for(size_t j = 0; j < mat.columns(); ++j) {
-                p[j] = {mat(i, j), i, j};
+                p[j] = {r[j], i, j};
             }
         }
-        pdqsort(&edges_[0], &edges_[edges_.size()], [](const auto x, const auto y) {return x.cost() > y.cost();});
-        // Sorted in reverse order, so edges_.back() is the minimum cost
-        // and edges_.pop_back() pops it off.
-        nottempopen_.clear();
+        pdqsort(&edges_[0], &edges_[edges_.size()], [](const auto x, const auto y) {return x.cost() < y.cost();});
+        tempopen_.clear();
         for(size_t i = 0; i < mat.rows(); ++i) nottempopen_.insert(i);
     }
     template<typename MatType, typename IType=DefIT>
@@ -82,8 +81,8 @@ struct NaiveJVSolver {
         std::vector<uint32_t> tov(tempopen_.begin(), tempopen_.end());
         std::vector<uint32_t> to_remove;
         auto lai = rng() % tov.size();
-        auto la = tov[lai];
         std::swap(tov[lai], tov.back());
+        auto la = tov.back();
         tov.pop_back();
         std::vector<IType> ret{la};
         while(tov.size()) {
@@ -170,7 +169,7 @@ struct NaiveJVSolver {
     }
     
     std::pair<uint32_t, double> min_tightening_cost() const {
-        if(edgeindex_ == size_t(-1)) return std::make_pair(uint32_t(-1), std::numeric_limits<double>::max());
+        if(edgeindex_ == edges_.size()) return std::make_pair(uint32_t(-1), std::numeric_limits<double>::max());
         auto edge = edges_[edgeindex_];
         return std::make_pair(edge.di(), edge.cost() - maxalph_);
     }
@@ -212,12 +211,10 @@ struct NaiveJVSolver {
         assert(w_.rows());
         std::vector<uint32_t> to_remove;
         size_t nz = 0;
-        edgeindex_ = edges_.size();
-        while(edges_[edgeindex_].cost() == 0.) {
-            ++nz;
-            --edgeindex_;
-        }
-        //std::fprintf(stderr, "nz: %zu\n", nz);
+        edgeindex_ = std::find_if(edges_.begin(), edges_.end(), [](auto x) {return x.cost() > 0.;})
+                     - edges_.begin();
+        // Skip over 0 indices
+        std::fprintf(stderr, "nz: %zu\n", nz);
         while(S.size()) {
             //std::fprintf(stderr, "Size of S: %zu. nto size: %zu. tos: %zu\n", S.size(), nottempopen_.size(), tempopen_.size());
             //std::fprintf(stderr, "getting min tight cost\n");
@@ -226,19 +223,16 @@ struct NaiveJVSolver {
             auto [bestfac, openinc]   = min_opening_cost();
             //std::fprintf(stderr, "got min opening cost\n");
             bool tighten = true;
-            if(tightinc < openinc) --edgeindex_;
-            else tighten = false;
+            if(tightinc < openinc) {
+                auto bec = edges_[edgeindex_].cost();
+                do ++edgeindex_; while(edges_[edgeindex_].cost() == bec);
+                // Skip over identical weights
+            } else tighten = false;
             const double inc = std::min(tightinc, openinc);
             //std::fprintf(stderr, "inc: %g. open: %g. tighten: %g\n", inc, openinc, tightinc);
             perform_increment(inc, to_remove, mat);
             //std::fprintf(stderr, "new alpha: %g\n", maxalph_);
-            if(tighten) {
-                //std::fprintf(stderr, "tightening. Try and maybe fail\n");
-                if(edges_.size()) {
-                    while(edges_[edgeindex_].cost() == maxalph_)
-                        --edgeindex_;
-                }
-            } else {
+            if(!tighten) {
                 //auto fc = facility_cost_;
                 tempopen_.insert(bestfac);
                 nottempopen_.erase(bestfac);

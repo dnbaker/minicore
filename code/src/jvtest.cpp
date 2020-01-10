@@ -9,7 +9,7 @@ int main() {
     }
     std::fprintf(stderr, "Getting here only checks compilation, not correctness, of JV draft.\n");
     size_t dim = 50;
-    size_t np = 800;
+    size_t np = 400;
     unsigned k = 15, nf = dim;
     blaze::DynamicMatrix<float> points(np, dim);
 #if 0
