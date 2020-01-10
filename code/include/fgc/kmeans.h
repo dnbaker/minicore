@@ -7,7 +7,9 @@
 
 namespace clustering {
 
+#ifdef USE_TBB
 using std::inclusive_scan;
+#endif
 using std::partial_sum;
 using blz::sqrL2Norm;
 
