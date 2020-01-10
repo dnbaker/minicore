@@ -7,19 +7,19 @@
 #include "blaze/Math.h"
 namespace fgc {
 
-template<typename VT, bool SO=blaze::rowMajor, bool isPadded=blaze::padded>
+template<typename VT, bool SO=blaze::rowMajor, bool isPadded=blaze::padded, bool isAligned=blaze::unaligned>
 struct DiskMat {
     size_t nr_, nc_;
     using mmapper = mio::mmap_sink;
     std::unique_ptr<mmapper> ms_;
-    bool delete_file_ = false;
+    bool delete_file_;
+
+
     // TODO:
     //  alignment -- if offset is 0, it's already aligned.
     //            -- otherwise, allocate enough extra so that it is
-    //  padding   -- more importantly (to make later lines aligned)
-    //            -- I should allocate a little extra space for full optimization
 
-    static constexpr bool AF = blaze::unaligned;
+    static constexpr bool AF = isAligned;
     static constexpr bool PF = isPadded;
     using MatType = blaze::CustomMatrix<VT, AF, PF, SO>;
     MatType mat_;
@@ -30,8 +30,16 @@ struct DiskMat {
         std::memset(ptr, 0, sizeof(*this));
         std::swap_ranges(ptr, ptr + sizeof(*this), optr);
     }
-    DiskMat(size_t nr, size_t nc, std::string path, size_t offset=0): nr_(nr), nc_(nc), path_(path) {
-        size_t nperrow = isPadded ? size_t(blaze::nextMultiple(nc_, blaze::SIMDTrait<VT>::size)): nc_;
+    static constexpr size_t SIMDSIZE = blaze::SIMDTrait<VT>::size;
+    DiskMat(size_t nr, size_t nc, std::string path, size_t offset=0, bool delete_file=false):
+        nr_(nr), nc_(nc),
+        delete_file_(delete_file),
+        path_(path)
+    {
+        if(isAligned && offset % (SIMDSIZE * sizeof(VT))) {
+            throw std::invalid_argument("offset is not aligned; invalid storage.");
+        }
+        size_t nperrow = isPadded ? size_t(blaze::nextMultiple(nc_, SIMDSIZE)): nc_;
         const size_t nb = nr_ * nperrow * sizeof(VT), total_nb = nb + offset;
         const char *fn = path.data();
         std::FILE *fp = fopen(fn, "a+");
@@ -52,11 +60,7 @@ struct DiskMat {
         }
         assert(size_t(st.st_size) >= total_nb);
         ms_.reset(new mmapper(fd, offset, nb));
-        if constexpr(!isPadded) {
-            mat_ = MatType((VT *)ms_->data(), nr, nc);
-        } else {
-            mat_ = MatType((VT *)ms_->data(), nr, nc, nperrow);
-        }
+        mat_ = MatType((VT *)ms_->data(), nr, nc, nperrow);
     }
     ~DiskMat() {
         if(delete_file_) {
