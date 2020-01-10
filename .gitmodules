@@ -28,3 +28,6 @@
 [submodule "code/pdqsort"]
 	path = code/pdqsort
 	url = https://github.com/orlp/pdqsort
+[submodule "code/mio"]
+	path = code/mio
+	url = https://github.com/mandreyel/mio

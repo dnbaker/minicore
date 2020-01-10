@@ -26,6 +26,7 @@ template<typename DirectedS=undirectedS, typename EdgeProps=float, typename VtxP
 struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, boost::property<boost::edge_weight_t, EdgeProps>, GraphProps> {
     using super = boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, boost::property<boost::edge_weight_t, EdgeProps>, GraphProps>;
     using this_type = Graph<DirectedS, EdgeProps, VtxProps, GraphProps>;
+    using edge_distance_type = EdgeProps;
 
     template<typename...Args>
     Graph(Args &&... args): super(std::forward<Args>(args)...) {
