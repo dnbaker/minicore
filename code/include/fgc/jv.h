@@ -81,19 +81,18 @@ std::vector<typename Graph::vertex_descriptor>
         auto r = row(c, i);
         assert(r.size() == n);
 #if GETPREDS
-        std::vector<typename Graph::vertex_descriptor> p(n);
+        auto p(std::make_unique<typename Graph::vertex_descriptor[]>(n));
 #endif
         boost::dijkstra_shortest_paths(x, edge,
-#if GETPREDS
-                                       distance_map(&r[0]).predecessor_map(&p[0])
-#else
                                        distance_map(&r[0])
+#if GETPREDS
+                                       .predecessor_map(&p[0])
 #endif
         );
         if(r[0] == std::numeric_limits<float>::max()) {
-#if GETPREDS
-            for(const auto pi: p) {
-                std::fprintf(stderr, "pi: %zu. candidate: %zu\n", size_t(pi), size_t(edge));
+#if defined(GETPREDS) && defined(VERBOSE_AF)
+            for(size_t i = 0; i < n; ++i) {
+                std::fprintf(stderr, "pi: %zu. candidate: %zu\n", size_t(pi[i]), size_t(edge));
             }
 #endif
             throw 1;
@@ -112,36 +111,7 @@ std::vector<typename Graph::vertex_descriptor>
     for(size_t i = 0; i < sol.size(); ++i)
         ret[i] = candidates[sol[i]];
     return ret;
-#if 0
-    auto tmp = jvs.kmedian(c, k, true);
-    std::vector<typename Graph::vertex_descriptor> ret; ret.reserve(tmp.size());
-    for(const auto v: tmp) ret.push_back(v);
-    return ret;
-#endif
 } // jain_vazirani_ufl
-
-#if 0
-template<typename Graph>
-auto jain_vazirani_kmedian(Graph &x,
-                           const std::vector<typename Graph::vertex_descriptor> &candidates,
-                           size_t k) {
-    double minval = 0.;
-    auto edge_iterator_pair = x.edges();
-    typename property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, x);
-    auto maxelit = std::max_element(edge_iterator_pair.begin(), edge_iterator_pair.end(),
-                                    [&weightmap](auto x, auto y) {return weightmap[x] < weightmap[y];});
-    double maxcost = weightmap[*maxelit];
-    double maxval = maxcost * x.num_vertices();
-    auto ubound = jain_vazirani_ufl(x, candidates, 0); // Opens all facilities
-    auto lbound = jain_vazirani_ufl(x, candidates, maxval);
-    while(std::min(k - ubound.size(), lbound.size() - k) < k / 2) {
-        // do binary search
-        // on cost
-        throw std::runtime_error("NotImplemented");
-    }
-} // jain_vazirani_kmedian
-#endif
-
 
 } // namespace fgc
 

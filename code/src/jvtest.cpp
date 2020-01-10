@@ -1,4 +1,5 @@
 #include "fgc/jv.h"
+//#include "fgc/blaze_adaptor.h"
 
 int main() {
 
@@ -11,6 +12,8 @@ int main() {
     size_t dim = 50;
     size_t np = 400;
     unsigned k = 15, nf = dim;
+    wy::WyRand<uint32_t, 2> rng(13);
+    std::uniform_real_distribution<float> gen(dim * np);
     blaze::DynamicMatrix<float> points(np, dim);
 #if 0
     std::mt19937_64 mt;
@@ -19,7 +22,9 @@ int main() {
         for(auto &v: r)
             v = urd(mt);
 #endif
-    randomize(points);
+    for(auto r: blz::rowiterator(points))
+        for(auto &v: r)
+            v = gen(rng);
     points = 1. / points;
     std::set<int> indices;
     while(indices.size() < nf)
