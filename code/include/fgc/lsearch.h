@@ -3,6 +3,14 @@
 #define FGC_LOCAL_SEARCH_H__
 #include "fgc/graph.h"
 #include "fgc/diskmat.h"
+#include "fgc/kcenter.h"
+
+/*
+ * In this file, we use the local search heuristic for k-median.
+ * Originally described in "Local Search Heuristics for k-median and Facility Location Problems",
+ * Vijay Arya, Naveen Garg, Rohit Khandekar, Adam Meyerson, Kamesh Munagala, Vinayaka Pandit
+ * (http://theory.stanford.edu/~kamesh/lsearch.pdf)
+ */
 
 namespace fgc {
 
@@ -22,6 +30,25 @@ DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Grap
     assert((~ret).rows() == nv && (~ret).columns() == nv);
     return ret;
 }
+
+/*
+ * 
+ *
+ *
+ */
+
+template<typename MatType, typename WFT=float, typename IType=std::uint32_t>
+struct LocalKMedSearcher {
+    const MatType &mat_;
+    const WFT *weights_;
+    blaze::SmallArray<IType, 16> sol_;
+    using SolType = blaze::SmallArray<IType, 16>;
+    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01, const WFT *weights=nullptr): mat_(mat), weights_(weights) {
+    }
+    // Steps:
+    // 1. Use k-center approx for seeds
+    // 2. Loop over finding candidate replacements and performing swaps.
+};
 
 } // fgc
 

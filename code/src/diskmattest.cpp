@@ -13,5 +13,6 @@ int main() {
     DiskMat<float> dm(200, 1000, fn);
     dm.delete_file_ = true;
     ~dm = 0;
+    assert(dm(1, 4) == 0.);
     assert(blaze::sum(~dm) == 0);
 }

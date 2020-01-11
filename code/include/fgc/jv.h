@@ -100,9 +100,11 @@ std::vector<typename Graph::vertex_descriptor>
         // Now the row c(r, i) has the distances from candidate facility candidates[i] to
         // all nodes.
     }
+#if VERBOSE_AF
     std::cerr << "cost matrix: " << c << '\n';
+#endif
     // maxcost = (maxcostedgecost * num_cities)
-    
+
     NaiveJVSolver<float> jvs(c.rows(), c.columns(), 0.);
     auto sol = jvs.kmedian(c, k);
     for(const auto v: sol)

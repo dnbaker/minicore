@@ -39,7 +39,7 @@ struct DiskMat {
         if(isAligned && offset % (SIMDSIZE * sizeof(VT))) {
             throw std::invalid_argument("offset is not aligned; invalid storage.");
         }
-        size_t nperrow = isPadded ? size_t(blaze::nextMultiple(nc_, SIMDSIZE)): nc_;
+        const size_t nperrow = isPadded ? size_t(blaze::nextMultiple(nc_, SIMDSIZE)): nc_;
         const size_t nb = nr_ * nperrow * sizeof(VT), total_nb = nb + offset;
         const char *fn = path.data();
         std::FILE *fp = fopen(fn, "a+");
@@ -53,15 +53,17 @@ struct DiskMat {
             std::fclose(fp);
             throw std::system_error(rc, std::system_category(), buf);
         }
-        auto filesize = st.st_size;
-        if(size_t(filesize) < total_nb) {
-            ::ftruncate(fd, total_nb);
+        size_t filesize = st.st_size;
+        if(filesize < total_nb) {
+            if((rc = ::ftruncate(fd, total_nb))) throw std::system_error(rc, std::system_category(), "Failed to resize (ftruncate)");
             ::fstat(fd, &st);
         }
         assert(size_t(st.st_size) >= total_nb);
         ms_.reset(new mmapper(fd, offset, nb));
         mat_ = MatType((VT *)ms_->data(), nr, nc, nperrow);
     }
+    auto operator()(size_t i, size_t j) const {return (~*this)(i, j);}
+    auto &operator()(size_t i, size_t j)      {return (~*this)(i, j);}
     ~DiskMat() {
         if(delete_file_) {
             std::system((std::string("rm ") + path_).data());
@@ -71,6 +73,15 @@ struct DiskMat {
     const MatType &operator~() const {return mat_;}
 }; // DiskMat
 
+template<typename VT, bool SO, bool isPadded, bool isAligned, bool checked=true>
+auto row(DiskMat<VT, SO, isPadded, isAligned> &mat, size_t i, blaze::Check<checked> check=blaze::Check<checked>()) {
+    return blaze::row(~mat, i, check);
 }
+template<typename VT, bool SO, bool isPadded, bool isAligned, bool checked=true>
+auto column(DiskMat<VT, SO, isPadded, isAligned> &mat, size_t i, blaze::Check<checked> check=blaze::Check<checked>()) {
+    return blaze::row(~mat, i, check);
+}
+
+} // fgc
 
 #endif
