@@ -30,15 +30,12 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
         auto &lhs = first[centers.front()];
 #ifdef _OPENMP
         OMP_PRAGMA("omp parallel for")
-        for(size_t i = 0; i < np; ++i) {
-            distances[i] = norm(lhs, first[i]);
-        }
 #else
         SK_UNROLL_8
+#endif
         for(size_t i = 0; i < np; ++i) {
             distances[i] = norm(lhs, first[i]);
         }
-#endif
         assert(distances[fc] == 0.);
     }
 
