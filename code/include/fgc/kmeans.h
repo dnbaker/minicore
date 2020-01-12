@@ -7,7 +7,7 @@
 #include "matrix_coreset.h"
 
 
-namespace clustering {
+namespace coresets {
 
 #ifdef USE_TBB
 using std::inclusive_scan;
@@ -240,5 +240,5 @@ auto kmeans_matrix_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RN
 //       7. Add mmap accessor
 
 
-} // namespace clustering
+} // namespace coresets
 #endif // FGC_KMEANS_H__

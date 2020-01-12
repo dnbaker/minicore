@@ -1,18 +1,18 @@
 #pragma once
 #include "coreset.h"
-#include "blaze_adaptor.h"
 
 namespace coresets {
 
 template<typename MatrixType, typename FT=double>
 struct MatrixCoreset {
     MatrixType mat_;
-    std::vector<FT> weights_;
+    WVec<FT> weights_;
     bool rowwise_;
     MatrixCoreset &merge(const MatrixCoreset &o) {
         if(rowwise_ != o.rowwise_) throw std::runtime_error("Can't merge coresets of differing rowwiseness");
         weights_.reserve(weights_.size() + o.weights_.size());
-        weights_.insert(weights_.end(), o.weights_.begin(), o.weights_.end());
+        //weights_.insert(weights_.end(), o.weights_.begin(), o.weights_.end());
+        for(auto w: o.weights_) weights_.pushBack(w);
         if(rowwise_) {
             assert(mat_.columns() == o.mat_.columns());
             auto nc = mat_.columns();

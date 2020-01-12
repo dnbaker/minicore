@@ -12,11 +12,13 @@
 #ifndef FLOAT_TYPE
 #define FLOAT_TYPE float
 #endif
+using namespace coresets;
+
 template<typename Mat, typename RNG>
 void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {
     auto matrowit = blz::rowiterator(mat);
     auto start = t();
-    auto cs = clustering::outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), rng, npoints, eps, 
+    auto cs = outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), rng, npoints, eps, 
                 /*mu=*/1);
     auto stop = t();
     std::fprintf(stderr, "kcenter coreset took %gs\n", double((stop - start).count()) / 1e9);
@@ -58,23 +60,23 @@ int main(int argc, char *argv[]) {
         std::memcpy(&r[0], &ptr[i][0], sizeof(FLOAT_TYPE) * nd);
     }
     auto start = t();
-    auto centers = clustering::kmeanspp(ptr, ptr + n, gen, npoints);
+    auto centers = kmeanspp(ptr, ptr + n, gen, npoints);
     auto stop = t();
     std::fprintf(stderr, "Time for kmeans++: %gs\n", double((stop - start).count()) / 1e9);
     // centers contains [centers, distances]
     // then, a coreset can be constructed
     start = t();
-    auto kc = clustering::kcenter_greedy_2approx(ptr, ptr + n, gen, npoints);
+    auto kc = kcenter_greedy_2approx(ptr, ptr + n, gen, npoints);
     stop = t();
     std::fprintf(stderr, "Time for kcenter_greedy_2approx: %gs\n", double((stop - start).count()) / 1e9);
     start = t();
-    auto centers2 = clustering::kmeanspp(mat, gen, npoints, blz::L1Norm());
+    auto centers2 = kmeanspp(mat, gen, npoints, blz::L1Norm());
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ on L1 norm on matrix: %gs\n", double((stop - start).count()) / 1e9);
     test_kccs(mat, gen, npoints, eps);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
     start = t();
-    auto kmppmcs = clustering::kmeans_matrix_coreset(mat, npoints, gen, npoints * 2);
+    auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, npoints * 2);
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ matrix coreset: %gs\n", double((stop - start).count()) / 1e9);
     std::destroy_n(ptr, n);

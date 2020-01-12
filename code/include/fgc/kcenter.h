@@ -4,7 +4,7 @@
 #include "alias_sampler/div.h"
 #include <queue>
 
-namespace clustering {
+namespace coresets {
 using std::partial_sum;
 using blz::L2Norm;
 
@@ -78,8 +78,8 @@ struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
 
 
 template<typename IT>
-struct bicritera_result_t: public std::tuple<std::vector<IT>, std::vector<IT>, std::vector<std::pair<double, IT>>, double> {
-    using super = std::tuple<std::vector<IT>, std::vector<IT>, std::vector<std::pair<double, IT>>, double>;
+struct bicritera_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<double, IT>>, double> {
+    using super = std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<double, IT>>, double>;
     template<typename...Args>
     bicritera_result_t(Args &&...args): super(std::forward<Args>(args)...) {}
     auto &centers() {return std::get<0>(*this);}
@@ -114,8 +114,8 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     std::fprintf(stderr, "z: %zu\n", z);
     size_t farthestchunksize = std::ceil((1 + eps) * z),
            samplechunksize = std::ceil(std::log(1./eta) / (1 - gamma));
-    std::vector<IT> ret;
-    std::vector<IT> labels(np);
+    IVec<IT> ret;
+    IVec<IT> labels(np);
     ret.reserve(samplechunksize);
     std::vector<FT> distances(np);
     // randomly select 'log(1/eta) / (1 - eps)' vertices from X and add them to E.
@@ -123,7 +123,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         // Assuming that this is relatively small and we can take bad asymptotic complexity
         auto newv = rng() % np;
         if(std::find(ret.begin(), ret.end(), newv) == ret.end())
-            ret.push_back(newv);
+            ret.pushBack(newv);
     }
     if(samplechunksize > 100) {
         std::fprintf(stderr, "Warning: with samplechunksize %zu, it may end up taking a decent amount of time. Consider swapping this in for a hash set.", samplechunksize);
@@ -138,7 +138,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < np; ++i) {
         const auto &ref = first[i];
-        double dist = norm(ref, first[ret.front()]);
+        double dist = norm(ref, first[ret[0]]);
         double newdist;
         IT label = 0; // This label is an index into the ret vector, rather than the actual index
         for(size_t j = 1, e = ret.size(); j < e; ++j) {
@@ -162,7 +162,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
             }
         }
     }
-    std::vector<IT> random_samples(samplechunksize);
+    IVec<IT> random_samples(samplechunksize);
     // modulo without a div/mod instruction, much faster
     schism::Schismatic<IT> div(farthestchunksize); // pq size
     assert(samplechunksize >= 1.);
@@ -189,7 +189,11 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         // random_samples now contains indexes *into original dataset*
 
         // Insert into solution
+#if 0
         ret.insert(ret.end(), rsp, rsp + rsi);
+#else
+        for(auto it = rsp, e = rsp + rsi; it < e; ret.pushBack(*it++));
+#endif
 
         // compare each point against all of the new points
         pq.getc().clear(); // empty priority queue
@@ -379,4 +383,4 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double
 }
 }// namespace outliers
 
-} // clustering
+} // coresets
