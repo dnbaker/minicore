@@ -8,10 +8,18 @@
 #ifdef _OPENMP
 #  include <omp.h>
 #endif
-
+#include "blaze_adaptor.h"
 
 
 namespace coresets {
+#ifndef SMALLARRAY_DEFAULT_N
+#define SMALLARRAY_DEFAULT_N 16
+#endif
+
+template<typename IT, typename Alloc=std::allocator<IT>, size_t N=SMALLARRAY_DEFAULT_N>
+using IVec = blaze::SmallArray<IT, N, Alloc>;
+template<typename FT=float, typename Alloc=std::allocator<FT>, size_t N=SMALLARRAY_DEFAULT_N>
+using WVec = blaze::SmallArray<FT, N, Alloc>;
 
 using namespace shared;
 
@@ -32,8 +40,8 @@ struct IndexCoreset {
     /*
      * consists of only indices and weights
      */
-    std::vector<IT> indices_;
-    std::vector<FT> weights_;
+    IVec<IT> indices_;
+    WVec<FT> weights_;
     size_t size() const {return indices_.size();}
     IndexCoreset(IndexCoreset &&o) = default;
     IndexCoreset(const IndexCoreset &o) = default;
@@ -54,7 +62,7 @@ struct IndexCoreset {
         size_t newsz = it - &indices_[0];
         indices_.resize(newsz);
         weights_.resize(newsz);
-        if(shrink_to_fit) indices_.shrink_to_fit(), weights_.shrink_to_fit();
+        if(shrink_to_fit) indices_.shrinkToFit(), weights_.shrinkToFit();
     }
     std::vector<std::pair<IT, FT>> to_pairs() const {
         std::vector<std::pair<IT, FT>> ret(size());
@@ -64,7 +72,7 @@ struct IndexCoreset {
         return ret;
     }
     void show() {
-        for(size_t i = 0; i < indices_.size(); ++i) {
+        for(size_t i = 0, e  = indices_.size(); i < e; ++i) {
             std::fprintf(stderr, "%zu: [%u/%g]\n", i, indices_[i], weights_[i]);
         }
     }

@@ -5,7 +5,7 @@
 #include <algorithm>
 #include "pdqsort/pdqsort.h"
 
-namespace clustering {
+namespace coresets {
 
 // Median of a weighted set
 template<typename FT>
@@ -88,5 +88,5 @@ void kmedian_em_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
     }
 }
 #endif
-} // namespace clustering
+} // namespace coresets
 #endif /* FGC_KMEDIAN_H__ */
