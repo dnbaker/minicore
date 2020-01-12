@@ -1,4 +1,3 @@
-
 INCLUDE_PATHS=. include include/fgc blaze libosmium/include protozero/include
 
 ifdef BOOST_DIR
