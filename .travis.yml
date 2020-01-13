@@ -11,6 +11,8 @@ addons:
     - libboost-dev
     - libexpat1-dev
     - libbz2-dev
+    - zlib1g
+    - zlib1g-dev
 env:
   - CXX=g++-9
 install:

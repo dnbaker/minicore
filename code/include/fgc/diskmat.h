@@ -66,7 +66,13 @@ struct DiskMat {
     auto &operator()(size_t i, size_t j)      {return (~*this)(i, j);}
     ~DiskMat() {
         if(delete_file_) {
-            std::system((std::string("rm ") + path_).data());
+            auto rc = std::system((std::string("rm ") + path_).data());
+            if(rc) {
+                auto exit_status = WEXITSTATUS(rc);
+                auto stopsig = WSTOPSIG(rc);
+                throw std::system_error(exit_status, std::error_category(),
+                                        std::string("File deletion failed with exit status ") + std::to_string(exit_status) + (stopsig ? std::to_string(stopsig): std::string()));
+            }
         }
     }
     MatType       &operator~()       {return mat_;}
