@@ -415,13 +415,13 @@ auto columns_if(const M &mat, const F &func) {
                                                       mat.columns())); // ncol
 }
 
-template<typename VT, typename Allocator, size_t N>
-INLINE auto push_back(blaze::SmallArray<VT, N, Allocator> &x, VT v) {
+template<typename VT, typename Allocator, size_t N, typename VT2>
+INLINE auto push_back(blaze::SmallArray<VT, N, Allocator> &x, VT2 v) {
     return x.pushBack(v);
 }
 
-template<typename VT, typename Allocator>
-INLINE auto push_back(std::vector<VT, Allocator> &x, VT v) {
+template<typename VT, typename Allocator, typename VT2>
+INLINE auto push_back(std::vector<VT, Allocator> &x, VT2 v) {
     return x.push_back(v);
 }
 using namespace blaze;

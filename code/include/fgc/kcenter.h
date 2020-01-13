@@ -8,6 +8,7 @@ namespace fgc {
 namespace coresets {
 using std::partial_sum;
 using blz::L2Norm;
+using blz::push_back;
 
 
 /*
