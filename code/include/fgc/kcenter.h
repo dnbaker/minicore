@@ -21,20 +21,21 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
     static_assert(sizeof(typename RNG::result_type) == sizeof(IT), "IT must have the same size as the result type of the RNG");
     // Greedy 2-approximation
     static_assert(std::is_arithmetic<FT>::value, "FT must be arithmetic");
+    auto dm = make_index_dm(first, norm);
     size_t np = end - first;
     std::vector<IT> centers;
     std::vector<FT> distances(np, 0.), cdf(np);
     {
         auto fc = rng() % np;
         centers.push_back(fc);
-        auto &lhs = first[centers.front()];
 #ifdef _OPENMP
         OMP_PRAGMA("omp parallel for")
 #else
         SK_UNROLL_8
 #endif
         for(size_t i = 0; i < np; ++i) {
-            distances[i] = norm(lhs, first[i]);
+            if(unlikely(i == fc)) continue;
+            distances[i] = dm(fc, i);
         }
         assert(distances[fc] == 0.);
     }
@@ -42,11 +43,11 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
     while(centers.size() < k) {
         auto newc = std::max_element(distances.begin(), distances.end()) - distances.begin();
         centers.push_back(newc);
-        const auto &lhs = first[newc];
         OMP_PRAGMA("omp parallel for")
         for(IT i = 0; i < np; ++i) {
+            if(unlikely(i == newc)) continue;
             auto &ldist = distances[i];
-            if(auto dist(norm(lhs, first[i])); ldist < dist) ldist = dist;
+            if(const auto dist(dm(newc, i)); ldist < dist) ldist = dist;
         }
     }
     return centers;
@@ -107,6 +108,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                    const Norm &norm=Norm())
 {
     std::fprintf(stderr, "Note: the value k (%zu) is not used in this function or the algorithm\n", k);
+    auto dm = make_index_dm(first, norm);
     // Step 1: constants
     assert(end > first);
     size_t np = end - first;
@@ -134,15 +136,15 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     }
     detail::fpq<IT> pq;
     pq.reserve(farthestchunksize + 1);
+    const auto fv = ret[0];
     // Fill the priority queue from the first set
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < np; ++i) {
-        const auto &ref = first[i];
-        double dist = norm(ref, first[ret[0]]);
+        double dist = dm(fv, i);
         double newdist;
         IT label = 0; // This label is an index into the ret vector, rather than the actual index
         for(size_t j = 1, e = ret.size(); j < e; ++j) {
-            if((newdist = norm(ref, first[ret[j]])) < dist) {
+            if((newdist = dm(i, ret[j])) < dist) {
                 label = j;
                 dist = newdist;
             }
@@ -214,12 +216,12 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         for(size_t i = 0; i < np; ++i) {
             auto tid = omp_get_thread_num();
             auto &local_pq = queues.at(tid);
-            const auto &ref = first[i];
             double dist = distances[i];
+            if(dist == 0.) continue;
             double newdist;
             IT label = labels[i];
             for(size_t j = 0; j < rsi; ++j) {
-                if((newdist = norm(ref, first[rsp[j]])) < dist)
+                if((newdist = dm(i, rsp[j])) < dist)
                     dist = newdist, label = rsp[j];
             }
             distances[i] = dist;
@@ -245,12 +247,12 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
 #else
         OMP_PRAGMA("omp parallel for")
         for(size_t i = 0; i < np; ++i) {
-            const auto &ref = first[i];
             double dist = distances[i];
+            if(dist == 0.) continue;
             double newdist;
             IT label = labels[i];
             for(size_t j = 0; j < rsi; ++j) {
-                if((newdist = norm(ref, first[rsp[j]])) < dist)
+                if((newdist = dm(i, rsp[j])) < dist)
                     dist = newdist, label = rsp[j];
             }
             distances[i] = dist;
@@ -294,6 +296,7 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
                                 double gamma=0.001,
                                 const Norm &norm=Norm())
 {
+    auto dm = make_index_dm(first, norm);
     const size_t np = end - first;
     const size_t z = std::ceil(gamma * np);
     size_t farthestchunksize = std::ceil((1. + eps) * z);
@@ -309,12 +312,11 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
         // Fill pq
         OMP_PRAGMA("omp parallel for")
         for(size_t i = 0; i < np; ++i) {
-            const auto &ref = first[i];
             double dist = distances[i];
+            if(dist == 0.) continue;
             double newdist;
-            if((newdist = norm(first[i], newel)) < dist) {
+            if((newdist = dm(i, newc)) < dist)
                 dist = newdist;
-            }
             distances[i] = dist;
             if(pq.empty() || dist > pq.top().first) {
                 const auto p = std::make_pair(dist, i);
