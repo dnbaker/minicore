@@ -39,12 +39,30 @@
 #  ifndef OMP_ONLY
 #     define OMP_ONLY(...) __VA_ARGS__
 #  endif
+#  ifndef OMP_PFOR
+#    define OMP_PFOR OMP_PRAGMA("omp parallel for")
+#  endif
+#  ifndef OMP_ATOMIC
+#    define OMP_ATOMIC OMP_PRAGMA("omp atomic")
+#  endif
+#  ifndef OMP_CRITICAL
+#    define OMP_CRITICAL OMP_PRAGMA("omp critical")
+#  endif
 #else
 #  ifndef OMP_PRAGMA
 #    define OMP_PRAGMA(...)
 #  endif
 #  ifndef OMP_ONLY
 #    define OMP_ONLY(...)
+#  endif
+#  ifndef OMP_PFOR
+#    define OMP_PFOR
+#  endif
+#  ifndef OMP_ATOMIC
+#    define OMP_ATOMIC
+#  endif
+#  ifndef OMP_CRITICAL
+#    define OMP_CRITICAL
 #  endif
 #endif
 

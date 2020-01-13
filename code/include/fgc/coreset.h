@@ -69,7 +69,7 @@ struct IndexCoreset {
     }
     std::vector<std::pair<IT, FT>> to_pairs() const {
         std::vector<std::pair<IT, FT>> ret(size());
-        OMP_PRAGMA("omp parallel for")
+        OMP_PFOR
         for(IT i = 0; i < size(); ++i)
             ret[i].first = indices_[i], ret[i].second = weights_[i];
         return ret;
@@ -243,22 +243,22 @@ struct CoresetSampler {
             const auto w = getweight(i);
             auto cost = costs[i] * costs[i]; // d^2(x, A)
             auto wcost = w * cost;
-            OMP_PRAGMA("omp atomic")
+            OMP_ATOMIC
             weighted_cost_sums[asn] += wcost;
-            OMP_PRAGMA("omp atomic")
+            OMP_ATOMIC
             weight_sums[asn] += w; // If unweighted, weights are 1.
-            OMP_PRAGMA("omp atomic")
+            OMP_ATOMIC
             ++center_counts[asn];
             total_cost += wcost;
             sqcosts[i] = cost;
         }
-        OMP_PRAGMA("omp parallel for")
+        OMP_PFOR
         for(size_t i = 0; i < np; ++i) {
             this->probs_[i] = alpha_est * getweight(i) * (sqcosts[i] + weighted_cost_sums[assignments[i]] / weight_sums[assignments[i]])
                         + 2. * total_cost / weight_sums[assignments[i]];
         }
         auto si = 1. / std::accumulate(&this->probs_[0], this->probs_.get() + np, 0.);
-        OMP_PRAGMA("omp parallel for")
+        OMP_PFOR
         for(size_t i = 0; i < np; ++i)
             this->probs_[i] *= si;
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
@@ -300,9 +300,9 @@ struct CoresetSampler {
             assert(asn < ncenters);
             const auto w = getweight(i);
 
-            OMP_PRAGMA("omp atomic")
+            OMP_ATOMIC
             weight_sums[asn] += w; // If unweighted, weights are 1.
-            OMP_PRAGMA("omp atomic")
+            OMP_ATOMIC
             ++center_counts[asn];
             total_cost += w * costs[i];
         }
@@ -316,14 +316,14 @@ struct CoresetSampler {
             // Ignores number of items assigned to each cluster
             // std::fprintf(stderr, "note: FL method has worse guarantees than BFL\n");
             sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
-            OMP_PRAGMA("omp parallel for")
+            OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
                 probs_[i] = getweight(i) * (costs[i]) * tcinv;
             }
         } else {
             for(auto i = 0u; i < ncenters; ++i)
                 weight_sums[i] = 1./(2. * center_counts[i] * weight_sums[i]);
-            OMP_PRAGMA("omp parallel for")
+            OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
                 probs_[i] = getweight(i) * (costs[i] * tcinv + weight_sums[assignments[i]]); // Am I propagating weights correctly?
             }

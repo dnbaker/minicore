@@ -29,6 +29,9 @@ struct MatrixMetric {
     const Mat &mat_;
     MatrixMetric(const Mat &mat): mat_(mat) {}
     auto operator()(size_t i, size_t j) const {
+#if VERBOSE_AF
+        std::fprintf(stderr, "Row %zu and column %zu have value %f\n", i, j, double(mat_(i, j)));
+#endif
         return mat_(i, j);
     }
 };
@@ -96,6 +99,9 @@ struct IndexDistMetric<Iter, MatrixLookup> {
     IndexDistMetric(const Iter iter, Dist dist): mat_((*iter).operand()), dist_(std::move(dist)) {}
 
     auto operator()(size_t i, size_t j) const {
+#if 0
+        std::fprintf(stderr, "Row %zu and column %zu have value %f\n", i, j, double(mat_(i, j)));
+#endif
         return mat_(i, j);
         //return iter_[i][j];
     }
@@ -338,7 +344,7 @@ auto kmeans_matrix_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RN
 //       6. PROFIT
 //       Why?
 //       The solution is 1 + eps accurate, with the error being 1/eps^2
-//       We can effectively remove the log(n) approximationgc
+//       We can effectively remove the log(n) approximation
 //       ratio from
 //       Epilogue.
 

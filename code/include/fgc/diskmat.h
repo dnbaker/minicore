@@ -80,6 +80,8 @@ struct DiskMat {
             }
         }
     }
+    auto rows() const {return (~*this).rows();}
+    auto columns() const {return (~*this).columns();}
     MatType       &operator~()       {return mat_;}
     const MatType &operator~() const {return mat_;}
 }; // DiskMat

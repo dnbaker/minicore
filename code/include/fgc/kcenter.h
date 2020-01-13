@@ -26,13 +26,14 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
     static_assert(std::is_arithmetic<FT>::value, "FT must be arithmetic");
     auto dm = make_index_dm(first, norm);
     size_t np = end - first;
-    std::vector<IT> centers;
-    std::vector<FT> distances(np, 0.), cdf(np);
+    std::vector<IT> centers(k);
+    std::vector<FT> distances(np, 0.);
+    VERBOSE_ONLY(std::fprintf(stderr, "[%s] Starting kcenter_greedy_2approx\n", __PRETTY_FUNCTION__);)
     {
         auto fc = rng() % np;
-        centers.push_back(fc);
+        centers[0] = fc;
 #ifdef _OPENMP
-        OMP_PRAGMA("omp parallel for")
+        OMP_PFOR
 #else
         SK_UNROLL_8
 #endif
@@ -43,16 +44,41 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
         assert(distances[fc] == 0.);
     }
 
-    while(centers.size() < k) {
-        auto newc = std::max_element(distances.begin(), distances.end()) - distances.begin();
-        centers.push_back(newc);
-        OMP_PRAGMA("omp parallel for")
+    for(size_t ci = 0; ci < k; ++ci) {
+        auto it = std::max_element(
+#ifdef USE_TBB
+            std::execution::par_unseq,
+#endif
+            distances.begin(), distances.end());
+        VERBOSE_ONLY(std::fprintf(stderr, "maxelement is %zd from start\n", std::distance(distances.begin(), it));)
+        uint64_t newc = it - distances.begin();
+        assert(newc != np);
+#if VERBOSE_AF
+        std::fprintf(stderr, "newc for ci: %u, %u. Distance here: %f\n", unsigned(ci), unsigned(newc), distances[newc]);
+#endif
+        centers[ci] = newc;
+        distances[newc] = 0.;
+        OMP_PFOR
         for(IT i = 0; i < np; ++i) {
             if(unlikely(i == newc)) continue;
             auto &ldist = distances[i];
-            if(const auto dist(dm(newc, i)); ldist < dist) ldist = dist;
+            const auto dist = dm(newc, i);
+            if(dist < ldist) {
+#if VERBOSE_AF
+                std::fprintf(stderr, "replacing old dist of %f with min: %f\n", ldist, dist);
+#endif
+                ldist = dist;
+            }
         }
+        assert(std::find_if(distances.begin(), distances.end(), [](auto x) {return std::isnan(x) || std::isinf(x);})
+               == distances.end());
     }
+#if VERBOSE_AF
+    for(size_t i = 0; i < k; ++i)
+        std::fprintf(stderr, "center %zu: %zu\n", i, size_t(centers[i]));
+    for(size_t i = 0; i < distances.size(); ++i)
+        std::fprintf(stderr, "distance %zu: %f\n", i, distances[i]);
+#endif
     return centers;
 } // kcenter_greedy_2approx
 
@@ -141,7 +167,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     pq.reserve(farthestchunksize + 1);
     const auto fv = ret[0];
     // Fill the priority queue from the first set
-    OMP_PRAGMA("omp parallel for")
+    OMP_PFOR
     for(size_t i = 0; i < np; ++i) {
         double dist = dm(fv, i);
         double newdist;
@@ -156,7 +182,8 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         labels[i] = ret[label];
         if(pq.empty() || dist > pq.top().first) {
             const auto p = std::make_pair(dist, i);
-            OMP_PRAGMA("omp critical")
+            
+            OMP_CRITICAL
             {
                 // Check again after getting the lock
                 if(pq.empty()  || dist > pq.top().first) {
@@ -215,7 +242,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         }
         std::vector<detail::fpq<IT>> queues(nt);
         //std::fprintf(stderr, "queues created %zu\n", queues.size());
-        OMP_PRAGMA("omp parallel for")
+        OMP_PFOR
         for(size_t i = 0; i < np; ++i) {
             auto tid = omp_get_thread_num();
             auto &local_pq = queues.at(tid);
@@ -248,7 +275,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
             }
         }
 #else
-        OMP_PRAGMA("omp parallel for")
+        OMP_PFOR
         for(size_t i = 0; i < np; ++i) {
             double dist = distances[i];
             if(dist == 0.) continue;
@@ -262,7 +289,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
             labels[i] = label;
             if(pq.empty() || dist > pq.top().first) {
                 const auto p = std::make_pair(dist, i);
-                OMP_PRAGMA("omp critical")
+                OMP_CRITICAL
                 {
                     // Check again after getting the lock in case it's changed
                     if(pq.empty() || dist > pq.top().first) {
@@ -313,7 +340,7 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
     do {
         const auto &newel = first[newc];
         // Fill pq
-        OMP_PRAGMA("omp parallel for")
+        OMP_PFOR
         for(size_t i = 0; i < np; ++i) {
             double dist = distances[i];
             if(dist == 0.) continue;
@@ -323,7 +350,7 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
             distances[i] = dist;
             if(pq.empty() || dist > pq.top().first) {
                 const auto p = std::make_pair(dist, i);
-                OMP_PRAGMA("omp critical")
+                OMP_CRITICAL
                 {
                     if(pq.empty() || dist > pq.top().first) {
                         pq.push(p);
