@@ -7,6 +7,9 @@
 #include "matrix_coreset.h"
 
 namespace fgc {
+using blz::rowiterator;
+
+
 inline namespace metrics {
 struct MatrixLookup {};
 template<typename WFT>
@@ -112,7 +115,6 @@ auto make_matrix_m(const Mat &mat) {
 } // inline namespace metrics
 
 namespace coresets {
-using blz::rowiterator;
 
 
 

@@ -59,18 +59,9 @@ struct LocalKMedSearcher {
     }
     LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01, const WFT *weights=nullptr): mat_(mat), weights_(weights)
     {
-#if 0
-template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
-         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-std::vector<IT>
-kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm())
-    // Next: replace the norm() functor in kcenter_greedy_2approx,
-    // with one based on indexes only
-    // Use this to use MatrixMetric, to then reuse kcenter results for this.
-#endif
             wy::WyRand<IType, 2> rng(k / eps * mat.rows() + mat.columns());
             auto rowits = rowiterator(mat);
-            auto approx = kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k, MatrixLookup());
+            auto approx = coresets::kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k, MatrixLookup());
             sol_.resize(k);
             std::copy(approx.begin(), approx.end(), sol_.begin());
     }

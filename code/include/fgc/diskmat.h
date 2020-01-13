@@ -13,6 +13,7 @@ struct DiskMat {
     size_t nr_, nc_;
     using mmapper = mio::mmap_sink;
     std::unique_ptr<mmapper> ms_;
+    std::FILE *fp_;
     bool delete_file_;
 
 
@@ -32,6 +33,10 @@ struct DiskMat {
         std::swap_ranges(ptr, ptr + sizeof(*this), optr);
     }
     static constexpr size_t SIMDSIZE = blaze::SIMDTrait<VT>::size;
+    DiskMat(const DiskMat &o, std::string path, size_t offset=0, int delete_file=-1): DiskMat(o.rows(), o.columns(), path, offset, delete_file >= 0 ? delete_file: o.delete_file_)
+    {
+        std::memcpy(ms_->data(), o.ms_->data(), sizeof(VT) * (~*this).spacing() * nr_);
+    }
     DiskMat(size_t nr, size_t nc, std::string path, size_t offset=0, bool delete_file=false):
         nr_(nr), nc_(nc),
         delete_file_(delete_file),
@@ -43,15 +48,15 @@ struct DiskMat {
         const size_t nperrow = isPadded ? size_t(blaze::nextMultiple(nc_, SIMDSIZE)): nc_;
         const size_t nb = nr_ * nperrow * sizeof(VT), total_nb = nb + offset;
         const char *fn = path.data();
-        std::FILE *fp = fopen(fn, "a+");
-        if(!fp) throw 1;
-        auto fd = ::fileno(fp);
+        if((fp_ = fopen(fn, "a+")) == nullptr) throw std::system_error(0, std::system_category(), "Failed to open file for writing");
+        const int fd = ::fileno(fp_);
         struct stat st;
-        auto rc = ::fstat(fd, &st);
-        if(rc) {
+        int rc;
+        if((rc = ::fstat(fd, &st))) {
             char buf[256];
-            std::sprintf(buf, "Failed to fstat fd/fp/path %d/%p/%s", fd, (void *)fp, path.data());
-            std::fclose(fp);
+            std::sprintf(buf, "Failed to fstat fd/fp/path %d/%p/%s", fd, (void *)fp_, path.data());
+            std::fclose(fp_);
+            fp_ = nullptr;
             throw std::system_error(rc, std::system_category(), buf);
         }
         size_t filesize = st.st_size;
@@ -66,6 +71,7 @@ struct DiskMat {
     auto operator()(size_t i, size_t j) const {return (~*this)(i, j);}
     auto &operator()(size_t i, size_t j)      {return (~*this)(i, j);}
     ~DiskMat() {
+        if(fp_) std::fclose(fp_);
         if(delete_file_) {
             auto rc = std::system((std::string("rm ") + path_).data());
             if(rc) {

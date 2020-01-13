@@ -23,7 +23,7 @@ ifdef TBBDIR
 CXXFLAGS += -DUSE_TBB -L$(TBBDIR)/lib -I$(TBBDIR)/include -ltbb
 endif
 
-TESTS=tbm coreset_test bztest btest osm2dimacs testcsio dmlsearch diskmattest graphtest jvtest kmpptest tbas
+TESTS=tbm coreset_test bztest btest osm2dimacs dmlsearch diskmattest graphtest jvtest kmpptest tbas
 
 tests: $(TESTS)
 print_tests:

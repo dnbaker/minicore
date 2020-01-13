@@ -159,7 +159,7 @@ auto columniterator(const blaze::DynamicMatrix<FT, SO> &o) {
 }
 
 template< typename Type, bool AF, bool PF, bool SO >
-class CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
+struct CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     using super = blaze::CustomMatrix<Type, AF, PF, SO>;
     using this_type = CustomMatrix<Type, AF, PF, SO>;
     template<typename...Args>
