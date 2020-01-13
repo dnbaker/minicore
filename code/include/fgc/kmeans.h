@@ -314,7 +314,6 @@ auto kmeans_matrix_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RN
 //       We can effectively remove the log(n) approximation 
 //       ratio from
 //       Epilogue.
-//       7. Add mmap accessor
 
 
 } // namespace coresets
