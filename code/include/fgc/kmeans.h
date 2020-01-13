@@ -6,9 +6,14 @@
 #include <numeric>
 #include "matrix_coreset.h"
 
-
-namespace coresets {
-using blz::rowiterator;
+namespace fgc {
+inline namespace metrics {
+struct MatrixLookup {};
+template<typename WFT>
+struct WeightedMatrixLookup {
+    const WFT *w_;
+    WeightedMatrixLookup(const WFT *ptr=nullptr): w_(ptr) {}
+};
 
 template<typename Mat>
 struct MatrixMetric {
@@ -16,7 +21,7 @@ struct MatrixMetric {
      *  This calculate the distance between item i and item j in this problem
      *  by simply indexing the given array.
      *  This requires precalculation of the array (and space) but saves computation.
-     *
+     *  By convention, use row index = facility, column index = point
      */
     const Mat &mat_;
     MatrixMetric(const Mat &mat): mat_(mat) {}
@@ -24,6 +29,24 @@ struct MatrixMetric {
         return mat_(i, j);
     }
 };
+
+template<typename Mat, typename WFT>
+struct WeightedMatrixMetric: MatrixMetric<Mat> {
+    /*
+     * Weighted version of super-class
+     * By convention, use row index = facility, column index = point
+     * For this reason, we index weights under index j
+     */
+    using super = MatrixMetric<Mat>;
+    const WFT *weights_;
+
+    WeightedMatrixMetric(const Mat &mat, const WFT *weights=nullptr): weights_(weights) {}
+    INLINE auto mul(size_t ind) const {return weights_ ? weights_[ind]: static_cast<WFT>(1.);}
+    auto operator()(size_t i, size_t j) const {
+        return super::operator()(i, j) * mul(j);
+    }
+};
+
 template<typename Mat, typename Dist>
 struct MatrixDistMetric {
     /*
@@ -41,8 +64,6 @@ struct MatrixDistMetric {
         return dist_(row(mat_, i, blaze::unchecked), row(mat_, j, blaze::unchecked));
     }
 };
-struct MatrixLookup {};
-
 template<typename Iter, typename Dist>
 struct IndexDistMetric {
     /*
@@ -62,7 +83,7 @@ template<typename Iter>
 struct IndexDistMetric<Iter, MatrixLookup> {
     using Operand = decltype((*std::declval<Iter>()).operand());
     /* Specialization of above for MatrixLookup
-     * 
+     *gc
      *
      */
     using Dist = MatrixLookup;
@@ -76,7 +97,6 @@ struct IndexDistMetric<Iter, MatrixLookup> {
         //return iter_[i][j];
     }
 };
-
 template<typename Iter, typename Dist>
 auto make_index_dm(const Iter iter, const Dist dist) {
     return IndexDistMetric<Iter, Dist>(iter, dist);
@@ -89,6 +109,12 @@ template<typename Mat>
 auto make_matrix_m(const Mat &mat) {
     return MatrixMetric<Mat>(mat);
 }
+} // inline namespace metrics
+
+namespace coresets {
+using blz::rowiterator;
+
+
 
 #ifdef USE_TBB
 using std::inclusive_scan;
@@ -264,7 +290,6 @@ auto kmeans_coreset(Iter start, Iter end,
                     size_t cs_size,
                     const FT *weights=nullptr) {
     auto [centers, assignments, sqdists] = kmeanspp(start, end, rng, k, sqrL2Norm());
-    
     using sq_t = typename decltype(sqdists)::value_type;
     coresets::CoresetSampler<sq_t, IT> cs;
     size_t np = end - start;
@@ -311,10 +336,11 @@ auto kmeans_matrix_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RN
 //       6. PROFIT
 //       Why?
 //       The solution is 1 + eps accurate, with the error being 1/eps^2
-//       We can effectively remove the log(n) approximation 
+//       We can effectively remove the log(n) approximationgc
 //       ratio from
 //       Epilogue.
 
 
 } // namespace coresets
+} // namespace fgc
 #endif // FGC_KMEANS_H__

@@ -32,8 +32,8 @@ T. F. Gonzalez. Clustering to minimize the maximum intercluster distance. Theore
 
 Algorithms from:
 ```
-Hu Ding, Haikuo Yu, Zixiu Wang  
-Greedy Strategy Works for k-Center Clustering with Outliers and Coreset Construction                
+Hu Ding, Haikuo Yu, Zixiu Wang
+Greedy Strategy Works for k-Center Clustering with Outliers and Coreset Construction
 ```
 1. kcenter with outiers, 2-approximation
 2. kcenter bicriteria approximation

@@ -222,7 +222,6 @@ auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
     util::ScopedSyntheticVertex<Graph> vx(x);
     auto synthetic_vertex = vx.get();
     edge_cost last_cost = std::numeric_limits<edge_cost>::max(), current_cost = last_cost;
-    
 
     // For holding output of SPF / Dijkstra with multiple roots
     boost::clear_vertex(synthetic_vertex, x);

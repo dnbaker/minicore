@@ -1,4 +1,5 @@
 #include "coreset.h"
+using namespace fgc;
 
 int main() {
     coresets::IndexCoreset<uint32_t, float> cs(100);

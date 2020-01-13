@@ -12,6 +12,7 @@
 #ifndef FLOAT_TYPE
 #define FLOAT_TYPE float
 #endif
+using namespace fgc;
 using namespace coresets;
 
 template<typename Mat, typename RNG>
@@ -87,6 +88,6 @@ int main(int argc, char *argv[]) {
     assert(min(sqmat) > 0.);
     {
         auto greedy_metric = kcenter_greedy_2approx(rowiterator(sqmat).begin(), rowiterator(sqmat).end(),
-                                                    gen, /*k=*/3, coresets::MatrixLookup{});
+                                                    gen, /*k=*/3, MatrixLookup{});
     }
 }

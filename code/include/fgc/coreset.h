@@ -1,4 +1,6 @@
 #pragma once
+#ifndef FGC_CORESETS_H__
+#define FGC_CORESETS_H__
 #include <vector>
 #include <map>
 #define ALIAS_THREADSAFE 1
@@ -11,6 +13,7 @@
 #include "blaze_adaptor.h"
 
 
+namespace fgc {
 namespace coresets {
 #ifndef SMALLARRAY_DEFAULT_N
 #define SMALLARRAY_DEFAULT_N 16
@@ -237,7 +240,7 @@ struct CoresetSampler {
             // So maybe like a ~30% speedup?
             auto asn = assignments[i];
             assert(asn < ncenters);
-            const auto w = getweight(i); 
+            const auto w = getweight(i);
             auto cost = costs[i] * costs[i]; // d^2(x, A)
             auto wcost = w * cost;
             OMP_PRAGMA("omp atomic")
@@ -373,4 +376,8 @@ struct CoresetSampler {
 
 }//coresets
 
+}// namespace fgc
 
+namespace coresets = fgc::coresets;
+
+#endif /* FGC_CORESETS_H__ */

@@ -1,5 +1,6 @@
 #pragma once
 #include "blaze/Math.h"
+#include <vector>
 #include "./shared.h"
 
 namespace blz {
@@ -414,5 +415,14 @@ auto columns_if(const M &mat, const F &func) {
                                                       mat.columns())); // ncol
 }
 
-using namespace blaze;
+template<typename VT, typename Allocator, size_t N>
+INLINE auto push_back(blaze::SmallArray<VT, N, Allocator> &x, VT v) {
+    return x.pushBack(v);
 }
+
+template<typename VT, typename Allocator>
+INLINE auto push_back(std::vector<VT, Allocator> &x, VT v) {
+    return x.push_back(v);
+}
+using namespace blaze;
+} // namespace blz

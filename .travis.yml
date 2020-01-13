@@ -18,11 +18,15 @@ install:
   - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 60 --slave /usr/bin/g++ g++ /usr/bin/g++-9
 script:
   - cd code || echo "already in code"
-  - make coreset_test btest kmpptest graphtest osm2dimacs jvtest -j4
+  - make tests -j8
   - ./coreset_test
   - ./btest
   - ./kmpptest
   - ./jvtest
+  - ./tbm
+  - ./tbas
+  - ./diskmattest
+  - ./dmlsearch
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:

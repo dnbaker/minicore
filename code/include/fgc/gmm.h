@@ -65,7 +65,6 @@ struct GMM {
     }
     auto &mu() {return mu_;}
     auto &pi() {return pi_;}
-    
     GMM(unsigned k, size_t dim):
         k_(k), mu_(k, dim), pi_(k * dim, dim),
         pm_(pi_.rows(), pi_.columns()),

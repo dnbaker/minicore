@@ -5,6 +5,7 @@
 #include <algorithm>
 #include "pdqsort/pdqsort.h"
 
+namespace fgc {
 namespace coresets {
 
 // Median of a weighted set
@@ -89,4 +90,5 @@ void kmedian_em_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
 }
 #endif
 } // namespace coresets
+} // namespace fgc
 #endif /* FGC_KMEDIAN_H__ */

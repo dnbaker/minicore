@@ -167,7 +167,6 @@ struct NaiveJVSolver {
         }
         return med;
     }
-    
     std::pair<uint32_t, double> min_tightening_cost() const {
         if(edgeindex_ == edges_.size()) return std::make_pair(uint32_t(-1), std::numeric_limits<double>::max());
         auto edge = edges_[edgeindex_];

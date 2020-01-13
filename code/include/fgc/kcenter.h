@@ -4,9 +4,11 @@
 #include "alias_sampler/div.h"
 #include <queue>
 
+namespace fgc {
 namespace coresets {
 using std::partial_sum;
 using blz::L2Norm;
+
 
 /*
  *
@@ -125,7 +127,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         // Assuming that this is relatively small and we can take bad asymptotic complexity
         auto newv = rng() % np;
         if(std::find(ret.begin(), ret.end(), newv) == ret.end())
-            ret.pushBack(newv);
+            push_back(ret, newv);
     }
     if(samplechunksize > 100) {
         std::fprintf(stderr, "Warning: with samplechunksize %zu, it may end up taking a decent amount of time. Consider swapping this in for a hash set.", samplechunksize);
@@ -386,3 +388,4 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double
 }// namespace outliers
 
 } // coresets
+} // fgc

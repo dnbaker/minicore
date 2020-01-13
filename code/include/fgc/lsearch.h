@@ -51,15 +51,14 @@ struct LocalKMedSearcher {
     const WFT *weights_;
     blaze::SmallArray<IType, 16> sol_;
     using SolType = blaze::SmallArray<IType, 16>;
-    struct MetricFromGraph {
-        const MatType &ref_;
-        MetricFromGraph(const MatType &ref): ref_(ref) {}
-        template<typename LH, typename RH>
-        WFT operator()(const LH &lh, const RH &rh) const {
-            return ref_(lh, rh);
-        }
-    };
-    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01, const WFT *weights=nullptr): mat_(mat), weights_(weights) {
+    LocalKMedSearcher(const LocalKMedSearcher &o) = default;
+    LocalKMedSearcher(LocalKMedSearcher &&o) {
+        auto ptr = reinterpret_cast<const uint8_t *>(this);
+        std::memset(ptr, 0, sizeof(*this));
+        std::swap_ranges(ptr, ptr + sizeof(*this), reinterpret_cast<const uint8_t *>(std::addressof(o)));
+    }
+    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01, const WFT *weights=nullptr): mat_(mat), weights_(weights)
+    {
 #if 0
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
@@ -71,13 +70,19 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
 #endif
             wy::WyRand<IType, 2> rng(k / eps * mat.rows() + mat.columns());
             auto rowits = rowiterator(mat);
-            auto approx = clustering::kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k, 
-            sol_{wy::WyRand<IType, 2>(k * mat.rows() / eps + mat.columns())() % mat.rows()};
+            auto approx = kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k, MatrixLookup());
+            sol_.resize(k);
+            std::copy(approx.begin(), approx.end(), sol_.begin());
     }
     // Steps:
     // 1. Use k-center approx for seeds
     // 2. Loop over finding candidate replacements and performing swaps.
 };
+
+template<typename Mat, typename FT=float, typename IType=std::uint32_t>
+auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, const FT *weights=nullptr) {
+    return LocalKMedSearcher<Mat, FT, IType>(mat, k, eps, weights);
+}
 
 } // fgc
 
