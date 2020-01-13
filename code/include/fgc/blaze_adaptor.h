@@ -3,6 +3,7 @@
 #include "./shared.h"
 
 namespace blz {
+using blaze::unchecked;
 
 // These blaze adaptors exist for the purpose of
 // providing a pair of iterators.
@@ -36,11 +37,11 @@ struct row_iterator_t {
     auto operator[](size_t index) const {
         //std::fprintf(stderr, "index: %zu. rownum: %zu. nrows: %zu\n", index, rownum, ref_.rows());
         assert(index + rownum < ref_.rows());
-        return row(ref_, index + rownum);
+        return row(ref_, index + rownum, blaze::unchecked);
     }
     auto operator*() const {
         assert(rownum < ref_.rows());
-        return row(ref_, rownum);
+        return row(ref_, rownum, blaze::unchecked);
     }
 };
 
@@ -71,11 +72,11 @@ struct column_iterator_t {
     std::ptrdiff_t operator-(column_iterator_t o) const {return columnnum - o.columnnum;}
     auto operator[](size_t index) const {
         assert(index + columnnum < ref_.columns());
-        return column(ref_, index + columnnum);
+        return column(ref_, index + columnnum, blaze::unchecked);
     }
     auto operator*() const {
         assert(columnnum < ref_.columns());
-        return column(ref_, columnnum);
+        return column(ref_, columnnum, blaze::unchecked);
     }
 };
 

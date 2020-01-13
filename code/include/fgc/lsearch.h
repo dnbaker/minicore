@@ -31,21 +31,6 @@ DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Grap
     return ret;
 }
 
-/*
- * 
- *
- *
- */
-template<typename Mat>
-struct MatrixMetric {
-    const Mat mat_;
-    template<typename Mat>
-    MatrixMetric(const Mat &mat): mat_(mat) {}
-    template<typename AT>
-    auto operator()(size_t i, size_t j) const {
-        return mat_(i, j);
-    }
-};
 #if 0
 template<typename Mat, typename Norm>
 struct MatrixIndexNorm {

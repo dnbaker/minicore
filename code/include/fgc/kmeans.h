@@ -9,6 +9,84 @@
 
 namespace coresets {
 
+template<typename Mat>
+struct MatrixMetric {
+    /*
+     *  This calculate the distance between item i and item j in this problem
+     *  by simply indexing the given array.
+     *  This requires precalculation of the array (and space) but saves computation.
+     *
+     */
+    const Mat &mat_;
+    MatrixMetric(const Mat &mat): mat_(mat) {}
+    auto operator()(size_t i, size_t j) const {
+        return mat_(i, j);
+    }
+};
+template<typename Mat, typename Dist>
+struct MatrixDistMetric {
+    /*
+     *  This calculate the distance between item i and item j in this problem
+     *  by calculating the distances between row i and row j under the given distance metric.
+     *  This requires precalculation of the array (and space) but saves computation.
+     *
+     */
+    const Mat &mat_;
+    const Dist dist_;
+
+    MatrixDistMetric(const Mat &mat, Dist dist): mat_(mat), dist_(std::move(dist)) {}
+
+    auto operator()(size_t i, size_t j) const {
+        return dist_(row(mat_, i, blaze::unchecked), row(mat_, j, blaze::unchecked));
+    }
+};
+struct MatrixLookup {};
+
+template<typename Iter, typename Dist>
+struct IndexDistMetric {
+    /*
+     * Adapts random access iterator to use norms between dereferenced quantities.
+     */
+    const Iter iter_;
+    const Dist dist_;
+
+    IndexDistMetric(const Iter iter, Dist dist): iter_(iter), dist_(std::move(dist)) {}
+
+    auto operator()(size_t i, size_t j) const {
+        return dist_(iter_[i], iter_[j]);
+    }
+};
+
+template<typename Iter>
+struct IndexDistMetric<Iter, MatrixLookup> {
+    /* Specialization of above for MatrixLookup
+     * 
+     *
+     */
+    using Dist = MatrixLookup;
+    const Iter iter_;
+    const Dist dist_;
+
+    IndexDistMetric(const Iter iter, Dist dist): iter_(iter), dist_(std::move(dist)) {}
+
+    auto operator()(size_t i, size_t j) const {
+        return iter_[i][j];
+    }
+};
+
+template<typename Iter, typename Dist>
+auto make_index_dm(const Iter iter, const Dist dist) {
+    return IndexDistMetric<Iter, Dist>(iter, dist);
+}
+template<typename Mat, typename Dist>
+auto make_matrix_dm(const Mat &mat, const Dist dist) {
+    return MatrixDistMetric<Mat, Dist>(mat, dist);
+}
+template<typename Mat>
+auto make_matrix_m(const Mat &mat) {
+    return MatrixMetric<Mat>(mat);
+}
+
 #ifdef USE_TBB
 using std::inclusive_scan;
 #endif
@@ -27,6 +105,7 @@ template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
+    auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
     size_t np = end - first;
     std::vector<IT> centers;
@@ -35,22 +114,17 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     {
         auto fc = rng() % np;
         centers.push_back(fc);
-        const auto &lhs = first[centers.front()];
 #ifdef _OPENMP
         OMP_PRAGMA("omp parallel for reduction(+:sumd2)")
-        for(size_t i = 0; i < np; ++i) {
-            double dist = norm(lhs, first[i]);
-            distances[i] = dist;
-            sumd2 += dist;
-        }
 #else
         SK_UNROLL_8
+#endif
         for(size_t i = 0; i < np; ++i) {
-            double dist = norm(lhs, first[i]);
+            if(unlikely(i == fc)) continue;
+            double dist = dm(fc, i);
             distances[i] = dist;
             sumd2 += dist;
         }
-#endif
         assert(distances[fc] == 0.);
         inclusive_scan(distances.begin(), distances.end(), cdf.begin());
     }
@@ -64,14 +138,14 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
         auto newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * double(rng()) / rng.max()) - cdf.begin();
         const auto current_center_id = centers.size();
         centers.push_back(newc);
-        const auto &lhs = first[newc];
         sumd2 -= distances[newc];
         distances[newc] = 0.;
         double sum = sumd2;
         OMP_PRAGMA("omp parallel for reduction(+:sum)")
         for(IT i = 0; i < np; ++i) {
+            if(unlikely(i == newc)) continue;
             auto &ldist = distances[i];
-            double dist = norm(lhs, first[i]);
+            double dist = dm(newc, i);
             if(dist < ldist) { // Only write if it changed
                 assignments[i] = current_center_id;
                 auto diff = dist - ldist;

@@ -12,6 +12,23 @@
 #  endif
 #endif
 
+// unlikely/likely
+#ifndef unlikely
+#  if defined(__GNUC__) || defined(__INTEL_COMPILER)
+#    define unlikely(x) __builtin_expect((x), 0)
+#  else
+#    define unlikely(x) (x)
+#  endif
+#endif
+
+#ifndef likely
+#  if defined(__GNUC__) || defined(__INTEL_COMPILER)
+#    define likely(x) __builtin_expect(!!(x), 1)
+#  else
+#    define likely(x) (x)
+#  endif
+#endif
+
 
 // OpenMP
 
