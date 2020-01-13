@@ -81,4 +81,12 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "Time for kmeans++ matrix coreset: %gs\n", double((stop - start).count()) / 1e9);
     std::destroy_n(ptr, n);
     std::free(ptr);
+    blaze::DynamicMatrix<FLOAT_TYPE> sqmat(20, 20);
+    randomize(sqmat);
+    sqmat = map(sqmat, [](auto x) {return x * x + 1e-15;});
+    assert(min(sqmat) > 0.);
+    {
+        auto greedy_metric = kcenter_greedy_2approx(rowiterator(sqmat).begin(), rowiterator(sqmat).end(),
+                                                    gen, /*k=*/3, coresets::MatrixLookup{});
+    }
 }

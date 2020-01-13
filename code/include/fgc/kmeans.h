@@ -8,6 +8,7 @@
 
 
 namespace coresets {
+using blz::rowiterator;
 
 template<typename Mat>
 struct MatrixMetric {
@@ -59,18 +60,20 @@ struct IndexDistMetric {
 
 template<typename Iter>
 struct IndexDistMetric<Iter, MatrixLookup> {
+    using Operand = decltype((*std::declval<Iter>()).operand());
     /* Specialization of above for MatrixLookup
      * 
      *
      */
     using Dist = MatrixLookup;
-    const Iter iter_;
+    const Operand &mat_;
     const Dist dist_;
 
-    IndexDistMetric(const Iter iter, Dist dist): iter_(iter), dist_(std::move(dist)) {}
+    IndexDistMetric(const Iter iter, Dist dist): mat_((*iter).operand()), dist_(std::move(dist)) {}
 
     auto operator()(size_t i, size_t j) const {
-        return iter_[i][j];
+        return mat_(i, j);
+        //return iter_[i][j];
     }
 };
 
