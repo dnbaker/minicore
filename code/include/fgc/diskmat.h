@@ -5,6 +5,7 @@
 #include "mio/single_include/mio/mio.hpp"
 #include <cstring>
 #include "blaze/Math.h"
+#include <system_error>
 namespace fgc {
 
 template<typename VT, bool SO=blaze::rowMajor, bool isPadded=blaze::padded, bool isAligned=blaze::unaligned>
@@ -68,10 +69,8 @@ struct DiskMat {
         if(delete_file_) {
             auto rc = std::system((std::string("rm ") + path_).data());
             if(rc) {
-                auto exit_status = WEXITSTATUS(rc);
-                auto stopsig = WSTOPSIG(rc);
-                throw std::system_error(exit_status, std::error_category(),
-                                        std::string("File deletion failed with exit status ") + std::to_string(exit_status) + (stopsig ? std::to_string(stopsig): std::string()));
+                std::fprintf(stderr, "Note: file deletion failed with exit status %d and stopsig %d\n",
+                                      WEXITSTATUS(rc), WSTOPSIG(rc));
             }
         }
     }

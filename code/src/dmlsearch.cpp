@@ -6,14 +6,20 @@ using namespace fgc;
 
 int main() {
     const char *fn = "./zomg.dat";
-    Graph<> g(100);
-    for(int i = 0; i < 99; ++i) {
+    unsigned n = 100;
+    Graph<> g(n);
+    for(int i = 0; i < n - 1; ++i) {
         boost::add_edge(i, i + 1, 1.4, g);
     }
-    for(int i = 0; i < 100; ++i) {
-        boost::add_edge(i, std::rand() % 100, double(std::rand()) / RAND_MAX, g);
+    for(int i = 0; i < n; ++i) {
+        boost::add_edge(i, std::rand() % n, double(std::rand()) / RAND_MAX, g);
     }
     auto dm = graph2diskmat(g, fn);
     std::cout << ~dm << '\n';
     dm.delete_file_ = true;
+    std::vector<float> weights(n);
+    wy::WyHash<uint32_t, 2> rng(13);
+    std::uniform_real_distribution<float> vals(std::nextafter(0., 17.), 17.);
+    for(auto p = weights.data(), e = p + n; p < e; *p++ = vals(rng));
+    auto wp = weights.data();
 }
