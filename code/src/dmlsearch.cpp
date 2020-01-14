@@ -35,4 +35,5 @@ int main() {
     for(size_t i = 0; i < nr; ++i)
         row(~weighted_dm, i) *= wp[i];
     auto lsearcher = make_kmed_lsearcher(~dm, k, eps);
+    //lsearcher.run(1);
 }

@@ -186,12 +186,20 @@ double logsumexp(const VT &x) {
 template<typename VT>
 INLINE double multinomial_cumulant(const VT &x) {return logsumexp(x);}
 
+template<typename FT, bool SO, typename OFT>
+double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs, OFT lhc, OFT rhc) {
+    // Note: multinomial cumulants for lhs and rhs can be cached, such that
+    // multinomial_cumulant(mean) and the dot products are all tht are required
+    auto mean = (~lhs + ~rhs) * .5;
+    return std::sqrt(.5 * (dot(~lhs - mean, ~lhs) + dot(~rhs - mean, ~rhs)
+                               + 2. * multinomial_cumulant(mean)
+                               - lhc
+                               - rhc));
+}
 template<typename FT, bool SO>
-double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs) {
-    auto mean = (lhs + rhs) * .5;
-    auto tsum = (dot(lhs - mean, lhs) + dot(rhs - mean, rhs)
-                - multinomial_cumulant(lhs) - multinomial_cumulant(rhs) + 2. * multinomial_cumulant(mean)) * 0.5;
-    return std::sqrt(tsum);
+INLINE double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs) {
+    assert((~lhs).size() == (~rhs).size());
+    return multinomial_jsd(lhs, rhs, multinomial_cumulant(~lhs), multinomial_cumulant(~rhs));
 }
 
 

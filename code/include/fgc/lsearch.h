@@ -56,9 +56,11 @@ struct LocalKMedSearcher {
     const MatType &mat_;
     SolType sol_;
     std::vector<IType> assignments_;
+    std::vector<std::vector<IType>> center_indices_;
     blz::DV<DType> costs_;
     SolType counts_;
     double current_cost_;
+    const double eps_;
     IType k_;
 
     // Constructors
@@ -70,10 +72,11 @@ struct LocalKMedSearcher {
         std::swap_ranges(ptr, ptr + sizeof(*this), reinterpret_cast<const uint8_t *>(std::addressof(o)));
     }
     LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01):
-        mat_(mat), assignments_(mat.columns(), IType(-1)),
+        mat_(mat), assignments_(mat.columns(), IType(-1)), center_indices_(k),
         costs_(mat.columns(), std::numeric_limits<DType>::max()),
         counts_(k),
         current_cost_(std::numeric_limits<DType>::max()),
+        eps_(eps),
         k_(k)
     {
         wy::WyRand<IType, 2> rng(k / eps * mat.rows() + mat.columns());
@@ -120,10 +123,12 @@ struct LocalKMedSearcher {
         assert(assignments_.size() == nc);
         current_cost_ = blaze::sum(costs_);
         std::fill(counts_.begin(), counts_.end(), IType(0));
-        OMP_PFOR
+        //OMP_PFOR
         for(size_t ci = 0; ci < nc; ++ci) {
-            OMP_ATOMIC
-            ++counts_[assignments_[ci]];
+            //OMP_ATOMIC
+            auto asn = assignments_[ci];
+            ++counts_[asn];
+            blz::push_back(center_indices_.at(asn), ci); // replace at with operator[] if this works as expected
         }
         assert(std::accumulate(counts_.begin(), counts_.end(), 0u) == nc || !std::fprintf(stderr, "Doesn't add up: %u\n", std::accumulate(counts_.begin(), counts_.end(), 0u)));
         std::fprintf(stderr, "current cost: %f\n", current_cost_);
@@ -147,9 +152,29 @@ struct LocalKMedSearcher {
         double potential_gain = 0.;
         OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
         for(size_t i = 0; i < nc; ++i) {
-            if(assignments_[i] != oldcenter) continue; // Only points already assigned to 
+            if(assignments_[i] != oldcenter) continue; // Only points already assigned to
             if(assignments_[i] == oldcenter)
                 potential_gain += (newr[i] - oldr[i]);
+        }
+        return potential_gain;
+    }
+
+
+    double evaluate_swap_lazy(IType newcenter, IType oldcenterindex, const std::vector<IType> &c) const {
+        // oldcenter is the index into the sol_ array
+        // This function ignores the fact that the new center could outperform other centers
+        assert(newcenter < mat_.rows());
+        const auto oldcenter = sol_[oldcenterindex];
+        auto newr = row(mat_, newcenter, blaze::unchecked);
+        auto oldr = row(mat_, oldcenter, blaze::unchecked);
+        const size_t nc = mat_.columns();
+        double potential_gain = 0.;
+        const auto csz = c.size();
+        OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
+        for(size_t i = 0; i < csz; ++i) {
+            assert(assignments_[i] == oldcenterindex);
+            const auto ind = c[i];
+            potential_gain += (newr[ind] - oldr[ind]);
         }
         return potential_gain;
     }
@@ -157,6 +182,88 @@ struct LocalKMedSearcher {
     // Getters
     auto k() const {
         return k_;
+    }
+
+    void perform_swap(IType oldcenterindex, IType newcenter) {
+        std::fprintf(stderr, "swapping out oldcenter %u at index %u for %u\n", sol_[oldcenterindex], oldcenterindex, newcenter);
+        // This function should:
+        // 1. Update costs_
+        // 2. Update current_cost_
+        // 3. Update center_indices_
+        const size_t nc = mat_.columns();
+        //auto oldcenter = sol_[oldcenterindex];
+        sol_[oldcenterindex] = newcenter;
+
+        auto newr = row(mat_, newcenter);
+
+        // Calculate 
+        for(size_t i = 0; i < nc; ++i) {
+            if(newr[i] < costs_[i]) {
+                if(assignments_[i] != oldcenterindex) {
+                    assert(std::find(center_indices_[assignments_[i]].begin(), center_indices_[assignments_[i]].end(), i) != center_indices_[assignments_[i]].end());
+                    assignments_[i] = oldcenterindex;
+                }
+                costs_[i] = newr[i];
+            } else if(assignments_[i] == oldcenterindex) {
+                double mincost = mat_(sol_[0], i);
+                IType newasn = 0;
+                for(IType j = 1, e = sol_.size(); j < e; ++j) {
+                    if(auto mc = mat_(sol_[j], i); mc < mincost)
+                        newasn = j, mincost = mc;
+                }
+                assignments_[i] = newasn;
+            }
+        }
+        
+
+        for(auto &i: center_indices_) i.clear();
+        for(size_t i = 0; i < nc; ++i)
+            center_indices_[assignments_[i]].push_back(i);
+        double newcost = 0.;
+        OMP_PRAGMA("omp parallel for reduction(+:newcost)")
+        for(size_t i = 0; i < nc; ++i)
+            newcost += costs_[i];
+        std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
+        assert(newcost < current_cost_);
+        current_cost_ = newcost;
+    }
+
+    void run(size_t max_iter=30) {
+        const size_t nr = mat_.rows();
+        //auto it = std::max_element(cbeg, cd, [](const auto &x, const auto &y) {return x.size() < y.size();});
+        blaze::SmallArray<IType, 16> sv(k_);
+        //std::copy(sol_.begin(), sol_.end(), sv.begin());
+        std::iota(sv.data(), sv.data() + k_, IType(0));
+        auto cicmp = [&](auto x, auto y) {
+             return center_indices_[x].size() < center_indices_[y].size();
+        };
+        pdqsort(sv.begin(), sv.end(), cicmp);
+        ska::flat_hash_set<IType> current_centers(sol_.begin(), sol_.end());
+        const bool linear_check = k_ < 80; // if k_ < 80, check linearly, otherwise use the hash set.
+        double threshold = current_cost_ * (1. - eps_ / k_);
+        for(size_t iternum = max_iter; iternum--;) {
+            for(const auto oldcenterindex: sv) {
+                assert(oldcenterindex < center_indices_.size());
+                const auto oldcenter = sol_[oldcenterindex];
+                const auto &oldcenterindices = center_indices_[oldcenterindex];
+                for(size_t pi = 0; pi < nr; ++pi) {
+                    if(linear_check ? std::find(sol_.begin(), sol_.end(), pi) != sol_.end()
+                                    : current_centers.find(pi) != current_centers.end())
+                        continue;
+                    auto val = evaluate_swap_lazy(pi, oldcenterindex, oldcenterindices);
+                    std::fprintf(stderr, "expected to benefit %f from swap\n", val);
+                    if(val < threshold) {
+                        perform_swap(oldcenterindex, pi);
+                        current_centers.erase(oldcenter);
+                        current_centers.insert(pi);
+                        sv[oldcenterindex] = pi;
+                        threshold = current_cost_ * (1. - eps_ / k_);
+                        break; // Meaning we've swapped this guy out and will pick another one.
+                    }
+                }
+            }
+            pdqsort(sv.begin(), sv.end(), cicmp);
+        }
     }
 
     // Steps:
