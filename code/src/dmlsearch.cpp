@@ -1,4 +1,4 @@
-//#define VERBOSE_AF 1
+#define VERBOSE_AF 1
 #include "fgc/lsearch.h"
 #include "fgc/diskmat.h"
 #include <iostream>

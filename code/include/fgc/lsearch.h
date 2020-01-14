@@ -4,6 +4,7 @@
 #include "fgc/graph.h"
 #include "fgc/diskmat.h"
 #include "fgc/kcenter.h"
+#include "pdqsort/pdqsort.h"
 
 /*
  * In this file, we use the local search heuristic for k-median.
@@ -67,6 +68,24 @@ struct LocalKMedSearcher {
         std::memset(ptr, 0, sizeof(*this));
         std::swap_ranges(ptr, ptr + sizeof(*this), reinterpret_cast<const uint8_t *>(std::addressof(o)));
     }
+    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01):
+        mat_(mat), assignments_(mat.columns(), IType(-1)),
+        costs_(mat.columns(), std::numeric_limits<DType>::max()),
+        counts_(k),
+        current_cost_(std::numeric_limits<DType>::max()),
+        k_(k)
+    {
+        wy::WyRand<IType, 2> rng(k / eps * mat.rows() + mat.columns());
+        auto rowits = rowiterator(mat);
+        auto approx = coresets::kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k, MatrixLookup());
+        std::fprintf(stderr, "Approx is complete with size %zu (expected k: %u)\n", approx.size(), k);
+        sol_.resize(k);
+        std::copy(approx.begin(), approx.end(), sol_.begin());
+        pdqsort(sol_.data(), sol_.data() + sol_.size()); // Just for access pattern
+        assign();
+    }
+
+    // Setup/Utilities
 
     void assign() {
         const size_t nc = mat_.columns(), nr = mat_.rows(), ncand = sol_.size();
@@ -108,30 +127,35 @@ struct LocalKMedSearcher {
         assert(std::accumulate(counts_.begin(), counts_.end(), 0u) == nc || !std::fprintf(stderr, "Doesn't add up: %u\n", std::accumulate(counts_.begin(), counts_.end(), 0u)));
         std::fprintf(stderr, "current cost: %f\n", current_cost_);
         assert(counts_.size() == sol_.size());
+#if VERBOSE_AF
         for(size_t i = 0; i < counts_.size(); ++i) {
-            std::fprintf(stderr, "count %u is %zu\n", sol_[i], counts_[i]);
+            std::fprintf(stderr, "count %u is %zu\n", unsigned(sol_[i]), size_t(counts_[i]));
         }
         std::fputc('\n', stderr);
+#endif
+    }
+
+    double evaluate_swap(IType newcenter, IType oldcenterindex) {
+        // oldcenter is the index into the sol_ array
+        assert(oldcenterindex < sol_.size());
+        assert(newcenter < mat_.rows());
+        const auto oldcenter = sol_[oldcenterindex];
+        auto newr = row(mat_, newcenter, blaze::unchecked);
+        auto oldr = row(mat_, oldcenter, blaze::unchecked);
+        const size_t nc = mat_.columns();
+        double potential_gain = 0.;
+        OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
+        for(size_t i = 0; i < nc; ++i) {
+            if(assignments_[i] != oldcenter) continue; // Only points already assigned to 
+            if(assignments_[i] == oldcenter)
+                potential_gain += (newr[i] - oldr[i]);
+        }
+        return potential_gain;
     }
 
     // Steps:
     // 1. Use k-center approx for seeds
     // 2. Loop over finding candidate replacements and performing swaps.
-    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01):
-        mat_(mat), assignments_(mat.columns(), IType(-1)),
-        costs_(mat.columns(), std::numeric_limits<DType>::max()),
-        counts_(k),
-        current_cost_(std::numeric_limits<DType>::max())
-    {
-        wy::WyRand<IType, 2> rng(k / eps * mat.rows() + mat.columns());
-        auto rowits = rowiterator(mat);
-        auto approx = coresets::kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k, MatrixLookup());
-        std::fprintf(stderr, "Approx is complete with size %zu (expected k: %u)\n", approx.size(), k);
-        sol_.resize(k);
-        std::copy(approx.begin(), approx.end(), sol_.begin());
-        pdqsort(sol_.data(), sol_.data() + sol_.size()); // Just for access pattern
-        assign();
-    }
 };
 
 template<typename Mat, typename FT=float, typename IType=std::uint32_t>

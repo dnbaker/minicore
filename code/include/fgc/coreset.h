@@ -114,9 +114,7 @@ struct CoresetSampler {
     bool ready() const {return sampler_.get();}
 
     bool operator==(const CoresetSampler &o) const {
-#if VERBOSE_AF
-        std::fprintf(stderr, "np: %zu/%zu\n", np_, o.np_);
-#endif
+        VERBOSE_ONLY(std::fprintf(stderr, "np: %zu/%zu\n", np_, o.np_);)
         return np_ == o.np_ &&
                        std::equal(probs_.get(), probs_.get() + np_, o.probs_.get()) &&
                       ((weights_.get() == nullptr && o.weights_.get() == nullptr) || // Both are nullptr or
