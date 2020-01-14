@@ -170,7 +170,30 @@ struct sqrMaxNorm: sqrBaseNorm<maxNormFunctor> {};
  * Use https://people.eecs.berkeley.edu/~jordan/courses/260-spring10/other-readings/chapter8.pdf
  * to derive KL, Jensen-Shannon divergences + JS distances (sqrt(JS))
  * for the full exponential family of distributions.
+ * Currently, what I have is the multinomial, but this also applies to Poisson.
+ * See https://en.wikipedia.org/wiki/Exponential_family
+ * TODO:
+ * These include:
+ * Bernoulli, binomial, Poisson, chi-squared, Laplace, normal, lognormal, inverse gaussian, gamma,
+ * inverse gamma, beta, categorical, Dirichlet, Wishart
  */
+
+template<typename VT>
+double logsumexp(const VT &x) {
+    auto maxv = blaze::max(x);
+    return maxv + std::log(blaze::sum(blaze::exp(x - maxv)));
+}
+template<typename VT>
+INLINE double multinomial_cumulant(const VT &x) {return logsumexp(x);}
+
+template<typename FT, bool SO>
+double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs) {
+    auto mean = (lhs + rhs) * .5;
+    auto tsum = (dot(lhs - mean, lhs) + dot(rhs - mean, rhs)
+                - multinomial_cumulant(lhs) - multinomial_cumulant(rhs) + 2. * multinomial_cumulant(mean)) * 0.5;
+    return std::sqrt(tsum);
+}
+
 
 template<typename LHVec, typename RHVec>
 double bhattacharya_measure(const LHVec &lhs, const RHVec &rhs) {
