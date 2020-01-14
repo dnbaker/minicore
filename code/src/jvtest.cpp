@@ -1,5 +1,5 @@
 #include "fgc/jv.h"
-//#include "fgc/blaze_adaptor.h"
+#include "fgc/distance.h"
 
 int main() {
     if(0) {

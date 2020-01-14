@@ -10,6 +10,7 @@
 #ifdef _OPENMP
 #  include <omp.h>
 #endif
+#include "fgc/distance.h"
 #include "blaze_adaptor.h"
 
 

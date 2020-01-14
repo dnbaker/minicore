@@ -59,6 +59,7 @@ struct LocalKMedSearcher {
     blz::DV<DType> costs_;
     SolType counts_;
     double current_cost_;
+    IType k_;
 
     // Constructors
 
@@ -151,6 +152,11 @@ struct LocalKMedSearcher {
                 potential_gain += (newr[i] - oldr[i]);
         }
         return potential_gain;
+    }
+
+    // Getters
+    auto k() const {
+        return k_;
     }
 
     // Steps:
