@@ -49,15 +49,15 @@ struct MatrixIndexNorm {
 
 template<typename MatType, typename WFT=float, typename IType=std::uint32_t>
 struct LocalKMedSearcher {
-    using DType = typename MatType::ElementType;
     using SolType = blaze::SmallArray<IType, 16>;
+    using value_type = typename MatType::ElementType;
 
 
     const MatType &mat_;
     SolType sol_;
     std::vector<IType> assignments_;
     std::vector<std::vector<IType>> center_indices_;
-    blz::DV<DType> costs_;
+    blz::DV<value_type> costs_;
     SolType counts_;
     double current_cost_;
     const double eps_;
@@ -73,9 +73,9 @@ struct LocalKMedSearcher {
     }
     LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01):
         mat_(mat), assignments_(mat.columns(), IType(-1)), center_indices_(k),
-        costs_(mat.columns(), std::numeric_limits<DType>::max()),
+        costs_(mat.columns(), std::numeric_limits<value_type>::max()),
         counts_(k),
-        current_cost_(std::numeric_limits<DType>::max()),
+        current_cost_(std::numeric_limits<value_type>::max()),
         eps_(eps),
         k_(k)
     {
@@ -87,6 +87,21 @@ struct LocalKMedSearcher {
         std::copy(approx.begin(), approx.end(), sol_.begin());
         pdqsort(sol_.data(), sol_.data() + sol_.size()); // Just for access pattern
         assign();
+    }
+
+    template<typename Container>
+    double cost_for_sol(const Container &c) {
+        const size_t nc = c.size();
+        double ret = 0.;
+        OMP_PRAGMA("omp parallel for reduction(+:ret)")
+        for(size_t i = 0; i < mat_.columns(); ++i) {
+            auto col = column(mat_, i);
+            value_type minv = col[c[0]];
+            for(size_t j = 1; j < c.size(); ++j)
+                minv = std::min(col[c[j]], minv);
+            ret += minv;
+        }
+        return ret;
     }
 
     // Setup/Utilities
