@@ -20,14 +20,16 @@ int main() {
     auto r1 = row(dm, 1), r0 = row(dm, 0);
     randomize(r1);
     randomize(r0);
-    r1[0] = r0[0] = 0.;
+    r1[0] = 0.;
+    r0[0] = 0.;
+    r1[4] = 0.;
     r1 *= r1;
     r0 *= r0;
     r1 /= l2Norm(r1);
     r0 /= l2Norm(r0);
     blaze::CompressedVector<float> c1(r0.size()), c0(r0.size());
-    c1.reserve(r1.nonZeros());
-    c0.reserve(r0.nonZeros());
+    c1.reserve(r1.size() - 2);
+    c0.reserve(r0.size() - 1);
     for(size_t i = 0; i < r0.size(); ++i) {
         if(r0[i])
             c0.append(i, r0[i]);
