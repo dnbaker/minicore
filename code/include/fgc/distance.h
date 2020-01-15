@@ -181,16 +181,26 @@ struct sqrMaxNorm: sqrBaseNorm<maxNormFunctor> {};
  * inverse gamma, beta, categorical, Dirichlet, Wishart
  */
 
-template<typename VT>
-double logsumexp(const VT &x) {
-    auto maxv = blaze::max(x);
-    return maxv + std::log(blaze::sum(blaze::exp(x - maxv)));
+template<typename FT, bool SO>
+double logsumexp(const blaze::DenseVector<FT, SO> &x) {
+    auto maxv = blaze::max(~x);
+    return maxv + std::log(blaze::sum(blaze::exp(~x - maxv)));
 }
+template<typename FT, bool SO>
+double logsumexp(const blaze::SparseVector<FT, SO> &x) {
+    auto maxv = blaze::max(~x);
+    double s = 0.;
+    blaze::CompressedVector<typename FT::ElementType, SO> cv(~x);
+    for(const auto p: cv) {
+        //auto p = *it++;
+        s += std::exp(p.value() - maxv); // Sum over sparse elements
+    }
+    s += nonZeros(~x) * std::exp(-maxv);  // Handle the ones we skipped
+    return maxv + std::log(s);
+}
+
 template<typename VT>
 INLINE double multinomial_cumulant(const VT &x) {return logsumexp(x);}
-
-template<typename FT>
-INLINE auto filterinf(FT x) {return std::isinf(x) ? FT(0): x;}
 
 template<typename FT, bool SO, typename OFT>
 double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs, OFT lhc, OFT rhc) {
@@ -203,15 +213,76 @@ double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::Dense
     // Whenever P ( x ) {P(x)} P(x) is zero the contribution of the corresponding term is interpreted as zero because
     // lim_{x->0+}[xlog(x)] = 0
     // See https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence#Definition
+    using FloatType = typename FT::ElementType;
 
     auto mean = (~lhs + ~rhs) * .5;
-    auto logmean = blaze::map(blaze::log(mean), filterinf<FT>);
-    auto lhterm = blaze::map(blaze::log(~lhs) - logmean, filterinf<FT>);
-    auto rhterm = blaze::map(blaze::log(~rhs) - logmean, filterinf<FT>);
+    auto fi = [](auto x) {return std::isinf(x) ? FloatType(0): x;};
+    auto logmean = blaze::map(blaze::log(mean), fi);
+    auto lhterm = blaze::map(blaze::log(~lhs) - logmean, fi);
+    auto rhterm = blaze::map(blaze::log(~rhs) - logmean, fi);
     auto lhv = dot(lhterm, ~lhs), rhv = dot(rhterm, ~rhs);
     const auto retsq = multinomial_cumulant(mean) + (lhv + rhv - lhc - rhc) * .5;
     return std::sqrt(retsq);
 }
+
+template<typename FT, bool SO, typename OFT>
+double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs,
+                       // Original vectors
+                       const blaze::DenseVector<FT, SO> &lhl, const blaze::DenseVector<FT, SO> &rhl,
+                       // cached logs
+                       OFT lhc, OFT rhc) {
+    using FloatType = typename FT::ElementType;
+    assert(std::find_if(lhl.begin(), lhl.end(), [](auto x)
+                        {return std::isinf(x) || std::isnan(x);})
+           == lhl.end());
+    assert(std::find_if(rhl.begin(), rhl.end(), [](auto x)
+                        {return std::isinf(x) || std::isnan(x);})
+           == rhl.end());
+    auto mean = (~lhs + ~rhs) * .5;
+    auto fi = [](auto x) {return std::isinf(x) ? FloatType(0): x;};
+    auto logmean = blaze::map(blaze::log(mean), fi);
+    return std::sqrt(
+               multinomial_cumulant(mean)
+               + .5 * (
+                   + dot(blaze::map(lhl - logmean, fi), ~lhs)
+                   + dot(blaze::map(rhl - logmean, fi), ~rhs)
+                   - lhc - rhc
+               )
+           );
+}
+
+template<typename FT, bool SO, typename LT, typename OFT>
+double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs,
+                       // Original vectors
+                       const LT &lhl, const LT &rhl,
+                       //const blaze::SparseVector<FT, SO> &lhl, const blaze::SparseVector<FT, SO> &rhl,
+                       // cached logs
+                       OFT lhc, OFT rhc) {
+    assert(std::find_if(lhl.begin(), lhl.end(), [](auto x)
+                        {return std::isinf(x.value()) || std::isnan(x.value());})
+           == lhl.end());
+    assert(std::find_if(rhl.begin(), rhl.end(), [](auto x)
+                        {return std::isinf(x.value()) || std::isnan(x.value());})
+           == rhl.end());
+    auto mean = (~lhs + ~rhs) * .5;
+    auto logmean = blaze::log(mean);
+    return std::sqrt(
+               multinomial_cumulant(mean)
+               + .5 * (
+                   + dot(lhl - logmean, ~lhs)
+                   + dot(rhl - logmean, ~rhs)
+                   - lhc - rhc
+               )
+           );
+}
+
+template<typename FT, bool SO>
+double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs) {
+    auto lhl = blaze::log(lhs);
+    auto rhl = blaze::log(rhs);
+    return multinomial_jsd(lhs, rhs, lhl, rhl, multinomial_cumulant(lhs), multinomial_cumulant(rhs));
+}
+    
 
 template<typename FT, bool SO>
 INLINE double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs,
@@ -225,7 +296,7 @@ INLINE double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs,
 template<typename LHVec, typename RHVec>
 double bhattacharya_measure(const LHVec &lhs, const RHVec &rhs) {
     // Requires same storage.
-    // TODO: generalize for different storage classes/transpose flags using DenseVector and CompressedVector
+    // TODO: generalize for different storage classes/transpose flags using DenseVector and SparseVector
     // base classes
     return sqrt(lhs * rhs);
 }

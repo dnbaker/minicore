@@ -372,6 +372,11 @@ struct CoresetSampler {
     size_t size() const {return np_;}
 };
 
+template<typename FT, bool SO=blaze::rowMajor>
+struct MetricCoreset {
+    blaze::DynamicMatrix<FT, SO> distances_;
+};
+
 
 }//coresets
 

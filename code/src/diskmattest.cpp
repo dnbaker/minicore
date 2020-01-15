@@ -25,5 +25,15 @@ int main() {
     r0 *= r0;
     r1 /= l2Norm(r1);
     r0 /= l2Norm(r0);
+    blaze::CompressedVector<float> c1(r0.size()), c0(r0.size());
+    c1.reserve(r1.nonZeros());
+    c0.reserve(r0.nonZeros());
+    for(size_t i = 0; i < r0.size(); ++i) {
+        if(r0[i])
+            c0.append(i, r0[i]);
+        if(r1[i])
+            c1.append(i, r1[i]);
+    }
     std::fprintf(stderr, "multinomial jsd: %f\n", distance::multinomial_jsd(r1, r0));
+    std::fprintf(stderr, "multinomial jsd: %f\n", distance::multinomial_jsd(c1, c0));
 }

@@ -216,7 +216,6 @@ struct LocalKMedSearcher {
 
         auto newr = row(mat_, newcenter);
 
-        // Calculate 
         for(size_t i = 0; i < nc; ++i) {
             if(newr[i] < costs_[i]) {
 #if 1
