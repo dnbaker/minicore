@@ -24,6 +24,12 @@ struct edgetup: public std::tuple<double, uint32_t, uint32_t> {
     }
 };
 
+/*
+ * Note:
+ * The cost of opening the next facility is equal to
+ * (facility_cost_ - [sum contributed from edges removed from S] ) / ([# tight edges] - [# tight edges removed from S])
+ */
+
 template<typename FT>
 struct NaiveJVSolver {
     // Complexity: something like F^2N + N^2F
@@ -118,14 +124,6 @@ struct NaiveJVSolver {
     std::vector<IType> ufl(const MatType &mat, double faccost) {
         // Uncapacited Facility Location problem with facility cost = faccost
         this->reset(faccost);
-#if 0
-        for(const auto edge: edges_) {
-            char buf[30];
-            edge.sprintf(buf);
-            std::fprintf(stderr, "edge: %s|\n", buf);
-            //std::fputc('\n');
-        }
-#endif
         assert(nottempopen_.size() == w_.rows());
         assert(tempopen_.size() == 0);
         std::fprintf(stderr, "##Starting phase1 with faccost %.12g\n", faccost);

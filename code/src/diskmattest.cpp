@@ -20,6 +20,7 @@ int main() {
     auto r1 = row(dm, 1), r0 = row(dm, 0);
     randomize(r1);
     randomize(r0);
+    r1[0] = r0[0] = 0.;
     r1 *= r1;
     r0 *= r0;
     r1 /= l2Norm(r1);

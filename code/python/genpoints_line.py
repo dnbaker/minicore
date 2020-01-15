@@ -65,7 +65,7 @@ def generate_random_graph(*, dim, npoints, norm):
 
 a = agp()
 aa = a.add_argument
-aa("--dim", default=50, type=int)
+aa("--dim", default=2, type=int)
 aa("--npoints", default=500, type=int)
 aa("--fmt", default="line")
 aa("--norm", type=float)
