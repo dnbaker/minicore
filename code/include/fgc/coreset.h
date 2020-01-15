@@ -159,13 +159,13 @@ struct CoresetSampler {
     void write(std::FILE *fp) const {
         auto fd = ::fileno(fp);
         uint64_t n = np_;
-        ::write(fd, &n, sizeof(n));
-        ::write(fd, &seed_, sizeof(seed_));
-        ::write(fd, &probs_[0], sizeof(probs_[0]) * np_);
+        checked_posix_write(fd, &n, sizeof(n));
+        checked_posix_write(fd, &seed_, sizeof(seed_));
+        checked_posix_write(fd, &probs_[0], sizeof(probs_[0]) * np_);
         uint32_t weights_present = weights_ ? 1337: 0;
-        ::write(fd, &weights_present, sizeof(weights_present));
+        checked_posix_write(fd, &weights_present, sizeof(weights_present));
         if(weights_)
-            ::write(fd, &weights_[0], sizeof(weights_[0]) * np_);
+            checked_posix_write(fd, &weights_[0], sizeof(weights_[0]) * np_);
     }
     void read(gzFile fp) {
         uint64_t n;

@@ -186,6 +186,7 @@ double logsumexp(const blaze::DenseVector<FT, SO> &x) {
     auto maxv = blaze::max(~x);
     return maxv + std::log(blaze::sum(blaze::exp(~x - maxv)));
 }
+
 template<typename FT, bool SO>
 double logsumexp(const blaze::SparseVector<FT, SO> &x) {
     auto maxv = blaze::max(~x);
@@ -199,6 +200,8 @@ double logsumexp(const blaze::SparseVector<FT, SO> &x) {
 
 template<typename VT1, typename VT2, typename Scalar, bool TF>
 double logsumexp(const SVecScalarMultExpr<SVecSVecAddExpr<VT1, VT2, TF>, Scalar, TF> &exp) {
+    // Specifically for calculating the logsumexp of the mean of the two sparse vectors.
+    // SVecScalarMultExpr doesn't provide a ConstIterator, so we're rolling our own specialized function.
     auto maxv = blaze::max(~exp), mmax = -maxv;
     double s = 0.;
     auto lit = exp.leftOperand().leftOperand().begin(), rit = exp.leftOperand().rightOperand().begin(),
