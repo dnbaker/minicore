@@ -205,9 +205,9 @@ double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::Dense
     // See https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence#Definition
 
     auto mean = (~lhs + ~rhs) * .5;
-    auto logmean = blaze::map(blaze::log(mean), filterinf);
-    auto lhterm = blaze::map(blaze::log(~lhs) - logmean, filterinf);
-    auto rhterm = blaze::map(blaze::log(~rhs) - logmean, filterinf);
+    auto logmean = blaze::map(blaze::log(mean), filterinf<FT>);
+    auto lhterm = blaze::map(blaze::log(~lhs) - logmean, filterinf<FT>);
+    auto rhterm = blaze::map(blaze::log(~rhs) - logmean, filterinf<FT>);
     auto lhv = dot(lhterm, ~lhs), rhv = dot(rhterm, ~rhs);
     const auto retsq = multinomial_cumulant(mean) + (lhv + rhv - lhc - rhc) * .5;
     return std::sqrt(retsq);
