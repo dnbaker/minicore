@@ -190,12 +190,50 @@ template<typename FT, bool SO>
 double logsumexp(const blaze::SparseVector<FT, SO> &x) {
     auto maxv = blaze::max(~x);
     double s = 0.;
-    blaze::CompressedVector<typename FT::ElementType, SO> cv(~x);
-    for(const auto p: cv) {
-        //auto p = *it++;
+    for(const auto p: ~x) {
         s += std::exp(p.value() - maxv); // Sum over sparse elements
     }
-    s += nonZeros(~x) * std::exp(-maxv);  // Handle the ones we skipped
+    s += ((~x).size() - nonZeros(~x)) * std::exp(-maxv);  // Handle the ones we skipped
+    return maxv + std::log(s);
+}
+
+template<typename VT1, typename VT2, typename Scalar, bool TF>
+double logsumexp(const SVecScalarMultExpr<SVecSVecAddExpr<VT1, VT2, TF>, Scalar, TF> &exp) {
+    auto maxv = blaze::max(~exp), mmax = -maxv;
+    double s = 0.;
+    auto lit = exp.leftOperand().leftOperand().begin(), rit = exp.leftOperand().rightOperand().begin(),
+         lie = exp.leftOperand().leftOperand().end(),   rie = exp.leftOperand().rightOperand().end();
+    Scalar scalar = exp.rightOperand();
+    auto f = [scalar,mmax,&s](auto x) {s += std::exp(std::fma(x, scalar, mmax));};
+    size_t nnz = 0;
+    for(;;) {
+        if(lit == lie) {
+            while(rit != rie) {
+                f((rit++)->value());
+                ++nnz;
+            }
+            break;
+        }
+        if(rit == rie) {
+            while(lit != lie) {
+                f((lit++)->value());
+                ++nnz;
+            }
+            break;
+        }
+        if(lit->index() < rit->index()) {
+            f((lit++)->value());
+            ++nnz;
+        } else if(rit->index() < lit->index()) {
+            f((rit++)->value());
+            ++nnz;
+        } else /* indexes match */ {
+            ++nnz;
+            f(lit->value() + rit->value());
+            ++lit, ++rit;
+        }
+    }
+    s += ((~exp).size() - nnz) * std::exp(-maxv);  // Handle the ones we skipped
     return maxv + std::log(s);
 }
 
@@ -282,7 +320,6 @@ double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::Spar
     auto rhl = blaze::log(rhs);
     return multinomial_jsd(lhs, rhs, lhl, rhl, multinomial_cumulant(lhs), multinomial_cumulant(rhs));
 }
-    
 
 template<typename FT, bool SO>
 INLINE double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs,

@@ -182,7 +182,6 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         labels[i] = ret[label];
         if(pq.empty() || dist > pq.top().first) {
             const auto p = std::make_pair(dist, i);
-            
             OMP_CRITICAL
             {
                 // Check again after getting the lock
