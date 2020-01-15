@@ -189,40 +189,27 @@ double logsumexp(const VT &x) {
 template<typename VT>
 INLINE double multinomial_cumulant(const VT &x) {return logsumexp(x);}
 
+template<typename FT>
+INLINE auto filterinf(FT x) {return std::isinf(x) ? FT(0): x;}
+
 template<typename FT, bool SO, typename OFT>
 double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs, OFT lhc, OFT rhc) {
     // Note: multinomial cumulants for lhs and rhs can be cached as lhc/rhc, such that
     // multinomial_cumulant(mean) and the dot products are all that are required
     // TODO: optimize for sparse vectors (maybe filt can be eliminated?)
+    // TODO: cache logs as well as full vectors?
 
-#ifdef VERBOSE_AF
-    std::cout << "lhs: " << lhs << "\nrhs: " << rhs << '\n' << "lhc: " << lhc << "rhc: " << rhc << '\n';;
-#endif
     // We can turn inf values into 0 because:
-    // Whenever P ( x ) {\displaystyle P(x)} P(x) is zero the contribution of the corresponding term is interpreted as zero because
+    // Whenever P ( x ) {P(x)} P(x) is zero the contribution of the corresponding term is interpreted as zero because
     // lim_{x->0+}[xlog(x)] = 0
     // See https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence#Definition
-    auto filt = [](auto x) {return std::isinf(x) ? static_cast<decltype(x)>(0): x;};
+
     auto mean = (~lhs + ~rhs) * .5;
-    auto logmean = blaze::map(blaze::log(mean), filt);
-    auto lhterm = blaze::map(blaze::log(~lhs) - logmean, filt);
-#ifdef VERBOSE_AF
-    std::cout << "lhterm: " << lhterm << '\n';
-#endif
-    auto rhterm = blaze::map(blaze::log(~rhs) - logmean, filt);
-#ifdef VERBOSE_AF
-    std::cout << "rhterm: " << rhterm << '\n';
-#endif
+    auto logmean = blaze::map(blaze::log(mean), filterinf);
+    auto lhterm = blaze::map(blaze::log(~lhs) - logmean, filterinf);
+    auto rhterm = blaze::map(blaze::log(~rhs) - logmean, filterinf);
     auto lhv = dot(lhterm, ~lhs), rhv = dot(rhterm, ~rhs);
-#ifdef VERBOSE_AF
-    auto meanmc = multinomial_cumulant(mean);
-    std::cout << "mean mc: " << meanmc << '\n';
-    std::cout << "lhv: " << lhv << "rhv: " << rhv << '\n';
-#endif
     const auto retsq = multinomial_cumulant(mean) + (lhv + rhv - lhc - rhc) * .5;
-#ifdef VERBOSE_AF
-    std::cout << "retsq: " << retsq << '\n';
-#endif
     return std::sqrt(retsq);
 }
 

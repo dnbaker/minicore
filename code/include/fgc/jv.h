@@ -68,13 +68,20 @@ template<typename Graph>
 std::vector<typename Graph::vertex_descriptor>
     jain_vazirani_kmedian(Graph &x,
                           const std::vector<typename Graph::vertex_descriptor> &candidates,
-                          unsigned k)
+                          unsigned k,
+                          blaze::DynamicMatrix<float> *costsmat=nullptr)
 {
     // candidates consists of a vector of potential facility centers.
     //using Edge = typename Graph::edge_descriptor;
     const size_t n = x.num_vertices();
     size_t nf = candidates.size();
-    blaze::DynamicMatrix<float> c(nf, n, 0.);
+    std::unique_ptr<blaze::DynamicMatrix<float>> optr;
+    if(costsmat) {
+        costsmat->resize(nf, n);
+    } else {
+        optr.reset(new blaze::DynamicMatrix<float>(nf, n, 0.));
+    }
+    blaze::DynamicMatrix<float> &c(*(costsmat ? costsmat: optr.get()));
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < candidates.size(); ++i) {
         auto edge = candidates[i];
