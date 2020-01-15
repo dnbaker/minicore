@@ -172,7 +172,7 @@ struct LocalKMedSearcher {
         const auto oldcenter = sol_[oldcenterindex];
         auto newr = row(mat_, newcenter, blaze::unchecked);
         auto oldr = row(mat_, oldcenter, blaze::unchecked);
-        const size_t nc = mat_.columns();
+        //const size_t nc = mat_.columns();
         double potential_gain = 0.;
         const auto csz = c.size();
         OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
@@ -244,20 +244,20 @@ struct LocalKMedSearcher {
         blaze::SmallArray<IType, 16> sv(k_);
         //std::copy(sol_.begin(), sol_.end(), sv.begin());
         std::iota(sv.data(), sv.data() + k_, IType(0));
+
         auto cicmp = [&](auto x, auto y) {
              return center_indices_[x].size() < center_indices_[y].size();
         };
+
         pdqsort(sv.begin(), sv.end(), cicmp);
         ska::flat_hash_set<IType> current_centers(sol_.begin(), sol_.end());
         const bool linear_check = k_ < 80; // if k_ < 80, check linearly, otherwise use the hash set.
-        double threshold = current_cost_ * (1. - eps_ / k_);
         double diffthresh = current_cost_ / k_ * eps_;
         bool exhausted_lazy, use_full_cmp = false;
         for(size_t iternum = 0; iternum < max_iter; ++iternum) {
             std::fprintf(stderr, "iternum: %zu\n", iternum);
             exhausted_lazy = true;
             for(const auto oldcenterindex: sv) {
-                //std::fprintf(stderr, "oci: %u. ci size: %zu. sol size: %zu\n", oldcenterindex, center_indices_.size(), sol_.size());
                 assert(oldcenterindex < sol_.size());
                 const auto oldcenter = sol_[oldcenterindex];
                 const auto &oldcenterindices = center_indices_[oldcenterindex];
@@ -265,16 +265,16 @@ struct LocalKMedSearcher {
                     if(linear_check ? std::find(sol_.begin(), sol_.end(), pi) != sol_.end()
                                     : current_centers.find(pi) != current_centers.end())
                         continue;
-                    auto val = use_full_cmp ? evaluate_swap(pi, oldcenterindex)
-                                            : evaluate_swap_lazy(pi, oldcenterindex, oldcenterindices);
+                    const auto val = use_full_cmp ? evaluate_swap(pi, oldcenterindex)
+                                                  : evaluate_swap_lazy(pi, oldcenterindex, oldcenterindices);
                     if(val > diffthresh) {
                         perform_swap(oldcenterindex, pi);
                         current_centers.erase(oldcenter);
                         current_centers.insert(pi);
                         sol_[oldcenterindex] = pi;
-                        threshold = current_cost_ * (1. - eps_ / k_);
+                        diffthresh = current_cost_ / k_ * eps_;
                         exhausted_lazy = false;
-                        break; // Meaning we've swapped this guy out and will pick another one.
+                        continue; // Meaning we've swapped this guy out and will pick another one.
                     }
                 }
             }

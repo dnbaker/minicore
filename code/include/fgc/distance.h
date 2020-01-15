@@ -191,8 +191,10 @@ INLINE double multinomial_cumulant(const VT &x) {return logsumexp(x);}
 
 template<typename FT, bool SO, typename OFT>
 double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs, OFT lhc, OFT rhc) {
-    // Note: multinomial cumulants for lhs and rhs can be cached, such that
-    // multinomial_cumulant(mean) and the dot products are all tht are required
+    // Note: multinomial cumulants for lhs and rhs can be cached as lhc/rhc, such that
+    // multinomial_cumulant(mean) and the dot products are all that are required
+    // TODO: optimize for sparse vectors (maybe filt can be eliminated?)
+
 #ifdef VERBOSE_AF
     std::cout << "lhs: " << lhs << "\nrhs: " << rhs << '\n' << "lhc: " << lhc << "rhc: " << rhc << '\n';;
 #endif
