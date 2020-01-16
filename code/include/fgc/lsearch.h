@@ -125,18 +125,10 @@ struct LocalKMedSearcher {
             auto r = row(mat_, center, blaze::unchecked);
             OMP_PFOR
             for(size_t ci = 0; ci < nc_; ++ci) {
-                assert(ci < r.size());
                 if(const auto newcost = r[ci];
                    newcost < mat_(assignments_[ci], ci))
                 {
-                    //OMP_CRITICAL
-                    {
-                        assert(ci < assignments_.size());
-                        assert(assignments_[ci] < nr_ || assignments_[ci] == IType(-1));
-                        if(newcost < mat_(assignments_[ci], ci)) {
-                            assignments_[ci] = center;
-                        }
-                    }
+                   assignments_[ci] = center;
                 }
             }
         }
@@ -186,7 +178,6 @@ struct LocalKMedSearcher {
                 potential_gain += mat_(asn, i) - newr[i];
             }
         }
-        // TODO: make sure this is right.
         return potential_gain;
     }
 

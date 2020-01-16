@@ -13,7 +13,7 @@
 #define FLOAT_TYPE float
 #endif
 using namespace fgc;
-using namespace coresets;
+using namespace fgc::coresets;
 
 template<typename Mat, typename RNG>
 void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {

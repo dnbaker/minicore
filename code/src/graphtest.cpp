@@ -11,7 +11,7 @@ template<typename T> class TD;
 using namespace fgc;
 using namespace boost;
 
-#define undirectedS bidirectionalS
+//#define undirectedS bidirectionalS
 
 auto dimacs_official_parse(std::string input) {
     fgc::Graph<undirectedS> g;
@@ -42,12 +42,12 @@ auto dimacs_official_parse(std::string input) {
                 char *strend;
                 const char *p = line.data() + 2;
                 size_t lhs = std::strtoull(p, &strend, 10);
+                assert(lhs >= 1 || !std::fprintf(stderr, "p: %s\n", p));
                 p = strend + 1;
                 size_t rhs = std::strtoull(p, &strend, 10);
+                assert(rhs >= 1 || !std::fprintf(stderr, "p: %s\n", p));
                 p = strend + 1;
                 double dist = std::atof(p);
-                assert(lhs >= 1);
-                assert(rhs >= 1);
                 boost::add_edge(lhs - 1, rhs - 1, dist, g);
                 break;
             }
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
 #endif
     std::string input = argc == 1 ? "../data/dolphins.graph": const_cast<const char *>(argv[1]);
     const unsigned k = argc > 2 ? std::atoi(argv[2]): 12;
-    std::string fn = "default_scratch.fn";
+    std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     if(argc > 3) fn = argv[3];
     
     fgc::Graph<undirectedS> g;
@@ -99,7 +99,32 @@ int main(int argc, char **argv) {
     unsigned ncomp = boost::connected_components(g, ccomp.get());
     if(ncomp != 1) {
         std::fprintf(stderr, "not connected. ncomp: %u\n", ncomp);
-        return 1;
+        std::vector<unsigned> counts(ncomp);
+        for(size_t i = 0, e = boost::num_vertices(g); i < e; ++counts[ccomp[i++]]);
+        auto maxcomp = std::max_element(counts.begin(), counts.end()) - counts.begin();
+        std::fprintf(stderr, "maxcmp %zu out of total %u\n", maxcomp, ncomp);
+        flat_hash_map<uint64_t, uint64_t> remapper;
+        size_t id = 0;
+        for(size_t i = 0; i < boost::num_vertices(g); ++i) {
+            if(ccomp[i] == maxcomp) {
+                remapper[i] = id++;
+            }
+        }
+        fgc::Graph<undirectedS> newg(counts[maxcomp]);
+        boost::property_map <decltype(g),
+                             boost::edge_weight_t >::type EdgeWeightMap = get(boost::edge_weight, g);
+        for(auto edge: g.edges()) {
+            auto lhs = source(edge, g);
+            auto rhs = target(edge, g);
+            if(auto lit = remapper.find(lhs), rit = remapper.find(rhs);
+               lit != remapper.end() && rit != remapper.end()) {
+                boost::add_edge(lit->second, rit->second, EdgeWeightMap[edge], newg);
+            }
+        }
+        ncomp = boost::connected_components(newg, ccomp.get());
+        std::fprintf(stderr, "num components: %u. num edges: %u. num nodes: %u\n", ncomp, newg.num_edges(), newg.num_vertices());
+        g = std::move(newg);
+        assert(ncomp == 1);
     }
     ccomp.reset();
     assert(boost::num_vertices(g) > k);
@@ -126,13 +151,13 @@ int main(int argc, char **argv) {
 #endif
 
     std::fprintf(stderr, "med solution size: %zu\n", med_solution.size());
-#else
-    unsigned nseedings = 5;
+#endif
     auto lsearcher = make_kmed_lsearcher(~dm, k, 1e-5, seed);
     lsearcher.run();
-    size_t nreplaced = 0;
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
+    std::fprintf(stderr, "cost: %f\n", ccost);
+#if 0
     for(unsigned i = 0; i < nseedings; ++i) {
         lsearcher.reseed(seed + i, i % 2);
         lsearcher.run();

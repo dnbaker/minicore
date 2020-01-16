@@ -382,6 +382,6 @@ struct MetricCoreset {
 
 }// namespace fgc
 
-namespace coresets = fgc::coresets;
+namespace cs = fgc::coresets;
 
 #endif /* FGC_CORESETS_H__ */
