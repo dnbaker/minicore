@@ -36,7 +36,8 @@ def generate_random_graph(*, dim, npoints, norm):
         pass
     points = np.random.standard_cauchy(size=(npoints, dim))
     connections = np.random.choice(npoints**2, replace=False,
-                                   size=int(npoints * sqrt(np.log(npoints))))
+                                   size=int(npoints * 2 * np.log(npoints)))
+    points[len(points) - 1][:] = [1000] * dim
     connections.sort()
     connections = ((connections / npoints).astype(np.int32),
                    connections.astype(np.int32) % npoints)
@@ -46,6 +47,7 @@ def generate_random_graph(*, dim, npoints, norm):
     ccgraph = csr_matrix(cgraph)
     nc, labels = connected_components(csgraph=ccgraph,
                                       directed=False, return_labels=True)
+    nextra = 10
     while nc != 1:
         print("Reconnecting because it wasn't connected: %d" % nc,
               file=sys.stderr)
@@ -57,7 +59,10 @@ def generate_random_graph(*, dim, npoints, norm):
         nc, labels = connected_components(csgraph=ccgraph,
                                           directed=False, return_labels=True)
     del ccgraph
-    indices = cgraph.nonzero()
+    for i in range(npoints - 1):
+        cgraph[i, npoints - 1] = 1
+    cgraph[npoints - 1, npoints - 1] = 1
+    connections = cgraph.nonzero()
     dists = np.array([np.linalg.norm(points[i] - points[j], ord=norm)
                       for i, j in zip(*connections)])
     return connections, dists

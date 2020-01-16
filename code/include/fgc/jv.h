@@ -114,8 +114,10 @@ std::vector<typename Graph::vertex_descriptor>
 
     NaiveJVSolver<float> jvs(c.rows(), c.columns(), 0.);
     auto sol = jvs.kmedian(c, k);
+#ifndef NDEBUG
     for(const auto v: sol)
         assert(v <= candidates.size());
+#endif
     std::vector<typename Graph::vertex_descriptor> ret(sol.size());
     for(size_t i = 0; i < sol.size(); ++i)
         ret[i] = candidates[sol[i]];

@@ -32,6 +32,12 @@ print_tests:
 %: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
+graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
+
+fast%: src/%.cpp $(wildcard include/fgc/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
+
 %pg: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg -o $@
 

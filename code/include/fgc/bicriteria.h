@@ -115,10 +115,9 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
     return container;
 }
 
-template<typename... Args>
-auto get_costs(boost::adjacency_list<Args...> &x, const std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor> &container) {
-    using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<boost::adjacency_list<Args...>>()))>;
-    using Graph = boost::adjacency_list<Args...>;
+template<typename Graph, typename Container>
+auto get_costs(Graph &x, const Container &container) {
+    using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
     using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
     util::ScopedSyntheticVertex<Graph> vx(x);
     std::vector<edge_cost> costs(boost::num_vertices(x));

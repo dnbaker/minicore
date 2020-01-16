@@ -20,7 +20,7 @@ int main() {
         boost::add_edge(i, std::rand() % n, double(std::rand()) / RAND_MAX, g);
     }
     auto dm = graph2diskmat(g, fn);
-    std::cout << ~dm << '\n';
+    //std::cout << ~dm << '\n';
     dm.delete_file_ = true;
     std::vector<float> weights(n);
     wy::WyHash<uint32_t, 2> rng(13);

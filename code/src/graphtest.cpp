@@ -2,6 +2,7 @@
 #include "parse.h"
 #include "bicriteria.h"
 #include "coreset.h"
+#include "lsearch.h"
 #include "jv.h"
 
 template<typename T> class TD;
@@ -10,7 +11,7 @@ template<typename T> class TD;
 using namespace fgc;
 using namespace boost;
 
-//#define undirectedS bidirectionalS
+#define undirectedS bidirectionalS
 
 auto dimacs_official_parse(std::string input) {
     fgc::Graph<undirectedS> g;
@@ -60,130 +61,98 @@ auto dimacs_parse(const char *fn) {
     auto g = parse_dimacs_unweighted<boost::undirectedS>(fn);
     using Graph = decltype(g);
     boost::graph_traits<decltype(g)>::edge_iterator ei, ei_end;
-    //typedef boost::graph_traits<Graph> GraphTraits;
-    //typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, g);
-    //typename boost::property_map<Graph, boost::edge_weight_t>::type weight = get(boost::edge_weight, g);
-    //typename boost::property_map<Graph, boost::edge_weight_t>::type weightMap = 
-    //               get(boost::edge_weigh_t, graph);
-    //property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, g);
-    //std::fprintf(stderr, "address: %p. index: %p\n", (void *)&weightmap, (void *)&index);
+    wy::WyRand<uint64_t, 2> gen(boost::num_vertices(g));
     for(std::tie(ei, ei_end) = boost::edges(g); ei != ei_end; ++ei) {
-        //auto src = source(*ei, g);
-        //auto dest = target(*ei, g);
-#if VERBOSE_AF
-        auto v = boost::get(boost::edge_weight_t(), g, *ei);
-        std::fprintf(stderr, "[%p] value: %f. s: %d. dest: %d\n", (void *)&ed, v, unsigned(index[src]), unsigned(index[dest]));
-#endif
-        boost::put(boost::edge_weight_t(), g, *ei, 1. / (double(std::rand()) / RAND_MAX));
-#if VERBOSE_AF
-        std::fprintf(stderr, "after value: %f. s: %d. dest: %d\n", boost::get(boost::edge_weight_t(), g, *ei), unsigned(index[src]), unsigned(index[dest]));
-#endif
-        //typename GraphTraits::edge_descriptor e;
-        //std::fprintf(stderr, "edge weight: %f. edge id: %d\n", g[*ei], (int)*ei);
+        boost::put(boost::edge_weight_t(), g, *ei, 1. / (double(gen()) / gen.max()));
     }
     for(auto [vs, ve] = boost::vertices(g); vs != ve; ++vs) {
         boost::graph_traits<Graph>::vertex_descriptor vind = *vs;
         ++vind;
-        //std::fprintf(stderr, "vd: %zu\n", size_t(vind));
-        //auto vind = *vs;
-        //TD<decltype(vind)> td;
-    }
-#if 0
-    size_t edgecount = 0;
-    for(const auto &e: g.edges()) {
-        edgecount += reinterpret_cast<uint64_t>(&e) % 65536;
-        //std::fprintf(stderr, "WOOO\n");
-    }
-    edgecount = 0;
-    for(const auto &e: g.vertices()) {
-        edgecount += reinterpret_cast<uint64_t>(&e) % 65536;
-    }
-#if VERBOSE_AF
-    std::fprintf(stderr, "sum of hash remainders: %zu\n", edgecount);
-#endif
-#endif
-    std::vector<typename Graph::Vertex> top;
-    try {
-        top = g.toposort();
-    } catch(const boost::not_a_dag &ex) {
-        std::fprintf(stderr, "Not a dag, can't topo sort\n");
     }
     return g;
 }
 auto csv_parse(const char *fn) {
-    auto g = parse_nber<boost::undirectedS>(fn);
-    using Graph = decltype(g);
-    std::vector<typename Graph::Vertex> top;
-    try {
-        top = g.toposort();
-    } catch(const boost::not_a_dag &ex) {
-        std::fprintf(stderr, "Not a dag, can't topo sort\n");
-    }
-    using Graph = decltype(g);
-    boost::graph_traits<decltype(g)>::edge_iterator ei, ei_end;
-#if 0
-    typedef boost::graph_traits<Graph> GraphTraits;
-    GraphTraits gt;
-    std::fprintf(stderr, "%p\n", (void *)&gt);
-#endif
-    //typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, g);
-    return g;
+    return parse_nber<boost::undirectedS>(fn);
 }
 
-int main(int c, char **v) {
-    std::string input = c == 1 ? "../data/dolphins.graph": const_cast<const char *>(v[1]);
+int main(int argc, char **argv) {
+#ifdef _OPENMP
+    omp_set_num_threads(std::thread::hardware_concurrency());
+#endif
+    std::string input = argc == 1 ? "../data/dolphins.graph": const_cast<const char *>(argv[1]);
+    const unsigned k = argc > 2 ? std::atoi(argv[2]): 12;
+    std::string fn = "default_scratch.fn";
+    if(argc > 3) fn = argv[3];
+    
     fgc::Graph<undirectedS> g;
+    // 1. Parse
     if(input.find(".csv") != std::string::npos) {
         g = csv_parse(input.data());
     } else if(input.find(".gr") != std::string::npos && input.find(".graph") == std::string::npos) {
         g = dimacs_official_parse(input);
     } else {
-        // DIMACS, non-official
         g = dimacs_parse(input.data());
-        //if(false) {
-        //}
     }
-    std::vector<uint32_t> ccomp(boost::num_vertices(g));
-    unsigned ncomp = boost::connected_components(g, &ccomp[0]);
+    // Assert that it's connected, or else the problem has infinite cost.
+    auto ccomp = std::make_unique<uint32_t []>(boost::num_vertices(g));
+    assert(&ccomp[0] == ccomp.get());
+    unsigned ncomp = boost::connected_components(g, ccomp.get());
     if(ncomp != 1) {
         std::fprintf(stderr, "not connected. ncomp: %u\n", ncomp);
         return 1;
     }
+    ccomp.reset();
+    assert(boost::num_vertices(g) > k);
     uint64_t seed = 1337;
-    //min(log2(n)^(2.5), 3000)
+
     size_t nsampled_max = std::min(std::ceil(std::pow(std::log2(boost::num_vertices(g)), 2.5)), 3000.);
     if(nsampled_max > boost::num_vertices(g))
         nsampled_max = boost::num_vertices(g) / 2;
+    auto dm = graph2diskmat(g, fn);
+
+    // Perform Thorup sample before JV method.
+#if 0
     double frac = nsampled_max / double(boost::num_vertices(g));
-    auto sampled = thorup_sample(g, 10, seed, frac); // 0 is the seed, 500 is the maximum sampled size
+    auto sampled = thorup_sample(g, k, seed, frac); // 0 is the seed, 500 is the maximum sampled size
     std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
     std::fprintf(stderr, "ncomp: %u\n", ncomp);
-#if VERBOSE_AF
-    for(const auto v: sampled) {
-        std::vector<double> distances(boost::num_vertices(g));
-        boost::dijkstra_shortest_paths(g, v, distance_map(&distances[0]));
-        std::fprintf(stderr, "v %zu has max distance %f\n", size_t(v), *std::max_element(distances.begin(), distances.end()));
-    }
-#endif
-#if 1
-    auto med_solution =  fgc::jain_vazirani_kmedian(g, sampled, 10);
+
+    // Use this sample to generate an approximate k-median solution
+    auto med_solution = fgc::jain_vazirani_kmedian(g, sampled, k);
+
+    // Sanity check: make sure that our sampled points are in the Thorup sample.
+#ifndef NDEBUG
     for(const auto v: med_solution) assert(std::find(sampled.begin(), sampled.end(), v) != sampled.end());
+#endif
+
     std::fprintf(stderr, "med solution size: %zu\n", med_solution.size());
+#else
+    int nr = 100;
+    unsigned nseedings = 10;
+    auto lsearcher = make_kmed_lsearcher(~dm, k, 1e-5, seed);
+    lsearcher.run(nr);
+    size_t nreplaced = 0;
+    auto med_solution = lsearcher.sol_;
+    auto ccost = lsearcher.current_cost_;
+    for(size_t i = 0; i < nseedings; ++i) {
+        lsearcher.reseed(seed + i, i % 2);
+        lsearcher.run(nr);
+        std::fprintf(stderr, "old cost: %g. new cost: %g\n", ccost, lsearcher.current_cost_);
+        std::fprintf(stderr, "cost for sol: %g\n", lsearcher.cost_for_sol(lsearcher.sol_));
+        if(lsearcher.current_cost_ < ccost) {
+            std::fprintf(stderr, "replacing with seeding number %u!\n", nseedings);
+            med_solution = lsearcher.sol_;
+            ccost = lsearcher.current_cost_;
+            ++nreplaced;
+        }
+    }
+    std::fprintf(stderr, "nreplaced: %zu/%u\n", nreplaced, nseedings);
+#endif
+    // Calculate the costs of this solution
     auto [costs, assignments] = get_costs(g, med_solution);
-#else
-    if(sampled.size() > boost::num_vertices(g) / 2)
-        sampled.erase(sampled.begin() + sampled.size() / 2, sampled.end());
-    auto [costs, assignments] = get_costs(g, sampled);
-#endif
+    // Build a coreset importance sampler based on it.
     coresets::CoresetSampler<float, uint32_t> sampler;
-    std::fprintf(stderr, "constructed sampler\n");
-    // TODO: make assignments real
-#if 1
     sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data());
-#else
-    sampler.make_sampler(costs.size(), sampled.size(), costs.data(), assignments.data());
-#endif
-    std::fprintf(stderr, "made sampler\n");
     auto sampled_cs = sampler.sample(50);
     std::FILE *ofp = std::fopen("sampler.out", "wb");
     sampler.write(ofp);
