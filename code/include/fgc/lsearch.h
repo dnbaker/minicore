@@ -268,7 +268,8 @@ struct LocalKMedSearcher {
         const bool linear_check = k_ < 80; // if k_ < 80, check linearly, otherwise use the hash set.
         double diffthresh = current_cost_ / k_ * eps_;
         bool exhausted_lazy, use_full_cmp = false;
-        for(size_t iternum = 0; iternum < max_iter; ++iternum) {
+        size_t iternum;
+        for(iternum = 0; iternum < max_iter; ++iternum) {
             std::fprintf(stderr, "iternum: %zu\n", iternum);
             exhausted_lazy = true;
             for(const auto oldcenterindex: sv) {
@@ -297,6 +298,10 @@ struct LocalKMedSearcher {
                 use_full_cmp = true;
             }
             pdqsort(sv.begin(), sv.end(), cicmp);
+        }
+        if(iternum != max_iter) {
+            std::fprintf(stderr, "Finished in %zu/%zu rounds by exhausting all potential improvements\n",
+                         iternum, max_iter);
         }
     }
 

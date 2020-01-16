@@ -35,5 +35,7 @@ int main() {
     for(size_t i = 0; i < nr; ++i)
         row(~weighted_dm, i) *= wp[i];
     auto lsearcher = make_kmed_lsearcher(~dm, k, eps);
-    lsearcher.run(5);
+    lsearcher.run(50);
+    auto lsearcher_fewer_facilities = make_kmed_lsearcher(blaze::submatrix(~dm, 0, 0, 20, 100), k, eps);
+    lsearcher_fewer_facilities.run(50);
 }

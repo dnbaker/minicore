@@ -92,8 +92,22 @@ auto row(DiskMat<VT, SO, isPadded, isAligned> &mat, size_t i, blaze::Check<check
 }
 template<typename VT, bool SO, bool isPadded, bool isAligned, bool checked=true>
 auto column(DiskMat<VT, SO, isPadded, isAligned> &mat, size_t i, blaze::Check<checked> check=blaze::Check<checked>()) {
-    return blaze::row(~mat, i, check);
+    return blaze::column(~mat, i, check);
 }
+
+template<typename VT>
+class DiskVector {
+    size_t n_, m_;
+    VT     *data_;
+public:
+    DiskVector(): n_(0), m_(0), n_(nullptr) {}
+    size_t capacity() const {return m_;}
+    size_t size()     const {return n_;}
+    auto begin()       {return data_;}
+    auto begin() const {return data_;}
+    auto end()         {return data_ + n_;}
+    auto end()   const {return data_ + n_;}
+};
 
 } // fgc
 

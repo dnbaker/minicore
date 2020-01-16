@@ -81,6 +81,31 @@ struct column_iterator_t {
     }
 };
 
+template<typename MatType>
+struct RowViewer {
+    const row_iterator_t<MatType> start_, end_;
+    RowViewer(MatType &mat): start_{{0, mat}}, end_{{mat.rows(), mat}} {}
+    auto begin() const {return start_;}
+    auto end()   const {return end_;}
+};
+
+
+template<typename MatType>
+struct ColumnViewer {
+    const column_iterator_t<MatType> start_, end_;
+    ColumnViewer(MatType &mat): start_{{0, mat}}, end_{{mat.columns(), mat}} {}
+    auto begin() const {return start_;}
+    auto end()   const {return end_;}
+};
+template<typename MatType>
+struct ConstRowViewer: public RowViewer<const MatType> {
+    ConstRowViewer(const MatType &mat): RowViewer<const MatType>(mat) {}
+};
+template<typename MatType>
+struct ConstColumnViewer: public ColumnViewer<const MatType> {
+    ConstColumnViewer(const MatType &mat): ColumnViewer<const MatType>(mat) {}
+};
+
 #define DOFUNC(fn) auto fn() const {return (~*this).fn();}
 #define ADD_FUNCS\
     DOFUNC(rows)\
@@ -108,6 +133,7 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
         ((super &)*this).operator=(std::forward<Args>(args)...);
         return *this;
     }
+#if 0
     struct RowViewer {
         row_iterator start_, end_;
         RowViewer(this_type &ref): start_{{0, ref}}, end_{{ref.rows(), ref}} {}
@@ -134,21 +160,34 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
         auto begin() const {return start_;}
         const auto &end()  const {return end_;}
     };
-    auto rowiterator()       {return RowViewer(*this);}
-    auto rowiterator() const {return ConstRowViewer(*this);}
-    auto columniterator()       {return ColumnViewer(*this);}
-    auto columniterator() const {return ConstColumnViewer(*this);}
+#endif
+    auto rowiterator()       {return RowViewer<this_type>(*this);}
+    auto rowiterator() const {return ConstRowViewer<this_type>(*this);}
+    auto columniterator()       {return ColumnViewer<this_type>(*this);}
+    auto columniterator() const {return ConstColumnViewer<this_type>(*this);}
     ADD_FUNCS
 };
+
 
 template<typename FT, bool SO>
 auto rowiterator(blaze::DynamicMatrix<FT, SO> &o) {
     return reinterpret_cast<blz::DynamicMatrix<FT, SO> &>(o).rowiterator();
 }
+
 template<typename FT, bool SO>
 auto rowiterator(const blaze::DynamicMatrix<FT, SO> &o) {
     return reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(o).rowiterator();
 }
+
+#if 0
+template<typename MT, bool AF, bool SO, bool DF>
+auto rowiterator(const blaze::Submatrix<MT, AF, SO, DF> &o) {
+    return 
+}
+#endif
+
+
+
 template<typename FT, bool SO>
 auto columniterator(blaze::DynamicMatrix<FT, SO> &o) {
     return reinterpret_cast<blz::DynamicMatrix<FT, SO> &>(o).columniterator();
@@ -172,6 +211,7 @@ struct CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
         ((super &)*this).operator=(std::forward<Args>(args)...);
         return *this;
     }
+#if 0
     struct RowViewer {
         row_iterator start_, end_;
         RowViewer(this_type &ref): start_{{0, ref}}, end_{ref.rows(), ref} {}
@@ -198,10 +238,11 @@ struct CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
         auto begin() const {return start_;}
         auto &end()  const {return end_;}
     };
-    auto rowiterator()       {return RowViewer(*this);}
-    auto rowiterator() const {return ConstRowViewer(*this);}
-    auto columniterator()       {return ColumnViewer(*this);}
-    auto columniterator() const {return ConstColumnViewer(*this);}
+#endif
+    auto rowiterator()       {return RowViewer<this_type>(*this);}
+    auto rowiterator() const {return ConstRowViewer<this_type>(*this);}
+    auto columniterator()       {return ColumnViewer<this_type>(*this);}
+    auto columniterator() const {return ConstColumnViewer<this_type>(*this);}
     ADD_FUNCS
 };
 #undef ADD_FUNCS
@@ -217,6 +258,7 @@ template<typename FT, bool AF=blaze::unaligned, bool PF=blaze::unpadded, bool TF
 using CV = blaze::CustomVector<FT, AF, PF, TF>;
 
 
+#if 0
 template<typename FT, bool AF, bool PF, bool SO>
 auto rowiterator(blaze::CustomMatrix<FT, AF, PF, SO> &o) {
     return reinterpret_cast<blz::CustomMatrix<FT, AF, PF, SO> &>(o).rowiterator();
@@ -232,6 +274,32 @@ auto columniterator(blaze::CustomMatrix<FT, AF, PF, SO> &o) {
 template<typename FT, bool AF, bool PF, bool SO>
 auto columniterator(const blaze::CustomMatrix<FT, AF, PF, SO> &o) {
     return reinterpret_cast<const blz::CustomMatrix<FT, AF, PF, SO> &>(o).columniterator();
+}
+#endif
+
+template<typename MatType>
+auto rowiterator(MatType &mat) {
+    return RowViewer<MatType>(mat);
+}
+template<typename MatType>
+auto rowiterator(const MatType &mat) {
+    return ConstRowViewer<MatType>(mat);
+}
+template<typename MatType>
+auto constrowiterator(const MatType &mat) {
+    return ConstRowViewer<const MatType>(mat);
+}
+template<typename MatType>
+auto columniterator(MatType &mat) {
+    return ColumnViewer<MatType>(mat);
+}
+template<typename MatType>
+auto columniterator(const MatType &mat) {
+    return ConstColumnViewer<MatType>(mat);
+}
+template<typename MatType>
+auto constcolumniterator(const MatType &mat) {
+    return ConstColumnViewer<const MatType>(mat);
 }
 
 
