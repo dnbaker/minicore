@@ -135,8 +135,9 @@ auto get_costs(Graph &x, const Container &container) {
     typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, x);
     using v_int_t = decltype(index[p[0]]);
     flat_hash_map<v_int_t, uint32_t> pid2ind;
+    auto it = container.begin();
     for(size_t i = 0; i < container.size(); ++i)
-        pid2ind[index[container[i]]] = i;
+        pid2ind[index[*it++]] = i;
     // This could be slow, but whatever.
     for(size_t i = 0; i < p.size(); ++i) {
         auto parent = p[i], newparent = p[index[parent]];

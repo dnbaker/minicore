@@ -86,10 +86,12 @@ struct LocalKMedSearcher {
     }
 
     void reseed(uint64_t seed, bool do_kcenter=false) {
+        assignments_ = 0;
+        current_cost_ = std::numeric_limits<value_type>::max();
         wy::WyRand<IType, 2> rng(seed);
-        auto rowits = rowiterator(mat_);
         sol_.clear();
         if(do_kcenter) {
+            auto rowits = rowiterator(mat_);
             auto approx = coresets::kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k_, MatrixLookup());
             for(const auto c: approx) sol_.insert(c);
         } else {
@@ -118,6 +120,7 @@ struct LocalKMedSearcher {
 
     void assign() {
         assert(assignments_.size() == nc_);
+        assert(sol_.size() == k_);
         for(const auto center: sol_) {
             auto r = row(mat_, center, blaze::unchecked);
             OMP_PFOR
@@ -126,7 +129,7 @@ struct LocalKMedSearcher {
                 if(const auto newcost = r[ci];
                    newcost < mat_(assignments_[ci], ci))
                 {
-                    OMP_CRITICAL
+                    //OMP_CRITICAL
                     {
                         assert(ci < assignments_.size());
                         assert(assignments_[ci] < nr_ || assignments_[ci] == IType(-1));
@@ -216,7 +219,7 @@ struct LocalKMedSearcher {
         return k_;
     }
 
-#ifndef NDEBUG
+#if VERBOSE_AF
     void recalculate(IType oldcenter, IType newcenter) {
         std::fprintf(stderr, "swapping out oldcenter %u for %u\n", oldcenter, newcenter);
         assert(std::find(sol_.begin(), sol_.end(), oldcenter) == sol_.end());
@@ -254,56 +257,48 @@ struct LocalKMedSearcher {
         OMP_PRAGMA("omp parallel for reduction(+:newcost)")
         for(size_t i = 0; i < nc_; ++i)
             newcost += mat_(assignments_[i], i);
-#ifndef NDEBUG
+#if 1
         std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
 #endif
         assert(newcost <= current_cost_);
         current_cost_ = newcost;
     }
 
-    void run(size_t max_iter=30) {
+    void run() {
         //auto it = std::max_element(cbeg, cd, [](const auto &x, const auto &y) {return x.size() < y.size();});
 
         double diffthresh = current_cost_ / k_ * eps_;
-        bool exhausted_lazy, use_full_cmp = false;
-        size_t iternum;
-        for(iternum = 0; iternum < max_iter; ++iternum) {
-            std::fprintf(stderr, "iternum: %zu\n", iternum);
-            exhausted_lazy = true;
+        size_t total = 0;
+        {
             next:
             for(const auto oldcenter: sol_) {
                 for(size_t pi = 0; pi < nr_; ++pi) {
                     if(sol_.find(pi) != sol_.end()) continue;
                     const auto val = evaluate_swap(pi, oldcenter);
                     if(val > diffthresh) {
+                        std::fprintf(stderr, "Swapping %zu for %u\n", pi, oldcenter);
                         sol_.erase(oldcenter);
                         sol_.insert(pi);
-#ifndef NDEBUG
+#if VERBOSE_AF
                         recalculate(oldcenter, pi);
 #else
                         recalculate();
 #endif
                         diffthresh = current_cost_ / k_ * eps_;
-                        exhausted_lazy = false;
+                        ++total;
                         goto next; // Meaning we've swapped this guy out and will pick another one.
                     }
                 }
             }
-            if(exhausted_lazy) {
-                if(use_full_cmp) break;
-                use_full_cmp = true;
-            }
         }
+#if VERBOSE_AF
         const auto nc = cost_for_sol(sol_);
         assert(std::abs(current_cost_ - nc) < 1e-10);
-#if NDEBUG
         std::fprintf(stderr, "Cost by manual: %f. cost using exhaustive; %f\n", current_cost_, nc);
-#endif
         current_cost_ = nc;
-        if(iternum != max_iter) {
-            std::fprintf(stderr, "Finished in %zu/%zu rounds by exhausting all potential improvements. Final cost: %f\n",
-                         iternum, max_iter, current_cost_);
-        }
+#endif
+        std::fprintf(stderr, "Finished in %zu swaps by exhausting all potential improvements. Final cost: %f\n",
+                     total, current_cost_);
     }
 
     // Steps:

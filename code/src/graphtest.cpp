@@ -127,23 +127,23 @@ int main(int argc, char **argv) {
 
     std::fprintf(stderr, "med solution size: %zu\n", med_solution.size());
 #else
-    int nr = 100;
-    unsigned nseedings = 10;
+    unsigned nseedings = 5;
     auto lsearcher = make_kmed_lsearcher(~dm, k, 1e-5, seed);
-    lsearcher.run(nr);
+    lsearcher.run();
     size_t nreplaced = 0;
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
-    for(size_t i = 0; i < nseedings; ++i) {
+    for(unsigned i = 0; i < nseedings; ++i) {
         lsearcher.reseed(seed + i, i % 2);
-        lsearcher.run(nr);
-        std::fprintf(stderr, "old cost: %g. new cost: %g\n", ccost, lsearcher.current_cost_);
-        std::fprintf(stderr, "cost for sol: %g\n", lsearcher.cost_for_sol(lsearcher.sol_));
+        lsearcher.run();
+        std::fprintf(stderr, "old cost: %g. new cost: %g. kcenter initialization? %d\n", ccost, lsearcher.current_cost_, i % 2);
         if(lsearcher.current_cost_ < ccost) {
             std::fprintf(stderr, "replacing with seeding number %u!\n", nseedings);
             med_solution = lsearcher.sol_;
             ccost = lsearcher.current_cost_;
             ++nreplaced;
+        } else {
+            std::fprintf(stderr, "not replacing\n");
         }
     }
     std::fprintf(stderr, "nreplaced: %zu/%u\n", nreplaced, nseedings);
