@@ -315,6 +315,13 @@ auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01) {
     return LocalKMedSearcher<Mat, FT, IType>(mat, k, eps);
 }
 
+template<typename MT, blaze::AlignmentFlag AF, bool SO, bool DF, typename IType=std::uint32_t>
+auto make_kmed_lsearcher(const blaze::Submatrix<MT, AF, SO, DF> &mat, unsigned k, double eps=0.01) {
+    using FT = typename MT::ElementType;
+    blaze::CustomMatrix<FT, AF, blaze::IsPadded<MT>::value, SO> custom(const_cast<FT *>(mat.data()), mat.rows(), mat.columns(), mat.spacing());
+    return LocalKMedSearcher<decltype(custom), FT, IType>(custom, k, eps);
+}
+
 } // fgc
 
 #endif /* FGC_LOCAL_SEARCH_H__ */

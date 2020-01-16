@@ -22,7 +22,6 @@ std::vector<IT>
 kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm())
 {
     static_assert(sizeof(typename RNG::result_type) == sizeof(IT), "IT must have the same size as the result type of the RNG");
-    // Greedy 2-approximation
     static_assert(std::is_arithmetic<FT>::value, "FT must be arithmetic");
     auto dm = make_index_dm(first, norm);
     size_t np = end - first;
@@ -53,9 +52,6 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
         VERBOSE_ONLY(std::fprintf(stderr, "maxelement is %zd from start\n", std::distance(distances.begin(), it));)
         uint64_t newc = it - distances.begin();
         assert(newc != np);
-#if VERBOSE_AF
-        std::fprintf(stderr, "newc for ci: %u, %u. Distance here: %f\n", unsigned(ci), unsigned(newc), distances[newc]);
-#endif
         centers[ci] = newc;
         distances[newc] = 0.;
         OMP_PFOR
@@ -64,21 +60,12 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
             auto &ldist = distances[i];
             const auto dist = dm(newc, i);
             if(dist < ldist) {
-#if VERBOSE_AF
-                std::fprintf(stderr, "replacing old dist of %f with min: %f\n", ldist, dist);
-#endif
                 ldist = dist;
             }
         }
         assert(std::find_if(distances.begin(), distances.end(), [](auto x) {return std::isnan(x) || std::isinf(x);})
                == distances.end());
     }
-#if VERBOSE_AF
-    for(size_t i = 0; i < k; ++i)
-        std::fprintf(stderr, "center %zu: %zu\n", i, size_t(centers[i]));
-    for(size_t i = 0; i < distances.size(); ++i)
-        std::fprintf(stderr, "distance %zu: %f\n", i, distances[i]);
-#endif
     return centers;
 } // kcenter_greedy_2approx
 

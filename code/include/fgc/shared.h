@@ -15,6 +15,13 @@
 #endif
 
 namespace fgc {
+
+
+#if !NDEBUG
+template<typename T> class TD; // Debugging only
+#endif
+
+
 namespace shared {
 template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
           typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>

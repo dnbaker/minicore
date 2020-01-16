@@ -86,26 +86,34 @@ struct IndexDistMetric {
 };
 
 template<typename Iter>
+struct BaseOperand {
+    using DerefType = decltype((*std::declval<Iter>()));
+    using TwiceDerefedType = std::remove_reference_t<decltype(std::declval<DerefType>().operand())>;
+    using type = TwiceDerefedType;
+};
+
+
+template<typename Iter>
 struct IndexDistMetric<Iter, MatrixLookup> {
-    using Operand = decltype((*std::declval<Iter>()).operand());
+    using Operand = typename BaseOperand<Iter>::type;
+    using ET = typename Operand::ElementType;
     /* Specialization of above for MatrixLookup
-     *gc
+     *
      *
      */
     using Dist = MatrixLookup;
     const Operand &mat_;
     const Dist dist_;
+    //TD<Operand> to2;
 
     IndexDistMetric(const Iter iter, Dist dist): mat_((*iter).operand()), dist_(std::move(dist)) {}
 
-    auto operator()(size_t i, size_t j) const {
-#if 0
-        std::fprintf(stderr, "Row %zu and column %zu have value %f\n", i, j, double(mat_(i, j)));
-#endif
+    ET operator()(size_t i, size_t j) const {
         return mat_(i, j);
         //return iter_[i][j];
     }
 };
+
 template<typename Iter, typename Dist>
 auto make_index_dm(const Iter iter, const Dist dist) {
     return IndexDistMetric<Iter, Dist>(iter, dist);
