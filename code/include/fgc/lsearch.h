@@ -15,9 +15,8 @@
 
 namespace fgc {
 
-template<typename Graph, typename VType=std::vector<typename boost::graph_traits<Graph>::vectex_descriptor>>
+template<typename Graph, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
 DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Graph &x, std::string path, VType *sources=nullptr) {
-    using ST = std::decay_t<decltype((*sources)[0])>;
     static_assert(std::is_arithmetic<typename Graph::edge_property_type::value_type>::value, "This should be floating point, or at least arithmetic");
     using FT = typename Graph::edge_property_type::value_type;
     const size_t nv = boost::num_vertices(x), nrows = sources ? sources->size(): nv;
@@ -26,7 +25,7 @@ DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Grap
     OMP_PFOR
     for(size_t i = 0; i < nrows; ++i) {
         auto mr = row(~ret, i);
-        auto vtx = sources ? (*sources)[i]: ST(i);
+        auto vtx = sources ? (*sources)[i]: vertices[i];
         boost::dijkstra_shortest_paths(x, vtx, distance_map(&mr[0]));
     }
     assert((~ret).rows() == nrows && (~ret).columns() == nv);
