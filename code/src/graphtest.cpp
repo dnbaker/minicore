@@ -133,6 +133,10 @@ int main(int argc, char **argv) {
     if(nsampled_max > boost::num_vertices(g))
         nsampled_max = boost::num_vertices(g) / 2;
     auto dm = graph2diskmat(g, fn);
+    if(z != 1.) {
+        assert(z > 1.);
+        ~dm = pow(abs(~dm), z);
+    }
 
     // Perform Thorup sample before JV method.
     auto lsearcher = make_kmed_lsearcher(~dm, k, 1e-5, seed);
