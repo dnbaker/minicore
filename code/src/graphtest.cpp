@@ -4,6 +4,7 @@
 #include "coreset.h"
 #include "lsearch.h"
 #include "jv.h"
+#include <ctime>
 
 template<typename T> class TD;
 
@@ -76,12 +77,10 @@ auto csv_parse(const char *fn) {
 }
 
 int main(int argc, char **argv) {
-#ifdef _OPENMP
-    omp_set_num_threads(std::thread::hardware_concurrency());
-#endif
     std::string input = argc == 1 ? "../data/dolphins.graph": const_cast<const char *>(argv[1]);
     const unsigned k = argc > 2 ? std::atoi(argv[2]): 12;
-    std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
+    std::string fn = std::string("default_scratch.") + std::to_string(std::time(nullptr)) + ".tmp";
+    const double z = 1.; // z = power of the distance norm
     if(argc > 3) fn = argv[3];
     
     fgc::Graph<undirectedS> g;
@@ -122,7 +121,7 @@ int main(int argc, char **argv) {
             }
         }
         ncomp = boost::connected_components(newg, ccomp.get());
-        std::fprintf(stderr, "num components: %u. num edges: %u. num nodes: %u\n", ncomp, newg.num_edges(), newg.num_vertices());
+        std::fprintf(stderr, "num components: %u. num edges: %zu. num nodes: %zu\n", ncomp, newg.num_edges(), newg.num_vertices());
         g = std::move(newg);
         assert(ncomp == 1);
     }
@@ -136,45 +135,17 @@ int main(int argc, char **argv) {
     auto dm = graph2diskmat(g, fn);
 
     // Perform Thorup sample before JV method.
-#if 0
-    double frac = nsampled_max / double(boost::num_vertices(g));
-    auto sampled = thorup_sample(g, k, seed, frac); // 0 is the seed, 500 is the maximum sampled size
-    std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
-    std::fprintf(stderr, "ncomp: %u\n", ncomp);
-
-    // Use this sample to generate an approximate k-median solution
-    auto med_solution = fgc::jain_vazirani_kmedian(g, sampled, k);
-
-    // Sanity check: make sure that our sampled points are in the Thorup sample.
-#ifndef NDEBUG
-    for(const auto v: med_solution) assert(std::find(sampled.begin(), sampled.end(), v) != sampled.end());
-#endif
-
-    std::fprintf(stderr, "med solution size: %zu\n", med_solution.size());
-#endif
     auto lsearcher = make_kmed_lsearcher(~dm, k, 1e-5, seed);
     lsearcher.run();
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
     std::fprintf(stderr, "cost: %f\n", ccost);
 #if 0
-    for(unsigned i = 0; i < nseedings; ++i) {
-        lsearcher.reseed(seed + i, i % 2);
-        lsearcher.run();
-        std::fprintf(stderr, "old cost: %g. new cost: %g. kcenter initialization? %d\n", ccost, lsearcher.current_cost_, i % 2);
-        if(lsearcher.current_cost_ < ccost) {
-            std::fprintf(stderr, "replacing with seeding number %u!\n", nseedings);
-            med_solution = lsearcher.sol_;
-            ccost = lsearcher.current_cost_;
-            ++nreplaced;
-        } else {
-            std::fprintf(stderr, "not replacing\n");
-        }
-    }
-    std::fprintf(stderr, "nreplaced: %zu/%u\n", nreplaced, nseedings);
 #endif
     // Calculate the costs of this solution
     auto [costs, assignments] = get_costs(g, med_solution);
+    if(z != 1.)
+        costs = blaze::pow(blaze::abs(costs), z);
     // Build a coreset importance sampler based on it.
     coresets::CoresetSampler<float, uint32_t> sampler;
     sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data());

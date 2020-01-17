@@ -5,10 +5,10 @@
 
 using namespace fgc;
 
-int main() {
+int main(int argc, char *argv[]) {
     const char *fn = "./zomg.dat";
-    unsigned n = 200;
-    unsigned k = 10;
+    unsigned n = argc == 1 ? 100: std::atoi(argv[1]);
+    unsigned k = 20;
     double eps = 0.01;
     Graph<> g(n);
     for(unsigned i = 0; i < n - 1; ++i) {
@@ -27,6 +27,7 @@ int main() {
     std::uniform_real_distribution<float> vals(std::nextafter(0., 17.), 17.);
     for(auto p = weights.data(), e = p + n; p < e; *p++ = vals(rng));
     auto wp = weights.data();
+    for(auto &w: weights) w *= w;
     DiskMat<float> weighted_dm(dm, "./zomg.weighted.dat");
     assert(weighted_dm.rows() == dm.rows());
     assert(weighted_dm.columns() == dm.columns());
@@ -36,6 +37,6 @@ int main() {
         row(~weighted_dm, i) *= wp[i];
     auto lsearcher = make_kmed_lsearcher(~dm, k, eps);
     lsearcher.run();
-    auto lsearcher_fewer_facilities = make_kmed_lsearcher(blaze::submatrix(~dm, 0, 0, 50, 100), k, eps);
+    auto lsearcher_fewer_facilities = make_kmed_lsearcher(blaze::submatrix(~dm, 0, 0, 50, n), k, eps);
     lsearcher_fewer_facilities.run();
 }

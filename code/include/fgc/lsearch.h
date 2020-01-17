@@ -56,9 +56,6 @@ struct LocalKMedSearcher {
     const MatType &mat_;
     shared::flat_hash_set<IType> sol_;
     blz::DV<IType> assignments_;
-    //std::vector<std::vector<IType>> center_indices_;
-    //blz::DV<value_type> costs_;
-    //SolType counts_;
     double current_cost_;
     const double eps_;
     IType k_;
@@ -132,36 +129,7 @@ struct LocalKMedSearcher {
                 }
             }
         }
-#ifndef NDEBUG
-#if 0
-        for(size_t i = 0; i < nc_; ++i) {
-            std::fprintf(stderr, "index %zu. cost: %f. assignment: %zu\n", i, costs_[i], size_t(assignments_[i]));
-            assert(mat_(assignments_[i], i) == costs_[i]);
-        }
-#endif
-        for(const auto asn: assignments_) {
-            assert(asn < nr_);
-        }
-#endif
-        assert(assignments_.size() == nc_);
         current_cost_ = cost_for_sol(sol_);
-#if 0
-        std::fill(counts_.begin(), counts_.end(), IType(0));
-        //OMP_PFOR
-        for(size_t ci = 0; ci < nc_; ++ci) {
-            //OMP_ATOMIC
-            auto asn = assignments_[ci];
-            ++counts_[asn];
-            blz::push_back(center_indices_.at(asn), ci); // replace at with operator[] if this works as expected
-        }
-        assert(std::accumulate(counts_.begin(), counts_.end(), 0u) == nc_ || !std::fprintf(stderr, "Doesn't add up: %u\n", std::accumulate(counts_.begin(), counts_.end(), 0u)));
-        std::fprintf(stderr, "current cost: %f\n", current_cost_);
-        assert(counts_.size() == sol_.size());
-        for(size_t i = 0; i < counts_.size(); ++i) {
-            std::fprintf(stderr, "count %u is %zu\n", unsigned(sol_[i]), size_t(counts_[i]));
-        }
-        std::fputc('\n', stderr);
-#endif
     }
 
     double evaluate_swap(IType newcenter, IType oldcenter) const {
@@ -181,63 +149,21 @@ struct LocalKMedSearcher {
         return potential_gain;
     }
 
-#if 0
-    double evaluate_swap_lazy(IType newcenter, IType oldcenterindex, const std::vector<IType> &c) const {
-        // oldcenter is the index into the sol_ array
-        // This function ignores the fact that the new center could outperform other centers
-        //std::fprintf(stderr, "I think this might be wrong...\n");
-        //throw std::runtime_error("Don't permit calling this currently.\n");
-        assert(newcenter < mat_.rows());
-        const auto oldcenter = sol_[oldcenterindex];
-        auto newr = row(mat_, newcenter, blaze::unchecked);
-        auto oldr = row(mat_, oldcenter, blaze::unchecked);
-        //const size_t nc = mat_.columns();
-        double potential_gain = 0.;
-        const auto csz = c.size();
-        OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
-        for(size_t i = 0; i < csz; ++i) {
-            const auto ind = c[i];
-            assert(assignments_[ind] == oldcenterindex);
-            assert(sol_[oldcenterindex] == oldcenter);
-            potential_gain += (oldr[ind] - newr[ind]);
-        }
-        return potential_gain;
-    }
-#endif
-
     // Getters
     auto k() const {
         return k_;
     }
 
-#if VERBOSE_AF
-    void recalculate(IType oldcenter, IType newcenter) {
-        std::fprintf(stderr, "swapping out oldcenter %u for %u\n", oldcenter, newcenter);
-        assert(std::find(sol_.begin(), sol_.end(), oldcenter) == sol_.end());
-#else
     void recalculate() {
-#endif
-        // This function should:
-        // 1. Update costs_
-        // 2. Update current_cost_
-        // 3. Update center_indices_
-        //auto oldcenter = sol_[oldcenterindex];
-        //pdqsort(sol_.begin(), sol_.end());
         assignments_ = *sol_.begin();
 
-        OMP_PFOR
-        for(size_t i = 0; i < nc_; ++i) {
-            for(auto it = sol_.begin(); ++it != sol_.end();) {
-                const auto center = *it;
-                if(const auto newcost(mat_(center, i));
-                   newcost < mat_(assignments_[i], i))
-                {
-                    OMP_CRITICAL
-                    {
-                    if(newcost < mat_(assignments_[i], i))
-                        assignments_[i] = center;
-                    }
-                }
+        for(auto it = sol_.begin(); ++it != sol_.end();) {
+            const auto center = *it;
+            auto crow = row(mat_, center, blaze::unchecked);
+            OMP_PFOR
+            for(size_t i = 0; i < nc_; ++i) {
+                if(const auto cost(crow[i]); cost < mat_(assignments_[i], i))
+                    assignments_[i] = center;
             }
         }
 #ifndef NDEBUG
@@ -248,15 +174,14 @@ struct LocalKMedSearcher {
         OMP_PRAGMA("omp parallel for reduction(+:newcost)")
         for(size_t i = 0; i < nc_; ++i)
             newcost += mat_(assignments_[i], i);
-#if 1
+
+
         std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
-#endif
         assert(newcost <= current_cost_);
         current_cost_ = newcost;
     }
 
     void run() {
-        //auto it = std::max_element(cbeg, cd, [](const auto &x, const auto &y) {return x.size() < y.size();});
 
         double diffthresh = current_cost_ / k_ * eps_;
         size_t total = 0;
@@ -267,14 +192,12 @@ struct LocalKMedSearcher {
                     if(sol_.find(pi) != sol_.end()) continue;
                     const auto val = evaluate_swap(pi, oldcenter);
                     if(val > diffthresh) {
-                        std::fprintf(stderr, "Swapping %zu for %u\n", pi, oldcenter);
+                        std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu\n", pi, oldcenter, total + 1);
+
                         sol_.erase(oldcenter);
                         sol_.insert(pi);
-#if VERBOSE_AF
-                        recalculate(oldcenter, pi);
-#else
+
                         recalculate();
-#endif
                         diffthresh = current_cost_ / k_ * eps_;
                         ++total;
                         goto next; // Meaning we've swapped this guy out and will pick another one.
@@ -282,19 +205,9 @@ struct LocalKMedSearcher {
                 }
             }
         }
-#if VERBOSE_AF
-        const auto nc = cost_for_sol(sol_);
-        assert(std::abs(current_cost_ - nc) < 1e-10);
-        std::fprintf(stderr, "Cost by manual: %f. cost using exhaustive; %f\n", current_cost_, nc);
-        current_cost_ = nc;
-#endif
         std::fprintf(stderr, "Finished in %zu swaps by exhausting all potential improvements. Final cost: %f\n",
                      total, current_cost_);
     }
-
-    // Steps:
-    // 1. Use k-center approx for seeds
-    // 2. Loop over finding candidate replacements and performing swaps.
 };
 
 template<typename Mat, typename FT=float, typename IType=std::uint32_t>

@@ -35,6 +35,9 @@ print_tests:
 graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
 
+dmlrun: src/dmlsearch.cpp $(wildcard include/fgc/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
+
 fast%: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
 

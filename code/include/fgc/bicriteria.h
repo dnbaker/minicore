@@ -3,6 +3,8 @@
 #include <random>
 #include <thread>
 #include "graph.h"
+#include "blaze_adaptor.h"
+
 
 namespace fgc {
 using namespace shared;
@@ -116,11 +118,13 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
 }
 
 template<typename Graph, typename Container>
-auto get_costs(Graph &x, const Container &container) {
+std::pair<blz::DV<std::decay_t<decltype(get(boost::edge_weight_t(), std::declval<Graph>(), std::declval<Graph>()))>>,
+          std::vector<uint32_t>>
+get_costs(Graph &x, const Container &container) {
     using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
     using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
     util::ScopedSyntheticVertex<Graph> vx(x);
-    std::vector<edge_cost> costs(boost::num_vertices(x));
+    blz::DV<edge_cost> costs(boost::num_vertices(x));
     std::vector<Vertex> p(boost::num_vertices(x));
     std::vector<uint32_t> assignments(boost::num_vertices(x));
     auto synthetic_vertex = vx.get();
@@ -147,7 +151,7 @@ auto get_costs(Graph &x, const Container &container) {
         }
         assignments[i] = pid2ind[index[parent]];
     }
-    return std::make_pair(costs, assignments);
+    return std::make_pair(std::move(costs), assignments);
 }
 
 } // thorup
