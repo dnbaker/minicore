@@ -79,7 +79,8 @@ auto csv_parse(const char *fn) {
 int main(int argc, char **argv) {
     std::string input = argc == 1 ? "../data/dolphins.graph": const_cast<const char *>(argv[1]);
     const unsigned k = argc > 2 ? std::atoi(argv[2]): 12;
-    std::string fn = std::string("default_scratch.") + std::to_string(std::time(nullptr)) + ".tmp";
+    std::srand(std::hash<std::string>{}(input));
+    std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     const double z = 1.; // z = power of the distance norm
     if(argc > 3) fn = argv[3];
     
