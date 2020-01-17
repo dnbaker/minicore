@@ -3,11 +3,15 @@
 #include <fstream>
 #include <string>
 #include <climits>
+#include <cassert>
 #include <unordered_map>
 #include <iostream>
 #include <cstring>
 
 namespace fgc {
+using namespace ::fgc::shared;
+
+//#define undirectedS bidirectionalS
 
 enum ParsedFiletype {
     DIMACS,
@@ -17,7 +21,7 @@ enum ParsedFiletype {
 };
 
 template<typename DirectedS, typename VtxProps=boost::no_property, typename GraphProps=boost::no_property>
-Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(const char *fn) {
+Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(std::string fn) {
     using GraphType = Graph<DirectedS, float, VtxProps, GraphProps>;
     std::string line;
     std::ifstream ifs(fn);
@@ -50,7 +54,7 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(const char
 
 // #state1,place1,mi_to_place,state2,place2
 template<typename DirectedS, typename VtxProps=boost::no_property, typename GraphProps=boost::no_property, typename VtxIdType=uint64_t>
-Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(const char *fn) {
+Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(std::string fn) {
     using GraphType = Graph<DirectedS, float, VtxProps, GraphProps>;
     GraphType ret;
     std::string line;
@@ -94,5 +98,78 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(const char *fn) {
     std::fprintf(stderr, "num edges: %zu. num vertices: %zu\n", boost::num_edges(ret), boost::num_vertices(ret));
     return ret;
 }
+fgc::Graph<undirectedS> dimacs_official_parse(std::string input) {
+    fgc::Graph<undirectedS> g;
+    std::ifstream ifs(input);
+    std::string graphtype;
+    size_t nnodes = 0, nedges = 0;
+    for(std::string line; std::getline(ifs, line);) {
+        if(line.empty()) continue;
+        switch(line.front()) {
+            case 'c': break; // nothing
+            case 'p': {
+                const char *p = line.data() + 2, *p2 = ++p;
+                while(!std::isspace(*p2)) ++p2;
+                graphtype = std::string(p, p2 - p);
+                std::fprintf(stderr, "graphtype: %s\n", graphtype.data());
+                p = p2 + 1;
+                nnodes = std::strtoull(p, nullptr, 10);
+                for(size_t i = 0; i < nnodes; ++i)
+                    boost::add_vertex(g); // Add all the vertices
+                if((p2 = std::strchr(p, ' ')) == nullptr) throw std::runtime_error(std::string("Failed to parse file at ") + input);
+                p = p2 + 1;
+                nedges = std::strtoull(p, nullptr, 10);
+                std::fprintf(stderr, "n: %zu. m: %zu\n", nnodes, nedges);
+                break;
+            }
+            case 'a': {
+                assert(nnodes);
+                char *strend;
+                const char *p = line.data() + 2;
+                size_t lhs = std::strtoull(p, &strend, 10);
+                assert(lhs >= 1 || !std::fprintf(stderr, "p: %s\n", p));
+                p = strend + 1;
+                size_t rhs = std::strtoull(p, &strend, 10);
+                assert(rhs >= 1 || !std::fprintf(stderr, "p: %s\n", p));
+                p = strend + 1;
+                double dist = std::atof(p);
+                boost::add_edge(lhs - 1, rhs - 1, dist, g);
+                break;
+            }
+            default: std::fprintf(stderr, "Unexpected: this line! (%s)\n", line.data()); throw std::runtime_error("");
+        }
+    }
+    return g;
+}
 
-} // graph
+static fgc::Graph<undirectedS> dimacs_parse(std::string fn) {
+    auto g = parse_dimacs_unweighted<boost::undirectedS>(fn);
+    using Graph = decltype(g);
+    boost::graph_traits<decltype(g)>::edge_iterator ei, ei_end;
+    wy::WyRand<uint64_t, 2> gen(boost::num_vertices(g));
+    for(std::tie(ei, ei_end) = boost::edges(g); ei != ei_end; ++ei) {
+        boost::put(boost::edge_weight_t(), g, *ei, 1. / (double(gen()) / gen.max()));
+    }
+    for(auto [vs, ve] = boost::vertices(g); vs != ve; ++vs) {
+        boost::graph_traits<Graph>::vertex_descriptor vind = *vs;
+        ++vind;
+    }
+    return g;
+}
+
+auto csv_parse(std::string fn) {
+    return parse_nber<boost::undirectedS>(fn);
+}
+
+fgc::Graph<undirectedS> parse_by_fn(std::string input) {
+    fgc::Graph<undirectedS> g;
+    if(input.find(".csv") != std::string::npos) {
+        g = csv_parse(input);
+    } else if(input.find(".gr") != std::string::npos && input.find(".graph") == std::string::npos) {
+        g = dimacs_official_parse(input);
+    } else g = dimacs_parse(input);
+    return g;
+}
+
+
+} // fgc

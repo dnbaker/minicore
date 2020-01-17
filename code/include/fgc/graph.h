@@ -126,7 +126,7 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, boost::prop
         return Edges(*this);
     }
     auto cedges() const {
-        return Edges(*this);
+        return ConstEdges(*this);
     }
     auto edges() const {return cedges();}
     auto vertices() {
@@ -136,7 +136,7 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, boost::prop
         return cvertices();
     }
     auto cvertices() const {
-        return Vertices(*this);
+        return ConstVertices(*this);
     }
     template<typename F>
     void for_each_edge(const F &f) {
