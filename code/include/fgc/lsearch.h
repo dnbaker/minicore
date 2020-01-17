@@ -15,21 +15,21 @@
 
 namespace fgc {
 
-template<typename Graph>
-DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Graph &x, std::string path) {
+template<typename Graph, typename VType=std::vector<typename boost::graph_traits<Graph>::vectex_descriptor>>
+DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Graph &x, std::string path, VType *sources=nullptr) {
+    using ST = std::decay_t<decltype((*sources)[0])>;
     static_assert(std::is_arithmetic<typename Graph::edge_property_type::value_type>::value, "This should be floating point, or at least arithmetic");
     using FT = typename Graph::edge_property_type::value_type;
-    auto nv = boost::num_vertices(x);
-    DiskMat<FT> ret(nv, nv, path);
-    //std::vector<typename boost::graph_traits<Graph>::vertex_descriptor> vertices(boost::vertexs(x).first, boost::vertexs(x).second);
+    const size_t nv = boost::num_vertices(x), nrows = sources ? sources->size(): nv;
+    DiskMat<FT> ret(nrows, nv, path);
     typename boost::graph_traits<Graph>::vertex_iterator vertices = boost::vertices(x).first;
-    const size_t e = boost::num_vertices(x);
     OMP_PFOR
-    for(size_t i = 0; i < e; ++i) {
+    for(size_t i = 0; i < nrows; ++i) {
         auto mr = row(~ret, i);
-        boost::dijkstra_shortest_paths(x, vertices[i], distance_map(&mr[0]));
+        auto vtx = sources ? (*sources)[i]: ST(i);
+        boost::dijkstra_shortest_paths(x, vtx, distance_map(&mr[0]));
     }
-    assert((~ret).rows() == nv && (~ret).columns() == nv);
+    assert((~ret).rows() == nrows && (~ret).columns() == nv);
     return ret;
 }
 

@@ -5,6 +5,7 @@
 #include "fgc/lsearch.h"
 #include "fgc/jv.h"
 #include <ctime>
+#include <getopt.h>
 
 template<typename T> class TD;
 
@@ -63,16 +64,22 @@ int main(int argc, char **argv) {
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     const double z = 1.; // z = power of the distance norm
     if(argc > 3) fn = argv[3];
+    std::vector<unsigned> ks{k};
 
     fgc::Graph<undirectedS, float> g = parse_by_fn(input);
     max_component(g);
     // Assert that it's connected, or else the problem has infinite cost.
     uint64_t seed = 1337;
 
-    size_t nsampled_max = std::min(std::ceil(std::pow(std::log2(boost::num_vertices(g)), 2.5)), 3000.);
-    if(nsampled_max > boost::num_vertices(g))
-        nsampled_max = boost::num_vertices(g) / 2;
-    auto dm = graph2diskmat(g, fn);
+    size_t nsampled_max = std::min(std::ceil(std::pow(std::log2(boost::num_vertices(g)), 2.5)), 20000.);
+    const double frac = std::max(double(nsampled_max) / boost::num_vertices(g), .5);
+    std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
+    std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> *ptr = nullptr;
+    if(boost::num_vertices(g) > 20000) {
+        sampled = thorup_sample(g, *std::max_element(ks.begin(), ks.end()), seed, frac);
+        ptr = &sampled;
+    }
+    auto dm = graph2diskmat(g, fn, ptr);
     if(z != 1.) {
         assert(z > 1.);
         ~dm = pow(abs(~dm), z);
