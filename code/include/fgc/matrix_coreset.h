@@ -37,6 +37,12 @@ struct MatrixCoreset {
     }
 };
 
+template<typename Mat, typename View>
+void resize_and_assign(Mat &dest, const View &view) {
+    dest.resize(view.rows(), view.columns());
+    dest = view;
+}
+
 template<typename FT, typename IT, typename MatrixType, typename CMatrixType=blaze::DynamicMatrix<FT>>
 MatrixCoreset<MatrixType, FT>
 index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
@@ -47,7 +53,6 @@ index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
     const auto icdat = ic.indices_.data();
     const size_t icsz = ic.indices_.size();
 #ifndef NDEBUG
-    std::fprintf(stderr, "rowwise: %d. num: %zu\n", rowwise, icsz);
     const size_t lim = rowwise ? mat.rows(): mat.columns();
     for(const auto ind: ic.indices_)
         assert(ind < lim || !std::fprintf(stderr, "index %u is too big\n", ind));
@@ -57,15 +62,13 @@ index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
         for(size_t i = 0; i < icsz; ++i) assert(icdat[icsz] < mat.rows());
 #endif
         auto rows = blaze::rows(mat, icdat, icsz);
-        ret.resize(rows.rows(), rows.columns());
-        ret = rows;
+        resize_and_assign(ret, rows);
     } else {
 #if !NDEBUG
         for(size_t i = 0; i < icsz; ++i) assert(icdat[icsz] < mat.columns());
 #endif
         auto columns = blaze::columns(mat, icdat, icsz);
-        ret.resize(columns.rows(), columns.columns());
-        ret = columns;
+        resize_and_assign(ret, columns);
     }
 #if !NDEBUG
     std::fprintf(stderr, "Gathered pieces for index2matrix\n");

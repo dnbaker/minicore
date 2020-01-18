@@ -396,6 +396,7 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double
     for(const auto &pair: counts) {
         ret.weights_[i] = pair.second;
         ret.indices_[i] = pair.first;
+        ++i;
     }
     return ret;
 }

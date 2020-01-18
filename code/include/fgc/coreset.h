@@ -343,36 +343,16 @@ struct CoresetSampler {
         seed = seed ? seed: seed_;
         sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
-#ifdef ALIAS_THREADSAFE
-        auto ptr = &ret.indices_[0];
-        size_t end = (n / 8) * 8;
-        OMP_PRAGMA("omp parallel for")
-        for(size_t i = 0; i < end; i += 8) {
-            ptr[i + 0] = sampler_->sample();
-            ptr[i + 1] = sampler_->sample();
-            ptr[i + 2] = sampler_->sample();
-            ptr[i + 3] = sampler_->sample();
-            ptr[i + 4] = sampler_->sample();
-            ptr[i + 5] = sampler_->sample();
-            ptr[i + 6] = sampler_->sample();
-            ptr[i + 7] = sampler_->sample();
-        }
-        while(end < n)
-            ptr[end++] = sampler_->sample();
-#else
-        SK_UNROLL_8
+        const double nsamplinv = 1. / n;
         for(size_t i = 0; i < n; ++i) {
-            ret.indices_[i] = sampler_->sample();
+            auto ind = sampler_->sample();
+            ret.indices_[i] = ind;
+            ret.weights_[i] = getweight(ind) * nsamplinv / probs_[ind];
         }
-#endif
 #ifndef NDEBUG
         for(size_t i = 0; i < n; ++i)
             assert(ret.indices_[i] < np_);
 #endif
-        double nsamplinv = 1. / n;
-        OMP_PRAGMA("omp parallel for")
-        for(size_t i = 0; i < n; ++i)
-            ret.weights_[i] = getweight(ret.indices_[i]) * nsamplinv / probs_[i];
         return ret;
     }
     size_t size() const {return np_;}

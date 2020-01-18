@@ -313,7 +313,9 @@ auto kmeans_coreset(Iter start, Iter end,
     size_t np = end - start;
     cs.make_sampler(np, centers.size(), sqdists.data(), assignments.data(), weights,
                     /*seed=*/rng());
-    coresets::IndexCoreset<IT, sq_t> ics(cs.sample(cs_size, rng()));
+    auto ics(cs.sample(cs_size, rng()));
+    static_assert(std::is_same<decltype(ics), coresets::IndexCoreset<IT, sq_t>>::value, "must be this type");
+    //coresets::IndexCoreset<IT, sq_t> ics(cs.sample(cs_size, rng()));
 #ifndef NDEBUG
     std::fprintf(stderr, "max sampled idx: %u\n", *std::max_element(ics.indices_.begin(), ics.indices_.end()));
 #endif
