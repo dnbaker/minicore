@@ -309,26 +309,12 @@ auto kmeans_coreset(Iter start, Iter end,
     using sq_t = typename decltype(sqdists)::value_type;
     coresets::CoresetSampler<sq_t, IT> cs;
     size_t np = end - start;
-#if 0
-    // Get assignments
-    OMP_PRAGMA("parallel for")
-    for(size_t i = 0; i < np; ++i) {
-        double minv = std::numeric_limits<double>::max();
-        unsigned assign_index;
-        for(unsigned j = 0; j < centers.size(); ++j) {
-            double newdist;
-            if((newdist = blz::l2Dist(start[i], start[centers[j]])) < minv) {
-                minv = newdist;
-                assign_index = j;
-            }
-        }
-        sqdists[i] = minv;
-        assignments[i] = assign_index;
-    }
-#endif
     cs.make_sampler(np, centers.size(), sqdists.data(), assignments.data(), weights,
                     /*seed=*/rng());
     coresets::IndexCoreset<IT, sq_t> ics(cs.sample(cs_size, rng()));
+#ifndef NDEBUG
+    std::fprintf(stderr, "max sampled idx: %u\n", *std::max_element(ics.indices_.begin(), ics.indices_.end()));
+#endif
     return ics;
 }
 template<typename FT, bool SO,
@@ -340,6 +326,9 @@ auto kmeans_matrix_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RN
     const auto &blzview = reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(mat);
     auto ics = kmeans_coreset(blzview.rowiterator().begin(), blzview.rowiterator().end(),
                               k, rng, cs_size, weights);
+#ifndef NDEBUG
+    std::fprintf(stderr, "Got kmeans coreset of size %zu\n", ics.size());
+#endif
     coresets::MatrixCoreset<blaze::DynamicMatrix<FT, SO>, FT> csmat = index2matrix(ics, mat);
     return csmat;
 }

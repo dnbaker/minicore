@@ -36,6 +36,9 @@ int main(int argc, char *argv[]) {
     }
 #ifdef _OPENMP
     auto nt = std::thread::hardware_concurrency();
+    if(auto env = std::getenv("OMP_NUM_THREADS"); env) {
+        nt = std::atoi(env);
+    }
     omp_set_num_threads(nt);
     std::fprintf(stderr, "%d threads used\n", nt);
 #endif

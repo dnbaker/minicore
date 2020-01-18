@@ -60,13 +60,19 @@ struct IndexCoreset {
         auto it = &indices_[0];
         auto wit = &weights_[0];
         for(const auto &pair: m) {
-            *it++ = pair.first.first;
-            *wit++ = pair.second * pair.first.second; // Add the weights together
+            auto [idxw, count] = pair;
+            auto [idx, weight] = idxw;
+            *it++ = idx;
+            *wit++ = count * weight; // Add the weights together
         }
-        size_t newsz = it - &indices_[0];
+        size_t newsz = m.size();
+        assert(newsz < indices_.size());
         indices_.resize(newsz);
         weights_.resize(newsz);
         if(shrink_to_fit) indices_.shrinkToFit(), weights_.shrinkToFit();
+#if 0
+        std::fprintf(stderr, "compacted\n");
+#endif
     }
     std::vector<std::pair<IT, FT>> to_pairs() const {
         std::vector<std::pair<IT, FT>> ret(size());
@@ -358,6 +364,10 @@ struct CoresetSampler {
         for(size_t i = 0; i < n; ++i) {
             ret.indices_[i] = sampler_->sample();
         }
+#endif
+#ifndef NDEBUG
+        for(size_t i = 0; i < n; ++i)
+            assert(ret.indices_[i] < np_);
 #endif
         double nsamplinv = 1. / n;
         OMP_PRAGMA("omp parallel for")

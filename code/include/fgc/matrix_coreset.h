@@ -46,6 +46,12 @@ index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
     CMatrixType ret;
     const auto icdat = ic.indices_.data();
     const size_t icsz = ic.indices_.size();
+#ifndef NDEBUG
+    std::fprintf(stderr, "rowwise: %d. num: %zu\n", rowwise, icsz);
+    const size_t lim = rowwise ? mat.rows(): mat.columns();
+    for(const auto ind: ic.indices_)
+        assert(ind < lim || !std::fprintf(stderr, "index %u is too big\n", ind));
+#endif
     if(rowwise) {
         auto rows = blaze::rows(mat, icdat, icsz);
         ret.resize(rows.rows(), rows.columns());
