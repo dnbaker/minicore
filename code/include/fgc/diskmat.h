@@ -40,7 +40,7 @@ struct DiskMat {
         std::memcpy(ms_->data(), o.ms_->data(), sizeof(VT) * (~*this).spacing() * nr_);
         std::fprintf(stderr, "Copied to %s\n", path_.size() ? path_.data(): "tmpfile");
     }
-    DiskMat(size_t nr, size_t nc, const char *s=nullptr, size_t offset=0, bool delete_file=false):
+    DiskMat(size_t nr, size_t nc, const char *s=nullptr, size_t offset=0, bool delete_file=true):
         nr_(nr), nc_(nc),
         delete_file_(delete_file),
         path_(s ? s: "")
@@ -51,7 +51,7 @@ struct DiskMat {
         }
         const size_t nperrow = isPadded ? size_t(blaze::nextMultiple(nc_, SIMDSIZE)): nc_;
         const size_t nb = nr_ * nperrow * sizeof(VT), total_nb = nb + offset;
-        if((fp_ = s ? std::fopen(s, "a+"): ::tmpfile()) == nullptr) {
+        if((fp_ = s ? std::fopen(s, "a+"): std::tmpfile()) == nullptr) {
             char buf[256];
             std::sprintf(buf, "Failed to open file for writing. %s/%d (%s)", ::strerror(errno), errno, s ? s: "tmpfil");
             throw std::system_error(0, std::system_category(), buf);

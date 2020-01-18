@@ -17,6 +17,7 @@ struct ScopedSyntheticVertex {
     ScopedSyntheticVertex(Graph &ref): ref_(ref), vtx_(boost::add_vertex(ref_)) {}
     Vertex get() const {return vtx_;}
     ~ScopedSyntheticVertex() {
+        boost:: clear_vertex(vtx_, ref_);
         boost::remove_vertex(vtx_, ref_);
     }
 };
@@ -91,13 +92,13 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
             //R.pop_back();           // Delete
         }
         // Add connections from R to all members of F with cost 0.
-        boost::clear_vertex(synthetic_vertex, x);
         for(const auto vertex: F)
             boost::add_edge(synthetic_vertex, vertex, 0., x);
         // Calculate F->R distances
         // (one Dijkstra call with synthetic node)
         boost::dijkstra_shortest_paths(x, synthetic_vertex,
                                        distance_map(&distances[0]).predecessor_map(&p[0]));
+        boost::clear_vertex(synthetic_vertex, x);
         // Pick random t in R, remove from R all points with dist(x, F) <= dist(t, F)
         auto el = R[rng() % R.size()];
         auto minv = distances[el];
@@ -113,6 +114,16 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
 #endif
         std::fprintf(stderr, "R size after: %zu\n", R.size());
     }
+    std::fprintf(stderr, "num vertices: %zu\n", boost::num_vertices(x));
+    boost::clear_vertex(synthetic_vertex, x);
+#ifndef NDEBUG
+    for(auto epair = boost::edges(x); epair.first != epair.second; ++epair.first) {
+        auto edge = *epair.first;
+        auto t = target(edge, x);
+        auto s = source(edge, x);
+        assert(t != synthetic_vertex && s != synthetic_vertex);
+    }
+#endif
     std::fprintf(stderr, "size: %zu\n", container.size());
     return container;
 }

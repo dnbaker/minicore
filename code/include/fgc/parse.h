@@ -42,6 +42,8 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(std::strin
         for(;;) {
             auto newv = std::atoi(s) - 1;
             boost::add_edge(id, newv, static_cast<edge_property_type>(1.), ret);
+            assert(newv < boost::num_vertices(ret));
+            assert(id < boost::num_vertices(ret));
 
             if((s = std::strchr(s, ' ')) == nullptr || !std::isdigit(*++s)) break;
         }
@@ -94,6 +96,8 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(std::string fn) {
             //assert(vid == ids.back());
         }
         boost::add_edge(it->second, rit->second, static_cast<edge_property_type>(dist), ret);
+        assert(it->second < boost::num_vertices(ret));
+        assert(it->first < boost::num_vertices(ret));
     }
     std::fprintf(stderr, "num edges: %zu. num vertices: %zu\n", boost::num_edges(ret), boost::num_vertices(ret));
     return ret;
@@ -134,6 +138,8 @@ fgc::Graph<undirectedS> dimacs_official_parse(std::string input) {
                 p = strend + 1;
                 double dist = std::atof(p);
                 boost::add_edge(lhs - 1, rhs - 1, dist, g);
+                assert(lhs - 1 < boost::num_vertices(g));
+                assert(rhs - 1 < boost::num_vertices(g));
                 break;
             }
             default: std::fprintf(stderr, "Unexpected: this line! (%s)\n", line.data()); throw std::runtime_error("");

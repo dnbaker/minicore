@@ -7,7 +7,7 @@ namespace coresets {
 template<typename MatrixType, typename FT=double>
 struct MatrixCoreset {
     MatrixType mat_;
-    WVec<FT> weights_;
+    blz::DynamicVector<FT> weights_;
     bool rowwise_;
     MatrixCoreset &merge(const MatrixCoreset &o) {
         if(rowwise_ != o.rowwise_) throw std::runtime_error("Can't merge coresets of differing rowwiseness");
@@ -44,12 +44,14 @@ index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
 {
     auto weights = ic.weights_;
     CMatrixType ret;
+    const auto icdat = ic.indices_.data();
+    const size_t icsz = ic.indices_.size();
     if(rowwise) {
-        auto rows = blaze::rows(mat, ic.indices_);
+        auto rows = blaze::rows(mat, icdat, icsz);
         ret.resize(rows.rows(), rows.columns());
         ret = rows;
     } else {
-        auto columns = blaze::columns(mat, ic.indices_);
+        auto columns = blaze::columns(mat, icdat, icsz);
         ret.resize(columns.rows(), columns.columns());
         ret = columns;
     }

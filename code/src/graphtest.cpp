@@ -6,9 +6,7 @@
 #include "fgc/jv.h"
 #include <ctime>
 #include <getopt.h>
-#if 0
 #include "blaze/util/Serialization.h"
-#endif
 
 template<typename T> class TD;
 
@@ -63,8 +61,11 @@ max_component(GraphT &g) {
 void usage(const char *ex) {
     std::fprintf(stderr, "usage: %s <opts> [input file or ../data/dolphins.graph]\n"
                          "-k\tset k [12]\n"
+                         "-c\tAppend coreset size. Default: {100} (if empty)\n"
+                         "-s\tPath to write coreset sampler to\n"
                          "-z\tset z [1.]\n",
                  ex);
+    std::exit(1);
 }
 
 int main(int argc, char **argv) {
@@ -72,7 +73,7 @@ int main(int argc, char **argv) {
     double z = 1.; // z = power of the distance norm
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     std::vector<unsigned> coreset_sizes;
-    for(int c;(c = getopt(argc, argv, "z:s:c:k:h:?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "z:s:c:k:h?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
@@ -96,6 +97,7 @@ int main(int argc, char **argv) {
     std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
     std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> *ptr = nullptr;
     if(boost::num_vertices(g) > 20000) {
+        std::fprintf(stderr, "num vtx: %zu. Thorup sampling!\n", boost::num_vertices(g));
         sampled = thorup_sample(g, k, seed, frac);
         ptr = &sampled;
     }
@@ -111,6 +113,8 @@ int main(int argc, char **argv) {
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
     std::fprintf(stderr, "cost: %f\n", ccost);
+    for(const auto ms: med_solution)
+        assert(ms < boost::num_vertices(g));
     // Calculate the costs of this solution
     auto [costs, assignments] = get_costs(g, med_solution);
     if(z != 1.)
@@ -121,12 +125,18 @@ int main(int argc, char **argv) {
     std::FILE *ofp = std::fopen(fn.data(), "wb");
     sampler.write(ofp);
     std::fclose(ofp);
-    for(const auto coreset_size: coreset_sizes) {
+    for(auto coreset_size: coreset_sizes) {
+        if(coreset_size > (~dm).rows()) coreset_size = (~dm).rows();
         auto sampled_cs = sampler.sample(coreset_size);
         std::string fn = std::string("sampled.") + std::to_string(coreset_size) + ".matcs";
-#if 0
+        //auto subm = submatrix(~dm, 0, 0, coreset_size, (~dm).columns());
+        auto subm = blaze::DynamicMatrix<float>(coreset_size, (~dm).columns());
+        std::fprintf(stderr, "About to fill distmat with coreset of size %u\n", coreset_size);
+        fill_graph_distmat(g, subm, &sampled_cs.indices_);
+        // tmpdm has # indices rows, # nodes columns
+        auto columnsel = columns(subm, sampled_cs.indices_.data(), sampled_cs.indices_.size());
+        assert(columnsel.rows() == columnsel.columns());
         blaze::Archive<std::ofstream> bfp(fn);
-        bfp << sampled_cs.indices_ << sampled_cs.weights_ << rows(~dm, sampled_cs.indices_.data(), sampled_cs.indices_.size());
-#endif
+        bfp << sampled_cs.indices_ << sampled_cs.weights_ << columnsel;
     }
 }
