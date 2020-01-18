@@ -6,6 +6,9 @@
 #include "fgc/jv.h"
 #include <ctime>
 #include <getopt.h>
+#if 0
+#include "blaze/util/Serialization.h"
+#endif
 
 template<typename T> class TD;
 
@@ -57,14 +60,31 @@ max_component(GraphT &g) {
     return g;
 }
 
+void usage(const char *ex) {
+    std::fprintf(stderr, "usage: %s <opts> [input file or ../data/dolphins.graph]\n"
+                         "-k\tset k [12]\n"
+                         "-z\tset z [1.]\n",
+                 ex);
+}
+
 int main(int argc, char **argv) {
-    std::string input = argc == 1 ? "../data/dolphins.graph": const_cast<const char *>(argv[1]);
-    const unsigned k = argc > 2 ? std::atoi(argv[2]): 12;
-    std::srand(std::hash<std::string>{}(input));
+    unsigned k = 10;
+    double z = 1.; // z = power of the distance norm
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
-    const double z = 1.; // z = power of the distance norm
-    if(argc > 3) fn = argv[3];
-    std::vector<unsigned> ks{k};
+    std::vector<unsigned> coreset_sizes;
+    for(int c;(c = getopt(argc, argv, "z:s:c:k:h:?")) >= 0;) {
+        switch(c) {
+            case 'k': k = std::atoi(optarg); break;
+            case 'z': z = std::atof(optarg); break;
+            case 's': fn = optarg; break;
+            case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
+            case 'h': default: usage(argv[0]);
+        }
+    }
+    if(coreset_sizes.empty())
+        coreset_sizes.push_back(100);
+    std::string input = argc == optind ? "../data/dolphins.graph": const_cast<const char *>(argv[optind]);
+    std::srand(std::hash<std::string>{}(input));
 
     fgc::Graph<undirectedS, float> g = parse_by_fn(input);
     max_component(g);
@@ -76,7 +96,7 @@ int main(int argc, char **argv) {
     std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
     std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> *ptr = nullptr;
     if(boost::num_vertices(g) > 20000) {
-        sampled = thorup_sample(g, *std::max_element(ks.begin(), ks.end()), seed, frac);
+        sampled = thorup_sample(g, k, seed, frac);
         ptr = &sampled;
     }
     auto dm = graph2diskmat(g, fn, ptr);
@@ -98,8 +118,15 @@ int main(int argc, char **argv) {
     // Build a coreset importance sampler based on it.
     coresets::CoresetSampler<float, uint32_t> sampler;
     sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data());
-    auto sampled_cs = sampler.sample(50);
-    std::FILE *ofp = std::fopen("sampler.out", "wb");
+    std::FILE *ofp = std::fopen(fn.data(), "wb");
     sampler.write(ofp);
     std::fclose(ofp);
+    for(const auto coreset_size: coreset_sizes) {
+        auto sampled_cs = sampler.sample(coreset_size);
+        std::string fn = std::string("sampled.") + std::to_string(coreset_size) + ".matcs";
+#if 0
+        blaze::Archive<std::ofstream> bfp(fn);
+        bfp << sampled_cs.indices_ << sampled_cs.weights_ << rows(~dm, sampled_cs.indices_.data(), sampled_cs.indices_.size());
+#endif
+    }
 }

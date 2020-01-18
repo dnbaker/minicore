@@ -3,7 +3,7 @@
 #define FGC_CORESETS_H__
 #include <vector>
 #include <map>
-#define ALIAS_THREADSAFE 1
+//#define ALIAS_THREADSAFE 0
 #include "alias_sampler/alias_sampler.h"
 #include "shared.h"
 #include <zlib.h>
@@ -44,8 +44,8 @@ struct IndexCoreset {
     /*
      * consists of only indices and weights
      */
-    IVec<IT> indices_;
-    WVec<FT> weights_;
+    blaze::DynamicVector<IT> indices_;
+    blaze::DynamicVector<FT> weights_;
     size_t size() const {return indices_.size();}
     IndexCoreset(IndexCoreset &&o) = default;
     IndexCoreset(const IndexCoreset &o) = default;
@@ -358,10 +358,6 @@ struct CoresetSampler {
         for(size_t i = 0; i < n; ++i) {
             ret.indices_[i] = sampler_->sample();
         }
-#endif
-#ifndef NDEBUG
-        for(auto i = &ret.indices_[0]; i != &ret.indices_[n]; ++i)
-            assert(size_t(i - &ret.indices_[0]) < np_);
 #endif
         double nsamplinv = 1. / n;
         OMP_PRAGMA("omp parallel for")
