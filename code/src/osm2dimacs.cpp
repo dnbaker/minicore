@@ -23,8 +23,8 @@
 
 // For the NodeLocationForWays handler
 #include <osmium/handler/node_locations_for_ways.hpp>
-#include <unordered_set>
-#include <unordered_map>
+//#include <unordered_set>
+#include "flat_hash_map/flat_hash_map.hpp"
 #include <vector>
 #include <cinttypes>
 
@@ -39,8 +39,8 @@ using location_handler_type = osmium::handler::NodeLocationsForWays<index_type>;
 using id_int_t = osmium::object_id_type;
 struct RoadLengthHandler : public osmium::handler::Handler {
 
-    double length = 0;
-    std::unordered_set<id_int_t> node_ids_;
+    //double length = 0;
+    ska::flat_hash_set<id_int_t> node_ids_;
     struct EdgeD {
         id_int_t lhs_, rhs_;
         double dist_;
@@ -52,24 +52,28 @@ struct RoadLengthHandler : public osmium::handler::Handler {
     void way(const osmium::Way& way) {
         //const char* highway = way.tags()["highway"];
         if(way.tags()["highway"] == nullptr) return;
-        length += osmium::geom::haversine::distance(way.nodes());
+        //length += osmium::geom::haversine::distance(way.nodes());
         auto &nodes = way.nodes();
-        node_ids_.insert(nodes[nodes.size() - 1].ref());
-        for(size_t i = 0, e = nodes.size() - 1; i < e; ++i) {
-            auto id = nodes[i].ref();
-            node_ids_.insert(id);
-            //auto dist = osmium::geom::haversine::distance(nodes[i], nodes[i + 1]);
-            auto dist = osmium::geom::haversine::distance(nodes[i].location(), nodes[i + 1].location());
-            EdgeD ed{id, nodes[i + 1].ref(), dist};
-            edges_.emplace_back(ed);
+        size_t i = 0;
+        while(!nodes[i].location()) ++i;
+        size_t j = i;
+        while(++j < nodes.size()) {
+            if(!nodes[j].location()) continue;
+#define ref positive_ref
+            auto jloc = nodes[j].location();
+            node_ids_.insert(nodes[i].ref());
+            node_ids_.insert(nodes[j].ref());
+            auto dist = osmium::geom::haversine::distance(nodes[i].location(), jloc);
+            edges_.push_back(EdgeD({nodes[i].ref(), nodes[j].ref(), dist}));
+#undef ref
+            i = j;
         }
-        
     }
 
 }; // struct RoadLengthHandler
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
+    if (argc < 2 || std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argv + argc) {
         std::cerr << "Usage: " << argv[0] << " OSMFILE <output ? output: stdout>\n";
         std::cerr << "Consumes an osm file and emits a DIMACS .gr file which can then be used.\n"
                   << "which ultimately could be transformed into a graph parser, but\n"
@@ -90,6 +94,8 @@ int main(int argc, char* argv[]) {
         // to the ways
         location_handler_type location_handler{index};
 
+        location_handler.ignore_errors();
+
         // Our handler defined above
         RoadLengthHandler road_length_handler;
 
@@ -97,7 +103,7 @@ int main(int argc, char* argv[]) {
         osmium::apply(reader, location_handler, road_length_handler);
 
         id_int_t assigned_id = 1;
-        std::unordered_map<id_int_t, id_int_t> reassigner;
+        ska::flat_hash_map<id_int_t, id_int_t> reassigner;
         reassigner.reserve(road_length_handler.node_ids_.size());
         std::fprintf(ofp, "c Auto-generated 9th DIMACS Implementation Challenge: Shortest Paths-format file\n"
                           "c From Open Street Maps [OSM] (https://openstreetmap.org)\n"
@@ -116,7 +122,7 @@ int main(int argc, char* argv[]) {
 
         // Output the length. The haversine function calculates it in meters,
         // so we first devide by 1000 to get kilometers.
-        std::cout << "Length: " << road_length_handler.length / 1000 << " km\n";
+        //std::cout << "Length: " << road_length_handler.length / 1000 << " km\n";
     } catch (const std::exception& e) {
         // All exceptions used by the Osmium library derive from std::exception.
         std::cerr << e.what() << '\n';

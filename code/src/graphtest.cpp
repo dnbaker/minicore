@@ -1,9 +1,14 @@
-#include "graph.h"
-#include "parse.h"
-#include "bicriteria.h"
-#include "coreset.h"
-#include "lsearch.h"
-#include "jv.h"
+#include "fgc/graph.h"
+#include "fgc/parse.h"
+#include "fgc/bicriteria.h"
+#include "fgc/coreset.h"
+#include "fgc/lsearch.h"
+#include "fgc/jv.h"
+#include <ctime>
+#include <getopt.h>
+#if 0
+#include "blaze/util/Serialization.h"
+#endif
 
 template<typename T> class TD;
 
@@ -11,171 +16,117 @@ template<typename T> class TD;
 using namespace fgc;
 using namespace boost;
 
-#define undirectedS bidirectionalS
 
-auto dimacs_official_parse(std::string input) {
-    fgc::Graph<undirectedS> g;
-    std::ifstream ifs(input);
-    std::string graphtype;
-    size_t nnodes = 0, nedges = 0;
-    for(std::string line; std::getline(ifs, line);) {
-        if(line.empty()) continue;
-        switch(line.front()) {
-            case 'c': break; // nothing
-            case 'p': {
-                const char *p = line.data() + 2, *p2 = ++p;
-                while(!std::isspace(*p2)) ++p2;
-                graphtype = std::string(p, p2 - p);
-                std::fprintf(stderr, "graphtype: %s\n", graphtype.data());
-                p = p2 + 1;
-                nnodes = std::strtoull(p, nullptr, 10);
-                for(size_t i = 0; i < nnodes; ++i)
-                    boost::add_vertex(g); // Add all the vertices
-                if((p2 = std::strchr(p, ' ')) == nullptr) throw std::runtime_error(std::string("Failed to parse file at ") + input);
-                p = p2 + 1;
-                nedges = std::strtoull(p, nullptr, 10);
-                std::fprintf(stderr, "n: %zu. m: %zu\n", nnodes, nedges);
-                break;
-            }
-            case 'a': {
-                assert(nnodes);
-                char *strend;
-                const char *p = line.data() + 2;
-                size_t lhs = std::strtoull(p, &strend, 10);
-                p = strend + 1;
-                size_t rhs = std::strtoull(p, &strend, 10);
-                p = strend + 1;
-                double dist = std::atof(p);
-                assert(lhs >= 1);
-                assert(rhs >= 1);
-                boost::add_edge(lhs - 1, rhs - 1, dist, g);
-                break;
-            }
-            default: std::fprintf(stderr, "Unexpected: this line! (%s)\n", line.data()); throw std::runtime_error("");
-        }
-    }
-    return g;
-}
 
-auto dimacs_parse(const char *fn) {
-    auto g = parse_dimacs_unweighted<boost::undirectedS>(fn);
-    using Graph = decltype(g);
-    boost::graph_traits<decltype(g)>::edge_iterator ei, ei_end;
-    wy::WyRand<uint64_t, 2> gen(boost::num_vertices(g));
-    for(std::tie(ei, ei_end) = boost::edges(g); ei != ei_end; ++ei) {
-        boost::put(boost::edge_weight_t(), g, *ei, 1. / (double(gen()) / gen.max()));
-    }
-    for(auto [vs, ve] = boost::vertices(g); vs != ve; ++vs) {
-        boost::graph_traits<Graph>::vertex_descriptor vind = *vs;
-        ++vind;
-    }
-    return g;
-}
-auto csv_parse(const char *fn) {
-    return parse_nber<boost::undirectedS>(fn);
-}
-
-int main(int argc, char **argv) {
-#ifdef _OPENMP
-    omp_set_num_threads(std::thread::hardware_concurrency());
+#if 0
+fgc::Graph<undirectedS> &
+max_component(fgc::Graph<undirectedS> &g) {
 #endif
-    std::string input = argc == 1 ? "../data/dolphins.graph": const_cast<const char *>(argv[1]);
-    const unsigned k = argc > 2 ? std::atoi(argv[2]): 12;
-    std::string fn = "default_scratch.fn";
-    if(argc > 3) fn = argv[3];
-    
-    fgc::Graph<undirectedS> g;
-    // 1. Parse
-    if(input.find(".csv") != std::string::npos) {
-        g = csv_parse(input.data());
-    } else if(input.find(".gr") != std::string::npos && input.find(".graph") == std::string::npos) {
-        g = dimacs_official_parse(input);
-    } else {
-        g = dimacs_parse(input.data());
-    }
-    // Assert that it's connected, or else the problem has infinite cost.
+template<typename GraphT>
+GraphT &
+max_component(GraphT &g) {
     auto ccomp = std::make_unique<uint32_t []>(boost::num_vertices(g));
     assert(&ccomp[0] == ccomp.get());
     unsigned ncomp = boost::connected_components(g, ccomp.get());
     if(ncomp != 1) {
         std::fprintf(stderr, "not connected. ncomp: %u\n", ncomp);
-        return 1;
-    }
-    ccomp.reset();
-    assert(boost::num_vertices(g) > k);
-    uint64_t seed = 1337;
-
-    size_t nsampled_max = std::min(std::ceil(std::pow(std::log2(boost::num_vertices(g)), 2.5)), 3000.);
-    if(nsampled_max > boost::num_vertices(g))
-        nsampled_max = boost::num_vertices(g) / 2;
-    auto dm = graph2diskmat(g, fn);
-
-    // Perform Thorup sample before JV method.
-    double frac = nsampled_max / double(boost::num_vertices(g));
-    auto sampled = thorup_sample(g, k, seed, frac); // 0 is the seed, 500 is the maximum sampled size
-    std::fprintf(stderr, "sampled %zu of %zu points\n", sampled.size(), size_t(boost::num_vertices(g)));
-#if 0
-    std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
-    std::fprintf(stderr, "ncomp: %u\n", ncomp);
-
-    // Use this sample to generate an approximate k-median solution
-    auto med_solution = fgc::jain_vazirani_kmedian(g, sampled, k);
-
-    // Sanity check: make sure that our sampled points are in the Thorup sample.
-#ifndef NDEBUG
-    for(const auto v: med_solution) assert(std::find(sampled.begin(), sampled.end(), v) != sampled.end());
-#endif
-
-    std::fprintf(stderr, "med solution size: %zu\n", med_solution.size());
-#else
-    unsigned nseedings = 5;
-    auto lsearcher = make_kmed_lsearcher(~dm, k, 1e-5, seed);
-    lsearcher.run();
-    size_t nreplaced = 0;
-    auto med_solution = lsearcher.sol_;
-    auto ccost = lsearcher.current_cost_;
-    for(unsigned i = 0; i < nseedings; ++i) {
-        lsearcher.reseed(seed + i, i % 2);
-        lsearcher.run();
-        std::fprintf(stderr, "old cost: %g. new cost: %g. kcenter initialization? %d\n", ccost, lsearcher.current_cost_, i % 2);
-        if(lsearcher.current_cost_ < ccost) {
-            std::fprintf(stderr, "replacing with seeding number %u!\n", i);
-            med_solution = lsearcher.sol_;
-            ccost = lsearcher.current_cost_;
-            ++nreplaced;
-        } else {
-            std::fprintf(stderr, "not replacing\n");
-        }
-    }
-    std::fprintf(stderr, "nreplaced: %zu/%u\n", nreplaced, nseedings);
-    DiskMat<float> cdm(sampled.size(), g.num_vertices(), "__cdm_scratch__", 0, 1);
-    fill_cand_distance_mat(g, ~cdm, sampled);
-    {
-        auto tlsearcher = make_kmed_lsearcher(~cdm, k, 1e-5, seed);
-        tlsearcher.run();
-        if(tlsearcher.current_cost_ < ccost) {
-            std::fprintf(stderr, "replacing with Thorup at seeding %u!\n", nseedings + 1);
-            med_solution = tlsearcher.sol_;
-        }
-        for(unsigned i = 1; i < nseedings; ++i) {
-            tlsearcher.reseed(seed + nseedings + i, i % 2);
-            tlsearcher.run();
-            std::fprintf(stderr, "Thorup old cost: %g. new cost: %g. kcenter initialization? %d\n", ccost, lsearcher.current_cost_, i % 2);
-            if(tlsearcher.current_cost_ < ccost) {
-                med_solution = tlsearcher.sol_;
-                ccost = tlsearcher.current_cost_;
-                ++nreplaced;
+        std::vector<unsigned> counts(ncomp);
+        for(size_t i = 0, e = boost::num_vertices(g); i < e; ++counts[ccomp[i++]]);
+        auto maxcomp = std::max_element(counts.begin(), counts.end()) - counts.begin();
+        std::fprintf(stderr, "maxcmp %zu out of total %u\n", maxcomp, ncomp);
+        flat_hash_map<uint64_t, uint64_t> remapper;
+        size_t id = 0;
+        for(size_t i = 0; i < boost::num_vertices(g); ++i) {
+            if(ccomp[i] == maxcomp) {
+                remapper[i] = id++;
             }
         }
+        GraphT newg(counts[maxcomp]);
+        typename boost::property_map <fgc::Graph<undirectedS>,
+                             boost::edge_weight_t >::type EdgeWeightMap = get(boost::edge_weight, g);
+        for(auto edge: g.edges()) {
+            auto lhs = source(edge, g);
+            auto rhs = target(edge, g);
+            if(auto lit = remapper.find(lhs), rit = remapper.find(rhs);
+               lit != remapper.end() && rit != remapper.end()) {
+                boost::add_edge(lit->second, rit->second, EdgeWeightMap[edge], newg);
+            }
+        }
+        ncomp = boost::connected_components(newg, ccomp.get());
+        std::fprintf(stderr, "num components: %u. num edges: %zu. num nodes: %zu\n", ncomp, newg.num_edges(), newg.num_vertices());
+        assert(ncomp == 1);
+        std::swap(newg, g);
     }
-#endif
+    return g;
+}
+
+void usage(const char *ex) {
+    std::fprintf(stderr, "usage: %s <opts> [input file or ../data/dolphins.graph]\n"
+                         "-k\tset k [12]\n"
+                         "-z\tset z [1.]\n",
+                 ex);
+}
+
+int main(int argc, char **argv) {
+    unsigned k = 10;
+    double z = 1.; // z = power of the distance norm
+    std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
+    std::vector<unsigned> coreset_sizes;
+    for(int c;(c = getopt(argc, argv, "z:s:c:k:h:?")) >= 0;) {
+        switch(c) {
+            case 'k': k = std::atoi(optarg); break;
+            case 'z': z = std::atof(optarg); break;
+            case 's': fn = optarg; break;
+            case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
+            case 'h': default: usage(argv[0]);
+        }
+    }
+    if(coreset_sizes.empty())
+        coreset_sizes.push_back(100);
+    std::string input = argc == optind ? "../data/dolphins.graph": const_cast<const char *>(argv[optind]);
+    std::srand(std::hash<std::string>{}(input));
+
+    fgc::Graph<undirectedS, float> g = parse_by_fn(input);
+    max_component(g);
+    // Assert that it's connected, or else the problem has infinite cost.
+    uint64_t seed = 1337;
+
+    size_t nsampled_max = std::min(std::ceil(std::pow(std::log2(boost::num_vertices(g)), 2.5)), 20000.);
+    const double frac = std::max(double(nsampled_max) / boost::num_vertices(g), .5);
+    std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
+    std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> *ptr = nullptr;
+    if(boost::num_vertices(g) > 20000) {
+        sampled = thorup_sample(g, k, seed, frac);
+        ptr = &sampled;
+    }
+    auto dm = graph2diskmat(g, fn, ptr);
+    if(z != 1.) {
+        assert(z > 1.);
+        ~dm = pow(abs(~dm), z);
+    }
+
+    // Perform Thorup sample before JV method.
+    auto lsearcher = make_kmed_lsearcher(~dm, k, 1e-5, seed);
+    lsearcher.run();
+    auto med_solution = lsearcher.sol_;
+    auto ccost = lsearcher.current_cost_;
+    std::fprintf(stderr, "cost: %f\n", ccost);
     // Calculate the costs of this solution
     auto [costs, assignments] = get_costs(g, med_solution);
+    if(z != 1.)
+        costs = blaze::pow(blaze::abs(costs), z);
     // Build a coreset importance sampler based on it.
     coresets::CoresetSampler<float, uint32_t> sampler;
     sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data());
-    auto sampled_cs = sampler.sample(50);
-    std::FILE *ofp = std::fopen("sampler.out", "wb");
+    std::FILE *ofp = std::fopen(fn.data(), "wb");
     sampler.write(ofp);
     std::fclose(ofp);
+    for(const auto coreset_size: coreset_sizes) {
+        auto sampled_cs = sampler.sample(coreset_size);
+        std::string fn = std::string("sampled.") + std::to_string(coreset_size) + ".matcs";
+#if 0
+        blaze::Archive<std::ofstream> bfp(fn);
+        bfp << sampled_cs.indices_ << sampled_cs.weights_ << rows(~dm, sampled_cs.indices_.data(), sampled_cs.indices_.size());
+#endif
+    }
 }

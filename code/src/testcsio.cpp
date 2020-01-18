@@ -1,7 +1,7 @@
 #include "fgc/coreset.h"
 
 using FT = float;
-using namespace coresets;
+using namespace cs;
 int main() {
     CoresetSampler<FT> cs;
     std::vector<float> costs(100);
