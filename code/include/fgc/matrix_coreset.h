@@ -53,14 +53,23 @@ index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
         assert(ind < lim || !std::fprintf(stderr, "index %u is too big\n", ind));
 #endif
     if(rowwise) {
+#if !NDEBUG
+        for(size_t i = 0; i < icsz; ++i) assert(icdat[icsz] < mat.rows());
+#endif
         auto rows = blaze::rows(mat, icdat, icsz);
         ret.resize(rows.rows(), rows.columns());
         ret = rows;
     } else {
+#if !NDEBUG
+        for(size_t i = 0; i < icsz; ++i) assert(icdat[icsz] < mat.columns());
+#endif
         auto columns = blaze::columns(mat, icdat, icsz);
         ret.resize(columns.rows(), columns.columns());
         ret = columns;
     }
+#if !NDEBUG
+    std::fprintf(stderr, "Gathered pieces for index2matrix\n");
+#endif
     return MatrixCoreset<MatrixType, FT>{std::move(ret), std::move(weights), rowwise};
 } // index2matrix
 
