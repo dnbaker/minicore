@@ -175,7 +175,7 @@ struct LocalKMedSearcher {
             newcost += mat_(assignments_[i], i);
 
 
-        std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
+        //std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
         assert(newcost <= current_cost_);
         current_cost_ = newcost;
     }
@@ -191,8 +191,7 @@ struct LocalKMedSearcher {
                     if(sol_.find(pi) != sol_.end()) continue;
                     const auto val = evaluate_swap(pi, oldcenter);
                     if(val > diffthresh) {
-                        std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu\n", pi, oldcenter, total + 1);
-
+                        //std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu\n", pi, oldcenter, total + 1);
                         sol_.erase(oldcenter);
                         sol_.insert(pi);
 

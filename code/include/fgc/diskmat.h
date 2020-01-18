@@ -25,23 +25,27 @@ struct DiskMat {
     static constexpr bool PF = isPadded;
     using MatType = blaze::CustomMatrix<VT, AF, PF, SO>;
     MatType mat_;
-    const char *path_;
+    std::string path_;
     DiskMat(const DiskMat &o) = delete;
-    DiskMat(DiskMat &&o) {
+    DiskMat(DiskMat &&o): path_(o.path_) {
         uint8_t *ptr = reinterpret_cast<uint8_t *>(this), *optr = reinterpret_cast<uint8_t *>(std::addressof(o));
         std::memset(ptr, 0, sizeof(*this));
         std::swap_ranges(ptr, ptr + sizeof(*this), optr);
+        std::fprintf(stderr, "[%s at %p] moved diskmat has path %s\n", __PRETTY_FUNCTION__, (void *)this, path_.data() ? path_.data(): "tmpfile");
     }
     static constexpr size_t SIMDSIZE = blaze::SIMDTrait<VT>::size;
-    DiskMat(const DiskMat &o, const char *s=nullptr, size_t offset=0, int delete_file=-1): DiskMat(o.rows(), o.columns(), s, offset, delete_file >= 0 ? delete_file: o.delete_file_)
+    DiskMat(const DiskMat &o, const char *s, size_t offset=0, int delete_file=-1):
+        DiskMat(o.rows(), o.columns(), s, offset, delete_file >= 0 ? delete_file: o.delete_file_)
     {
         std::memcpy(ms_->data(), o.ms_->data(), sizeof(VT) * (~*this).spacing() * nr_);
+        std::fprintf(stderr, "Copied to %s\n", path_.size() ? path_.data(): "tmpfile");
     }
     DiskMat(size_t nr, size_t nc, const char *s=nullptr, size_t offset=0, bool delete_file=false):
         nr_(nr), nc_(nc),
         delete_file_(delete_file),
-        path_(s)
+        path_(s ? s: "")
     {
+        std::fprintf(stderr, "Opened file at %s\n", s ? s: "tmpfile");
         if(isAligned && offset % (SIMDSIZE * sizeof(VT))) {
             throw std::invalid_argument("offset is not aligned; invalid storage.");
         }
@@ -57,7 +61,7 @@ struct DiskMat {
         int rc;
         if((rc = ::fstat(fd, &st))) {
             char buf[256];
-            std::sprintf(buf, "Failed to fstat fd/fp/path %d/%p/%s", fd, (void *)fp_, path.data());
+            std::sprintf(buf, "Failed to fstat fd/fp/path %d/%p/%s", fd, (void *)fp_, path_.data());
             std::fclose(fp_);
             fp_ = nullptr;
             throw std::system_error(rc, std::system_category(), buf);
@@ -70,12 +74,15 @@ struct DiskMat {
         assert(size_t(st.st_size) >= total_nb);
         ms_.reset(new mmapper(fd, offset, nb));
         mat_ = MatType((VT *)ms_->data(), nr, nc, nperrow);
+        assert(s ? (path_.data() && std::strcmp(path_.data(), s)) == 0: path_.empty());
     }
+    DiskMat(size_t nr, size_t nc, std::string path, size_t offset=0, bool delete_file=false): DiskMat(nr, nc, path.data(), offset, delete_file) {}
     auto operator()(size_t i, size_t j) const {return (~*this)(i, j);}
     auto &operator()(size_t i, size_t j)      {return (~*this)(i, j);}
     ~DiskMat() {
         if(fp_) std::fclose(fp_);
-        if(delete_file_ && path_) {
+        if(delete_file_ && path_.size()) {
+            std::fprintf(stderr, "[%s at %p]path: %s/%p\n", __PRETTY_FUNCTION__, (void *)this, path_.data(), (void *)path_.data());
             auto rc = std::system((std::string("rm ") + path_).data());
             if(rc) {
                 std::fprintf(stderr, "Note: file deletion failed with exit status %d and stopsig %d\n",

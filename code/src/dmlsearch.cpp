@@ -6,7 +6,6 @@
 using namespace fgc;
 
 int main(int argc, char *argv[]) {
-    const char *fn = "./zomg.dat";
     unsigned n = argc == 1 ? 100: std::atoi(argv[1]);
     unsigned k = 20;
     double eps = 0.01;
@@ -19,24 +18,26 @@ int main(int argc, char *argv[]) {
         boost::add_edge(i, std::rand() % n, double(std::rand()) / RAND_MAX, g);
         boost::add_edge(i, std::rand() % n, double(std::rand()) / RAND_MAX, g);
     }
-    auto dm = graph2diskmat(g, fn);
+    auto dm = graph2diskmat(g, "./zomg.dat");
     //std::cout << ~dm << '\n';
     dm.delete_file_ = true;
+    auto lsearcher = make_kmed_lsearcher(~dm, k, eps);
+    lsearcher.run();
+
     std::vector<float> weights(n);
     wy::WyHash<uint32_t, 2> rng(13);
     std::uniform_real_distribution<float> vals(std::nextafter(0., 17.), 17.);
     for(auto p = weights.data(), e = p + n; p < e; *p++ = vals(rng));
     auto wp = weights.data();
     for(auto &w: weights) w *= w;
-    DiskMat<float> weighted_dm(dm, "./zomg.weighted.dat");
+    DiskMat<float> weighted_dm(dm, nullptr);
+    weighted_dm.delete_file_ = true;
     assert(weighted_dm.rows() == dm.rows());
     assert(weighted_dm.columns() == dm.columns());
     const auto nr = weighted_dm.rows();
     //OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < nr; ++i)
         row(~weighted_dm, i) *= wp[i];
-    auto lsearcher = make_kmed_lsearcher(~dm, k, eps);
-    lsearcher.run();
     auto lsearcher_fewer_facilities = make_kmed_lsearcher(blaze::submatrix(~dm, 0, 0, 50, n), k, eps);
     lsearcher_fewer_facilities.run();
 }
