@@ -64,7 +64,7 @@ struct RoadLengthHandler : public osmium::handler::Handler {
             node_ids_.insert(nodes[i].ref());
             node_ids_.insert(nodes[j].ref());
             auto dist = osmium::geom::haversine::distance(nodes[i].location(), jloc);
-            edges_.push_back(EdgeD({nodes[i].ref(), nodes[j].ref(), dist}));
+            edges_.push_back(EdgeD({static_cast<id_int_t>(nodes[i].ref()), static_cast<id_int_t>(nodes[j].ref()), dist}));
 #undef ref
             i = j;
         }
