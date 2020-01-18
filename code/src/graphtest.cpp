@@ -111,9 +111,10 @@ int main(int argc, char **argv) {
     auto dm = graph2diskmat(g, fn);
 
     // Perform Thorup sample before JV method.
-#if 0
     double frac = nsampled_max / double(boost::num_vertices(g));
     auto sampled = thorup_sample(g, k, seed, frac); // 0 is the seed, 500 is the maximum sampled size
+    std::fprintf(stderr, "sampled %zu of %zu points\n", sampled.size(), size_t(boost::num_vertices(g)));
+#if 0
     std::fprintf(stderr, "sampled size: %zu\n", sampled.size());
     std::fprintf(stderr, "ncomp: %u\n", ncomp);
 
@@ -138,7 +139,7 @@ int main(int argc, char **argv) {
         lsearcher.run();
         std::fprintf(stderr, "old cost: %g. new cost: %g. kcenter initialization? %d\n", ccost, lsearcher.current_cost_, i % 2);
         if(lsearcher.current_cost_ < ccost) {
-            std::fprintf(stderr, "replacing with seeding number %u!\n", nseedings);
+            std::fprintf(stderr, "replacing with seeding number %u!\n", i);
             med_solution = lsearcher.sol_;
             ccost = lsearcher.current_cost_;
             ++nreplaced;
@@ -147,6 +148,26 @@ int main(int argc, char **argv) {
         }
     }
     std::fprintf(stderr, "nreplaced: %zu/%u\n", nreplaced, nseedings);
+    DiskMat<float> cdm(sampled.size(), g.num_vertices(), "__cdm_scratch__", 0, 1);
+    fill_cand_distance_mat(g, ~cdm, sampled);
+    {
+        auto tlsearcher = make_kmed_lsearcher(~cdm, k, 1e-5, seed);
+        tlsearcher.run();
+        if(tlsearcher.current_cost_ < ccost) {
+            std::fprintf(stderr, "replacing with Thorup at seeding %u!\n", nseedings + 1);
+            med_solution = tlsearcher.sol_;
+        }
+        for(unsigned i = 1; i < nseedings; ++i) {
+            tlsearcher.reseed(seed + nseedings + i, i % 2);
+            tlsearcher.run();
+            std::fprintf(stderr, "Thorup old cost: %g. new cost: %g. kcenter initialization? %d\n", ccost, lsearcher.current_cost_, i % 2);
+            if(tlsearcher.current_cost_ < ccost) {
+                med_solution = tlsearcher.sol_;
+                ccost = tlsearcher.current_cost_;
+                ++nreplaced;
+            }
+        }
+    }
 #endif
     // Calculate the costs of this solution
     auto [costs, assignments] = get_costs(g, med_solution);

@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
         // Apply input data to first the location handler and then our own handler
         osmium::apply(reader, location_handler, road_length_handler);
 
-        id_int_t assigned_id = 0;
+        id_int_t assigned_id = 1;
         std::unordered_map<id_int_t, id_int_t> reassigner;
         reassigner.reserve(road_length_handler.node_ids_.size());
         std::fprintf(ofp, "c Auto-generated 9th DIMACS Implementation Challenge: Shortest Paths-format file\n"

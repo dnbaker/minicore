@@ -53,6 +53,26 @@ struct FacPQ: std::priority_queue<FacilityInfo, std::vector<FacilityInfo>> {
     const auto &getc() const {return this->c;}
 };
 
+template<typename Graph, typename Mat>
+void fill_cand_distance_mat(const Graph &x, Mat &mat, const std::vector<typename Graph::vertex_descriptor> &candidates) {
+    assert(mat.rows() == candidates.size());
+    assert(mat.columns() == x.num_vertices());
+    OMP_PRAGMA("omp parallel for")
+    for(size_t i = 0; i < candidates.size(); ++i) {
+        auto edge = candidates[i];
+        auto r = row(mat, i);
+        assert(r.size() == x.num_vertices());
+        boost::dijkstra_shortest_paths(x, edge,
+                                       distance_map(&r[0]));
+        if(r[0] == std::numeric_limits<float>::max()) {
+            throw std::runtime_error("This is probably not connected");
+        }
+        // Now the row c(r, i) has the distances from candidate facility candidates[i] to
+        // all nodes.
+    }
+    
+}
+
 /*
  *
  * jain_vazirani_ufl is the uncapacitated facility location proble
@@ -82,31 +102,7 @@ std::vector<typename Graph::vertex_descriptor>
         optr.reset(new blaze::DynamicMatrix<float>(nf, n, 0.));
     }
     blaze::DynamicMatrix<float> &c(*(costsmat ? costsmat: optr.get()));
-    OMP_PRAGMA("omp parallel for")
-    for(size_t i = 0; i < candidates.size(); ++i) {
-        auto edge = candidates[i];
-        auto r = row(c, i);
-        assert(r.size() == n);
-#if GETPREDS
-        auto p(std::make_unique<typename Graph::vertex_descriptor[]>(n));
-#endif
-        boost::dijkstra_shortest_paths(x, edge,
-                                       distance_map(&r[0])
-#if GETPREDS
-                                       .predecessor_map(&p[0])
-#endif
-        );
-        if(r[0] == std::numeric_limits<float>::max()) {
-#if defined(GETPREDS) && defined(VERBOSE_AF)
-            for(size_t i = 0; i < n; ++i) {
-                std::fprintf(stderr, "pi: %zu. candidate: %zu\n", size_t(pi[i]), size_t(edge));
-            }
-#endif
-            throw 1;
-        }
-        // Now the row c(r, i) has the distances from candidate facility candidates[i] to
-        // all nodes.
-    }
+    fill_cand_distance_mat(x, c, candidates);
 #if VERBOSE_AF
     std::cerr << "cost matrix: " << c << '\n';
 #endif
