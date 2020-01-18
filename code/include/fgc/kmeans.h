@@ -177,16 +177,17 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     std::fprintf(stderr, "first loop sum: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), double(0)));
 #endif
     std::vector<IT> assignments(np);
+    std::uniform_real_distribution<double> urd;
     while(centers.size() < k) {
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
-        auto newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * double(rng()) / rng.max()) - cdf.begin();
+        auto newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
         const auto current_center_id = centers.size();
         centers.push_back(newc);
         sumd2 -= distances[newc];
         distances[newc] = 0.;
         double sum = sumd2;
-        OMP_PRAGMA("omp parallel for reduction(+:sum)")
+        OMP_PFOR
         for(IT i = 0; i < np; ++i) {
             if(unlikely(i == newc)) continue;
             auto &ldist = distances[i];
@@ -194,6 +195,7 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
             if(dist < ldist) { // Only write if it changed
                 assignments[i] = current_center_id;
                 auto diff = dist - ldist;
+                OMP_ATOMIC
                 sum += diff;
                 ldist = dist;
             }
