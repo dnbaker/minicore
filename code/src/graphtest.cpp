@@ -92,13 +92,17 @@ int main(int argc, char **argv) {
     unsigned k = 10;
     double z = 1.; // z = power of the distance norm
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
+    std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
     size_t nsampled_max = 0;
-    for(int c;(c = getopt(argc, argv, "S:z:s:c:k:h?")) >= 0;) {
+    uint64_t hv = 0;
+    for(auto av = argv; *av; hv ^= std::hash<std::string>{}(*av++));
+    for(int c;(c = getopt(argc, argv, "o:S:z:s:c:k:h?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
             case 's': fn = optarg; break;
+            case 'o': output_prefix = optarg; break;
             case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
             case 'S': nsampled_max = std::strtoull(optarg, nullptr, 10); break;
             case 'h': default: usage(argv[0]);
@@ -106,7 +110,14 @@ int main(int argc, char **argv) {
     }
     if(coreset_sizes.empty())
         coreset_sizes.push_back(100);
+    if(output_prefix.empty())
+        output_prefix = std::to_string(std::accumulate(argv, argv + argc, uint64_t(0),
+                            [](auto x, auto y) {
+                                return x ^ std::hash<std::string>{}(y);
+                            }
+                        ));
     std::string input = argc == optind ? "../data/dolphins.graph": const_cast<const char *>(argv[optind]);
+
     std::srand(std::hash<std::string>{}(input));
 
     fgc::Graph<undirectedS, float> g = parse_by_fn(input);
@@ -136,11 +147,13 @@ int main(int argc, char **argv) {
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
     std::fprintf(stderr, "cost: %f\n", ccost);
+#ifndef NDEBUG
     for(const auto ms: med_solution) {
         assert(ms < lsearcher.mat_.rows());
         if(ptr) assert(ms < sampled.size());
         assert(ms < boost::num_vertices(g));
     }
+#endif
     // Calculate the costs of this solution
     std::vector<uint32_t> approx_v(med_solution.begin(), med_solution.end());
     if(ptr) for(auto &i: approx_v) i = sampled[i]; // Remember, these were indices into the sampled vector, not the original solution
@@ -156,14 +169,14 @@ int main(int argc, char **argv) {
     std::fclose(ofp);
     seed = std::mt19937_64(seed)();
     wy::WyRand<uint32_t, 2> rng(seed);
-    std::ofstream tblout("./table_out.tsv");
+    std::ofstream tblout(output_prefix + ".table_out.tsv");
     tblout << "#label" << ':' << "coreset_size" << 'x' << "sampled#times" << '\t' << "mincost" << '\t' << "meancost" << '\t' << "maxcost" << '\n';
     static constexpr unsigned nsamples = 1000;
     for(auto coreset_size: coreset_sizes) {
         if(auto nr = (~dm).rows(); nr < coreset_size) coreset_size = nr;
         char buf[128];
-        std::sprintf(buf, "sampled.%u.matcs", coreset_size);
-        std::string fn(buf);
+        std::sprintf(buf, ".sampled.%u.matcs", coreset_size);
+        std::string fn = output_prefix + buf;
         auto sampled_cs = sampler.sample(coreset_size);
         //auto subm = submatrix(~dm, 0, 0, coreset_size, (~dm).columns());
         auto subm = blaze::DynamicMatrix<float>(coreset_size, (~dm).columns());
