@@ -13,7 +13,13 @@ LDFLAGS+=-lz
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LDFLAGS) #-ftemplate-backtrace-limit=0
 
 EX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
+FEX=$(patsubst %,fast%,$(EX))
+PGEX=$(patsubst %,%pg,$(EX))
+PGFEX=$(patsubst %,%pgf,$(EX))
 all: $(EX)
+fall: $(FEX)
+pgall: $(PGEX)
+pgfall: $(PGFEX)
 
 ifdef OMP
 CXXFLAGS += -fopenmp
@@ -55,5 +61,11 @@ osm2dimacs: src/osm2dimacs.cpp
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@
 
+fastosm2dimacs: src/osm2dimacs.cpp
+	$(CXX) $(CXXFLAGS) \
+        $(OSINC) -pthread \
+        $< -lz -lbz2 -lexpat -o $@ -O3 -fopenmp -lbz2 -lexpat
+
+
 clean:
-	rm -f $(EX)
+	rm -f $(EX) graphrun dmlrun $(FEX)
