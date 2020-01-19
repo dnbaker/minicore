@@ -35,12 +35,7 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
             nt = omp_get_num_threads();
         }
 #endif
-#if DISKBASED_WORKING_SPACE
-        DiskMat<float> ws(nt, boost::num_vertices(x));
-        auto &working_space = ~ws;
-#else
         blaze::DynamicMatrix<float> working_space(nt, boost::num_vertices(x));
-#endif
         OMP_PFOR
         for(size_t i = 0; i < nrows; ++i) {
             unsigned rowid = 0;
@@ -48,7 +43,7 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
             rowid = omp_get_thread_num();
 #endif
             auto wrow(row(working_space, rowid));
-            auto vtx = sources ? (*sources)[i]: vertices[i];
+            auto vtx = (*sources)[i];
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&wrow[0]));
             row(mat, i) = serial(elements(wrow, sources->data(), sources->size()));
         }

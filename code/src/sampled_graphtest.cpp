@@ -184,15 +184,15 @@ int main(int argc, char **argv) {
     std::fclose(ofp);
     seed = std::mt19937_64(seed)();
     wy::WyRand<uint32_t, 2> rng(seed);
-    std::ofstream tblout(output_prefix + "./table_out.tsv");
+    std::string ofname = output_prefix + ".table_out.tsv";
+    std::fprintf(stderr, "Writing output coreset to %s\n", ofname.data());
+    std::ofstream tblout(ofname);
     tblout << "#label" << ':' << "coreset_size" << 'x' << "sampled#times" << '\t' << "mincost" << '\t' << "meancost" << '\t' << "maxcost" << '\n';
     static constexpr unsigned nsamples = 1000;
     for(auto coreset_size: coreset_sizes) {
-        if(auto nr = boost::num_vertices(g); nr < coreset_size) coreset_size = nr;
+        //if(auto nr = boost::num_vertices(g); nr < coreset_size) coreset_size = nr;
         std::string fn(output_prefix + ".sampled." + std::to_string(coreset_size) + ".matcs");
         auto sampled_cs = sampler.sample(coreset_size);
-        //auto subm = submatrix(dm, 0, 0, coreset_size, (dm).columns());
-        auto subm = blaze::DynamicMatrix<float>(coreset_size, (dm).columns());
         std::fprintf(stderr, "About to fill distmat with coreset of size %u\n", coreset_size);
         blaze::DynamicMatrix<float> coreset_dm(coreset_size, coreset_size);
         fill_graph_distmat(g, coreset_dm, &sampled_cs.indices_, true);
@@ -203,6 +203,6 @@ int main(int argc, char **argv) {
         for(size_t i = 0; i < coreset_dm.columns(); ++i) {
             column(coreset_dm, i) *= sampled_cs.weights_[i];
         }
-        sample_and_write(coreset_dm, rng, tblout, k, std::string("graphcoreset,z=") + std::to_string(z), nsamples);
+        sample_and_write(coreset_dm, rng, tblout, k, std::string("graphcoreset,z=") + std::to_string(z).substr(0, 3), nsamples);
     }
 }

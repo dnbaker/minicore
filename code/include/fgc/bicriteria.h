@@ -83,16 +83,13 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
     auto synthetic_vertex = vx.get();
     // TODO: consider using hash_set distribution for provide randomness for insertion to F.
     // Maybe replace with hash set? Idk.
-    std::vector<edge_cost> distances(boost::num_vertices(x));
-    std::vector<Vertex> p(boost::num_vertices(x));
+    std::unique_ptr<edge_cost[]> distances(new edge_cost[boost::num_vertices(x)]);
     for(size_t iter = 0; iter < iterations && R.size() > 0; ++iter) {
         //size_t last_size = F.size();
         // Sample ``samples_per_round'' samples.
         for(size_t i = 0, e = samples_per_round; i < e && R.size(); ++i) {
             auto &r = R[rng() % R.size()];
             F.emplace_back(r);
-            //std::swap(r, R.back()); // Move to the back
-            //R.pop_back();           // Delete
         }
         // Add connections from R to all members of F with cost 0.
         for(const auto vertex: F)
@@ -100,33 +97,25 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
         // Calculate F->R distances
         // (one Dijkstra call with synthetic node)
         boost::dijkstra_shortest_paths(x, synthetic_vertex,
-                                       distance_map(&distances[0]).predecessor_map(&p[0]));
+                                       distance_map(distances.get()));
         boost::clear_vertex(synthetic_vertex, x);
         // Pick random t in R, remove from R all points with dist(x, F) <= dist(t, F)
         auto el = R[rng() % R.size()];
         auto minv = distances[el];
-        std::fprintf(stderr, "minv: %f\n", minv);
+        VERBOSE_ONLY(std::fprintf(stderr, "minv: %f\n", minv);)
         // remove all R with dist(x, F) leq dist(x, R)
-        std::fprintf(stderr, "R size before: %zu\n", R.size());
+        VERBOSE_ONLY(std::fprintf(stderr, "R size before: %zu\n", R.size());)
 #ifdef USE_TBB
         R.erase(std::remove_if(std::execution::par_unseq, R.begin(), R.end(), [d=distances.data(),minv](auto x) {return d[x] <= minv;}), R.end());
 #elif __cplusplus > 201703uL
-        std::erase_if(R, [d=distances.data(),minv](auto x) {return d[x] <= minv;});
+        std::erase_if(R, [d=distances.get(),minv](auto x) {return d[x] <= minv;});
 #else
-        R.erase(std::remove_if(R.begin(), R.end(), [d=distances.data(),minv](auto x) {return d[x] <= minv;}), R.end());
+        R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
 #endif
-        std::fprintf(stderr, "R size after: %zu\n", R.size());
+        VERBOSE_ONLY(std::fprintf(stderr, "R size after: %zu\n", R.size());)
     }
-    std::fprintf(stderr, "num vertices: %zu\n", boost::num_vertices(x));
+    VERBOSE_ONLY(std::fprintf(stderr, "num vertices: %zu\n", boost::num_vertices(x));)
     boost::clear_vertex(synthetic_vertex, x);
-#ifndef NDEBUG
-    for(auto epair = boost::edges(x); epair.first != epair.second; ++epair.first) {
-        auto edge = *epair.first;
-        auto t = target(edge, x);
-        auto s = source(edge, x);
-        assert(t != synthetic_vertex && s != synthetic_vertex);
-    }
-#endif
     std::fprintf(stderr, "size: %zu\n", container.size());
     return container;
 }
@@ -137,8 +126,8 @@ std::pair<blz::DV<std::decay_t<decltype(get(boost::edge_weight_t(), std::declval
 get_costs(Graph &x, const Container &container) {
     using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
     using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
-    util::ScopedSyntheticVertex<Graph> vx(x);
     blz::DV<edge_cost> costs(boost::num_vertices(x));
+    util::ScopedSyntheticVertex<Graph> vx(x);
     std::vector<Vertex> p(boost::num_vertices(x));
     std::vector<uint32_t> assignments(boost::num_vertices(x));
     auto synthetic_vertex = vx.get();
@@ -165,6 +154,7 @@ get_costs(Graph &x, const Container &container) {
         }
         assignments[i] = pid2ind[index[parent]];
     }
+    assignments.pop_back();
     return std::make_pair(std::move(costs), assignments);
 }
 
