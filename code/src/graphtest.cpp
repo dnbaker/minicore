@@ -68,6 +68,7 @@ void usage(const char *ex) {
     std::exit(1);
 }
 
+
 template<typename Mat, typename RNG>
 void sample_and_write(const Mat &mat, RNG &rng, std::ofstream &ofs, unsigned k, std::string label, unsigned nsamples=1000) {
     double maxcost = 0., meancost = 0., mincost = std::numeric_limits<double>::max();
@@ -172,6 +173,7 @@ int main(int argc, char **argv) {
     std::ofstream tblout(output_prefix + ".table_out.tsv");
     tblout << "#label" << ':' << "coreset_size" << 'x' << "sampled#times" << '\t' << "mincost" << '\t' << "meancost" << '\t' << "maxcost" << '\n';
     static constexpr unsigned nsamples = 1000;
+    sample_cost_full(g, rng, tblout, k, nsamples);
     for(auto coreset_size: coreset_sizes) {
         if(auto nr = (~dm).rows(); nr < coreset_size) coreset_size = nr;
         char buf[128];
@@ -182,6 +184,8 @@ int main(int argc, char **argv) {
         auto subm = blaze::DynamicMatrix<float>(coreset_size, (~dm).columns());
         std::fprintf(stderr, "About to fill distmat with coreset of size %u\n", coreset_size);
         fill_graph_distmat(g, subm, &sampled_cs.indices_);
+        if(z != 1.)
+            subm = blaze::pow(blaze::abs(subm), z);
         // tmpdm has # indices rows, # nodes columns
         auto columnsel = columns(subm, sampled_cs.indices_.data(), sampled_cs.indices_.size());
         blaze::DynamicMatrix<float> coreset_dm = columns(subm, sampled_cs.indices_.data(), sampled_cs.indices_.size());
@@ -191,6 +195,6 @@ int main(int argc, char **argv) {
         for(size_t i = 0; i < coreset_dm.columns(); ++i) {
             column(coreset_dm, i) *= sampled_cs.weights_[i];
         }
-        sample_and_write(coreset_dm, rng, tblout, k, std::string("graphcoreset,z=") + std::to_string(z), nsamples);
+        sample_and_write(coreset_dm, rng, tblout, k, std::string("graphcoreset,z="), nsamples);
     }
 }

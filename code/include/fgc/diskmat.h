@@ -8,7 +8,7 @@
 #include <system_error>
 namespace fgc {
 
-template<typename VT, bool SO=blaze::rowMajor, bool isPadded=blaze::padded, bool isAligned=blaze::unaligned>
+template<typename VT, bool SO=blaze::rowMajor, bool isPadded=blaze::padded, bool isAligned=blaze::aligned>
 struct DiskMat {
     size_t nr_, nc_;
     using mmapper = mio::mmap_sink;
@@ -114,18 +114,36 @@ auto column(DiskMat<VT, SO, isPadded, isAligned> &mat, size_t i, blaze::Check<ch
     return blaze::column(~mat, i, check);
 }
 
-template<typename VT>
-class DiskVector {
-    size_t n_, m_;
-    VT     *data_;
+#ifndef DEFAULT_MAX_NRAMBYTES
+#define DEFAULT_MAX_NRAMBYTES static_cast<size_t>(16ull << 30)
+#endif
+
+template<typename VT, bool SO=blaze::rowMajor, size_t max_nbytes=DEFAULT_MAX_NRAMBYTES>
+class PolymorphicMat {
+    using CMType = blaze::CustomMatrix<VT, blaze::aligned, blaze::padded, blaze::rowMajor>;
+    using DiskType = DiskMat<VT, SO, blaze::aligned, blaze::padded>;
+    std::unique_ptr<DiskType> diskmat_;
+    std::unique_ptr<blaze::DynamicMatrix<VT, SO>> rammat_;
+    std::unique_ptr<CMType> cm_;
 public:
-    DiskVector(): n_(0), m_(0), n_(nullptr) {}
-    size_t capacity() const {return m_;}
-    size_t size()     const {return n_;}
-    auto begin()       {return data_;}
-    auto begin() const {return data_;}
-    auto end()         {return data_ + n_;}
-    auto end()   const {return data_ + n_;}
+    
+    static constexpr size_t MAX_BYTES_RAM = max_nbytes;
+    
+    PolymorphicMat(size_t nr, size_t nc, size_t maxmem=MAX_BYTES_RAM, const char *s=nullptr) {
+        size_t spacing = blaze::nextMultiple(nc, blaze::SIMDTrait<VT>::size);
+        size_t total_bytes = nr * spacing * sizeof(VT);
+        VT *ptr;
+        if(total_bytes > maxmem) {
+            diskmat_.reset(new DiskType(nr, nc, s));
+            ptr = diskmat_->data();
+        } else {
+            rammat_.reset(new blaze::DynamicMatrix<VT, SO>(nr, nc));
+            ptr = rammat_->data();
+        }
+        cm_.reset(new CMType(ptr, nr, nc, spacing));
+    }
+    CMType &operator~() {return *cm_;}
+    const CMType &operator~() const {return *cm_;}
 };
 
 } // fgc

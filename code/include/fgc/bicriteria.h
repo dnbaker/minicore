@@ -134,7 +134,6 @@ get_costs(Graph &x, const Container &container) {
     for(const auto vtx: container) {
         boost::add_edge(synthetic_vertex, vtx, 0., x);
     }
-    boost::add_edge(synthetic_vertex, synthetic_vertex, 0., x);
     std::fprintf(stderr, "About to call dijkstra\n");
     boost::dijkstra_shortest_paths(x, synthetic_vertex,
                                    distance_map(&costs[0]).predecessor_map(&p[0]));
@@ -159,6 +158,46 @@ get_costs(Graph &x, const Container &container) {
 }
 
 } // thorup
+template<typename Graph, typename RNG, typename ICon, typename FCon>
+double sample_full_costs(Graph &x, RNG &rng, unsigned k, ICon &indices, FCon &costbuffer) {
+    indices.reserve(k);
+    const size_t nsamp = boost::num_vertices(x);
+    while(indices.size() < k) {
+        if(auto v = rng() % nsamp; std::find(indices.begin(), indices.end(), v) == indices.end())
+            blz::push_back(indices, v);
+    }
+    util::ScopedSyntheticVertex<Graph> vx(x);
+    auto synthetic_vertex = vx.get();
+    for(auto idx: indices)
+        boost::add_edge(synthetic_vertex, idx, 0., x);
+    boost::dijkstra_shortest_paths(x, synthetic_vertex, distance_map(&costbuffer[0]));
+    boost::clear_vertex(synthetic_vertex, x);
+    double ret = 0.;
+    OMP_PRAGMA("omp parallel for reduction(+:ret)")
+    for(unsigned i = 0; i < nsamp; ++i) {
+        ret += costbuffer[i];
+    }
+    return ret;
+}
+
+template<typename Graph, typename RNG>
+void sample_cost_full(Graph &x, RNG &rng, std::ofstream &ofs, unsigned k, unsigned nsamples=1000) {
+    blaze::SmallArray<unsigned, 32> indices;
+    indices.reserve(k);
+    std::vector<float> costs(boost::num_vertices(x) + 1, 0.);
+    double maxcost = std::numeric_limits<double>::min(),
+           mincost = std::numeric_limits<double>::max(),
+           meancost = 0.;
+    for(unsigned i = 0; i < nsamples; ++i) {
+        double cost = sample_full_costs(x, rng, k, indices, costs);
+        maxcost = std::max(cost, maxcost);
+        mincost = std::min(cost, mincost);
+        meancost += cost;
+        indices.clear();
+    }
+    meancost /= nsamples;
+    ofs << "fullproblem\t" << boost::num_vertices(x) << '\t' << mincost << '\t' << meancost << '\t' << maxcost << '\n';
+}
 using namespace thorup;
 
 namespace tnk {
