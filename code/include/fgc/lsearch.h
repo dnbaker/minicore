@@ -50,7 +50,7 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
             auto wrow(row(working_space, rowid));
             auto vtx = sources ? (*sources)[i]: vertices[i];
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&wrow[0]));
-            row(mat, i) = elements(wrow, sources->data(), sources->size());
+            row(mat, i) = serial(elements(wrow, sources->data(), sources->size()));
         }
     } else {
         OMP_PFOR

@@ -40,6 +40,8 @@ struct DiskMat {
         std::memcpy(ms_->data(), o.ms_->data(), sizeof(VT) * (~*this).spacing() * nr_);
         std::fprintf(stderr, "Copied to %s\n", path_.size() ? path_.data(): "tmpfile");
     }
+    operator       MatType &()       {return ~*this;}
+    operator const MatType &() const {return ~*this;}
     DiskMat(size_t nr, size_t nc, const char *s=nullptr, size_t offset=0, bool delete_file=true):
         nr_(nr), nc_(nc),
         delete_file_(delete_file),
@@ -96,9 +98,9 @@ struct DiskMat {
     }
     auto data() const {return mat_.data();}
     auto data()       {return mat_.data();}
-    auto spacing() const {return (~*this).spacing();}
-    auto rows() const {return (~*this).rows();}
-    auto columns() const {return (~*this).columns();}
+    auto spacing() const {return mat_.spacing();}
+    auto rows() const {return mat_.rows();}
+    auto columns() const {return mat_.columns();}
     MatType       &operator~()       {return mat_;}
     const MatType &operator~() const {return mat_;}
 }; // DiskMat

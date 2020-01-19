@@ -135,8 +135,11 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "Working in RAM\n");
         rammatptr.reset(new blaze::DynamicMatrix<float>(graph2rammat(g, fn, &sampled, true)));
     }
+    std::fprintf(stderr, "Making custom matrix\n");
     CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), sampled.size(), sampled.size(), diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
+    std::fprintf(stderr, "Made custom matrix\n");
     if(z != 1.) {
+        std::fprintf(stderr, "powering of distance\n");
         assert(z > 1.);
         dm = pow(abs(dm), z);
     }
@@ -144,6 +147,7 @@ int main(int argc, char **argv) {
 
     // Perform Thorup sample before JV method.
     auto lsearcher = make_kmed_lsearcher(dm, k, 1e-5, seed);
+    std::fprintf(stderr, "made lsearcher\n");
     lsearcher.run();
     std::fprintf(stderr, "[Phase 3] Local search completed\n");
     auto med_solution = lsearcher.sol_;
