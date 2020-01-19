@@ -16,30 +16,61 @@
 namespace fgc {
 
 template<typename Graph, typename MatType, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
-void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullptr) {
+void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullptr, bool sources_only=false) {
     const size_t nrows = sources ? sources->size(): boost::num_vertices(x);
-    assert((~mat).rows() == nrows && (~mat).columns() == boost::num_vertices(x));
+    size_t ncol = sources_only ? nrows: boost::num_vertices(x);
     const typename boost::graph_traits<Graph>::vertex_iterator vertices = boost::vertices(x).first;
+    if(mat.rows() != nrows || mat.columns() != ncol) throw std::invalid_argument("mat sizes don't match output");
 #ifndef NDEBUG
     auto vtx_idx_map = boost::get(vertex_index, x);
 #endif
-    OMP_PFOR
-    for(size_t i = 0; i < nrows; ++i) {
-        auto mr = row(~mat, i);
-        auto vtx = sources ? (*sources)[i]: vertices[i];
-        assert(vtx == vtx_idx_map[vtx]);
-        assert(vtx < boost::num_vertices(x));
-        boost::dijkstra_shortest_paths(x, vtx, distance_map(&mr[0]));
+    if(sources_only) {
+        // require that mat have nrows * ncol
+        if(sources == nullptr) throw std::invalid_argument("sources_only requires non-null sources");
+        unsigned nt = 1;
+#ifdef _OPENMP
+        OMP_PRAGMA("omp parallel")
+        {
+            OMP_PRAGMA("omp single")
+            nt = omp_get_num_threads();
+        }
+#endif
+#if DISKBASED_WORKING_SPACE
+        DiskMat<float> ws(nt, boost::num_vertices(x));
+        auto &working_space = ~ws;
+#else
+        blaze::DynamicMatrix<float> working_space(nt, boost::num_vertices(x));
+#endif
+        OMP_PFOR
+        for(size_t i = 0; i < nrows; ++i) {
+            unsigned rowid = 0;
+#ifdef _OPENMP
+            rowid = omp_get_thread_num();
+#endif
+            auto wrow(row(working_space, rowid));
+            auto vtx = sources ? (*sources)[i]: vertices[i];
+            boost::dijkstra_shortest_paths(x, vtx, distance_map(&wrow[0]));
+            row(mat, i) = elements(wrow, sources->data(), sources->size());
+        }
+    } else {
+        OMP_PFOR
+        for(size_t i = 0; i < nrows; ++i) {
+            auto mr = row(~mat, i);
+            auto vtx = sources ? (*sources)[i]: vertices[i];
+            assert(vtx == vtx_idx_map[vtx]);
+            assert(vtx < boost::num_vertices(x));
+            boost::dijkstra_shortest_paths(x, vtx, distance_map(&mr[0]));
+        }
     }
 }
 
 template<typename Graph, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
-DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Graph &x, std::string path, const VType *sources=nullptr) {
+DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Graph &x, std::string path, const VType *sources=nullptr, bool sources_only=false) {
     static_assert(std::is_arithmetic<typename Graph::edge_property_type::value_type>::value, "This should be floating point, or at least arithmetic");
     using FT = typename Graph::edge_property_type::value_type;
     const size_t nv = boost::num_vertices(x), nrows = sources ? sources->size(): nv;
     DiskMat<FT> ret(nrows, nv, path);
-    fill_graph_distmat(x, ret, sources);
+    fill_graph_distmat(x, ret, sources, sources_only);
     return ret;
 }
 
