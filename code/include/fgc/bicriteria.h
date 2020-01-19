@@ -31,16 +31,17 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
 
 template<typename... Args>
 std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor>
-thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, double maxfrac=1.) {
+thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, size_t max_sampled=0) {
+    if(max_sampled == 0) max_sampled = boost::num_vertices(x);
     using Vertex = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
     // Algorithm E, Thorup p.418
     const size_t n = boost::num_vertices(x);
-    size_t max_sampled = std::ceil(maxfrac * n);
     //m = boost::num_edges(x);
     const double logn = std::log2(n);
     const double eps  = std::sqrt(logn);
     size_t samples_per_round = std::ceil(21. * k * logn / eps);
     size_t iterations_per_round = std::ceil(3 * logn);
+    std::fprintf(stderr, "max sampled: %zu\n", max_sampled);
     std::fprintf(stderr, "samples per round: %zu\n", samples_per_round);
     std::fprintf(stderr, "iterations per round: %zu\n", iterations_per_round);
     flat_hash_set<Vertex> samples;

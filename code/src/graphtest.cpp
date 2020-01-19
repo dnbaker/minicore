@@ -93,12 +93,14 @@ int main(int argc, char **argv) {
     double z = 1.; // z = power of the distance norm
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     std::vector<unsigned> coreset_sizes;
+    size_t nsampled_max = 0;
     for(int c;(c = getopt(argc, argv, "z:s:c:k:h?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
             case 's': fn = optarg; break;
             case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
+            case 'S': nsampled_max = std::strtoull(optarg, nullptr, 10); break;
             case 'h': default: usage(argv[0]);
         }
     }
@@ -112,13 +114,13 @@ int main(int argc, char **argv) {
     // Assert that it's connected, or else the problem has infinite cost.
     uint64_t seed = 1337;
 
-    size_t nsampled_max = std::min(std::ceil(std::pow(std::log2(boost::num_vertices(g)), 2.5)), 20000.);
-    const double frac = std::max(double(nsampled_max) / boost::num_vertices(g), .5);
+    if(nsampled_max == 0)
+        nsampled_max = std::ceil(std::pow(std::log2(boost::num_vertices(g)), 3.5));
     std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
     std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> *ptr = nullptr;
     if(boost::num_vertices(g) > 20000) {
         std::fprintf(stderr, "num vtx: %zu. Thorup sampling!\n", boost::num_vertices(g));
-        sampled = thorup_sample(g, k, seed, frac);
+        sampled = thorup_sample(g, k, seed, nsampled_max);
         ptr = &sampled;
     }
     auto dm = graph2diskmat(g, fn, ptr);
@@ -133,8 +135,10 @@ int main(int argc, char **argv) {
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
     std::fprintf(stderr, "cost: %f\n", ccost);
+#if !NDEBUG
     for(const auto ms: med_solution)
         assert(ms < boost::num_vertices(g));
+#endif
     // Calculate the costs of this solution
     auto [costs, assignments] = get_costs(g, med_solution);
     if(z != 1.)
