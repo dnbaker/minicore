@@ -42,7 +42,7 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(std::strin
         for(;;) {
             auto newv = std::atoi(s) - 1;
             boost::add_edge(id, newv, static_cast<edge_property_type>(1.), ret);
-            assert(newv < boost::num_vertices(ret));
+            assert(unsigned(newv) < boost::num_vertices(ret));
             assert(id < boost::num_vertices(ret));
 
             if((s = std::strchr(s, ' ')) == nullptr || !std::isdigit(*++s)) break;

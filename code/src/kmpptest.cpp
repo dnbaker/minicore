@@ -21,6 +21,8 @@ void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {
     auto start = t();
     auto cs = outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), rng, npoints, eps, 
                 /*mu=*/1);
+    auto maxv = *std::max_element(cs.indices_.begin(), cs.indices_.end());
+    std::fprintf(stderr, "max index: %u\n", unsigned(maxv));
     auto stop = t();
     std::fprintf(stderr, "kcenter coreset took %gs\n", double((stop - start).count()) / 1e9);
     start = t();
