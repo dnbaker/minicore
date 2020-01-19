@@ -65,7 +65,8 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
 }
 
 template<typename Graph, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
-DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Graph &x, std::string path, const VType *sources=nullptr, bool sources_only=false) {
+DiskMat<typename Graph::edge_property_type::value_type>
+graph2diskmat(const Graph &x, std::string path, const VType *sources=nullptr, bool sources_only=false) {
     static_assert(std::is_arithmetic<typename Graph::edge_property_type::value_type>::value, "This should be floating point, or at least arithmetic");
     using FT = typename Graph::edge_property_type::value_type;
     size_t nv = sources && sources_only ? sources->size(): boost::num_vertices(x), nrows = sources ? sources->size(): nv;
@@ -76,11 +77,12 @@ DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Grap
 
 
 template<typename Graph, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
-blz::DynamicMatrix<typename Graph::edge_property_type::value_type> graph2rammat(const Graph &x, std::string, const VType *sources=nullptr, bool sources_only=false) {
+blz::DynamicMatrix<typename Graph::edge_property_type::value_type>
+graph2rammat(const Graph &x, std::string, const VType *sources=nullptr, bool sources_only=false) {
     static_assert(std::is_arithmetic<typename Graph::edge_property_type::value_type>::value, "This should be floating point, or at least arithmetic");
     using FT = typename Graph::edge_property_type::value_type;
     size_t nv = sources && sources_only ? sources->size(): boost::num_vertices(x), nrows = sources ? sources->size(): nv;
-    blz::DynamicMatrix<typename Graph::edge_property_type::value_type>  ret(nrows, nv);
+    blz::DynamicMatrix<FT>  ret(nrows, nv);
     fill_graph_distmat(x, ret, sources, sources_only);
     return ret;
 }

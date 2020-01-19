@@ -63,6 +63,8 @@ void usage(const char *ex) {
                          "-k\tset k [12]\n"
                          "-c\tAppend coreset size. Default: {100} (if empty)\n"
                          "-s\tPath to write coreset sampler to\n"
+                         "-S\tSet maximum size of Thorup subsampled data. Default: infinity\n"
+                         "-M\tSet maxmimum memory size to use. Default: 16GiB\n"
                          "-z\tset z [1.]\n",
                  ex);
     std::exit(1);
@@ -94,13 +96,15 @@ int main(int argc, char **argv) {
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     std::vector<unsigned> coreset_sizes;
     size_t nsampled_max = 0;
-    for(int c;(c = getopt(argc, argv, "S:z:s:c:k:h?")) >= 0;) {
+    size_t rammax = 16uLL << 30;
+    for(int c;(c = getopt(argc, argv, "M:S:z:s:c:k:h?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
+            case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
             case 's': fn = optarg; break;
             case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
-            case 'S': nsampled_max = std::strtoull(optarg, nullptr, 10); std::fprintf(stderr, "Note: this variable is not used\n"); break;
+            case 'S': nsampled_max = std::strtoull(optarg, nullptr, 10); break;
             case 'h': default: usage(argv[0]);
         }
     }
@@ -119,15 +123,27 @@ int main(int argc, char **argv) {
     sampled = thorup_sample(g, k, seed, nsampled_max);
     std::fprintf(stderr, "sampled size: %zu. argument: %zu\n", sampled.size(), nsampled_max);
     std::fprintf(stderr, "[Phase 1] Thorup sampling complete\n");
-    auto dm = graph2rammat(g, fn, &sampled, true);
+
+    std::unique_ptr<DiskMat<float>> diskmatptr;
+    std::unique_ptr<blaze::DynamicMatrix<float>> rammatptr;
+
+    using CM = blaze::CustomMatrix<float, blaze::aligned, blaze::padded, blaze::rowMajor>;
+    if(sampled.size() * sampled.size() * sizeof(float) > rammax) {
+        std::fprintf(stderr, "Spilling to disk\n");
+        diskmatptr.reset(new DiskMat<float>(graph2diskmat(g, fn, &sampled, true)));
+    } else {
+        std::fprintf(stderr, "Working in RAM\n");
+        rammatptr.reset(new blaze::DynamicMatrix<float>(graph2rammat(g, fn, &sampled, true)));
+    }
+    CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), sampled.size(), sampled.size(), diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
     if(z != 1.) {
         assert(z > 1.);
-        ~dm = pow(abs(~dm), z);
+        dm = pow(abs(dm), z);
     }
     std::fprintf(stderr, "[Phase 2] Distances gathered\n");
 
     // Perform Thorup sample before JV method.
-    auto lsearcher = make_kmed_lsearcher(~dm, k, 1e-5, seed);
+    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-5, seed);
     lsearcher.run();
     std::fprintf(stderr, "[Phase 3] Local search completed\n");
     auto med_solution = lsearcher.sol_;
@@ -165,8 +181,8 @@ int main(int argc, char **argv) {
         std::sprintf(buf, "sampled.%u.matcs", coreset_size);
         std::string fn(buf);
         auto sampled_cs = sampler.sample(coreset_size);
-        //auto subm = submatrix(~dm, 0, 0, coreset_size, (~dm).columns());
-        auto subm = blaze::DynamicMatrix<float>(coreset_size, (~dm).columns());
+        //auto subm = submatrix(dm, 0, 0, coreset_size, (dm).columns());
+        auto subm = blaze::DynamicMatrix<float>(coreset_size, (dm).columns());
         std::fprintf(stderr, "About to fill distmat with coreset of size %u\n", coreset_size);
         blaze::DynamicMatrix<float> coreset_dm(coreset_size, coreset_size);
         fill_graph_distmat(g, coreset_dm, &sampled_cs.indices_, true);

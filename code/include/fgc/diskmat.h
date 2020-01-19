@@ -94,6 +94,9 @@ struct DiskMat {
             }
         }
     }
+    auto data() const {return mat_.data();}
+    auto data()       {return mat_.data();}
+    auto spacing() const {return (~*this).spacing();}
     auto rows() const {return (~*this).rows();}
     auto columns() const {return (~*this).columns();}
     MatType       &operator~()       {return mat_;}
