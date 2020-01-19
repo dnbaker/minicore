@@ -67,8 +67,18 @@ osm2dimacs: src/osm2dimacs.cpp
 fastosm2dimacs: src/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lz -lbz2 -lexpat -o $@ -O3 -fopenmp -lbz2 -lexpat
+        $< -lz -lbz2 -lexpat -o $@ -O3 -fopenmp -DNDEBUG
+
+osm2dimacspgf: src/osm2dimacs.cpp
+	$(CXX) $(CXXFLAGS) \
+        $(OSINC) -pthread \
+        $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg -DNDEBUG -fopenmp
+
+osm2dimacspg: src/osm2dimacs.cpp
+	$(CXX) $(CXXFLAGS) \
+        $(OSINC) -pthread \
+        $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
 clean:
-	rm -f $(EX) graphrun dmlrun $(FEX)
+	rm -f $(EX) graphrun dmlrun $(FEX) $(PGEX) $(PGFEX)
