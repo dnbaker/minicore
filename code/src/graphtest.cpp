@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     std::vector<unsigned> coreset_sizes;
     size_t nsampled_max = 0;
-    for(int c;(c = getopt(argc, argv, "z:s:c:k:h?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "S:z:s:c:k:h?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
@@ -140,7 +140,10 @@ int main(int argc, char **argv) {
         assert(ms < boost::num_vertices(g));
 #endif
     // Calculate the costs of this solution
-    auto [costs, assignments] = get_costs(g, med_solution);
+    std::vector<uint32_t> approx_v(med_solution.begin(), med_solution.end());
+    for(auto &i: approx_v) i = sampled[i]; // Remember, these were indices into the sampled vector, not the original solution
+    std::sort(approx_v.data(), approx_v.data() + approx_v.size());
+    auto [costs, assignments] = get_costs(g, approx_v);
     if(z != 1.)
         costs = blaze::pow(blaze::abs(costs), z);
     // Build a coreset importance sampler based on it.

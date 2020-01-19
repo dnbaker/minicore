@@ -55,6 +55,8 @@ thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, size
         std::fprintf(stderr, "Samples size after iter %zu/%zu: %zu\n", i, nr, samples.size());
     }
     current_buffer.assign(samples.begin(), samples.end());
+    if(max_sampled < samples.size())
+        current_buffer.erase(samples.begin() + max_sampled, samples.end());
     return current_buffer;
 }
 

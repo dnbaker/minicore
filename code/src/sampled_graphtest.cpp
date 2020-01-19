@@ -94,13 +94,13 @@ int main(int argc, char **argv) {
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     std::vector<unsigned> coreset_sizes;
     size_t nsampled_max = 0;
-    for(int c;(c = getopt(argc, argv, "z:s:c:k:h?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "S:z:s:c:k:h?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
             case 's': fn = optarg; break;
             case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
-            case 'S': nsampled_max = std::strtoull(optarg, nullptr, 10); break;
+            case 'S': nsampled_max = std::strtoull(optarg, nullptr, 10); std::fprintf(stderr, "Note: this variable is not used\n"); break;
             case 'h': default: usage(argv[0]);
         }
     }
@@ -114,16 +114,10 @@ int main(int argc, char **argv) {
     // Assert that it's connected, or else the problem has infinite cost.
     uint64_t seed = 1337;
 
-    if(nsampled_max == 0)
-        nsampled_max = std::ceil(std::pow(std::log2(boost::num_vertices(g)), 3.5));
     std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
-    std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> *ptr = nullptr;
-    if(boost::num_vertices(g) > 20000) {
-        std::fprintf(stderr, "num vtx: %zu. Thorup sampling!\n", boost::num_vertices(g));
-        sampled = thorup_sample(g, k, seed, nsampled_max);
-        ptr = &sampled;
-    }
-    auto dm = graph2diskmat(g, fn, ptr);
+    std::fprintf(stderr, "num vtx: %zu. Thorup sampling!\n", boost::num_vertices(g));
+    sampled = thorup_sample(g, k, seed, nsampled_max);
+    auto dm = graph2diskmat(g, fn, &sampled, true);
     if(z != 1.) {
         assert(z > 1.);
         ~dm = pow(abs(~dm), z);
@@ -140,7 +134,10 @@ int main(int argc, char **argv) {
         assert(ms < boost::num_vertices(g));
 #endif
     // Calculate the costs of this solution
-    auto [costs, assignments] = get_costs(g, med_solution);
+    std::vector<uint32_t> approx_v(med_solution.begin(), med_solution.end());
+    for(auto &i: approx_v) i = sampled[i];
+    std::sort(approx_v.data(), approx_v.data() + approx_v.size());
+    auto [costs, assignments] = get_costs(g, approx_v);
     if(z != 1.)
         costs = blaze::pow(blaze::abs(costs), z);
     // Build a coreset importance sampler based on it.
@@ -155,7 +152,7 @@ int main(int argc, char **argv) {
     tblout << "#label" << ':' << "coreset_size" << 'x' << "sampled#times" << '\t' << "mincost" << '\t' << "meancost" << '\t' << "maxcost" << '\n';
     static constexpr unsigned nsamples = 1000;
     for(auto coreset_size: coreset_sizes) {
-        if(auto nr = (~dm).rows(); nr < coreset_size) coreset_size = nr;
+        if(auto nr = boost::num_vertices(g); nr < coreset_size) coreset_size = nr;
         char buf[128];
         std::sprintf(buf, "sampled.%u.matcs", coreset_size);
         std::string fn(buf);
@@ -163,10 +160,9 @@ int main(int argc, char **argv) {
         //auto subm = submatrix(~dm, 0, 0, coreset_size, (~dm).columns());
         auto subm = blaze::DynamicMatrix<float>(coreset_size, (~dm).columns());
         std::fprintf(stderr, "About to fill distmat with coreset of size %u\n", coreset_size);
-        fill_graph_distmat(g, subm, &sampled_cs.indices_);
+        blaze::DynamicMatrix<float> coreset_dm(coreset_size, coreset_size);
+        fill_graph_distmat(g, coreset_dm, &sampled_cs.indices_, true);
         // tmpdm has # indices rows, # nodes columns
-        auto columnsel = columns(subm, sampled_cs.indices_.data(), sampled_cs.indices_.size());
-        blaze::DynamicMatrix<float> coreset_dm = columns(subm, sampled_cs.indices_.data(), sampled_cs.indices_.size());
         assert(coreset_dm.rows() == coreset_dm.columns());
         blaze::Archive<std::ofstream> bfp(fn);
         bfp << sampled_cs.indices_ << sampled_cs.weights_ << coreset_dm;

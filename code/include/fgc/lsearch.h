@@ -68,7 +68,7 @@ template<typename Graph, typename VType=std::vector<typename boost::graph_traits
 DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Graph &x, std::string path, const VType *sources=nullptr, bool sources_only=false) {
     static_assert(std::is_arithmetic<typename Graph::edge_property_type::value_type>::value, "This should be floating point, or at least arithmetic");
     using FT = typename Graph::edge_property_type::value_type;
-    const size_t nv = boost::num_vertices(x), nrows = sources ? sources->size(): nv;
+    size_t nv = sources && sources_only ? sources->size(): boost::num_vertices(x), nrows = sources ? sources->size(): nv;
     DiskMat<FT> ret(nrows, nv, path);
     fill_graph_distmat(x, ret, sources, sources_only);
     return ret;
