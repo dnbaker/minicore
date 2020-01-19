@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
     sampled = thorup_sample(g, k, seed, nsampled_max);
     std::fprintf(stderr, "sampled size: %zu. argument: %zu\n", sampled.size(), nsampled_max);
     std::fprintf(stderr, "[Phase 1] Thorup sampling complete\n");
-    auto dm = graph2diskmat(g, fn, &sampled, true);
+    auto dm = graph2rammat(g, fn, &sampled, true);
     if(z != 1.) {
         assert(z > 1.);
         ~dm = pow(abs(~dm), z);

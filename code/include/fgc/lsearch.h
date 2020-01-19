@@ -74,19 +74,17 @@ DiskMat<typename Graph::edge_property_type::value_type> graph2diskmat(const Grap
     return ret;
 }
 
-#if 0
-template<typename Mat, typename Norm>
-struct MatrixIndexNorm {
-    const Mat mat_;
-    const Norm norm_;
-    template<typename Mat>
-    MatrixMetric(const Mat &mat): mat_(mat) {}
-    template<typename AT>
-    auto operator()(size_t i, size_t j) const {
-        return mat_(i, j);
-    }
-};
-#endif
+
+template<typename Graph, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
+blz::DynamicMatrix<typename Graph::edge_property_type::value_type> graph2rammat(const Graph &x, std::string, const VType *sources=nullptr, bool sources_only=false) {
+    static_assert(std::is_arithmetic<typename Graph::edge_property_type::value_type>::value, "This should be floating point, or at least arithmetic");
+    using FT = typename Graph::edge_property_type::value_type;
+    size_t nv = sources && sources_only ? sources->size(): boost::num_vertices(x), nrows = sources ? sources->size(): nv;
+    blz::DynamicMatrix<typename Graph::edge_property_type::value_type>  ret(nrows, nv);
+    fill_graph_distmat(x, ret, sources, sources_only);
+    return ret;
+}
+
 
 template<typename MatType, typename WFT=float, typename IType=std::uint32_t>
 struct LocalKMedSearcher {
