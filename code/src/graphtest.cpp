@@ -68,6 +68,26 @@ void usage(const char *ex) {
     std::exit(1);
 }
 
+template<typename Mat, typename RNG>
+void sample_and_write(const Mat &mat, RNG &rng, std::ofstream &ofs, unsigned k, std::string label, unsigned nsamples=1000) {
+    double maxcost = 0., meancost = 0., mincost = std::numeric_limits<double>::max();
+    std::vector<uint32_t> indices;
+    const size_t nsamp = mat.rows();
+    indices.reserve(k);
+    for(unsigned i = 0; i < nsamples; ++i) {
+        while(indices.size() < k)
+            if(auto v = rng() % nsamp; std::find(indices.begin(), indices.end(), v) == indices.end())
+                indices.push_back(v);
+        double cost = blaze::sum(blaze::min<blaze::columnwise>(rows(mat, indices.data(), indices.size())));
+        maxcost = std::max(cost, maxcost);
+        mincost = std::min(cost, mincost);
+        meancost += cost;
+        indices.clear();
+    }
+    meancost /= nsamples;
+    ofs << label << ':' << mat.rows() << 'x' << nsamples << '\t' << mincost << '\t' << meancost << '\t' << maxcost << '\n';
+}
+
 int main(int argc, char **argv) {
     unsigned k = 10;
     double z = 1.; // z = power of the distance norm
@@ -125,18 +145,30 @@ int main(int argc, char **argv) {
     std::FILE *ofp = std::fopen(fn.data(), "wb");
     sampler.write(ofp);
     std::fclose(ofp);
+    seed = std::mt19937_64(seed)();
+    wy::WyRand<uint32_t, 2> rng(seed);
+    std::ofstream tblout("./table_out.tsv");
+    tblout << "#label" << ':' << "coreset_size" << 'x' << "sampled#times" << '\t' << "mincost" << '\t' << "meancost" << '\t' << "maxcost" << '\n';
+    static constexpr unsigned nsamples = 1000;
     for(auto coreset_size: coreset_sizes) {
-        if(coreset_size > (~dm).rows()) coreset_size = (~dm).rows();
+        if(auto nr = (~dm).rows(); nr < coreset_size) coreset_size = nr;
+        char buf[128];
+        std::sprintf(buf, "sampled.%u.matcs", coreset_size);
+        std::string fn(buf);
         auto sampled_cs = sampler.sample(coreset_size);
-        std::string fn = std::string("sampled.") + std::to_string(coreset_size) + ".matcs";
         //auto subm = submatrix(~dm, 0, 0, coreset_size, (~dm).columns());
         auto subm = blaze::DynamicMatrix<float>(coreset_size, (~dm).columns());
         std::fprintf(stderr, "About to fill distmat with coreset of size %u\n", coreset_size);
         fill_graph_distmat(g, subm, &sampled_cs.indices_);
         // tmpdm has # indices rows, # nodes columns
         auto columnsel = columns(subm, sampled_cs.indices_.data(), sampled_cs.indices_.size());
-        assert(columnsel.rows() == columnsel.columns());
+        blaze::DynamicMatrix<float> coreset_dm = columns(subm, sampled_cs.indices_.data(), sampled_cs.indices_.size());
+        assert(coreset_dm.rows() == coreset_dm.columns());
         blaze::Archive<std::ofstream> bfp(fn);
-        bfp << sampled_cs.indices_ << sampled_cs.weights_ << columnsel;
+        bfp << sampled_cs.indices_ << sampled_cs.weights_ << coreset_dm;
+        for(size_t i = 0; i < coreset_dm.columns(); ++i) {
+            column(coreset_dm, i) *= sampled_cs.weights_[i];
+        }
+        sample_and_write(coreset_dm, rng, tblout, k, std::string("graphcoreset,z=") + std::to_string(z), nsamples);
     }
 }
