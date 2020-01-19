@@ -20,6 +20,9 @@ all: $(EX)
 fall: $(FEX)
 pgall: $(PGEX)
 pgfall: $(PGFEX)
+that:
+ALL: pgall pgfall \
+    all that fall
 
 ifdef OMP
 CXXFLAGS += -fopenmp

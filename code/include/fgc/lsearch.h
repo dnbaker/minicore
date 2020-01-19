@@ -230,17 +230,17 @@ struct LocalKMedSearcher {
             next:
             for(const auto oldcenter: sol_) {
                 for(size_t pi = 0; pi < nr_; ++pi) {
-                    if(sol_.find(pi) != sol_.end()) continue;
-                    const auto val = evaluate_swap(pi, oldcenter);
-                    if(val > diffthresh) {
-                        //std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu\n", pi, oldcenter, total + 1);
-                        sol_.erase(oldcenter);
-                        sol_.insert(pi);
-
-                        recalculate();
-                        diffthresh = current_cost_ / k_ * eps_;
-                        ++total;
-                        goto next; // Meaning we've swapped this guy out and will pick another one.
+                    if(sol_.find(pi) == sol_.end()) {
+                        if(const auto val = evaluate_swap(pi, oldcenter);
+                           val > diffthresh) {
+                            std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
+                            sol_.erase(oldcenter);
+                            sol_.insert(pi);
+                            recalculate();
+                            diffthresh = current_cost_ / k_ * eps_;
+                            ++total;
+                            goto next; // Meaning we've swapped this guy out and will pick another one.
+                        }
                     }
                 }
             }

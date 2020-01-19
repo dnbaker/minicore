@@ -45,7 +45,9 @@ struct DiskMat {
         delete_file_(delete_file),
         path_(s ? s: "")
     {
-        std::fprintf(stderr, "Opened file at %s\n", s ? s: "tmpfile");
+#if VERBOSE_AF
+        std::fprintf(stderr, "Opened file at %s to make matrix of size %zu, %zu\n", s ? s: "tmpfile", nr_, nc_);
+#endif
         if(isAligned && offset % (SIMDSIZE * sizeof(VT))) {
             throw std::invalid_argument("offset is not aligned; invalid storage.");
         }
@@ -82,7 +84,9 @@ struct DiskMat {
     ~DiskMat() {
         if(fp_) std::fclose(fp_);
         if(delete_file_ && path_.size()) {
+#if VERBOSE_AF
             std::fprintf(stderr, "[%s at %p]path: %s/%p\n", __PRETTY_FUNCTION__, (void *)this, path_.data(), (void *)path_.data());
+#endif
             auto rc = std::system((std::string("rm ") + path_).data());
             if(rc) {
                 std::fprintf(stderr, "Note: file deletion failed with exit status %d and stopsig %d\n",

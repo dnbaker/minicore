@@ -123,6 +123,7 @@ int main(int argc, char **argv) {
         sampled = thorup_sample(g, k, seed, nsampled_max);
         ptr = &sampled;
     }
+    std::fprintf(stderr, "Thorup sampling complete\n");
     auto dm = graph2diskmat(g, fn, ptr);
     if(z != 1.) {
         assert(z > 1.);
@@ -135,13 +136,14 @@ int main(int argc, char **argv) {
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
     std::fprintf(stderr, "cost: %f\n", ccost);
-#if !NDEBUG
-    for(const auto ms: med_solution)
+    for(const auto ms: med_solution) {
+        assert(ms < lsearcher.mat_.rows());
+        if(ptr) assert(ms < sampled.size());
         assert(ms < boost::num_vertices(g));
-#endif
+    }
     // Calculate the costs of this solution
     std::vector<uint32_t> approx_v(med_solution.begin(), med_solution.end());
-    for(auto &i: approx_v) i = sampled[i]; // Remember, these were indices into the sampled vector, not the original solution
+    if(ptr) for(auto &i: approx_v) i = sampled[i]; // Remember, these were indices into the sampled vector, not the original solution
     std::sort(approx_v.data(), approx_v.data() + approx_v.size());
     auto [costs, assignments] = get_costs(g, approx_v);
     if(z != 1.)

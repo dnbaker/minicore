@@ -117,15 +117,19 @@ int main(int argc, char **argv) {
     std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
     std::fprintf(stderr, "num vtx: %zu. Thorup sampling!\n", boost::num_vertices(g));
     sampled = thorup_sample(g, k, seed, nsampled_max);
+    std::fprintf(stderr, "sampled size: %zu. argument: %zu\n", sampled.size(), nsampled_max);
+    std::fprintf(stderr, "[Phase 1] Thorup sampling complete\n");
     auto dm = graph2diskmat(g, fn, &sampled, true);
     if(z != 1.) {
         assert(z > 1.);
         ~dm = pow(abs(~dm), z);
     }
+    std::fprintf(stderr, "[Phase 2] Distances gathered\n");
 
     // Perform Thorup sample before JV method.
     auto lsearcher = make_kmed_lsearcher(~dm, k, 1e-5, seed);
     lsearcher.run();
+    std::fprintf(stderr, "[Phase 3] Local search completed\n");
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
     std::fprintf(stderr, "cost: %f\n", ccost);
@@ -135,7 +139,11 @@ int main(int argc, char **argv) {
 #endif
     // Calculate the costs of this solution
     std::vector<uint32_t> approx_v(med_solution.begin(), med_solution.end());
-    for(auto &i: approx_v) i = sampled[i];
+    for(auto &i: approx_v) {
+        assert(i < sampled.size());
+        i = sampled[i];
+        assert(i < boost::num_vertices(g));
+    }
     std::sort(approx_v.data(), approx_v.data() + approx_v.size());
     auto [costs, assignments] = get_costs(g, approx_v);
     if(z != 1.)
