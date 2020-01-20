@@ -187,7 +187,7 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
         sumd2 -= distances[newc];
         distances[newc] = 0.;
         double sum = sumd2;
-        OMP_PFOR
+        OMP_PRAGMA("omp parallel for reduction(+:sum)")
         for(IT i = 0; i < np; ++i) {
             if(unlikely(i == newc)) continue;
             auto &ldist = distances[i];
@@ -195,7 +195,6 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
             if(dist < ldist) { // Only write if it changed
                 assignments[i] = current_center_id;
                 auto diff = dist - ldist;
-                OMP_ATOMIC
                 sum += diff;
                 ldist = dist;
             }

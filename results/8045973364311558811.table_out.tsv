@@ -1,0 +1,9 @@
+##Command-line: './kzclustexp -c10 -c100 -c1000 -c10000 ../data/miniosm.gr'
+##z: 1
+##nsamples: 500
+##k: 10
+#coreset_size	distortion
+10	0.173862
+100	0.185775
+1000	0.0393204
+10000	0.00994122

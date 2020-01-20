@@ -15,6 +15,44 @@ using namespace fgc;
 using namespace boost;
 
 
+template<typename Graph, typename ICon, typename FCon, typename IT, typename RetCon>
+void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuffer,
+                             const std::vector<coresets::IndexCoreset<IT, typename Graph::edge_distance_type>> &coresets,
+                             RetCon &ret)
+{
+    assert(ret.size() == coresets.size());
+    const size_t nv = boost::num_vertices(x);
+    const size_t ncs = coresets.size();
+    util::ScopedSyntheticVertex<Graph> vx(x);
+    {
+        auto synthetic_vertex = vx.get();
+        for(auto idx: indices)
+            boost::add_edge(synthetic_vertex, idx, 0., x);
+        boost::dijkstra_shortest_paths(x, synthetic_vertex, distance_map(&costbuffer[0]));
+    }
+    double fullcost = 0.;
+    OMP_PRAGMA("omp parallel for reduction(+:fullcost)")
+    for(unsigned i = 0; i < nv; ++i) {
+        fullcost += costbuffer[i];
+    }
+    OMP_PFOR
+    for(size_t j = 0; j < ncs; ++j) {
+        const auto indices = coresets[j].indices_.data();
+        const auto weights = coresets[j].weights_.data();
+        const size_t cssz = coresets[j].size();
+        double coreset_cost = 0.;
+        //OMP_PRAGMA("omp parallel for reduction(+:coreset_cost)")
+        for(unsigned i = 0; i < cssz; ++i) {
+            coreset_cost += costbuffer[indices[i]] * weights[i];
+        }
+        ret[j] = coreset_cost;
+    }
+    for(size_t j = 0; j < ncs; ++j) {
+        double distortion = std::abs(ret[j] / fullcost - 1.);
+        std::fprintf(stderr, "distortion for coreset %zu of size %zu is %g\n", j, coresets[j].size(), distortion);
+        ret[j] = distortion;
+    }
+}
 
 template<typename GraphT>
 GraphT &
@@ -38,13 +76,12 @@ max_component(GraphT &g) {
         GraphT newg(counts[maxcomp]);
         typename boost::property_map <fgc::Graph<undirectedS>,
                              boost::edge_weight_t >::type EdgeWeightMap = get(boost::edge_weight, g);
-        for(auto edge: g.edges()) {
-            auto lhs = source(edge, g);
-            auto rhs = target(edge, g);
-            if(auto lit = remapper.find(lhs), rit = remapper.find(rhs);
-               lit != remapper.end() && rit != remapper.end()) {
+        using MapIt = typename flat_hash_map<uint64_t, uint64_t>::const_iterator;
+        MapIt lit, rit;
+        for(const auto edge: g.edges()) {
+            if((lit = remapper.find(source(edge, g))) != remapper.end() &&
+               (rit = remapper.find(target(edge, g))) != remapper.end())
                 boost::add_edge(lit->second, rit->second, EdgeWeightMap[edge], newg);
-            }
         }
         ncomp = boost::connected_components(newg, ccomp.get());
         std::fprintf(stderr, "num components: %u. num edges: %zu. num nodes: %zu\n", ncomp, newg.num_edges(), newg.num_vertices());
@@ -64,7 +101,7 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
     char buf[128];
     std::sprintf(buf, "'\n##z: %g\n##nsamples: %u\n##k: %u\n", z, nsamples, k);
     ofs << buf;
-    ofs << "#label\tcoreset_size\tmincost\tmeancost\tmaxcost\n";
+    ofs << "#coreset_size\tdistortion\n";
 }
 
 void usage(const char *ex) {
@@ -78,26 +115,6 @@ void usage(const char *ex) {
                          "-z\tset z [1.]\n",
                  ex);
     std::exit(1);
-}
-
-template<typename Mat, typename RNG>
-void sample_and_write(const Mat &mat, RNG &rng, std::ofstream &ofs, unsigned k, std::string label, unsigned nsamples=1000) {
-    double maxcost = 0., meancost = 0., mincost = std::numeric_limits<double>::max();
-    std::vector<uint32_t> indices;
-    const size_t nsamp = mat.rows();
-    indices.reserve(k);
-    for(unsigned i = 0; i < nsamples; ++i) {
-        while(indices.size() < k)
-            if(auto v = rng() % nsamp; std::find(indices.begin(), indices.end(), v) == indices.end())
-                indices.push_back(v);
-        double cost = blaze::sum(blaze::min<blaze::columnwise>(rows(mat, indices.data(), indices.size())));
-        maxcost = std::max(cost, maxcost);
-        mincost = std::min(cost, mincost);
-        meancost += cost;
-        indices.clear();
-    }
-    meancost /= nsamples;
-    ofs << label << '\t' << mat.rows() << '\t' << mincost << '\t' << meancost << '\t' << maxcost << '\n';
 }
 
 int main(int argc, char **argv) {
@@ -136,10 +153,12 @@ int main(int argc, char **argv) {
     if(output_prefix.empty())
         output_prefix = std::to_string(seed);
     std::string input = argc == optind ? "../data/dolphins.graph": const_cast<const char *>(argv[optind]);
-    std::srand(std::hash<std::string>{}(input));
+    std::srand(seed);
     std::fprintf(stderr, "Reading from file: %s\n", input.data());
 
+    // Parse the graph
     fgc::Graph<undirectedS, float> g = parse_by_fn(input);
+    // Select only the component with the most edges.
     max_component(g);
     // Assert that it's connected, or else the problem has infinite cost.
 
@@ -191,21 +210,47 @@ int main(int argc, char **argv) {
     wy::WyRand<uint32_t, 2> rng(seed);
     std::string ofname = output_prefix + ".table_out.tsv";
     std::ofstream tblout(ofname);
-    static constexpr unsigned nsamples = 1000;
+    static constexpr unsigned nsamples = 500;
     print_header(tblout, argv, nsamples, k, z);
-    sample_cost_full(g, rng, tblout, k, nsamples);
+    blaze::DynamicMatrix<uint32_t> random_centers(nsamples, k);
+    for(size_t i = 0; i < random_centers.rows(); ++i) {
+        auto r = row(random_centers, i);
+        wy::WyRand<uint32_t> rng(seed + i * nsamples);
+        flat_hash_set<uint32_t> centers; centers.reserve(k);
+        while(centers.size() < k) {
+            centers.insert(rng() % boost::num_vertices(g));
+        }
+        auto it = centers.begin();
+        for(size_t j = 0; j < r.size(); ++j)
+            r[j] = *it++;
+        std::sort(r.begin(), r.end());
+    }
+    std::vector<coresets::IndexCoreset<uint32_t, float>> coresets;
+    coresets.reserve(coreset_sizes.size());
     for(auto coreset_size: coreset_sizes) {
-        auto sampled_cs = sampler.sample(coreset_size);
-        PolymorphicMat<float> coreset_mat(coreset_size, coreset_size, rammax);
-        auto &coreset_dm(~coreset_mat);
-        fill_graph_distmat(g, coreset_dm, &sampled_cs.indices_, true);
-        // tmpdm has # indices rows, # nodes columns
-        assert(coreset_dm.rows() == coreset_dm.columns());
+        coresets.emplace_back(sampler.sample(coreset_size));
         std::string fn(output_prefix + ".sampled." + std::to_string(coreset_size) + ".matcs");
         blaze::Archive<std::ofstream> bfp(fn);
-        bfp << sampled_cs.indices_ << sampled_cs.weights_;
-        for(size_t i = 0; i < coreset_dm.columns(); ++i)
-            column(coreset_dm, i) *= sampled_cs.weights_[i];
-        sample_and_write(coreset_dm, rng, tblout, k, "coreset", nsamples);
+        bfp << coresets.back().indices_ << coresets.back().weights_;
     }
+    blaze::DynamicVector<double> maxdistortion(coresets.size(), std::numeric_limits<double>::min()),
+                                 distbuffer(boost::num_vertices(g)),
+                                 currentdistortion(coresets.size()),
+                                 mindistortion(coresets.size(), std::numeric_limits<double>::max()),
+                                 meandistortion(coresets.size(), 0.);
+    for(size_t i = 0; i < random_centers.rows(); ++i) {
+        auto rc = row(random_centers, i);
+        assert(rc.size() == k);
+        calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion);
+        maxdistortion = max(maxdistortion, currentdistortion);
+        mindistortion = min(mindistortion, currentdistortion);
+        meandistortion = meandistortion + currentdistortion;
+    }
+    meandistortion /= random_centers.rows();
+    for(size_t i = 0; i < coreset_sizes.size(); ++i) {
+        tblout << coreset_sizes[i] << '\t' << currentdistortion[i] << '\n';
+    }
+    std::cerr << "mean\n" << meandistortion;
+    std::cerr << "max\n" << maxdistortion;
+    std::cerr << "min\n" << mindistortion;
 }

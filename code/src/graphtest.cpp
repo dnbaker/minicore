@@ -15,6 +15,44 @@ using namespace fgc;
 using namespace boost;
 
 
+template<typename Graph, typename RNG, typename ICon, typename FCon, typename IT, typename RetCon>
+void calculate_distortion_centerset(Graph &x, unsigned k, const ICon &indices, FCon &costbuffer,
+                             const std::vector<coresets::IndexCoreset<IT, typename graph::edge_distance_type>> &coresets,
+                             RetCon &ret)
+{
+    assert(ret.size() == coresets.size());
+    const size_t nv = boost::num_vertices(x);
+    const size_t ncs = coresets.size();
+    util::ScopedSyntheticVertex<Graph> vx(x);
+    {
+        auto synthetic_vertex = vx.get();
+        for(auto idx: indices)
+            boost::add_edge(synthetic_vertex, idx, 0., x);
+        boost::dijkstra_shortest_paths(x, synthetic_vertex, distance_map(&costbuffer[0]));
+    }
+    double fullcost = 0.;
+    OMP_PRAGMA("omp parallel for reduction(+:fullcost)")
+    for(unsigned i = 0; i < nv; ++i) {
+        fullcost += costbuffer[i];
+    }
+    OMP_PFOR
+    for(size_t j = 0; j < ncs; ++j) {
+        const auto indices = coresets[j].indices_.data();
+        const auto weights = coresets[j].weights_.data();
+        const size_t cssz = coresets[j].size();
+        double coreset_cost = 0.;
+        //OMP_PRAGMA("omp parallel for reduction(+:coreset_cost)")
+        for(unsigned i = 0; i < cssz; ++i) {
+            coreset_cost += costbuffer[indices[i]] * weights[i];
+        }
+        ret[j] = coreset_cost;
+    }
+    for(size_t j = 0; i < ncs; ++j) {
+        double distortion = std::abs(ret[j] / fullcost - 1.);
+        std::fprintf(stderr, "distortion for coreset %zu of size %zu is %g\n", j, coresets[j].size(), distortion);
+        ret[j] = distortion;
+    }
+}
 
 #if 0
 fgc::Graph<undirectedS> &

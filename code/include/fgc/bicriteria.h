@@ -156,28 +156,8 @@ get_costs(Graph &x, const Container &container) {
 }
 
 } // thorup
-template<typename Graph, typename RNG, typename ICon, typename FCon>
-double sample_full_costs(Graph &x, RNG &rng, unsigned k, ICon &indices, FCon &costbuffer) {
-    indices.reserve(k);
-    const size_t nsamp = boost::num_vertices(x);
-    while(indices.size() < k) {
-        if(auto v = rng() % nsamp; std::find(indices.begin(), indices.end(), v) == indices.end())
-            blz::push_back(indices, v);
-    }
-    util::ScopedSyntheticVertex<Graph> vx(x);
-    auto synthetic_vertex = vx.get();
-    for(auto idx: indices)
-        boost::add_edge(synthetic_vertex, idx, 0., x);
-    boost::dijkstra_shortest_paths(x, synthetic_vertex, distance_map(&costbuffer[0]));
-    boost::clear_vertex(synthetic_vertex, x);
-    double ret = 0.;
-    OMP_PRAGMA("omp parallel for reduction(+:ret)")
-    for(unsigned i = 0; i < nsamp; ++i) {
-        ret += costbuffer[i];
-    }
-    return ret;
-}
 
+#if 0
 template<typename Graph, typename RNG>
 void sample_cost_full(Graph &x, RNG &rng, std::ofstream &ofs, unsigned k, unsigned nsamples=1000) {
     blaze::SmallArray<unsigned, 32> indices;
@@ -196,6 +176,7 @@ void sample_cost_full(Graph &x, RNG &rng, std::ofstream &ofs, unsigned k, unsign
     meancost /= nsamples;
     ofs << "fullproblem\t" << boost::num_vertices(x) << '\t' << mincost << '\t' << meancost << '\t' << maxcost << '\n';
 }
+#endif
 using namespace thorup;
 
 namespace tnk {
