@@ -193,6 +193,8 @@ int main(int argc, char **argv) {
     lsearcher.run();
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
+    if(diskmatptr) diskmatptr.reset();
+    if(rammatptr) rammatptr.reset();
 
     std::fprintf(stderr, "[Phase 3] Local search completed. Cost for solution: %g\n", ccost);
     // Calculate the costs of this solution
