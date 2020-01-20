@@ -18,7 +18,7 @@ using namespace boost;
 template<typename Graph, typename ICon, typename FCon, typename IT, typename RetCon>
 void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuffer,
                              const std::vector<coresets::IndexCoreset<IT, typename Graph::edge_distance_type>> &coresets,
-                             RetCon &ret)
+                             RetCon &ret, double z)
 {
     assert(ret.size() == coresets.size());
     const size_t nv = boost::num_vertices(x);
@@ -29,6 +29,9 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
         for(auto idx: indices)
             boost::add_edge(synthetic_vertex, idx, 0., x);
         boost::dijkstra_shortest_paths(x, synthetic_vertex, distance_map(&costbuffer[0]));
+    }
+    if(z != 1.) {
+        costbuffer = pow(costbuffer, z);
     }
     double fullcost = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:fullcost)")
@@ -243,7 +246,7 @@ int main(int argc, char **argv) {
     for(size_t i = 0; i < random_centers.rows(); ++i) {
         auto rc = row(random_centers, i);
         assert(rc.size() == k);
-        calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion);
+        calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion, z);
         maxdistortion = max(maxdistortion, currentdistortion);
         mindistortion = min(mindistortion, currentdistortion);
         meandistortion = meandistortion + currentdistortion;
