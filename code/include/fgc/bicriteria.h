@@ -134,10 +134,8 @@ get_costs(Graph &x, const Container &container) {
     for(const auto vtx: container) {
         boost::add_edge(synthetic_vertex, vtx, 0., x);
     }
-    std::fprintf(stderr, "About to call dijkstra\n");
     boost::dijkstra_shortest_paths(x, synthetic_vertex,
                                    distance_map(&costs[0]).predecessor_map(&p[0]));
-    std::fprintf(stderr, "dijkstra finished\n");
     typename boost::property_map<Graph, boost::vertex_index_t>::type index = get(boost::vertex_index, x);
     using v_int_t = decltype(index[p[0]]);
     flat_hash_map<v_int_t, uint32_t> pid2ind;

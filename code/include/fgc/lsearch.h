@@ -45,7 +45,9 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
             auto wrow(row(working_space, rowid));
             auto vtx = (*sources)[i];
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&wrow[0]));
+            std::fprintf(stderr, "Calculated dijkstra for row %zu from thread %u\n", i, rowid);
             row(mat, i) = serial(elements(wrow, sources->data(), sources->size()));
+            std::fprintf(stderr, "Assigned row %zu from thread %u\n", i, rowid);
         }
     } else {
         OMP_PFOR

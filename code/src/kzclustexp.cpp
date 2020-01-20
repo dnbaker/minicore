@@ -113,12 +113,17 @@ int main(int argc, char **argv) {
             return x ^ std::hash<std::string>{}(y);                                
         }
     );
-    for(int c;(c = getopt(argc, argv, "o:M:S:z:s:c:k:R:h?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "p:o:M:S:z:s:c:k:R:h?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
             case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
+            case 'p':
+#ifdef _OPENMP
+                omp_set_num_threads(std::atoi(optarg));
+#endif
+                break;
             case 'o': output_prefix = optarg; break;
             case 's': fn = optarg; break;
             case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
