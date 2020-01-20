@@ -112,7 +112,8 @@ void usage(const char *ex) {
                          "-S\tSet maximum size of Thorup subsampled data. Default: infinity\n"
                          "-M\tSet maxmimum memory size to use. Default: 16GiB\n"
                          "-R\tSet random seed. Default: hash based on command-line arguments\n"
-                         "-z\tset z [1.]\n",
+                         "-z\tset z [1.]\n"
+                         "-t\tSet number of sampled centers to test [500]\n",
                  ex);
     std::exit(1);
 }
@@ -123,6 +124,7 @@ int main(int argc, char **argv) {
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
+    unsigned coreset_testing_num_iter = 500;
     size_t nsampled_max = 0;
     size_t rammax = 16uLL << 30;
     uint64_t seed = std::accumulate(argv, argv + argc, uint64_t(0),                 
@@ -130,12 +132,13 @@ int main(int argc, char **argv) {
             return x ^ std::hash<std::string>{}(y);                                
         }
     );
-    for(int c;(c = getopt(argc, argv, "p:o:M:S:z:s:c:k:R:h?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "t:p:o:M:S:z:s:c:k:R:h?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
             case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
+            case 't': coreset_testing_num_iter = std::atoi(optarg); break;
             case 'p':
 #ifdef _OPENMP
                 omp_set_num_threads(std::atoi(optarg));
@@ -210,12 +213,11 @@ int main(int argc, char **argv) {
     wy::WyRand<uint32_t, 2> rng(seed);
     std::string ofname = output_prefix + ".table_out.tsv";
     std::ofstream tblout(ofname);
-    static constexpr unsigned nsamples = 500;
-    print_header(tblout, argv, nsamples, k, z);
-    blaze::DynamicMatrix<uint32_t> random_centers(nsamples, k);
+    print_header(tblout, argv, coreset_testing_num_iter, k, z);
+    blaze::DynamicMatrix<uint32_t> random_centers(coreset_testing_num_iter, k);
     for(size_t i = 0; i < random_centers.rows(); ++i) {
         auto r = row(random_centers, i);
-        wy::WyRand<uint32_t> rng(seed + i * nsamples);
+        wy::WyRand<uint32_t> rng(seed + i * coreset_testing_num_iter);
         flat_hash_set<uint32_t> centers; centers.reserve(k);
         while(centers.size() < k) {
             centers.insert(rng() % boost::num_vertices(g));
