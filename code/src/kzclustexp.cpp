@@ -44,7 +44,6 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
         const auto weights = coresets[j].weights_.data();
         const size_t cssz = coresets[j].size();
         double coreset_cost = 0.;
-        //OMP_PRAGMA("omp parallel for reduction(+:coreset_cost)")
         for(unsigned i = 0; i < cssz; ++i) {
             coreset_cost += costbuffer[indices[i]] * weights[i];
         }
@@ -104,7 +103,7 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
     char buf[128];
     std::sprintf(buf, "'\n##z: %g\n##nsamples: %u\n##k: %u\n", z, nsamples, k);
     ofs << buf;
-    ofs << "#coreset_size\tmax distortion\tmean distortion\n";
+    ofs << "#coreset_size\tmax distortion (true coreset)\tmean distortion (true coreset)\tmax distortion (uniform sampling)\tmean distortion (uniform sampling)\n";
 }
 
 void usage(const char *ex) {
@@ -208,8 +207,9 @@ int main(int argc, char **argv) {
     // For locality when calculating
     std::sort(approx_v.data(), approx_v.data() + approx_v.size());
     auto [costs, assignments] = get_costs(g, approx_v);
+    std::fprintf(stderr, "[Phase 4] Calculated costs and assignments for all points\n");
     if(z != 1.)
-        costs = blaze::pow(blaze::abs(costs), z);
+        costs = blaze::pow(costs, z);
     // Build a coreset importance sampler based on it.
     coresets::CoresetSampler<float, uint32_t> sampler;
     sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data());
@@ -234,20 +234,26 @@ int main(int argc, char **argv) {
             r[j] = *it++;
         std::sort(r.begin(), r.end());
     }
+    coresets::UniformSampler<float, uint32_t> uniform_sampler(costs.size());
     std::vector<coresets::IndexCoreset<uint32_t, float>> coresets;
-    coresets.reserve(coreset_sizes.size());
+    // The first half of these are true coresets, the others are uniformly subsampled.
+    const size_t ncs = coreset_sizes.size();
+    coresets.reserve(ncs * 2);
     for(auto coreset_size: coreset_sizes) {
         coresets.emplace_back(sampler.sample(coreset_size));
-        std::string fn(output_prefix + ".sampled." + std::to_string(coreset_size) + ".matcs");
-        blaze::Archive<std::ofstream> bfp(fn);
-        bfp << coresets.back().indices_ << coresets.back().weights_;
     }
+    for(auto coreset_size: coreset_sizes) {
+        coresets.emplace_back(uniform_sampler.sample(coreset_size));
+    }
+    std::fprintf(stderr, "[Phase 5] Generated coresets\n");
     blaze::DynamicVector<double> maxdistortion(coresets.size(), std::numeric_limits<double>::min()),
                                  distbuffer(boost::num_vertices(g)),
                                  currentdistortion(coresets.size()),
                                  mindistortion(coresets.size(), std::numeric_limits<double>::max()),
                                  meandistortion(coresets.size(), 0.);
     for(size_t i = 0; i < random_centers.rows(); ++i) {
+        if(i % 10 == 0)
+            std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
         auto rc = row(random_centers, i);
         assert(rc.size() == k);
         calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion, z);
@@ -256,8 +262,11 @@ int main(int argc, char **argv) {
         meandistortion = meandistortion + currentdistortion;
     }
     meandistortion /= random_centers.rows();
-    for(size_t i = 0; i < coreset_sizes.size(); ++i) {
-        tblout << coreset_sizes[i] << '\t' << maxdistortion[i] << '\t' << meandistortion[i] << '\n';
+    for(size_t i = 0; i < ncs; ++i) {
+        tblout << coreset_sizes[i] << '\t'
+               << maxdistortion[i] << '\t' << meandistortion[i] << '\t'
+               << maxdistortion[i + ncs] << '\t' << meandistortion[i + ncs]
+               << '\n';
     }
     std::cerr << "mean\n" << meandistortion;
     std::cerr << "max\n" << maxdistortion;

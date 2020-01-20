@@ -108,6 +108,25 @@ template<> VT<double>{using type = __m512d;}
 #endif
 #endif
 
+
+
+template<typename FT=float, typename IT=std::uint32_t>
+struct UniformSampler {
+    const size_t np_;
+    wy::WyRand<IT, 2> rng_;
+    UniformSampler(size_t np, uint64_t seed=0): np_(np), rng_(seed) {
+    }
+    IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0) {
+        if(seed) rng_.seed(seed);
+        IndexCoreset<IT, FT> ret(n);
+        for(size_t i = 0; i < n; ++i) {
+            ret.indices_[i] = rng_() % np_;
+        }
+        ret.weights_ = static_cast<FT>(1.);
+        return ret;
+    }
+};
+
 template<typename FT=float, typename IT=std::uint32_t>
 struct CoresetSampler {
     using Sampler = alias::AliasSampler<FT, wy::WyRand<IT, 2>, IT>;
@@ -340,8 +359,7 @@ struct CoresetSampler {
     }
     IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0) {
         if(!sampler_.get()) throw 1;
-        seed = seed ? seed: seed_;
-        sampler_->seed(seed);
+        if(seed) sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
         const double nsamplinv = 1. / n;
         for(size_t i = 0; i < n; ++i) {
