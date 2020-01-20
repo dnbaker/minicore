@@ -38,7 +38,7 @@ thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, size
     const size_t n = boost::num_vertices(x);
     //m = boost::num_edges(x);
     const double logn = std::log2(n);
-    const double eps  = std::sqrt(logn);
+    const double eps  = 1. / std::sqrt(logn);
     size_t samples_per_round = std::ceil(21. * k * logn / eps);
     size_t iterations_per_round = std::ceil(3 * logn);
     std::fprintf(stderr, "max sampled: %zu\n", max_sampled);

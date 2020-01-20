@@ -49,7 +49,7 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
     }
     for(size_t j = 0; j < ncs; ++j) {
         double distortion = std::abs(ret[j] / fullcost - 1.);
-        std::fprintf(stderr, "distortion for coreset %zu of size %zu is %g\n", j, coresets[j].size(), distortion);
+        //std::fprintf(stderr, "distortion for coreset %zu of size %zu is %g\n", j, coresets[j].size(), distortion);
         ret[j] = distortion;
     }
 }
