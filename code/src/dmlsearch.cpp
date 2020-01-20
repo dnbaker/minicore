@@ -38,6 +38,12 @@ int main(int argc, char *argv[]) {
     //OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < nr; ++i)
         row(~weighted_dm, i) *= wp[i];
-    auto lsearcher_fewer_facilities = make_kmed_lsearcher(blaze::submatrix(~dm, 0, 0, 50, n), k, eps);
+    auto lsearcher_cp = make_kmed_lsearcher(~weighted_dm, k, eps);
+    lsearcher_cp.run();
+    auto subm = blaze::submatrix(~dm, 0, 0, 50, n);
+    assert(subm.rows() == 50);
+    assert(subm.columns() == n);
+    blaze::CustomMatrix<float, blaze::aligned, blaze::padded, blaze::rowMajor> cm(subm.data(), subm.rows(), subm.columns(), subm.spacing());
+    auto lsearcher_fewer_facilities = make_kmed_lsearcher(cm, k, eps);
     lsearcher_fewer_facilities.run();
 }

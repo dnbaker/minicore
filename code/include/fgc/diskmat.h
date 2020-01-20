@@ -38,8 +38,9 @@ struct DiskMat {
         DiskMat(o.rows(), o.columns(), s, offset, delete_file >= 0 ? delete_file: o.delete_file_)
     {
         std::memcpy(ms_->data(), o.ms_->data(), sizeof(VT) * (~*this).spacing() * nr_);
-        assert(std::memcmp(ms_->data(), o.ms_->data(), ms_->size()) == 0);
+#if VERBOSE_AF
         std::fprintf(stderr, "Copied to %s\n", path_.size() ? path_.data(): "tmpfile");
+#endif
     }
     operator       MatType &()       {return ~*this;}
     operator const MatType &() const {return ~*this;}
@@ -125,7 +126,7 @@ class PolymorphicMat {
     using DiskType = DiskMat<VT, SO, blaze::aligned, blaze::padded>;
     std::unique_ptr<DiskType> diskmat_;
     std::unique_ptr<blaze::DynamicMatrix<VT, SO>> rammat_;
-    std::unique_ptr<CMType> cm_;
+    CMType cm_;
 public:
     
     static constexpr size_t MAX_BYTES_RAM = max_nbytes;
@@ -141,10 +142,10 @@ public:
             rammat_.reset(new blaze::DynamicMatrix<VT, SO>(nr, nc));
             ptr = rammat_->data();
         }
-        cm_.reset(new CMType(ptr, nr, nc, spacing));
+        cm_ = CMType(ptr, nr, nc, spacing);
     }
-    CMType &operator~() {return *cm_;}
-    const CMType &operator~() const {return *cm_;}
+    CMType &operator~() {return cm_;}
+    const CMType &operator~() const {return cm_;}
 };
 
 } // fgc

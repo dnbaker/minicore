@@ -169,16 +169,29 @@ struct LocalKMedSearcher {
     }
 
     double evaluate_swap(IType newcenter, IType oldcenter) const {
+        //std::fprintf(stderr, "[%s] function starting: %u/%u\n", __PRETTY_FUNCTION__, newcenter, oldcenter);
         assert(newcenter < mat_.rows());
         assert(oldcenter < mat_.rows());
-        auto newr = row(mat_, newcenter, blaze::unchecked);
+        //std::fprintf(stderr, "Passed asserts\n");
+#if 0
+        //auto newr = row(mat_, newcenter, blaze::unchecked);
+#else
+        auto newr = row(mat_, newcenter);
+#endif
+        //std::fprintf(stderr, "Got row: %zu\n", newr.size());
+        assert(nc_ == newr.size());
+        assert(assignments_.size() == mat_.columns());
         double potential_gain = 0.;
+        //std::fprintf(stderr, "Starting to evaluate\n");
         OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
         for(size_t i = 0; i < nc_; ++i) {
             //if(assignments_[i] != oldcenter) continue; // Only points already assigned to
             //assert(costs_[i] == mat_(assignments_[i], i));
             auto asn = assignments_[i];
+            //std::fprintf(stderr, "old assignment: %u\n", asn);
+            assert(asn < nr_);
             if(asn == oldcenter || newr[i] < mat_(asn, i)) {
+                //std::fprintf(stderr, "Replacing %u/%zu with %u/%zu\n", asn, i, newcenter, i);
                 potential_gain += mat_(asn, i) - newr[i];
             }
         }
@@ -195,7 +208,8 @@ struct LocalKMedSearcher {
 
         for(auto it = sol_.begin(); ++it != sol_.end();) {
             const auto center = *it;
-            auto crow = row(mat_, center, blaze::unchecked);
+            auto crow = row(mat_, center);
+            assert(crow.size() == nc_);
             OMP_PFOR
             for(size_t i = 0; i < nc_; ++i) {
                 if(const auto cost(crow[i]); cost < mat_(assignments_[i], i))
@@ -218,7 +232,6 @@ struct LocalKMedSearcher {
     }
 
     void run() {
-
         double diffthresh = current_cost_ / k_ * eps_;
         size_t total = 0;
         {
@@ -250,12 +263,6 @@ auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, uint64_t s
     return LocalKMedSearcher<Mat, FT, IType>(mat, k, eps, seed);
 }
 
-template<typename MT, blaze::AlignmentFlag AF, bool SO, bool DF, typename IType=std::uint32_t>
-auto make_kmed_lsearcher(const blaze::Submatrix<MT, AF, SO, DF> &mat, unsigned k, double eps=0.01, uint64_t seed=0) {
-    using FT = typename MT::ElementType;
-    blaze::CustomMatrix<FT, AF, blaze::IsPadded<MT>::value, SO> custom(const_cast<FT *>(mat.data()), mat.rows(), mat.columns(), mat.spacing());
-    return LocalKMedSearcher<decltype(custom), FT, IType>(custom, k, eps, seed);
-}
 
 } // fgc
 
