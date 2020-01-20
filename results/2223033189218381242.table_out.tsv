@@ -1,0 +1,7 @@
+##Command-line: './kzclustexppgf -S8000 ../data/paraguay.osm.gr'
+##z: 1
+##nsamples: 1000
+##k: 10
+#label	coreset_size	mincost	meancost	maxcost
+fullproblem	1123556	1.06106e+11	1.43654e+11	2.16454e+11
+coreset	100	8.99035e+10	1.39351e+11	2.53286e+11

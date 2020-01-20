@@ -1,0 +1,18 @@
+##Command-line: '/net/langmead-bigmem-ib.bluecrab.cluster/storage/dnb/code2/fgc/code/fastkzclustexp -c32 -c64 -c128 -c256 -c512 -c1024 -c2048 -c4096 -c8192 -c16384 -c32768 -c65536 -k5 -M200000000000 ../data/miniosm.gr'
+##z: 1
+##nsamples: 1000
+##k: 5
+#label	coreset_size	mincost	meancost	maxcost
+fullproblem	12699	1.10234e+07	1.41889e+07	2.08004e+07
+coreset	32	8.13405e+06	1.19874e+07	2.70622e+07
+coreset	64	9.05384e+06	1.25273e+07	2.25934e+07
+coreset	128	1.03431e+07	1.4182e+07	2.33943e+07
+coreset	256	1.09837e+07	1.46281e+07	2.80633e+07
+coreset	512	1.05889e+07	1.45099e+07	2.81195e+07
+coreset	1024	1.08383e+07	1.4722e+07	2.51113e+07
+coreset	2048	1.07852e+07	1.47164e+07	2.79401e+07
+coreset	4096	1.08721e+07	1.47344e+07	2.41691e+07
+coreset	8192	1.14508e+07	1.48443e+07	2.66731e+07
+coreset	16384	1.14431e+07	1.46692e+07	2.47354e+07
+coreset	32768	1.0967e+07	1.48246e+07	2.46193e+07
+coreset	65536	1.17078e+07	1.50946e+07	2.33729e+07
