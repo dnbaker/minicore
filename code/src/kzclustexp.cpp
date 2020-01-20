@@ -101,7 +101,7 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
     char buf[128];
     std::sprintf(buf, "'\n##z: %g\n##nsamples: %u\n##k: %u\n", z, nsamples, k);
     ofs << buf;
-    ofs << "#coreset_size\tdistortion\n";
+    ofs << "#coreset_size\tmax distortion\tmean distortion\n";
 }
 
 void usage(const char *ex) {
@@ -250,7 +250,7 @@ int main(int argc, char **argv) {
     }
     meandistortion /= random_centers.rows();
     for(size_t i = 0; i < coreset_sizes.size(); ++i) {
-        tblout << coreset_sizes[i] << '\t' << maxdistortion[i] << '\n';
+        tblout << coreset_sizes[i] << '\t' << maxdistortion[i] << '\t' << meandistortion[i] << '\n';
     }
     std::cerr << "mean\n" << meandistortion;
     std::cerr << "max\n" << maxdistortion;
