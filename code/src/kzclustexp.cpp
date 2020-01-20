@@ -250,7 +250,7 @@ int main(int argc, char **argv) {
     }
     meandistortion /= random_centers.rows();
     for(size_t i = 0; i < coreset_sizes.size(); ++i) {
-        tblout << coreset_sizes[i] << '\t' << currentdistortion[i] << '\n';
+        tblout << coreset_sizes[i] << '\t' << maxdistortion[i] << '\n';
     }
     std::cerr << "mean\n" << meandistortion;
     std::cerr << "max\n" << maxdistortion;
