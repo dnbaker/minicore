@@ -38,6 +38,7 @@ struct DiskMat {
         DiskMat(o.rows(), o.columns(), s, offset, delete_file >= 0 ? delete_file: o.delete_file_)
     {
         std::memcpy(ms_->data(), o.ms_->data(), sizeof(VT) * (~*this).spacing() * nr_);
+        assert(std::memcmp(ms_->data(), o.ms_->data(), ms_->size()) == 0);
         std::fprintf(stderr, "Copied to %s\n", path_.size() ? path_.data(): "tmpfile");
     }
     operator       MatType &()       {return ~*this;}

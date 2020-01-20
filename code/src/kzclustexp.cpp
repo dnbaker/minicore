@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
             case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
             case 'o': output_prefix = optarg; break;
             case 's': fn = optarg; break;
-            case 'c': coreset_sizes.push_back(std::atoi(optarg)); std::fprintf(stderr, "WOOOOOOOOOOO cs back: %u\n", coreset_sizes.back()); break;
+            case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
             case 'S': nsampled_max = std::strtoull(optarg, nullptr, 10); break;
             case 'h': default: usage(argv[0]);
         }
@@ -132,6 +132,7 @@ int main(int argc, char **argv) {
         output_prefix = std::to_string(seed);
     std::string input = argc == optind ? "../data/dolphins.graph": const_cast<const char *>(argv[optind]);
     std::srand(std::hash<std::string>{}(input));
+    std::fprintf(stderr, "Reading from file: %s\n", input.data());
 
     fgc::Graph<undirectedS, float> g = parse_by_fn(input);
     max_component(g);
