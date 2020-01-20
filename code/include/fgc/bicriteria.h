@@ -59,6 +59,69 @@ thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, size
         current_buffer.erase(current_buffer.begin() + max_sampled, current_buffer.end());
     return current_buffer;
 }
+template<typename Graph, typename RNG>
+auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
+    using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
+    using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
+    std::vector<Vertex> R(boost::vertices(x).first, boost::vertices(x).second);
+    std::vector<Vertex> F;
+    F.reserve(nperround * 5);
+    util::ScopedSyntheticVertex<Graph> vx(x);
+    auto synthetic_vertex = vx.get();
+    const size_t nv = boost::num_vertices(x);
+    std::unique_ptr<edge_cost[]> distances(new edge_cost[nv]);
+    for(size_t i = 0; R.size() && i < maxnumrounds; ++i) {
+        if(R.size() > nperround) {
+            for(size_t j = 0; j < nperround; ++j) {
+                auto &r = R[rng() % R.size()];
+                F.push_back(r);
+                boost::add_edge(r, synthetic_vertex, 0., x);
+                std::swap(r, R.back());
+                R.pop_back();
+            }
+        } else {
+            for(const auto r: R)
+                F.push_back(r);
+            R.clear();
+        }
+        boost::dijkstra_shortest_paths(x, synthetic_vertex,
+                                       distance_map(distances.get()));
+        if(R.empty()) break;
+        auto randel = R[rng() % R.size()];
+        auto minv = distances[randel];
+        R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
+    }
+    double cost = 0.;
+    OMP_PRAGMA("omp parallel for reduction(+:cost)")
+    for(size_t i = 0; i < nv - 1; ++i) {
+        cost += distances[i];
+    }
+    std::fprintf(stderr, "Sampled set of size %zu has cost %f\n", F.size(), cost);
+    return std::make_pair(std::move(F), cost);
+}
+
+template<typename Graph>
+std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
+thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter) {
+    // Modification of Thorup, wherein we run Thorup Algorithm E
+    // with eps = 0.5 a fixed number of times and return the best result.
+
+    static constexpr double eps = 0.5;
+    wy::WyRand<uint64_t, 2> rng(seed);
+    const size_t n = boost::num_vertices(x);
+    const double logn = std::log2(n);
+    const size_t samples_per_round = std::ceil(21. * k * logn / eps);
+
+    auto bestsol = thorup_d(x, rng, samples_per_round, 3 * logn);
+    for(unsigned i = 1; i < num_iter; ++i) {
+        auto next = thorup_d(x, rng, samples_per_round, 3 * logn);
+        if(next.second < bestsol.second) {
+            std::fprintf(stderr, "Replacing old cost of %g with %g\n", bestsol.second, next.second);
+            std::swap(next, bestsol);
+        }
+    }
+    return bestsol.first;
+}
 
 template<typename...Args>
 auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_round, size_t iterations,

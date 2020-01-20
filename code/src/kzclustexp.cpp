@@ -135,6 +135,7 @@ int main(int argc, char **argv) {
             return x ^ std::hash<std::string>{}(y);                                
         }
     );
+    unsigned num_thorup_trials = 15;
     for(int c;(c = getopt(argc, argv, "t:p:o:M:S:z:s:c:k:R:h?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
@@ -169,7 +170,8 @@ int main(int argc, char **argv) {
     // Assert that it's connected, or else the problem has infinite cost.
 
     std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
-    sampled = thorup_sample(g, k, seed, nsampled_max);
+    //sampled = thorup_sample(g, k, seed, nsampled_max);
+    sampled = thorup_sample_mincost(g, k, seed, num_thorup_trials);
     std::fprintf(stderr, "[Phase 1] Thorup sampling complete. Sampled %zu points from input graph: %zu vertices, %zu edges.\n", sampled.size(), boost::num_vertices(g), boost::num_edges(g));
 
     std::unique_ptr<DiskMat<float>> diskmatptr;
