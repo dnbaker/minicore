@@ -109,6 +109,15 @@ template<> VT<double>{using type = __m512d;}
 #endif
 
 
+template<typename T>
+struct dumbrange {
+    T beg, e_;
+    dumbrange(T beg, T end): beg(beg), e_(end) {}
+    auto begin() const {return beg;}
+    auto end()   const {return e_;}
+};
+template<typename T>
+auto make_dumbrange(T beg, T end) {return dumbrange<T>(beg, end);}
 
 template<typename FT=float, typename IT=std::uint32_t>
 struct UniformSampler {
@@ -140,7 +149,7 @@ struct CoresetSampler {
     bool ready() const {return sampler_.get();}
 
     bool operator==(const CoresetSampler &o) const {
-        VERBOSE_ONLY(std::fprintf(stderr, "np: %zu/%zu\n", np_, o.np_);)
+        //VERBOSE_ONLY(std::fprintf(stderr, "np: %zu/%zu\n", np_, o.np_);)
         return np_ == o.np_ &&
                        std::equal(probs_.get(), probs_.get() + np_, o.probs_.get()) &&
                       ((weights_.get() == nullptr && o.weights_.get() == nullptr) || // Both are nullptr or
@@ -327,39 +336,53 @@ struct CoresetSampler {
         }
         assert(std::accumulate(center_counts.begin(), center_counts.end(), IT(0)) == np);
         for(const auto c: center_counts) std::fprintf(stderr, "center count: %u\n", c);
+        for(const auto c: center_counts) assert(c);
         const bool is_feldman = (sens == FELDMAN_LANGBERG);
         probs_.reset(new FT[np]);
         std::fprintf(stderr, "Sum: %g. accumulate sum: %g\n", total_cost, std::accumulate(costs, costs + np, 0.));
-        // TODO: Consider log space?
         if(is_feldman) {
             // Ignores number of items assigned to each cluster
-            // std::fprintf(stderr, "note: FL method has worse guarantees than BFL\n");
             sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
             double total_cost_inv = 1. / (total_cost);
-            OMP_PFOR
+            double total_probs = 0.;
+            OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
             for(size_t i = 0; i < np; ++i) {
                 probs_[i] = getweight(i) * (costs[i]) * total_cost_inv;
+                total_probs += probs_[i];
             }
+            blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np) /= total_probs;
         } else {
             //for(auto i = 0u; i < ncenters; ++i)
             //    weight_sums[i] = 1./(2. * center_counts[i] * weight_sums[i]);
-            double total_cost_2inv = 1. / (2. * total_cost);
-            OMP_PFOR
+            //double total_cost_2inv = 1. / (2. * total_cost);
+            double total_probs = 0.;
+            OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
             for(size_t i = 0; i < np; ++i) {
                 const auto w = getweight(i);
-                probs_[i] = (w * costs[i] * .5 / total_cost) + .5 * w / (weight_sums[assignments[i]] * center_counts[i]);
-                //probs_[i] = getweight(i) * (costs[i] * total_cost_2inv + weight_sums[assignments[i]]); // Am I propagating weights correctly?
+                double fraccost = w * costs[i] / total_cost;
+                const auto asn = assignments[i];
+                double fracw = w / (weight_sums[asn] * center_counts[asn]);
+                //std::fprintf(stderr, "w: %f. fraction of total cost: %g. fraction of weight for section: %g\n", getweight(i), fraccost, fracw);
+                probs_[i] = .5 * (fraccost + fracw);
+                total_probs += probs_[i];
             }
 #ifndef NDEBUG
-            double psum = 0.;
-            //OMP_PRAGMA("omp parallel for reduction(+:psum")
-            for(size_t i = 0; i < np_; ++i) {
-                psum += probs_[i];
-            }
-            std::fprintf(stderr, "psum: %f\n", psum);
+            std::fprintf(stderr, "total probs: %g\n", total_probs);
 #endif
-            sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
+#if 0
+            for(const auto p: make_dumbrange(probs_.get(), probs_.get() + np))
+                std::fprintf(stderr, "p: %g\n", p);
+#endif
+            blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np) /= total_probs;
         }
+#ifndef NDEBUG
+        double psum = 0.;
+        for(size_t i = 0; i < np_; ++i) {
+            psum += probs_[i];
+        }
+        std::fprintf(stderr, "psum: %f\n", psum);
+#endif
+        sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
     }
     auto getweight(size_t ind) const {
         return weights_ ? weights_[ind]: static_cast<FT>(1.);

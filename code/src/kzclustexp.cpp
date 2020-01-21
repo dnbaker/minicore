@@ -214,7 +214,8 @@ int main(int argc, char **argv) {
         costs = blaze::pow(costs, z);
     // Build a coreset importance sampler based on it.
     coresets::CoresetSampler<float, uint32_t> sampler;
-    sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data());
+    sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
+                         nullptr, 137, FELDMAN_LANGBERG);
     std::FILE *ofp = std::fopen(fn.data(), "wb");
     sampler.write(ofp);
     std::fclose(ofp);
