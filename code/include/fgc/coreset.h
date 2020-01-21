@@ -122,7 +122,7 @@ struct UniformSampler {
         for(size_t i = 0; i < n; ++i) {
             ret.indices_[i] = rng_() % np_;
         }
-        ret.weights_ = static_cast<FT>(1.);
+        ret.weights_ = static_cast<FT>(np_) / n; // Ensure final weight = np_
         return ret;
     }
 };
