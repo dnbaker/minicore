@@ -115,7 +115,8 @@ void usage(const char *ex) {
                          "-M\tSet maxmimum memory size to use. Default: 16GiB\n"
                          "-R\tSet random seed. Default: hash based on command-line arguments\n"
                          "-z\tset z [1.]\n"
-                         "-t\tSet number of sampled centers to test [500]\n",
+                         "-t\tSet number of sampled centers to test [500]\n"
+                         "-T\tNumber of Thorup sampling trials [15]\n",
                  ex);
     std::exit(1);
 }
@@ -135,13 +136,14 @@ int main(int argc, char **argv) {
         }
     );
     unsigned num_thorup_trials = 15;
-    for(int c;(c = getopt(argc, argv, "t:p:o:M:S:z:s:c:k:R:h?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "T:t:p:o:M:S:z:s:c:k:R:h?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
             case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
             case 't': coreset_testing_num_iter = std::atoi(optarg); break;
+            case 'T': num_thorup_trials = std::atoi(optarg); break;
             case 'p':
 #ifdef _OPENMP
                 omp_set_num_threads(std::atoi(optarg));
