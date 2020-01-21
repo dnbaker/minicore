@@ -1,0 +1,307 @@
+nohup: ignoring input
+Reading from file: ./nyc.gr
+graphtype: p
+n: 6446582. m: 6842266
+not connected. ncomp: 6688
+maxcmp 0 out of total 6688
+num components: 1. num edges: 6722684. num nodes: 6324108
+Sampled set of size 71037 has cost 4396782664.347944
+Sampled set of size 49569 has cost 7860638417.615897
+Sampled set of size 39540 has cost 13381150886.784271
+Sampled set of size 87966 has cost 6525538599.394195
+Sampled set of size 50974 has cost 7659697956.195627
+Sampled set of size 93073 has cost 3917798254.599292
+Replacing old cost of 4.39678e+09 with 3.9178e+09
+Sampled set of size 53175 has cost 7474693213.317407
+Sampled set of size 93589 has cost 4180581912.631434
+Sampled set of size 111269 has cost 4784408701.408135
+Sampled set of size 102667 has cost 3466093398.429793
+Replacing old cost of 3.9178e+09 with 3.46609e+09
+Sampled set of size 57101 has cost 7011609213.753947
+Sampled set of size 85456 has cost 4254904501.554815
+Sampled set of size 68885 has cost 6968620798.205191
+Sampled set of size 81158 has cost 5389837925.448617
+Sampled set of size 52064 has cost 6953802120.909045
+Sampled set of size 67874 has cost 4749627199.344904
+Sampled set of size 48428 has cost 6652544848.217322
+Sampled set of size 61213 has cost 6837762941.598216
+Sampled set of size 66590 has cost 8168902508.260301
+Sampled set of size 50568 has cost 6955316717.321745
+Sampled set of size 59283 has cost 9467564115.566330
+Sampled set of size 84422 has cost 6074670107.980182
+Sampled set of size 73715 has cost 6977782526.991217
+Sampled set of size 56464 has cost 6886896521.168357
+Sampled set of size 114163 has cost 3873632619.187326
+Sampled set of size 47791 has cost 5888396848.856905
+Sampled set of size 42934 has cost 7363635326.825510
+Sampled set of size 53010 has cost 6289861842.460772
+Sampled set of size 65252 has cost 5994134292.912951
+Sampled set of size 38028 has cost 12272293061.633274
+Sampled set of size 79821 has cost 4190612019.873200
+Sampled set of size 23718 has cost 9149316963.409128
+Sampled set of size 51128 has cost 5431248858.937871
+Sampled set of size 49192 has cost 7872217292.515977
+Sampled set of size 41029 has cost 6839514923.989950
+Sampled set of size 72170 has cost 7195612376.165932
+Sampled set of size 54654 has cost 4776693410.465572
+Sampled set of size 68296 has cost 5467425710.647327
+Sampled set of size 66499 has cost 6055994729.804987
+Sampled set of size 125027 has cost 3013812166.670040
+Replacing old cost of 3.46609e+09 with 3.01381e+09
+[Phase 1] Thorup sampling complete. Sampled 125027 points from input graph: 6324108 vertices, 6722684 edges.
+[Phase 2] Distances gathered
+Swapping 2 for 5906. Swap number 1. Current cost: 1.24231e+10. Improvement: 1.04945e+09
+Swapping 41 for 108551. Swap number 2. Current cost: 1.13737e+10. Improvement: 3.23848e+07
+Swapping 5 for 2. Swap number 3. Current cost: 1.13273e+10. Improvement: 7.8048e+07
+Swapping 57 for 5. Swap number 4. Current cost: 1.11031e+10. Improvement: 5.37634e+07
+Swapping 136 for 57. Swap number 5. Current cost: 1.10475e+10. Improvement: 105019
+Swapping 193 for 136. Swap number 6. Current cost: 1.10384e+10. Improvement: 1.35649e+06
+Swapping 453 for 193. Swap number 7. Current cost: 1.1037e+10. Improvement: 2.05718e+07
+Swapping 14 for 67589. Swap number 8. Current cost: 1.10164e+10. Improvement: 1.75216e+08
+Swapping 72 for 41. Swap number 9. Current cost: 1.08365e+10. Improvement: 2.88395e+07
+Swapping 0 for 78760. Swap number 10. Current cost: 1.07581e+10. Improvement: 759839
+Swapping 19 for 0. Swap number 11. Current cost: 1.06239e+10. Improvement: 5.85626e+06
+Swapping 0 for 42856. Swap number 12. Current cost: 1.0525e+10. Improvement: 2.9968e+08
+Swapping 25 for 0. Swap number 13. Current cost: 1.00692e+10. Improvement: 5.54167e+07
+Swapping 95 for 25. Swap number 14. Current cost: 9.70365e+09. Improvement: 8.76389e+07
+Swapping 1 for 94371. Swap number 15. Current cost: 9.59349e+09. Improvement: 1.53554e+08
+Swapping 2272 for 72. Swap number 16. Current cost: 9.43914e+09. Improvement: 9.67855e+06
+Swapping 8199 for 2272. Swap number 17. Current cost: 9.42373e+09. Improvement: 393185
+Swapping 83231 for 8199. Swap number 18. Current cost: 9.42334e+09. Improvement: 900342
+Swapping 37 for 1. Swap number 19. Current cost: 9.42185e+09. Improvement: 2.20175e+08
+Swapping 77 for 14. Swap number 20. Current cost: 9.08206e+09. Improvement: 4.36913e+07
+Swapping 175 for 77. Swap number 21. Current cost: 8.92007e+09. Improvement: 1.67434e+07
+Swapping 1321 for 175. Swap number 22. Current cost: 8.89175e+09. Improvement: 429409
+Swapping 2422 for 1321. Swap number 23. Current cost: 8.87818e+09. Improvement: 9.18983e+06
+Swapping 0 for 85697. Swap number 24. Current cost: 8.86626e+09. Improvement: 3.21763e+08
+Swapping 99 for 0. Swap number 25. Current cost: 8.54449e+09. Improvement: 2.60452e+07
+Swapping 1569 for 99. Swap number 26. Current cost: 8.50941e+09. Improvement: 150500
+Swapping 110 for 95. Swap number 27. Current cost: 8.50835e+09. Improvement: 603761
+Swapping 12356 for 1569. Swap number 28. Current cost: 8.50489e+09. Improvement: 5.88227e+06
+Swapping 215 for 19. Swap number 29. Current cost: 8.48718e+09. Improvement: 1.17574e+07
+Swapping 73 for 37. Swap number 30. Current cost: 8.47479e+09. Improvement: 6.3221e+07
+Swapping 319 for 73. Swap number 31. Current cost: 8.40809e+09. Improvement: 8.50284e+06
+Swapping 991 for 319. Swap number 32. Current cost: 8.39909e+09. Improvement: 1.68337e+07
+Swapping 1049 for 991. Swap number 33. Current cost: 8.36663e+09. Improvement: 9.99978e+06
+Swapping 2781 for 1049. Swap number 34. Current cost: 8.35439e+09. Improvement: 1.12692e+07
+Swapping 3361 for 2781. Swap number 35. Current cost: 8.34206e+09. Improvement: 5.60117e+06
+Swapping 32035 for 3361. Swap number 36. Current cost: 8.3356e+09. Improvement: 156458
+Swapping 56562 for 32035. Swap number 37. Current cost: 8.3354e+09. Improvement: 1.24197e+06
+Swapping 6418 for 2422. Swap number 38. Current cost: 8.3341e+09. Improvement: 3.63077e+06
+Swapping 16349 for 6418. Swap number 39. Current cost: 8.32875e+09. Improvement: 3.65776e+06
+Swapping 26485 for 16349. Swap number 40. Current cost: 8.32508e+09. Improvement: 2.77288e+06
+Swapping 2128 for 215. Swap number 41. Current cost: 8.32153e+09. Improvement: 2.77501e+06
+Swapping 4406 for 2128. Swap number 42. Current cost: 8.31871e+09. Improvement: 1.85188e+06
+Swapping 8646 for 4406. Swap number 43. Current cost: 8.31598e+09. Improvement: 7.93873e+06
+Swapping 32264 for 12356. Swap number 44. Current cost: 8.30804e+09. Improvement: 18373.2
+Swapping 6 for 120202. Swap number 45. Current cost: 8.30796e+09. Improvement: 1.67044e+08
+Swapping 73 for 56562. Swap number 46. Current cost: 8.11224e+09. Improvement: 1.22255e+07
+Swapping 87 for 73. Swap number 47. Current cost: 8.09012e+09. Improvement: 3.53273e+07
+Swapping 69 for 6. Swap number 48. Current cost: 8.04631e+09. Improvement: 3.33648e+07
+Swapping 537 for 69. Swap number 49. Current cost: 8.00823e+09. Improvement: 1.32477e+07
+Swapping 2272 for 83231. Swap number 50. Current cost: 7.97434e+09. Improvement: 4.89926e+06
+Swapping 6037 for 2272. Swap number 51. Current cost: 7.96665e+09. Improvement: 117036
+Swapping 8199 for 6037. Swap number 52. Current cost: 7.96652e+09. Improvement: 616525
+Swapping 18104 for 8199. Swap number 53. Current cost: 7.9659e+09. Improvement: 1.24623e+06
+Swapping 212 for 87. Swap number 54. Current cost: 7.96266e+09. Improvement: 2.87809e+06
+Swapping 1129 for 212. Swap number 55. Current cost: 7.95973e+09. Improvement: 5.0395e+06
+Swapping 978 for 1129. Swap number 56. Current cost: 7.94451e+09. Improvement: 6.02631e+06
+Swapping 4464 for 978. Swap number 57. Current cost: 7.93136e+09. Improvement: 1.24704e+07
+Swapping 10751 for 26485. Swap number 58. Current cost: 7.91087e+09. Improvement: 975757
+Swapping 24996 for 10751. Swap number 59. Current cost: 7.9041e+09. Improvement: 371969
+Swapping 52091 for 24996. Swap number 60. Current cost: 7.90372e+09. Improvement: 2.57515e+06
+Swapping 79684 for 52091. Swap number 61. Current cost: 7.9006e+09. Improvement: 1.4625e+06
+Swapping 83578 for 79684. Swap number 62. Current cost: 7.89906e+09. Improvement: 969561
+Swapping 14277 for 537. Swap number 63. Current cost: 7.89808e+09. Improvement: 331905
+Swapping 16889 for 14277. Swap number 64. Current cost: 7.89741e+09. Improvement: 219873
+Swapping 57326 for 18104. Swap number 65. Current cost: 7.89712e+09. Improvement: 3.60124e+06
+Swapping 63382 for 57326. Swap number 66. Current cost: 7.89123e+09. Improvement: 3.8257e+06
+Swapping 15 for 74368. Swap number 67. Current cost: 7.88739e+09. Improvement: 8.81779e+07
+Swapping 61 for 15. Swap number 68. Current cost: 7.79448e+09. Improvement: 2.04544e+07
+Swapping 908 for 61. Swap number 69. Current cost: 7.77402e+09. Improvement: 1.89872e+06
+Swapping 4384 for 908. Swap number 70. Current cost: 7.77016e+09. Improvement: 2.17326e+06
+Swapping 28941 for 83578. Swap number 71. Current cost: 7.76691e+09. Improvement: 485481
+Swapping 8697 for 4384. Swap number 72. Current cost: 7.76453e+09. Improvement: 2.46304e+06
+Swapping 14090 for 8697. Swap number 73. Current cost: 7.76108e+09. Improvement: 556853
+Swapping 47505 for 14090. Swap number 74. Current cost: 7.76047e+09. Improvement: 1.81848e+06
+Swapping 2292 for 28941. Swap number 75. Current cost: 7.7553e+09. Improvement: 3.00169e+06
+Swapping 39735 for 2292. Swap number 76. Current cost: 7.74228e+09. Improvement: 695768
+Swapping 53434 for 39735. Swap number 77. Current cost: 7.7352e+09. Improvement: 2.00836e+06
+Swapping 287 for 47505. Swap number 78. Current cost: 7.73319e+09. Improvement: 3.83316e+06
+Swapping 81521 for 63382. Swap number 79. Current cost: 7.71327e+09. Improvement: 1.07686e+06
+Swapping 552 for 287. Swap number 80. Current cost: 7.71193e+09. Improvement: 2.51408e+06
+Swapping 939 for 552. Swap number 81. Current cost: 7.70915e+09. Improvement: 6.77462e+06
+Swapping 96453 for 53434. Swap number 82. Current cost: 7.69879e+09. Improvement: 480790
+Swapping 2825 for 939. Swap number 83. Current cost: 7.69819e+09. Improvement: 3.26024e+06
+Swapping 9 for 20570. Swap number 84. Current cost: 7.69208e+09. Improvement: 7.06877e+07
+Swapping 289 for 9. Swap number 85. Current cost: 7.54318e+09. Improvement: 2.40886e+07
+Swapping 71 for 289. Swap number 86. Current cost: 7.5073e+09. Improvement: 1.16489e+06
+Swapping 3883 for 81521. Swap number 87. Current cost: 7.47321e+09. Improvement: 6.88106e+06
+Swapping 10562 for 3883. Swap number 88. Current cost: 7.4446e+09. Improvement: 4.51185e+06
+Swapping 346 for 71. Swap number 89. Current cost: 7.44007e+09. Improvement: 8.04024e+07
+Swapping 533 for 10562. Swap number 90. Current cost: 7.34345e+09. Improvement: 2.09064e+06
+Swapping 11244 for 533. Swap number 91. Current cost: 7.34047e+09. Improvement: 5.04402e+06
+Swapping 895 for 346. Swap number 92. Current cost: 7.33266e+09. Improvement: 2.46793e+06
+Swapping 2321 for 895. Swap number 93. Current cost: 7.33019e+09. Improvement: 3.93431e+06
+Swapping 4537 for 2825. Swap number 94. Current cost: 7.32558e+09. Improvement: 525129
+Swapping 95 for 110. Swap number 95. Current cost: 7.32504e+09. Improvement: 2.47697e+07
+Swapping 644 for 95. Swap number 96. Current cost: 7.29883e+09. Improvement: 1.00705e+07
+Swapping 40851 for 644. Swap number 97. Current cost: 7.27153e+09. Improvement: 2.93473e+06
+Swapping 12356 for 32264. Swap number 98. Current cost: 7.26752e+09. Improvement: 334469
+Swapping 47822 for 40851. Swap number 99. Current cost: 7.26719e+09. Improvement: 112105
+Swapping 59942 for 47822. Swap number 100. Current cost: 7.26572e+09. Improvement: 1.9319e+06
+Swapping 972 for 16889. Swap number 101. Current cost: 7.26343e+09. Improvement: 596450
+Swapping 68447 for 2321. Swap number 102. Current cost: 7.2541e+09. Improvement: 1.02687e+06
+Swapping 2724 for 972. Swap number 103. Current cost: 7.25272e+09. Improvement: 2.82149e+06
+Swapping 3280 for 2724. Swap number 104. Current cost: 7.2477e+09. Improvement: 4.37928e+06
+Swapping 3711 for 3280. Swap number 105. Current cost: 7.24318e+09. Improvement: 1.98229e+06
+Swapping 2321 for 68447. Swap number 106. Current cost: 7.23663e+09. Improvement: 996206
+Swapping 358 for 453. Swap number 107. Current cost: 7.23522e+09. Improvement: 6.71607e+06
+Swapping 96 for 96453. Swap number 108. Current cost: 7.19366e+09. Improvement: 1.85093e+07
+Swapping 306 for 4537. Swap number 109. Current cost: 7.08792e+09. Improvement: 2.52331e+06
+Swapping 3502 for 306. Swap number 110. Current cost: 7.08505e+09. Improvement: 2.13779e+06
+Swapping 32 for 358. Swap number 111. Current cost: 7.0804e+09. Improvement: 2.56253e+07
+Swapping 8 for 96. Swap number 112. Current cost: 7.03939e+09. Improvement: 2.81952e+07
+Swapping 179 for 3502. Swap number 113. Current cost: 6.99514e+09. Improvement: 1.374e+06
+Swapping 907 for 179. Swap number 114. Current cost: 6.99188e+09. Improvement: 6.86724e+06
+Swapping 15179 for 907. Swap number 115. Current cost: 6.98497e+09. Improvement: 3.34739e+06
+Swapping 109490 for 11244. Swap number 116. Current cost: 6.98163e+09. Improvement: 109823
+Swapping 10 for 32. Swap number 117. Current cost: 6.98149e+09. Improvement: 1.88973e+06
+Swapping 48 for 10. Swap number 118. Current cost: 6.9686e+09. Improvement: 2.40128e+07
+Swapping 54 for 48. Swap number 119. Current cost: 6.94264e+09. Improvement: 2.41379e+06
+Swapping 76 for 54. Swap number 120. Current cost: 6.94023e+09. Improvement: 5.46791e+06
+Swapping 21 for 8. Swap number 121. Current cost: 6.93476e+09. Improvement: 2.75356e+07
+Swapping 189 for 76. Swap number 122. Current cost: 6.90255e+09. Improvement: 3.08479e+06
+Swapping 339 for 189. Swap number 123. Current cost: 6.89898e+09. Improvement: 5.32299e+06
+Swapping 1599 for 339. Swap number 124. Current cost: 6.89293e+09. Improvement: 801735
+Swapping 1984 for 1599. Swap number 125. Current cost: 6.89196e+09. Improvement: 790287
+Swapping 6916 for 1984. Swap number 126. Current cost: 6.89116e+09. Improvement: 592953
+Swapping 8254 for 6916. Swap number 127. Current cost: 6.89029e+09. Improvement: 1.11238e+06
+Swapping 630 for 21. Swap number 128. Current cost: 6.88917e+09. Improvement: 3.00203e+06
+Swapping 2618 for 630. Swap number 129. Current cost: 6.88616e+09. Improvement: 394006
+Swapping 4956 for 2618. Swap number 130. Current cost: 6.88196e+09. Improvement: 838848
+Swapping 4010 for 8254. Swap number 131. Current cost: 6.88092e+09. Improvement: 519094
+Swapping 672 for 4010. Swap number 132. Current cost: 6.87962e+09. Improvement: 63174.5
+Swapping 4277 for 672. Swap number 133. Current cost: 6.87827e+09. Improvement: 433792
+Swapping 7314 for 4277. Swap number 134. Current cost: 6.87784e+09. Improvement: 170059
+Swapping 15325 for 4956. Swap number 135. Current cost: 6.87767e+09. Improvement: 840566
+Swapping 41171 for 15325. Swap number 136. Current cost: 6.87673e+09. Improvement: 919211
+Swapping 891 for 4464. Swap number 137. Current cost: 6.87569e+09. Improvement: 7594.34
+Swapping 3963 for 41171. Swap number 138. Current cost: 6.86779e+09. Improvement: 897774
+Swapping 6240 for 3963. Swap number 139. Current cost: 6.86445e+09. Improvement: 815396
+Swapping 17367 for 6240. Swap number 140. Current cost: 6.8636e+09. Improvement: 1.353e+06
+Finished in 140 swaps by exhausting all potential improvements. Final cost: 6862249577.302200
+[Phase 3] Local search completed. Cost for solution: 6.86225e+09
+[Phase 4] Calculated costs and assignments for all points
+[Phase 5] Generated coresets
+Calculating distortion 0/250
+Calculating distortion 10/250
+Calculating distortion 20/250
+Calculating distortion 30/250
+Calculating distortion 40/250
+Calculating distortion 50/250
+Calculating distortion 60/250
+Calculating distortion 70/250
+Calculating distortion 80/250
+Calculating distortion 90/250
+Calculating distortion 100/250
+Calculating distortion 110/250
+Calculating distortion 120/250
+Calculating distortion 130/250
+Calculating distortion 140/250
+Calculating distortion 150/250
+Calculating distortion 160/250
+Calculating distortion 170/250
+Calculating distortion 180/250
+Calculating distortion 190/250
+Calculating distortion 200/250
+Calculating distortion 210/250
+Calculating distortion 220/250
+Calculating distortion 230/250
+Calculating distortion 240/250
+mean
+(    0.175173 )
+(    0.155284 )
+(   0.0519228 )
+(    0.052518 )
+(   0.0324008 )
+(   0.0333676 )
+(   0.0180059 )
+(    0.017758 )
+(   0.0116487 )
+(  0.00804693 )
+(    0.999999 )
+(    0.999992 )
+(    0.999984 )
+(     0.99996 )
+(    0.999919 )
+(     0.99988 )
+(     0.99984 )
+(    0.999599 )
+(     0.99921 )
+(    0.998416 )
+max
+(    0.542731 )
+(    0.385812 )
+(    0.172869 )
+(    0.181493 )
+(    0.107747 )
+(   0.0744028 )
+(   0.0535938 )
+(   0.0596106 )
+(    0.036851 )
+(   0.0259595 )
+(    0.999999 )
+(    0.999993 )
+(    0.999986 )
+(    0.999964 )
+(    0.999924 )
+(    0.999886 )
+(    0.999848 )
+(    0.999614 )
+(    0.999224 )
+(    0.998436 )
+min
+(  0.00597851 )
+(  0.00290635 )
+( 0.000804675 )
+(   0.0001005 )
+( 0.000129821 )
+( 0.000930341 )
+( 0.000266488 )
+( 0.000108096 )
+( 6.59969e-05 )
+( 1.41118e-05 )
+(    0.999998 )
+(    0.999991 )
+(    0.999982 )
+(    0.999956 )
+(    0.999912 )
+(    0.999873 )
+(    0.999832 )
+(    0.999586 )
+(    0.999193 )
+(      0.9984 )
+	Command being timed: "./fastkzclustexp -M550000000000 -t250 -c10 -c50 -c100 -c250 -c500 -c750 -c1000 -c2500 -c5000 -c10000 -p80 -T40 -o nyc.results ./nyc.gr"
+	User time (seconds): 865274.56
+	System time (seconds): 67035.69
+	Percent of CPU this job got: 6296%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 4:06:47
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 67418248
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 2816252195
+	Voluntary context switches: 3556923
+	Involuntary context switches: 7804767
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 50440
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
