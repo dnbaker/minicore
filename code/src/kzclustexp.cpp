@@ -103,7 +103,10 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
     char buf[128];
     std::sprintf(buf, "'\n##z: %g\n##nsamples: %u\n##k: %u\n", z, nsamples, k);
     ofs << buf;
-    ofs << "#coreset_size\tmax distortion (true coreset)\tmean distortion (true coreset)\tmax distortion (uniform sampling)\tmean distortion (uniform sampling)\n";
+    ofs << "#coreset_size\tmax distortion (FL11)\tmean distortion (FL11)\t "
+        << "max distortion (BFL16)\tmean distortion (BFL16)"
+        << "max distortion (uniform sampling)\tmean distortion (uniform sampling)"
+        << "\n";
 }
 
 void usage(const char *ex) {
@@ -192,7 +195,7 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "[Phase 2] Distances gathered\n");
 
     // Perform Thorup sample before JV method.
-    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-5, seed);
+    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-5, seed * seed + seed);
     lsearcher.run();
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
@@ -213,9 +216,11 @@ int main(int argc, char **argv) {
     if(z != 1.)
         costs = blaze::pow(costs, z);
     // Build a coreset importance sampler based on it.
-    coresets::CoresetSampler<float, uint32_t> sampler;
+    coresets::CoresetSampler<float, uint32_t> sampler, bflsampler;
     sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
-                         nullptr, 137, FELDMAN_LANGBERG);
+                         nullptr, (((seed * 1337) ^ (seed * seed * seed)) - (seed >> 32) ^ (seed << 32)), coresets::FELDMAN_LANGBERG);
+    bflsampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
+                         nullptr, (((seed * 1337) + (seed * seed * seed)) ^ (seed >> 32) ^ (seed << 32)), coresets::BRAVERMAN_FELDMAN_LANG);
     std::FILE *ofp = std::fopen(fn.data(), "wb");
     sampler.write(ofp);
     std::fclose(ofp);
@@ -241,9 +246,12 @@ int main(int argc, char **argv) {
     std::vector<coresets::IndexCoreset<uint32_t, float>> coresets;
     // The first half of these are true coresets, the others are uniformly subsampled.
     const size_t ncs = coreset_sizes.size();
-    coresets.reserve(ncs * 2);
+    coresets.reserve(ncs * 3);
     for(auto coreset_size: coreset_sizes) {
         coresets.emplace_back(sampler.sample(coreset_size));
+    }
+    for(auto coreset_size: coreset_sizes) {
+        coresets.emplace_back(bflsampler.sample(coreset_size));
     }
     for(auto coreset_size: coreset_sizes) {
         coresets.emplace_back(uniform_sampler.sample(coreset_size));
@@ -266,9 +274,10 @@ int main(int argc, char **argv) {
     }
     meandistortion /= random_centers.rows();
     for(size_t i = 0; i < ncs; ++i) {
-        tblout << coreset_sizes[i] << '\t'
-               << maxdistortion[i] << '\t' << meandistortion[i] << '\t'
-               << maxdistortion[i + ncs] << '\t' << meandistortion[i + ncs]
+        tblout << coreset_sizes[i]
+               << '\t' << maxdistortion[i] << '\t' << meandistortion[i]
+               << '\t' << maxdistortion[i + ncs] << '\t' << meandistortion[i + ncs]
+               << '\t' << maxdistortion[i + ncs * 2] << '\t' << meandistortion[i + ncs * 2]
                << '\n';
     }
     std::cerr << "mean\n" << meandistortion;

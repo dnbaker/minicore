@@ -351,6 +351,9 @@ struct CoresetSampler {
                 total_probs += probs_[i];
             }
             blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np) /= total_probs;
+#ifndef NDEBUG
+            std::fprintf(stderr, "total probs: %g\n", total_probs);
+#endif
         } else {
             //for(auto i = 0u; i < ncenters; ++i)
             //    weight_sums[i] = 1./(2. * center_counts[i] * weight_sums[i]);
