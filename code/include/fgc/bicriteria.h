@@ -189,10 +189,13 @@ std::pair<blz::DV<std::decay_t<decltype(get(boost::edge_weight_t(), std::declval
 get_costs(Graph &x, const Container &container) {
     using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
     using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
-    blz::DV<edge_cost> costs(boost::num_vertices(x));
+    const size_t nv = boost::num_vertices(x);
+
     util::ScopedSyntheticVertex<Graph> vx(x);
-    std::vector<Vertex> p(boost::num_vertices(x));
     std::vector<uint32_t> assignments(boost::num_vertices(x));
+    blz::DV<edge_cost> costs(boost::num_vertices(x));
+    std::vector<Vertex> p(boost::num_vertices(x));
+
     auto synthetic_vertex = vx.get();
     for(const auto vtx: container) {
         boost::add_edge(synthetic_vertex, vtx, 0., x);
@@ -205,16 +208,34 @@ get_costs(Graph &x, const Container &container) {
     auto it = container.begin();
     for(size_t i = 0; i < container.size(); ++i)
         pid2ind[index[*it++]] = i;
+
+#ifndef NDEBUG
+    for(const auto c: container)
+        std::fprintf(stderr, "c: %zu\n", size_t(c));
+#endif
+
     // This could be slow, but whatever.
-    for(size_t i = 0; i < p.size(); ++i) {
+    for(size_t i = 0; i < nv; ++i) {
         auto parent = p[i], newparent = p[index[parent]];
         while(newparent != synthetic_vertex) {
             parent = newparent;
             newparent = p[index[parent]];
         }
-        assignments[i] = pid2ind[index[parent]];
+        assert(index[parent] == parent);
+        //std::fprintf(stderr, "parent: %u\n", parent);
+        auto it = pid2ind.find(index[parent]);
+#if! NDEBUG
+        if(it == pid2ind.end()) {
+            std::fprintf(stderr, "i: %zu. parent: %zu\n", i, p[i]);
+            assert(pid2ind.find(i) != pid2ind.end());
+        }
+#endif
+        assignments[i] = it == pid2ind.end() ? pid2ind.at(i): it->second;
     }
     assignments.pop_back();
+    costs.resize(nv);
+    assert(costs.size() == assignments.size());
+    assert(nv == costs.size());
     return std::make_pair(std::move(costs), assignments);
 }
 

@@ -157,6 +157,10 @@ struct LocalKMedSearcher {
         assert(assignments_.size() == nc_);
         assert(sol_.size() == k_);
         for(const auto center: sol_) {
+            assignments_[center] = center;
+            assert(mat_(center, center) == 0.);
+        }
+        for(const auto center: sol_) {
             auto r = row(mat_, center, blaze::unchecked);
             OMP_PFOR
             for(size_t ci = 0; ci < nc_; ++ci) {

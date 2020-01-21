@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
     std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
     unsigned coreset_testing_num_iter = 500;
-    size_t nsampled_max = 0;
+    //size_t nsampled_max = 0;
     size_t rammax = 16uLL << 30;
     uint64_t seed = std::accumulate(argv, argv + argc, uint64_t(0),                 
         [](auto x, auto y) {                                                       
@@ -152,7 +152,7 @@ int main(int argc, char **argv) {
             case 'o': output_prefix = optarg; break;
             case 's': fn = optarg; break;
             case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
-            case 'S': nsampled_max = std::strtoull(optarg, nullptr, 10); break;
+            case 'S': std::fprintf(stderr, "-S removed\n"); break;
             case 'h': default: usage(argv[0]);
         }
     }
@@ -254,8 +254,8 @@ int main(int argc, char **argv) {
                                  mindistortion(coresets.size(), std::numeric_limits<double>::max()),
                                  meandistortion(coresets.size(), 0.);
     for(size_t i = 0; i < random_centers.rows(); ++i) {
-        if(i % 10 == 0)
-            std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
+        //if(i % 10 == 0)
+        //    std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
         auto rc = row(random_centers, i);
         assert(rc.size() == k);
         calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion, z);

@@ -308,11 +308,6 @@ struct CoresetSampler {
         std::vector<IT> center_counts(ncenters);
         double total_cost = 0.;
 
-        // TODO: vectorize
-        // Sketch: check for SSE2/AVX2/AVX512
-        //         if weights is null,
-        //         set a vector via Space::set1()
-        //
         OMP_PRAGMA("omp parallel for reduction(+:total_cost)")
         for(size_t i = 0; i < np; ++i) {
             // TODO: vectorize?
@@ -330,27 +325,39 @@ struct CoresetSampler {
             ++center_counts[asn];
             total_cost += w * costs[i];
         }
+        assert(std::accumulate(center_counts.begin(), center_counts.end(), IT(0)) == np);
+        for(const auto c: center_counts) std::fprintf(stderr, "center count: %u\n", c);
         const bool is_feldman = (sens == FELDMAN_LANGBERG);
-        if(is_feldman)
-            total_cost *= 2.; // For division
-        const auto tcinv = 1. / total_cost;
         probs_.reset(new FT[np]);
+        std::fprintf(stderr, "Sum: %g. accumulate sum: %g\n", total_cost, std::accumulate(costs, costs + np, 0.));
         // TODO: Consider log space?
         if(is_feldman) {
             // Ignores number of items assigned to each cluster
             // std::fprintf(stderr, "note: FL method has worse guarantees than BFL\n");
             sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
+            double total_cost_inv = 1. / (total_cost);
             OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
-                probs_[i] = getweight(i) * (costs[i]) * tcinv;
+                probs_[i] = getweight(i) * (costs[i]) * total_cost_inv;
             }
         } else {
-            for(auto i = 0u; i < ncenters; ++i)
-                weight_sums[i] = 1./(2. * center_counts[i] * weight_sums[i]);
+            //for(auto i = 0u; i < ncenters; ++i)
+            //    weight_sums[i] = 1./(2. * center_counts[i] * weight_sums[i]);
+            double total_cost_2inv = 1. / (2. * total_cost);
             OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
-                probs_[i] = getweight(i) * (costs[i] * tcinv + weight_sums[assignments[i]]); // Am I propagating weights correctly?
+                const auto w = getweight(i);
+                probs_[i] = (w * costs[i] * .5 / total_cost) + .5 * w / (weight_sums[assignments[i]] * center_counts[i]);
+                //probs_[i] = getweight(i) * (costs[i] * total_cost_2inv + weight_sums[assignments[i]]); // Am I propagating weights correctly?
             }
+#ifndef NDEBUG
+            double psum = 0.;
+            //OMP_PRAGMA("omp parallel for reduction(+:psum")
+            for(size_t i = 0; i < np_; ++i) {
+                psum += probs_[i];
+            }
+            std::fprintf(stderr, "psum: %f\n", psum);
+#endif
             sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
         }
     }
