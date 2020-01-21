@@ -212,4 +212,13 @@ struct BidirGraph: public Graph<bidirectionalS, EdgeProps, VtxProps, GraphProps>
     }
 };
 
+template<typename Graph>
+void assert_connected(const Graph &x) {
+#ifndef NDEBUG
+    auto ccomp = std::make_unique<typename boost::graph_traits<Graph>::vertex_descriptor[]>(boost::num_vertices(x));
+    assert(boost::connected_components(x, ccomp.get()) == 1);
+#endif
+}
+
+
 } // graph

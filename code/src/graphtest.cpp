@@ -143,7 +143,8 @@ int main(int argc, char **argv) {
     }
 
     // Perform Thorup sample before JV method.
-    auto lsearcher = make_kmed_lsearcher(~dm, k, 1e-5, seed);
+    auto lsearcher = make_kmed_lsearcher(~dm, std::min(k * 5, unsigned(std::sqrt(boost::num_vertices(g)))),
+                                         1e-5, seed);
     lsearcher.run();
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;

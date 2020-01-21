@@ -35,6 +35,7 @@ thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, size
     if(max_sampled == 0) max_sampled = boost::num_vertices(x);
     using Vertex = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
     // Algorithm E, Thorup p.418
+    assert_connected(x);
     const size_t n = boost::num_vertices(x);
     //m = boost::num_edges(x);
     const double logn = std::log2(n);
@@ -66,6 +67,7 @@ auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
     std::vector<Vertex> R(boost::vertices(x).first, boost::vertices(x).second);
     std::vector<Vertex> F;
     F.reserve(nperround * 5);
+    assert_connected(x);
     util::ScopedSyntheticVertex<Graph> vx(x);
     auto synthetic_vertex = vx.get();
     const size_t nv = boost::num_vertices(x);
@@ -80,17 +82,25 @@ auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
                 R.pop_back();
             }
         } else {
-            for(const auto r: R)
+            for(const auto r: R) {
                 F.push_back(r);
+                boost::add_edge(F.back(), synthetic_vertex, 0., x);
+            }
             R.clear();
         }
+        std::fprintf(stderr, "F size: %zu\n", F.size());
         boost::dijkstra_shortest_paths(x, synthetic_vertex,
                                        distance_map(distances.get()));
+#if VERBOSE_AF
+        for(size_t j = 0; j < nv - 1; ++j)
+            std::fprintf(stderr, "cost %zu at iter %zu is %g\n", j, i, distances[j]);
+#endif
         if(R.empty()) break;
         auto randel = R[rng() % R.size()];
         auto minv = distances[randel];
         R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
     }
+    assert_connected(x);
     double cost = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:cost)")
     for(size_t i = 0; i < nv - 1; ++i) {
@@ -100,27 +110,39 @@ auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
     return std::make_pair(std::move(F), cost);
 }
 
-template<typename Graph>
-std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
-thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter) {
-    // Modification of Thorup, wherein we run Thorup Algorithm E
-    // with eps = 0.5 a fixed number of times and return the best result.
-
-    static constexpr double eps = 0.5;
-    wy::WyRand<uint64_t, 2> rng(seed);
-    const size_t n = boost::num_vertices(x);
-    const double logn = std::log2(n);
-    const size_t samples_per_round = std::ceil(21. * k * logn / eps);
-
-    auto bestsol = thorup_d(x, rng, samples_per_round, 3 * logn);
-    for(unsigned i = 1; i < num_iter; ++i) {
-        auto next = thorup_d(x, rng, samples_per_round, 3 * logn);
-        if(next.second < bestsol.second) {
-            std::fprintf(stderr, "Replacing old cost of %g with %g\n", bestsol.second, next.second);
-            std::swap(next, bestsol);
-        }
+template<typename Graph, typename VertexContainer>
+auto get_assignments(Graph &x, const VertexContainer &vertices) {
+    std::fprintf(stderr, "Gettiing assginasdfasdf\n");
+    const size_t nv = boost::num_vertices(x);
+    flat_hash_map<typename VertexContainer::value_type, uint32_t> vmap;
+    {
+        size_t i = 0;
+        for(const auto v: vertices)
+            vmap[v] = i++;
     }
-    return bestsol.first;
+    util::ScopedSyntheticVertex svx(x);
+    auto p = std::make_unique<typename graph_traits<Graph>::vertex_descriptor[]>(boost::num_vertices(x));
+    auto d = std::make_unique<float[]> (boost::num_vertices(x));
+    boost::dijkstra_shortest_paths(x, svx.get(),
+                                   distance_map(d.get()).predecessor_map(p.get()));
+    std::vector<typename VertexContainer::value_type> ret(nv);
+    for(const auto v: vertices) {
+        std::fprintf(stderr, "I am %zu and my parent is %zu\n", size_t(v), size_t(p[v]));
+    }
+    OMP_PFOR
+    for(size_t i = 0; i < ret.size(); ++i) {
+        typename VertexContainer::value_type id = i, newparent = p[i];
+        std::fprintf(stderr, "id: %u. parent: %u\n", unsigned(id), unsigned(newparent));
+        typename decltype(vmap)::const_iterator it;
+        while((it = vmap.find(id)) == vmap.end()) {
+            std::fprintf(stderr, "id: %u. parent: %u\n", unsigned(id), unsigned(newparent));
+            if(id == newparent) throw std::runtime_error("I DIE");
+            id = newparent;
+            newparent = p[id];
+        }
+        ret[i] = it->second;
+    }
+    return ret;
 }
 
 template<typename...Args>
@@ -238,6 +260,35 @@ get_costs(Graph &x, const Container &container) {
     assert(nv == costs.size());
     return std::make_pair(std::move(costs), assignments);
 }
+template<typename Graph>
+auto 
+//std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
+thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter) {
+    // Modification of Thorup, wherein we run Thorup Algorithm E
+    // with eps = 0.5 a fixed number of times and return the best result.
+
+    static constexpr double eps = 0.5;
+    wy::WyRand<uint64_t, 2> rng(seed);
+    const size_t n = boost::num_vertices(x);
+    const double logn = std::log2(n);
+    const size_t samples_per_round = std::ceil(21. * k * logn / eps);
+
+    //std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
+    auto bestsol = thorup_d(x, rng, samples_per_round, 3 * logn);
+    for(unsigned i = 1; i < num_iter; ++i) {
+        //std::fprintf(stderr, " at tsm %zunv: %zu\n", i, boost::num_vertices(x));
+        auto next = thorup_d(x, rng, samples_per_round, 3 * logn);
+        if(next.second < bestsol.second) {
+            std::fprintf(stderr, "Replacing old cost of %g with %g\n", bestsol.second, next.second);
+            std::swap(next, bestsol);
+        }
+    }
+    auto [_, assignments] = get_costs(x, bestsol.first);
+    //auto assignments(get_assignments(x, bestsol.first));
+    //std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
+    return std::make_pair(std::move(bestsol.first), std::move(assignments));
+}
+
 
 } // thorup
 

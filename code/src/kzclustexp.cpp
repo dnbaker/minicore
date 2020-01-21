@@ -85,15 +85,17 @@ max_component(GraphT &g) {
                (rit = remapper.find(target(edge, g))) != remapper.end())
                 boost::add_edge(lit->second, rit->second, EdgeWeightMap[edge], newg);
         }
+#ifndef NDEBUG
         ncomp = boost::connected_components(newg, ccomp.get());
         std::fprintf(stderr, "num components: %u. num edges: %zu. num nodes: %zu\n", ncomp, newg.num_edges(), newg.num_vertices());
         assert(ncomp == 1);
+#endif
         std::swap(newg, g);
     }
     return g;
 }
 
-void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k, double z) {
+void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k, double z, size_t nv, size_t ne) {
     ofs << "##Command-line: '";
     while(*argv) {
         ofs << *argv;
@@ -101,7 +103,7 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
         if(*argv) ofs << ' ';
     }
     char buf[128];
-    std::sprintf(buf, "'\n##z: %g\n##nsamples: %u\n##k: %u\n", z, nsamples, k);
+    std::sprintf(buf, "'\n##z: %g\n##nsamples: %u\n##k: %u\n##nv: %zu\n##ne: %zu\n", z, nsamples, k, nv, ne);
     ofs << buf;
     ofs << "#coreset_size\tmax distortion (FL11)\tmean distortion (FL11)\t "
         << "max distortion (BFL16)\tmean distortion (BFL16)"
@@ -159,8 +161,9 @@ int main(int argc, char **argv) {
             case 'h': default: usage(argv[0]);
         }
     }
-    if(coreset_sizes.empty())
-        coreset_sizes.push_back(100);
+    if(coreset_sizes.empty()) {
+        coreset_sizes = {10, 25, 50, 100, 150, 200, 250, 500, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 10000};
+    }
     if(output_prefix.empty())
         output_prefix = std::to_string(seed);
     std::string input = argc == optind ? "../data/dolphins.graph": const_cast<const char *>(argv[optind]);
@@ -171,11 +174,21 @@ int main(int argc, char **argv) {
     fgc::Graph<undirectedS, float> g = parse_by_fn(input);
     // Select only the component with the most edges.
     max_component(g);
+    assert_connected(g);
     // Assert that it's connected, or else the problem has infinite cost.
 
-    std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
+    //std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
     //sampled = thorup_sample(g, k, seed, nsampled_max);
-    sampled = thorup_sample_mincost(g, k, seed, num_thorup_trials);
+    auto [sampled, thorup_assignments] = thorup_sample_mincost(g, k, seed, num_thorup_trials);
+    std::vector<uint32_t> center_counts(sampled.size());
+    OMP_PFOR
+    for(size_t i = 0; i < thorup_assignments.size(); ++i) {
+        OMP_ATOMIC
+        ++center_counts[thorup_assignments[i]];
+    }
+    for(size_t i = 0; i < sampled.size(); ++i) {
+        std::fprintf(stderr, "center %zu is %zu and has %u supporters\n", i, size_t(sampled[i]), center_counts[i]);
+    }
     std::fprintf(stderr, "[Phase 1] Thorup sampling complete. Sampled %zu points from input graph: %zu vertices, %zu edges.\n", sampled.size(), boost::num_vertices(g), boost::num_edges(g));
 
     std::unique_ptr<DiskMat<float>> diskmatptr;
@@ -195,10 +208,11 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "[Phase 2] Distances gathered\n");
 
     // Perform Thorup sample before JV method.
-    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-5, seed * seed + seed);
+    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-9, seed * seed + seed);
     lsearcher.run();
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
+    // Free memory
     if(diskmatptr) diskmatptr.reset();
     if(rammatptr) rammatptr.reset();
 
@@ -218,7 +232,7 @@ int main(int argc, char **argv) {
     // Build a coreset importance sampler based on it.
     coresets::CoresetSampler<float, uint32_t> sampler, bflsampler;
     sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
-                         nullptr, (((seed * 1337) ^ (seed * seed * seed)) - (seed >> 32) ^ (seed << 32)), coresets::FELDMAN_LANGBERG);
+                         nullptr, (((seed * 1337) ^ (seed * seed * seed)) - ((seed >> 32) ^ (seed << 32))), coresets::FELDMAN_LANGBERG);
     bflsampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
                          nullptr, (((seed * 1337) + (seed * seed * seed)) ^ (seed >> 32) ^ (seed << 32)), coresets::BRAVERMAN_FELDMAN_LANG);
     std::FILE *ofp = std::fopen(fn.data(), "wb");
@@ -228,7 +242,7 @@ int main(int argc, char **argv) {
     wy::WyRand<uint32_t, 2> rng(seed);
     std::string ofname = output_prefix + ".table_out.tsv";
     std::ofstream tblout(ofname);
-    print_header(tblout, argv, coreset_testing_num_iter, k, z);
+    print_header(tblout, argv, coreset_testing_num_iter, k, z, boost::num_vertices(g), boost::num_edges(g));
     blaze::DynamicMatrix<uint32_t> random_centers(coreset_testing_num_iter, k);
     for(size_t i = 0; i < random_centers.rows(); ++i) {
         auto r = row(random_centers, i);
