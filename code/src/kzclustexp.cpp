@@ -289,6 +289,7 @@ int main(int argc, char **argv) {
     }
     coresets::UniformSampler<double, uint32_t> uniform_sampler(costs.size());
     // The first half of these are true coresets, the others are uniformly subsampled.
+    size_t niter = 1;
     for(size_t i = 0; i < niter; ++i) {
         std::vector<coresets::IndexCoreset<uint32_t, double>> coresets;
         const size_t ncs = coreset_sizes.size();
@@ -306,7 +307,6 @@ int main(int argc, char **argv) {
         blaze::DynamicVector<double> maxdistortion(coresets.size(), std::numeric_limits<double>::min()),
                                      distbuffer(boost::num_vertices(g)),
                                      currentdistortion(coresets.size()),
-                                     mindistortion(coresets.size(), std::numeric_limits<double>::max()),
                                      meandistortion(coresets.size(), 0.);
         for(size_t i = 0; i < random_centers.rows(); ++i) {
             //if(i % 10 == 0)
@@ -315,7 +315,6 @@ int main(int argc, char **argv) {
             assert(rc.size() == k);
             calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion, z);
             maxdistortion = max(maxdistortion, currentdistortion);
-            mindistortion = min(mindistortion, currentdistortion);
             meandistortion = meandistortion + currentdistortion;
         }
         meandistortion /= random_centers.rows();
@@ -328,6 +327,5 @@ int main(int argc, char **argv) {
         }
         std::cerr << "mean\n" << meandistortion;
         std::cerr << "max\n" << maxdistortion;
-        std::cerr << "min\n" << mindistortion;
     }
 }
