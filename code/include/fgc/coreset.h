@@ -314,69 +314,55 @@ struct CoresetSampler {
             weights_.reset(new FT[np]);
             std::memcpy(&weights_[0], weights, sizeof(FT) * np);
         } else weights_.release();
-        std::vector<FT> weight_sums(ncenters);
-        std::vector<IT> center_counts(ncenters);
         double total_cost = 0.;
 
         OMP_PRAGMA("omp parallel for reduction(+:total_cost)")
         for(size_t i = 0; i < np; ++i) {
-            // TODO: vectorize?
-            // weight sums per assignment couldn't be vectorized,
-            // total costs could be
-            // Probably a 4-16x speedup on 1/3 of the cost
-            // So maybe like a ~30% speedup?
-            auto asn = assignments[i];
-            assert(asn < ncenters);
             const auto w = getweight(i);
-
-            OMP_ATOMIC
-            weight_sums[asn] += w; // If unweighted, weights are 1.
-            OMP_ATOMIC
-            ++center_counts[asn];
             total_cost += w * costs[i];
         }
-        assert(std::accumulate(center_counts.begin(), center_counts.end(), IT(0)) == np);
-        for(const auto c: center_counts) std::fprintf(stderr, "center count: %u\n", c);
-        for(const auto c: center_counts) assert(c);
-        const bool is_feldman = (sens == FELDMAN_LANGBERG);
         probs_.reset(new FT[np]);
-        std::fprintf(stderr, "Sum: %g. accumulate sum: %g\n", total_cost, std::accumulate(costs, costs + np, 0.));
-        if(is_feldman) {
+        double total_probs = 0.;
+        if(sens == FELDMAN_LANGBERG) {
             // Ignores number of items assigned to each cluster
             sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
             double total_cost_inv = 1. / (total_cost);
-            double total_probs = 0.;
             OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
             for(size_t i = 0; i < np; ++i) {
                 probs_[i] = getweight(i) * (costs[i]) * total_cost_inv;
                 total_probs += probs_[i];
             }
-            blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np) /= total_probs;
 #ifndef NDEBUG
+            assert(std::abs(total_probs - 1.) < 1e-5 || !std::fprintf(stderr, "sum of fractions of the probabilities is not close to 1.\n"));
             std::fprintf(stderr, "total probs: %g\n", total_probs);
 #endif
+            // Normalize again
         } else {
-            //for(auto i = 0u; i < ncenters; ++i)
-            //    weight_sums[i] = 1./(2. * center_counts[i] * weight_sums[i]);
-            //double total_cost_2inv = 1. / (2. * total_cost);
-            double total_probs = 0.;
+            std::vector<IT> center_counts(ncenters);
+            std::vector<FT> weight_sums(ncenters);
+            OMP_PFOR
+            for(size_t i = 0; i < np; ++i) {
+                auto asn = assignments[i];
+                assert(asn < ncenters);
+                const auto w = getweight(i);
+                OMP_ATOMIC
+                weight_sums[asn] += w; // If unweighted, weights are 1.
+                OMP_ATOMIC
+                ++center_counts[asn];
+            }
             OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
             for(size_t i = 0; i < np; ++i) {
                 const auto w = getweight(i);
                 double fraccost = w * costs[i] / total_cost;
                 const auto asn = assignments[i];
                 double fracw = w / (weight_sums[asn] * center_counts[asn]);
-                //std::fprintf(stderr, "w: %f. fraction of total cost: %g. fraction of weight for section: %g\n", getweight(i), fraccost, fracw);
                 probs_[i] = .5 * (fraccost + fracw);
                 total_probs += probs_[i];
             }
 #ifndef NDEBUG
             std::fprintf(stderr, "total probs: %g\n", total_probs);
 #endif
-#if 0
-            for(const auto p: make_dumbrange(probs_.get(), probs_.get() + np))
-                std::fprintf(stderr, "p: %g\n", p);
-#endif
+            // Because this doesn't necessarily sum to 1.
             blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np) /= total_probs;
         }
 #ifndef NDEBUG

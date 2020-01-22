@@ -143,7 +143,12 @@ using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])
 
 
 /*
- * TODO: Adapt using https://arxiv.org/pdf/1309.7109.pdf for arbitrary distances
+ * However, using https://arxiv.org/abs/1508.05243 (Strong Coresets for Hard and Soft Bregman Clustering withApplications to Exponential Family Mixtures)
+ * any squared Bregman divergence will work for the kmeanspp, including regular exponential families.
+ * See http://www.jmlr.org/papers/volume6/banerjee05b/banerjee05b.pdf
+ * http://www.cs.utexas.edu/users/inderjit/Talks/bregtut.pdf
+ * and perhaps https://arxiv.org/pdf/1309.7109.pdf.
+ * The Banerjee paper has a table of relevant information.
  */
 
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,

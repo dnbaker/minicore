@@ -72,15 +72,12 @@ auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
     auto synthetic_vertex = vx.get();
     const size_t nv = boost::num_vertices(x);
     std::unique_ptr<edge_cost[]> distances(new edge_cost[nv]);
+    flat_hash_set<Vertex> vertices;
     for(size_t i = 0; R.size() && i < maxnumrounds; ++i) {
         if(R.size() > nperround) {
-            for(size_t j = 0; j < nperround; ++j) {
-                auto &r = R[rng() % R.size()];
-                F.push_back(r);
-                boost::add_edge(r, synthetic_vertex, 0., x);
-                std::swap(r, R.back());
-                R.pop_back();
-            }
+            do vertices.insert(R[rng() % R.size()]); while(vertices.size() < nperround);
+            F.insert(F.end(), vertices.begin(), vertices.end());
+            vertices.clear();
         } else {
             for(const auto r: R) {
                 F.push_back(r);
@@ -109,43 +106,6 @@ auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
     std::fprintf(stderr, "Sampled set of size %zu has cost %f\n", F.size(), cost);
     return std::make_pair(std::move(F), cost);
 }
-
-#if 0
-template<typename Graph, typename VertexContainer>
-auto get_assignments(Graph &x, const VertexContainer &vertices) {
-    std::fprintf(stderr, "Gettiing assginasdfasdf\n");
-    const size_t nv = boost::num_vertices(x);
-    flat_hash_map<typename VertexContainer::value_type, uint32_t> vmap;
-    {
-        size_t i = 0;
-        for(const auto v: vertices)
-            vmap[v] = i++;
-    }
-    util::ScopedSyntheticVertex svx(x);
-    auto p = std::make_unique<typename graph_traits<Graph>::vertex_descriptor[]>(boost::num_vertices(x));
-    auto d = std::make_unique<float[]> (boost::num_vertices(x));
-    boost::dijkstra_shortest_paths(x, svx.get(),
-                                   distance_map(d.get()).predecessor_map(p.get()));
-    std::vector<typename VertexContainer::value_type> ret(nv);
-    for(const auto v: vertices) {
-        std::fprintf(stderr, "I am %zu and my parent is %zu\n", size_t(v), size_t(p[v]));
-    }
-    OMP_PFOR
-    for(size_t i = 0; i < ret.size(); ++i) {
-        typename VertexContainer::value_type id = i, newparent = p[i];
-        //std::fprintf(stderr, "id: %u. parent: %u\n", unsigned(id), unsigned(newparent));
-        typename decltype(vmap)::const_iterator it;
-        while((it = vmap.find(id)) == vmap.end()) {
-            //std::fprintf(stderr, "id: %u. parent: %u\n", unsigned(id), unsigned(newparent));
-            if(id == newparent) throw std::runtime_error("I DIE");
-            id = newparent;
-            newparent = p[id];
-        }
-        ret[i] = it->second;
-    }
-    return ret;
-}
-#endif
 
 template<typename...Args>
 auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_round, size_t iterations,
