@@ -174,7 +174,7 @@ struct LocalKMedSearcher {
         current_cost_ = cost_for_sol(sol_);
     }
 
-    double evaluate_swap(IType newcenter, IType oldcenter) const {
+    double evaluate_swap(IType newcenter, IType oldcenter, bool single_threaded=false) const {
         //std::fprintf(stderr, "[%s] function starting: %u/%u\n", __PRETTY_FUNCTION__, newcenter, oldcenter);
         assert(newcenter < mat_.rows());
         assert(oldcenter < mat_.rows());
@@ -188,17 +188,22 @@ struct LocalKMedSearcher {
         assert(nc_ == newr.size());
         assert(assignments_.size() == mat_.columns());
         double potential_gain = 0.;
-        //std::fprintf(stderr, "Starting to evaluate\n");
-        OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
-        for(size_t i = 0; i < nc_; ++i) {
-            //if(assignments_[i] != oldcenter) continue; // Only points already assigned to
-            //assert(costs_[i] == mat_(assignments_[i], i));
-            auto asn = assignments_[i];
-            //std::fprintf(stderr, "old assignment: %u\n", asn);
-            assert(asn < nr_);
-            if(asn == oldcenter || newr[i] < mat_(asn, i)) {
-                //std::fprintf(stderr, "Replacing %u/%zu with %u/%zu\n", asn, i, newcenter, i);
-                potential_gain += mat_(asn, i) - newr[i];
+        if(single_threaded) {
+            for(size_t i = 0; i < nc_; ++i) {
+                auto asn = assignments_[i];
+                assert(asn < nr_);
+                if(asn == oldcenter || newr[i] < mat_(asn, i)) {
+                    potential_gain += mat_(asn, i) - newr[i];
+                }
+            }
+        } else {
+            OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
+            for(size_t i = 0; i < nc_; ++i) {
+                auto asn = assignments_[i];
+                assert(asn < nr_);
+                if(asn == oldcenter || newr[i] < mat_(asn, i)) {
+                    potential_gain += mat_(asn, i) - newr[i];
+                }
             }
         }
         return potential_gain;
@@ -241,7 +246,41 @@ struct LocalKMedSearcher {
         double diffthresh = current_cost_ / k_ * eps_;
         size_t total = 0;
         {
+#if BEST_IMPROVEMENT
+            double current_best;
+            IType current_best_index, current_best_center;
+#endif
             next:
+#if BEST_IMPROVEMENT
+            current_best = std::numeric_limits<double>::min();
+            current_best_index = -1, current_best_center = -1;
+            for(const auto oldcenter: sol_) {
+                OMP_PFOR
+                for(size_t pi = 0; pi < nr_; ++pi) {
+                    if(sol_.find(pi) == sol_.end()) {
+                        if(const auto val = evaluate_swap(pi, oldcenter, true);
+                           val > diffthresh && val > current_best)
+                        {
+                            OMP_CRITICAL
+                            {
+                                current_best = val;
+                                current_best_index = pi;
+                            }
+                            current_best_center = oldcenter;
+                            std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
+                        }
+                    }
+                }
+            }
+            if(current_best_index != IType(-1)) {
+                sol_.erase(current_best_center);
+                sol_.insert(current_best_index);
+                recalculate();
+                diffthresh = current_cost_ / k_ * eps_;
+                ++total;
+                goto next;
+            }
+#else
             for(const auto oldcenter: sol_) {
                 for(size_t pi = 0; pi < nr_; ++pi) {
                     if(sol_.find(pi) == sol_.end()) {
@@ -258,6 +297,7 @@ struct LocalKMedSearcher {
                     }
                 }
             }
+#endif
         }
         std::fprintf(stderr, "Finished in %zu swaps by exhausting all potential improvements. Final cost: %f\n",
                      total, current_cost_);
