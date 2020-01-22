@@ -120,7 +120,7 @@ void usage(const char *ex) {
                          "-M\tSet maxmimum memory size to use. Default: 16GiB\n"
                          "-R\tSet random seed. Default: hash based on command-line arguments\n"
                          "-z\tset z [1.]\n"
-                         "-t\tSet number of sampled centers to test [1000]\n"
+                         "-t\tSet number of sampled centers to test [500]\n"
                          "-T\tNumber of Thorup sampling trials [15]\n",
                  ex);
     std::exit(1);
@@ -133,29 +133,27 @@ int main(int argc, char **argv) {
     std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
     bool rectangular = false;
-    unsigned coreset_testing_num_iter = 1000;
+    unsigned testing_num_centersets = 1000;
     //size_t nsampled_max = 0;
     size_t rammax = 16uLL << 30;
-    uint64_t seed = std::accumulate(argv, argv + argc, uint64_t(0),                 
-        [](auto x, auto y) {                                                       
-            return x ^ std::hash<std::string>{}(y);                                
+    unsigned coreset_testing_num_iters = 5;
+    uint64_t seed = std::accumulate(argv, argv + argc, uint64_t(0),
+        [](auto x, auto y) {
+            return x ^ std::hash<std::string>{}(y);
         }
     );
     unsigned num_thorup_trials = 15;
-    for(int c;(c = getopt(argc, argv, "T:t:p:o:M:S:z:s:c:k:R:rh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "N:T:t:p:o:M:S:z:s:c:k:R:rh?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
             case 'r': rectangular = true; break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
             case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
-            case 't': coreset_testing_num_iter = std::atoi(optarg); break;
+            case 't': testing_num_centersets = std::atoi(optarg); break;
+            case 'N': coreset_testing_num_iters = std::atoi(optarg); break;
             case 'T': num_thorup_trials = std::atoi(optarg); break;
-            case 'p':
-#ifdef _OPENMP
-                omp_set_num_threads(std::atoi(optarg));
-#endif
-                break;
+            case 'p': OMP_SET_NT(std::atoi(optarg)); break;
             case 'o': output_prefix = optarg; break;
             case 's': fn = optarg; break;
             case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
@@ -282,11 +280,11 @@ int main(int argc, char **argv) {
     wy::WyRand<uint32_t, 2> rng(seed);
     std::string ofname = output_prefix + ".table_out.tsv";
     std::ofstream tblout(ofname);
-    print_header(tblout, argv, coreset_testing_num_iter, k, z, boost::num_vertices(g), boost::num_edges(g));
-    blaze::DynamicMatrix<uint32_t> random_centers(coreset_testing_num_iter, k);
+    print_header(tblout, argv, testing_num_centersets, k, z, boost::num_vertices(g), boost::num_edges(g));
+    blaze::DynamicMatrix<uint32_t> random_centers(testing_num_centersets, k);
     for(size_t i = 0; i < random_centers.rows(); ++i) {
         auto r = row(random_centers, i);
-        wy::WyRand<uint32_t> rng(seed + i * coreset_testing_num_iter);
+        wy::WyRand<uint32_t> rng(seed + i * testing_num_centersets);
         flat_hash_set<uint32_t> centers; centers.reserve(k);
         while(centers.size() < k) {
             centers.insert(rng() % boost::num_vertices(g));
@@ -297,11 +295,23 @@ int main(int argc, char **argv) {
         std::sort(r.begin(), r.end());
     }
     coresets::UniformSampler<float, uint32_t> uniform_sampler(costs.size());
-    // The first half of these are true coresets, the others are uniformly subsampled.
-    size_t niter = 1;
-    for(size_t i = 0; i < niter; ++i) {
+    // We run the inner loop `coreset_testing_num_iters` times
+    // and average the maximum distortion.
+    // We do this because there are two sources of randomness:
+    //     1. The randomly selected centers
+    //     2. The randomly-generated coresets
+    // By running this inner loop `coreset_testing_num_iters` times, we hope to better demonstrate
+    // the expected behavior
+
+    const size_t ncs = coreset_sizes.size();
+    const size_t distvecsz = ncs * 3;
+    blaze::DynamicVector<double> meanmaxdistortion(distvecsz, 0.),
+                                 meanmeandistortion(distvecsz, 0.);
+    //
+    for(size_t i = 0; i < coreset_testing_num_iters; ++i) {
+        // The first ncs coresets are VX-sampled, the second ncs are BFL-sampled, and the last ncs
+        // are uniformly randomly sampled.
         std::vector<coresets::IndexCoreset<uint32_t, float>> coresets;
-        const size_t ncs = coreset_sizes.size();
         coresets.reserve(ncs * 3);
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(sampler.sample(coreset_size));
@@ -312,9 +322,10 @@ int main(int argc, char **argv) {
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(uniform_sampler.sample(coreset_size));
         }
+        assert(coresets.size() == distvecsz);
         std::fprintf(stderr, "[Phase 5] Generated coresets\n");
-        blaze::DynamicVector<double> maxdistortion(coresets.size(), std::numeric_limits<double>::min()),
-                                     meandistortion(coresets.size(), 0.);
+        blaze::DynamicVector<double> maxdistortion(distvecsz, std::numeric_limits<double>::min()),
+                                     meandistortion(distvecsz, 0.);
         OMP_PFOR
         for(size_t i = 0; i < random_centers.rows(); ++i) {
             //if(i % 10 == 0)
@@ -334,15 +345,20 @@ int main(int argc, char **argv) {
                 meandistortion = blaze::serial(meandistortion + currentdistortion);
             }
         }
+        meanmaxdistortion += maxdistortion;
         meandistortion /= random_centers.rows();
-        for(size_t i = 0; i < ncs; ++i) {
-            tblout << coreset_sizes[i]
-                   << '\t' << maxdistortion[i] << '\t' << meandistortion[i]
-                   << '\t' << maxdistortion[i + ncs] << '\t' << meandistortion[i + ncs]
-                   << '\t' << maxdistortion[i + ncs * 2] << '\t' << meandistortion[i + ncs * 2]
-                   << '\n';
-        }
-        std::cerr << "mean\n" << meandistortion;
-        std::cerr << "max\n" << maxdistortion;
+        meanmeandistortion += meandistortion;
+        std::cerr << "mean [" << i << "]\n" << meandistortion;
+        std::cerr << "max  [" <<  i << "]\n" << maxdistortion;
     }
+    meanmaxdistortion /= coreset_testing_num_iters;
+    meanmeandistortion /= coreset_testing_num_iters;
+    for(size_t i = 0; i < ncs; ++i) {
+        tblout << coreset_sizes[i]
+               << '\t' << meanmaxdistortion[i] << '\t' << meanmeandistortion[i]
+               << '\t' << meanmaxdistortion[i + ncs] << '\t' << meanmeandistortion[i + ncs]
+               << '\t' << meanmaxdistortion[i + ncs * 2] << '\t' << meanmeandistortion[i + ncs * 2]
+               << '\n';
+    }
+    return EXIT_SUCCESS;
 }

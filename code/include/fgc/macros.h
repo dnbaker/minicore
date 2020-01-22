@@ -54,6 +54,9 @@
 #  ifndef OMP_SECTION
 #    define OMP_SECTION OMP_PRAGMA("omp section")
 #  endif
+#  ifndef OMP_SET_NT
+#    define OMP_SET_NT(x) omp_set_num_threads(x)
+#  endif
 #else
 #  ifndef OMP_PRAGMA
 #    define OMP_PRAGMA(...)
@@ -69,6 +72,15 @@
 #  endif
 #  ifndef OMP_CRITICAL
 #    define OMP_CRITICAL
+#  endif
+#  ifndef OMP_SECTIONS
+#    define OMP_SECTIONS
+#  endif
+#  ifndef OMP_SECTION
+#    define OMP_SECTION
+#  endif
+#  ifndef OMP_SET_NT
+#    define OMP_SET_NT(x)
 #  endif
 #endif
 

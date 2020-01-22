@@ -25,7 +25,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("infname")
     ap.add_argument("--prefix")
+    ap.add_argument("--include-bfl", '-B', action='store_true')
     args = ap.parse_args()
+    use_bfl = args.include_bfl
     if args.prefix is None:
         args.prefix = args.infname
     xlabels = []
@@ -34,7 +36,7 @@ if __name__ == "__main__":
         if len(line) == 0 or line[0] == "#": continue
         xlabels.append(int(line.split()[0]))
         data.append(list(map(float, line.strip().split()[1:])))
-    end = 17
+    end = 15
     xlabels = np.array(xlabels)[2:end]
     print(xlabels)
     # xlabels = np.ceil(np.log2(np.array(xlabels)[2:end])).astype(np.int32)
@@ -43,9 +45,9 @@ if __name__ == "__main__":
     # To make it clearer who was better
     mxfl, mxbfl, mxu = data[:,0], data[:,2], data[:,4]
     mufl, mubfl, muu = data[:,1], data[:,3], data[:,5]
-    names = ("Varadarajan-Xiao", "Uniform")
-    mudata=(mufl, muu)
-    mxdata=(mxfl, mxu)
+    names = ("Varadarajan-Xiao", "BFL", "Uniform") if use_bfl else ("Varadarajan-Xiao", "Uniform")
+    mudata=(mufl, mubfl, muu) if use_bfl else (mufl, muu)
+    mxdata= (mxfl, mxbfl, mxu) if use_bfl else (mxfl, mxu)
     # data=(mufl, mubfl, muu)
     # names=("Varadarajan-Xiao", "BFL", "Uniform")
     #print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
