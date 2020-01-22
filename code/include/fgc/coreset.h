@@ -318,6 +318,11 @@ struct CoresetSampler {
         } else if(sens == FL) {
             make_sampler_fl(np, ncenters, costs, assignments, seed);
         } else throw std::runtime_error("Invalid SensitivityMethod");
+#ifndef NDEBUG
+        for(unsigned i = 0; i < np; ++i) {
+            std::fprintf(stderr, "point %zu has prob %g\n", i, probs_[i]);
+        }
+#endif
     }
     void make_sampler_vx(size_t np, size_t ncenters,
                          const FT *costs, const IT *assignments,
@@ -364,7 +369,7 @@ struct CoresetSampler {
         auto cv = blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(costs), np);
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
-                    : blaze::sum(cv);
+                     : blaze::sum(cv);
         probs_.reset(new FT[np]);
         double total_probs = 0.;
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
