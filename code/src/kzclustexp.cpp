@@ -15,9 +15,9 @@ using namespace fgc;
 using namespace boost;
 
 
-template<typename Graph, typename ICon, typename FCon, typename IT, typename RetCon>
+template<typename Graph, typename ICon, typename FCon, typename IT, typename RetCon, typename CSWT>
 void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuffer,
-                             const std::vector<coresets::IndexCoreset<IT, typename Graph::edge_distance_type>> &coresets,
+                             const std::vector<coresets::IndexCoreset<IT, CSWT>> &coresets,
                              RetCon &ret, double z)
 {
     assert(ret.size() == coresets.size());
@@ -120,7 +120,7 @@ void usage(const char *ex) {
                          "-M\tSet maxmimum memory size to use. Default: 16GiB\n"
                          "-R\tSet random seed. Default: hash based on command-line arguments\n"
                          "-z\tset z [1.]\n"
-                         "-t\tSet number of sampled centers to test [500]\n"
+                         "-t\tSet number of sampled centers to test [1000]\n"
                          "-T\tNumber of Thorup sampling trials [15]\n",
                  ex);
     std::exit(1);
@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
-    unsigned coreset_testing_num_iter = 500;
+    unsigned coreset_testing_num_iter = 1000;
     //size_t nsampled_max = 0;
     size_t rammax = 16uLL << 30;
     uint64_t seed = std::accumulate(argv, argv + argc, uint64_t(0),                 
@@ -162,7 +162,34 @@ int main(int argc, char **argv) {
         }
     }
     if(coreset_sizes.empty()) {
-        coreset_sizes = {10, 25, 50, 100, 150, 200, 250, 500, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 10000};
+        coreset_sizes = {
+#if USE3
+3,
+ 6,
+ 9,
+ 18,
+ 27,
+ 54,
+ 81,
+ 162,
+ 243,
+ 486,
+ 729,
+ 1458,
+ 2187,
+ 4374,
+ 6561,
+ 13122,
+ 19683
+#else
+5, 10, 15, 20, 25, 50, 75, 100, 125, 250, 375, 500, 625, 1250, 1875, 2500
+#endif
+// Auto-generated:
+// from functools import reduce
+// makez = lambda z, n: reduce(lambda x, y: x + y, ([y * x for x in range(1, z)] for y in map(lambda x: z**x, range(1, n))))
+// makez(5, 9)
+//10, 25, 50, 100, 150, 200, 250, 500, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 10000
+};
     }
     if(output_prefix.empty())
         output_prefix = std::to_string(seed);
@@ -187,7 +214,8 @@ int main(int argc, char **argv) {
         ++center_counts[thorup_assignments[i]];
     }
     for(size_t i = 0; i < sampled.size(); ++i) {
-        std::fprintf(stderr, "center %zu is %zu and has %u supporters\n", i, size_t(sampled[i]), center_counts[i]);
+        if(center_counts[i] > 1u)
+            std::fprintf(stderr, "center %zu is %zu and has %u supporters\n", i, size_t(sampled[i]), center_counts[i]);
     }
     std::fprintf(stderr, "[Phase 1] Thorup sampling complete. Sampled %zu points from input graph: %zu vertices, %zu edges.\n", sampled.size(), boost::num_vertices(g), boost::num_edges(g));
 
@@ -204,6 +232,9 @@ int main(int argc, char **argv) {
     if(z != 1.) {
         assert(z > 1.);
         dm = pow(abs(dm), z);
+    }
+    for(size_t i = 0; i < center_counts.size(); ++i) {
+        column(dm, i) *= center_counts[i];
     }
     std::fprintf(stderr, "[Phase 2] Distances gathered\n");
 
@@ -230,7 +261,7 @@ int main(int argc, char **argv) {
     if(z != 1.)
         costs = blaze::pow(costs, z);
     // Build a coreset importance sampler based on it.
-    coresets::CoresetSampler<float, uint32_t> sampler, bflsampler;
+    coresets::CoresetSampler<double, uint32_t> sampler, bflsampler;
     sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
                          nullptr, (((seed * 1337) ^ (seed * seed * seed)) - ((seed >> 32) ^ (seed << 32))), coresets::FELDMAN_LANGBERG);
     bflsampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
@@ -256,8 +287,8 @@ int main(int argc, char **argv) {
             r[j] = *it++;
         std::sort(r.begin(), r.end());
     }
-    coresets::UniformSampler<float, uint32_t> uniform_sampler(costs.size());
-    std::vector<coresets::IndexCoreset<uint32_t, float>> coresets;
+    coresets::UniformSampler<double, uint32_t> uniform_sampler(costs.size());
+    std::vector<coresets::IndexCoreset<uint32_t, double>> coresets;
     // The first half of these are true coresets, the others are uniformly subsampled.
     const size_t ncs = coreset_sizes.size();
     coresets.reserve(ncs * 3);

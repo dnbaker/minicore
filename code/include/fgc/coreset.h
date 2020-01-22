@@ -149,7 +149,6 @@ struct CoresetSampler {
     bool ready() const {return sampler_.get();}
 
     bool operator==(const CoresetSampler &o) const {
-        //VERBOSE_ONLY(std::fprintf(stderr, "np: %zu/%zu\n", np_, o.np_);)
         return np_ == o.np_ &&
                        std::equal(probs_.get(), probs_.get() + np_, o.probs_.get()) &&
                       ((weights_.get() == nullptr && o.weights_.get() == nullptr) || // Both are nullptr or
@@ -237,8 +236,9 @@ struct CoresetSampler {
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + n, seed_));
     }
 
+    template<typename CFT>
     void make_gmm_sampler(size_t np, size_t ncenters,
-                      const FT *costs, const IT *assignments,
+                      const CFT *costs, const IT *assignments,
                       const FT *weights=nullptr,
                       uint64_t seed=137,
                       double alpha_est=0.)
@@ -296,8 +296,9 @@ struct CoresetSampler {
             this->probs_[i] *= si;
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
     }
+    template<typename CFT>
     void make_sampler(size_t np, size_t ncenters,
-                      const FT *costs, const IT *assignments,
+                      const CFT *costs, const IT *assignments,
                       const FT *weights=nullptr,
                       uint64_t seed=137,
                       SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG,
@@ -394,15 +395,23 @@ struct CoresetSampler {
         if(!sampler_.get()) throw 1;
         if(seed) sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
-        const double nsamplinv = 1. / n;
+        //const double nsamplinv = 1. / n;
+        const double dn = n;
         for(size_t i = 0; i < n; ++i) {
-            auto ind = sampler_->sample();
+            const auto ind = sampler_->sample();
             ret.indices_[i] = ind;
-            ret.weights_[i] = getweight(ind) * nsamplinv / probs_[ind];
+            ret.weights_[i] = getweight(ind) / (dn * probs_[ind]);
+            //std::fprintf(stderr, "Prob %zu is %g, and so our weight is %g\n", ind, probs_[ind], ret.weights_[i]);
         }
+        double sumw = 0.;
+        OMP_PRAGMA("omp parallel for reduction(+:sumw)")
+        for(size_t i = 0; i < n; ++i) {
+            sumw += ret.weights_[i];
+        }
+        std::fprintf(stderr, "weights sum before: %g\n", blaze::sum(ret.weights_));
+        ret.weights_ *= np_ / sumw;
+        std::fprintf(stderr, "weights sum after diving by old weight sum: %g\n", blaze::sum(ret.weights_));
 #ifndef NDEBUG
-        for(size_t i = 0; i < n; ++i)
-            assert(ret.indices_[i] < np_);
 #endif
         return ret;
     }

@@ -88,7 +88,7 @@ auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
             }
             R.clear();
         }
-        std::fprintf(stderr, "F size: %zu\n", F.size());
+        //std::fprintf(stderr, "F size: %zu\n", F.size());
         boost::dijkstra_shortest_paths(x, synthetic_vertex,
                                        distance_map(distances.get()));
 #if VERBOSE_AF
@@ -110,6 +110,7 @@ auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
     return std::make_pair(std::move(F), cost);
 }
 
+#if 0
 template<typename Graph, typename VertexContainer>
 auto get_assignments(Graph &x, const VertexContainer &vertices) {
     std::fprintf(stderr, "Gettiing assginasdfasdf\n");
@@ -132,10 +133,10 @@ auto get_assignments(Graph &x, const VertexContainer &vertices) {
     OMP_PFOR
     for(size_t i = 0; i < ret.size(); ++i) {
         typename VertexContainer::value_type id = i, newparent = p[i];
-        std::fprintf(stderr, "id: %u. parent: %u\n", unsigned(id), unsigned(newparent));
+        //std::fprintf(stderr, "id: %u. parent: %u\n", unsigned(id), unsigned(newparent));
         typename decltype(vmap)::const_iterator it;
         while((it = vmap.find(id)) == vmap.end()) {
-            std::fprintf(stderr, "id: %u. parent: %u\n", unsigned(id), unsigned(newparent));
+            //std::fprintf(stderr, "id: %u. parent: %u\n", unsigned(id), unsigned(newparent));
             if(id == newparent) throw std::runtime_error("I DIE");
             id = newparent;
             newparent = p[id];
@@ -144,6 +145,7 @@ auto get_assignments(Graph &x, const VertexContainer &vertices) {
     }
     return ret;
 }
+#endif
 
 template<typename...Args>
 auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_round, size_t iterations,
@@ -231,7 +233,7 @@ get_costs(Graph &x, const Container &container) {
     for(size_t i = 0; i < container.size(); ++i)
         pid2ind[index[*it++]] = i;
 
-#ifndef NDEBUG
+#if 0
     for(const auto c: container)
         std::fprintf(stderr, "c: %zu\n", size_t(c));
 #endif
@@ -248,7 +250,7 @@ get_costs(Graph &x, const Container &container) {
         auto it = pid2ind.find(index[parent]);
 #if! NDEBUG
         if(it == pid2ind.end()) {
-            std::fprintf(stderr, "i: %zu. parent: %zu\n", i, p[i]);
+            //std::fprintf(stderr, "i: %zu. parent: %zu\n", i, p[i]);
             assert(pid2ind.find(i) != pid2ind.end());
         }
 #endif
