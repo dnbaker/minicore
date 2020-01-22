@@ -182,7 +182,7 @@ int main(int argc, char **argv) {
  13122,
  19683
 #else
-5, 10, 15, 20, 25, 50, 75, 100, 125, 250, 375, 500, 625, 1250, 1875, 2500
+5, 10, 15, 20, 25, 50, 75, 100, 125, 250, 375, 500, 625, 1250, 1875, 2500, 3125, 3750
 #endif
 // Auto-generated:
 // from functools import reduce
@@ -289,45 +289,43 @@ int main(int argc, char **argv) {
     }
     coresets::UniformSampler<double, uint32_t> uniform_sampler(costs.size());
     // The first half of these are true coresets, the others are uniformly subsampled.
-    for(size_t i = 0; i < niter; ++i) {
-        std::vector<coresets::IndexCoreset<uint32_t, double>> coresets;
-        const size_t ncs = coreset_sizes.size();
-        coresets.reserve(ncs * 3);
-        for(auto coreset_size: coreset_sizes) {
-            coresets.emplace_back(sampler.sample(coreset_size));
-        }
-        for(auto coreset_size: coreset_sizes) {
-            coresets.emplace_back(bflsampler.sample(coreset_size));
-        }
-        for(auto coreset_size: coreset_sizes) {
-            coresets.emplace_back(uniform_sampler.sample(coreset_size));
-        }
-        std::fprintf(stderr, "[Phase 5] Generated coresets\n");
-        blaze::DynamicVector<double> maxdistortion(coresets.size(), std::numeric_limits<double>::min()),
-                                     distbuffer(boost::num_vertices(g)),
-                                     currentdistortion(coresets.size()),
-                                     mindistortion(coresets.size(), std::numeric_limits<double>::max()),
-                                     meandistortion(coresets.size(), 0.);
-        for(size_t i = 0; i < random_centers.rows(); ++i) {
-            //if(i % 10 == 0)
-            //    std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
-            auto rc = row(random_centers, i);
-            assert(rc.size() == k);
-            calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion, z);
-            maxdistortion = max(maxdistortion, currentdistortion);
-            mindistortion = min(mindistortion, currentdistortion);
-            meandistortion = meandistortion + currentdistortion;
-        }
-        meandistortion /= random_centers.rows();
-        for(size_t i = 0; i < ncs; ++i) {
-            tblout << coreset_sizes[i]
-                   << '\t' << maxdistortion[i] << '\t' << meandistortion[i]
-                   << '\t' << maxdistortion[i + ncs] << '\t' << meandistortion[i + ncs]
-                   << '\t' << maxdistortion[i + ncs * 2] << '\t' << meandistortion[i + ncs * 2]
-                   << '\n';
-        }
-        std::cerr << "mean\n" << meandistortion;
-        std::cerr << "max\n" << maxdistortion;
-        std::cerr << "min\n" << mindistortion;
+    std::vector<coresets::IndexCoreset<uint32_t, double>> coresets;
+    const size_t ncs = coreset_sizes.size();
+    coresets.reserve(ncs * 3);
+    for(auto coreset_size: coreset_sizes) {
+        coresets.emplace_back(sampler.sample(coreset_size));
     }
+    for(auto coreset_size: coreset_sizes) {
+        coresets.emplace_back(bflsampler.sample(coreset_size));
+    }
+    for(auto coreset_size: coreset_sizes) {
+        coresets.emplace_back(uniform_sampler.sample(coreset_size));
+    }
+    std::fprintf(stderr, "[Phase 5] Generated coresets\n");
+    blaze::DynamicVector<double> maxdistortion(coresets.size(), std::numeric_limits<double>::min()),
+                                 distbuffer(boost::num_vertices(g)),
+                                 currentdistortion(coresets.size()),
+                                 mindistortion(coresets.size(), std::numeric_limits<double>::max()),
+                                 meandistortion(coresets.size(), 0.);
+    for(size_t i = 0; i < random_centers.rows(); ++i) {
+        //if(i % 10 == 0)
+        //    std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
+        auto rc = row(random_centers, i);
+        assert(rc.size() == k);
+        calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion, z);
+        maxdistortion = max(maxdistortion, currentdistortion);
+        mindistortion = min(mindistortion, currentdistortion);
+        meandistortion = meandistortion + currentdistortion;
+    }
+    meandistortion /= random_centers.rows();
+    for(size_t i = 0; i < ncs; ++i) {
+        tblout << coreset_sizes[i]
+               << '\t' << maxdistortion[i] << '\t' << meandistortion[i]
+               << '\t' << maxdistortion[i + ncs] << '\t' << meandistortion[i + ncs]
+               << '\t' << maxdistortion[i + ncs * 2] << '\t' << meandistortion[i + ncs * 2]
+               << '\n';
+    }
+    std::cerr << "mean\n" << meandistortion;
+    std::cerr << "max\n" << maxdistortion;
+    std::cerr << "min\n" << mindistortion;
 }
