@@ -105,7 +105,7 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
     char buf[128];
     std::sprintf(buf, "'\n##z: %g\n##nsamples: %u\n##k: %u\n##nv: %zu\n##ne: %zu\n", z, nsamples, k, nv, ne);
     ofs << buf;
-    ofs << "#coreset_size\tmax distortion (FL11)\tmean distortion (FL11)\t "
+    ofs << "#coreset_size\tmax distortion (VX11)\tmean distortion (VX11)\t "
         << "max distortion (BFL16)\tmean distortion (BFL16)"
         << "max distortion (uniform sampling)\tmean distortion (uniform sampling)"
         << "\n";
@@ -268,11 +268,13 @@ int main(int argc, char **argv) {
     if(z != 1.)
         costs = blaze::pow(costs, z);
     // Build a coreset importance sampler based on it.
-    coresets::CoresetSampler<double, uint32_t> sampler, bflsampler;
+    coresets::CoresetSampler<float, uint32_t> sampler, bflsampler;
     sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
-                         nullptr, (((seed * 1337) ^ (seed * seed * seed)) - ((seed >> 32) ^ (seed << 32))), coresets::FELDMAN_LANGBERG);
+                         nullptr, (((seed * 1337) ^ (seed * seed * seed)) - ((seed >> 32) ^ (seed << 32))), coresets::VARADARAJAN_XIAO);
     bflsampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
                          nullptr, (((seed * 1337) + (seed * seed * seed)) ^ (seed >> 32) ^ (seed << 32)), coresets::BRAVERMAN_FELDMAN_LANG);
+    assert(sampler.sampler_.get());
+    assert(bflsampler.sampler_.get());
     std::FILE *ofp = std::fopen(fn.data(), "wb");
     sampler.write(ofp);
     std::fclose(ofp);
@@ -294,11 +296,11 @@ int main(int argc, char **argv) {
             r[j] = *it++;
         std::sort(r.begin(), r.end());
     }
-    coresets::UniformSampler<double, uint32_t> uniform_sampler(costs.size());
+    coresets::UniformSampler<float, uint32_t> uniform_sampler(costs.size());
     // The first half of these are true coresets, the others are uniformly subsampled.
     size_t niter = 1;
     for(size_t i = 0; i < niter; ++i) {
-        std::vector<coresets::IndexCoreset<uint32_t, double>> coresets;
+        std::vector<coresets::IndexCoreset<uint32_t, float>> coresets;
         const size_t ncs = coreset_sizes.size();
         coresets.reserve(ncs * 3);
         for(auto coreset_size: coreset_sizes) {
@@ -311,7 +313,7 @@ int main(int argc, char **argv) {
             coresets.emplace_back(uniform_sampler.sample(coreset_size));
         }
         std::fprintf(stderr, "[Phase 5] Generated coresets\n");
-        blaze::DynamicVector<double> maxdistortion(coresets.size(), std::numeric_limits<double>::min()),
+        blaze::DynamicVector<float> maxdistortion(coresets.size(), std::numeric_limits<float>::min()),
                                      distbuffer(boost::num_vertices(g)),
                                      currentdistortion(coresets.size()),
                                      meandistortion(coresets.size(), 0.);

@@ -31,10 +31,14 @@ enum SensitivityMethod: int {
     BRAVERMAN_FELDMAN_LANG, // 2016, New Frameowkrs
     FELDMAN_LANGBERG,       // 2011, Unified Framework
     LUCIC_FAULKNER_KRAUSE_FELDMAN, // 2017, Training Gaussian Mixture Models at Scale
+    VARADARAJAN_XIAO,
     // aliases
     BFL=BRAVERMAN_FELDMAN_LANG,
     FL=FELDMAN_LANGBERG,
-    LFKF=LUCIC_FAULKNER_KRAUSE_FELDMAN
+    LFKF=LUCIC_FAULKNER_KRAUSE_FELDMAN,
+    VX = VARADARAJAN_XIAO,
+    BOUNDED_TREE_WIDTH = VX,
+    BTW=BOUNDED_TREE_WIDTH
 };
 
 template<typename IT, typename FT>
@@ -141,9 +145,9 @@ struct CoresetSampler {
     using Sampler = alias::AliasSampler<FT, wy::WyRand<IT, 2>, IT>;
     std::unique_ptr<Sampler> sampler_;
     std::unique_ptr<FT []>     probs_;
-    std::unique_ptr<FT []>   weights_;
+    std::unique_ptr<blz::DV<FT>> weights_;
     size_t                        np_;
-    uint64_t                    seed_ = 1337;
+    uint64_t                    seed_ = 137;
 
 
     bool ready() const {return sampler_.get();}
@@ -184,10 +188,10 @@ struct CoresetSampler {
 #endif
         gzwrite(fp, &seed_, sizeof(seed_));
         gzwrite(fp, &probs_[0], sizeof(probs_[0]) * np_);
-        uint32_t weights_present = weights_ ? 1337: 0;
+        uint32_t weights_present = weights_ ? 137: 0;
         gzwrite(fp, &weights_present, sizeof(weights_present));
         if(weights_)
-            gzwrite(fp, &weights_[0], sizeof(weights_[0]) * np_);
+            gzwrite(fp, weights_->data(), sizeof(weights_->operator[](0)) * np_);
     }
     void write(std::FILE *fp) const {
         auto fd = ::fileno(fp);
@@ -195,10 +199,10 @@ struct CoresetSampler {
         checked_posix_write(fd, &n, sizeof(n));
         checked_posix_write(fd, &seed_, sizeof(seed_));
         checked_posix_write(fd, &probs_[0], sizeof(probs_[0]) * np_);
-        uint32_t weights_present = weights_ ? 1337: 0;
+        uint32_t weights_present = weights_ ? 137: 0;
         checked_posix_write(fd, &weights_present, sizeof(weights_present));
         if(weights_)
-            checked_posix_write(fd, &weights_[0], sizeof(weights_[0]) * np_);
+            checked_posix_write(fd, weights_->data(), sizeof(weights_->operator[](0)) * np_);
     }
     void read(gzFile fp) {
         uint64_t n;
@@ -213,9 +217,9 @@ struct CoresetSampler {
         uint32_t weights_present;
         gzread(fp, &weights_present, sizeof(weights_present));
         if(weights_present) {
-            assert(weights_present == 1337);
-            weights_.reset(new FT[n]);
-            gzread(fp, &weights_[0], sizeof(FT) * n);
+            assert(weights_present == 137);
+            weights_.reset(new blz::DV<FT>(n));
+            gzread(fp, weights_->data(), sizeof(FT) * n);
         }
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + n, seed_));
     }
@@ -229,9 +233,9 @@ struct CoresetSampler {
         uint32_t weights_present;
         ::read(fd, &weights_present, sizeof(weights_present));
         if(weights_present) {
-            assert(weights_present == 1337);
-            weights_.reset(new FT[n]);
-            ::read(fd, &weights_[0], sizeof(FT) * n);
+            assert(weights_present == 137);
+            weights_.reset(new blz::DV<FT>(n));
+            ::read(fd, weights_->data(), sizeof(FT) * n);
         }
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + n, seed_));
     }
@@ -239,7 +243,6 @@ struct CoresetSampler {
     template<typename CFT>
     void make_gmm_sampler(size_t np, size_t ncenters,
                       const CFT *costs, const IT *assignments,
-                      const FT *weights=nullptr,
                       uint64_t seed=137,
                       double alpha_est=0.)
     {
@@ -248,12 +251,7 @@ struct CoresetSampler {
         // From Training Gaussian Mixture Models at Scale via Coresets
         // http://www.jmlr.org/papers/volume18/15-506/15-506.pdf
         // Note: this can be expanded to general probability measures.
-        // I should to generalize this, such as for negative binomial and/or fancier functions
-        np_ = np;
-        if(weights) {
-            weights_.reset(new FT[np]);
-            std::memcpy(&weights_[0], weights, sizeof(FT) * np);
-        } else weights_.release();
+        throw std::runtime_error("I'm not certain this is correct. Do not use this until I am.");
         std::vector<FT> weight_sums(ncenters), weighted_cost_sums(ncenters);
         std::vector<FT> sqcosts(ncenters);
         std::vector<IT> center_counts(ncenters);
@@ -304,81 +302,125 @@ struct CoresetSampler {
                       SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG,
                       double alpha_est=0.)
     {
-        seed_ = seed;
-        if(sens == LUCIC_FAULKNER_KRAUSE_FELDMAN) {
-            make_gmm_sampler(np, ncenters, costs, assignments, weights, seed, alpha_est);
-            return;
-        }
         np_ = np;
         if(weights) {
-            weights_.reset(new FT[np]);
-            std::memcpy(&weights_[0], weights, sizeof(FT) * np);
+            weights_.reset(new blz::DV<FT>(np));
+            std::memcpy(weights_->data(), weights, sizeof(FT) * np);
         } else weights_.release();
-        double total_cost = 0.;
-
-        OMP_PRAGMA("omp parallel for reduction(+:total_cost)")
-        for(size_t i = 0; i < np; ++i) {
-            const auto w = getweight(i);
-            total_cost += w * costs[i];
+        if(sens == LUCIC_FAULKNER_KRAUSE_FELDMAN) {
+            make_gmm_sampler(np, ncenters, costs, assignments, seed, alpha_est);
         }
+        else if(sens == VARADARAJAN_XIAO) {
+            make_sampler_vx(np, ncenters, costs, assignments, seed);
+        }
+        else if(sens == BFL) {
+            make_sampler_bfl(np, ncenters, costs, assignments, seed);
+        } else if(sens == FL) {
+            make_sampler_fl(np, ncenters, costs, assignments, seed);
+        } else throw std::runtime_error("Invalid SensitivityMethod");
+    }
+    void make_sampler_vx(size_t np, size_t ncenters,
+                         const FT *costs, const IT *assignments,
+                         uint64_t seed=137)
+    {
+        auto cv = blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(costs), np);
+        double total_cost =
+            weights_ ? blaze::dot(*weights_, cv)
+                     : blaze::sum(cv);
+        probs_.reset(new FT[np]);
+        blz::CustomVector<FT, blaze::unaligned, blaze::unpadded> sensitivies(probs_.get(), np);
+        std::vector<IT> center_counts(ncenters);
+        OMP_PFOR
+        for(size_t i = 0; i < np; ++i) {
+            OMP_ATOMIC
+            ++center_counts[assignments[i]];
+        }
+        if(weights_) {
+            sensitivies = (*weights_) * cv * (1. / total_cost);
+        } else {
+            sensitivies = cv * (1. / total_cost);
+        }
+        // sensitivities = weights * costs / total_cost
+        blz::DV<FT> ccinv(ncenters);
+        for(unsigned i = 0; i < ncenters; ++i)
+            ccinv[i] = 1. / center_counts[i];
+        OMP_PFOR
+        for(size_t i = 0; i < np; ++i) {
+            sensitivies[i] += ccinv[assignments[i]];
+        }
+        // sensitivities = weights * costs / total_cost + 1. / (cluster_size)
+        const double total_sensitivity = blaze::sum(sensitivies);
+        // probabilities = sensitivity / sum(sensitivities) [use the same location in memory because we no longer need sensitivities]
+        sensitivies *= 1. / total_sensitivity;
+        sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
+    }
+    void make_sampler_fl(size_t np, size_t,
+                         const FT *costs, const IT *,
+                         uint64_t seed=137)
+    {
+        // See https://arxiv.org/pdf/1106.1379.pdf, figures 2,3,4
+        throw std::runtime_error("I'm not certain this is correct. Do not use this until I am.");
+
+        auto cv = blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(costs), np);
+        double total_cost =
+            weights_ ? blaze::dot(*weights_, cv)
+                    : blaze::sum(cv);
         probs_.reset(new FT[np]);
         double total_probs = 0.;
-        if(sens == FELDMAN_LANGBERG) {
-            // Ignores number of items assigned to each cluster
-            sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
-            double total_cost_inv = 1. / (total_cost);
-            OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
-            for(size_t i = 0; i < np; ++i) {
-                probs_[i] = getweight(i) * (costs[i]) * total_cost_inv;
-                total_probs += probs_[i];
-            }
-#ifndef NDEBUG
-            assert(std::abs(total_probs - 1.) < 1e-5 || !std::fprintf(stderr, "sum of fractions of the probabilities is not close to 1.\n"));
-            std::fprintf(stderr, "total probs: %g\n", total_probs);
-#endif
-            // Normalize again
-        } else {
-            std::vector<IT> center_counts(ncenters);
-            std::vector<FT> weight_sums(ncenters);
-            OMP_PFOR
-            for(size_t i = 0; i < np; ++i) {
-                auto asn = assignments[i];
-                assert(asn < ncenters);
-                const auto w = getweight(i);
-                OMP_ATOMIC
-                weight_sums[asn] += w; // If unweighted, weights are 1.
-                OMP_ATOMIC
-                ++center_counts[asn];
-            }
-            OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
-            for(size_t i = 0; i < np; ++i) {
-                const auto w = getweight(i);
-                double fraccost = w * costs[i] / total_cost;
-                const auto asn = assignments[i];
-                double fracw = w / (weight_sums[asn] * center_counts[asn]);
-                probs_[i] = .5 * (fraccost + fracw);
-                total_probs += probs_[i];
-            }
-#ifndef NDEBUG
-            std::fprintf(stderr, "total probs: %g\n", total_probs);
-#endif
-            // Because this doesn't necessarily sum to 1.
-            blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np) /= total_probs;
+        sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
+        double total_cost_inv = 1. / (total_cost);
+        OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
+        for(size_t i = 0; i < np; ++i) {
+            probs_[i] = getweight(i) * (costs[i]) * total_cost_inv;
+            total_probs += probs_[i];
+        }
+        sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
+    }
+    void make_sampler_bfl(size_t np, size_t ncenters,
+                          const FT *costs, const IT *assignments,
+                          uint64_t seed=137)
+    {
+        // This is for a bicriteria approximation
+        // Use make_sampler_vx for a constant approximation
+        auto cv = blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(costs), np);
+        double total_cost =
+            weights_ ? blaze::dot(*weights_, cv)
+                    : blaze::sum(cv);
+        probs_.reset(new FT[np]);
+        double total_probs = 0.;
+        std::vector<IT> center_counts(ncenters);
+        std::vector<FT> weight_sums(ncenters);
+        OMP_PFOR
+        for(size_t i = 0; i < np; ++i) {
+            auto asn = assignments[i];
+            assert(asn < ncenters);
+            const auto w = getweight(i);
+            OMP_ATOMIC
+            weight_sums[asn] += w; // If unweighted, weights are 1.
+            OMP_ATOMIC
+            ++center_counts[asn];
+        }
+        OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
+        for(size_t i = 0; i < np; ++i) {
+            const auto w = getweight(i);
+            double fraccost = w * costs[i] / total_cost;
+            const auto asn = assignments[i];
+            double fracw = w / (weight_sums[asn] * center_counts[asn]);
+            probs_[i] = .5 * (fraccost + fracw);
+            total_probs += probs_[i];
         }
 #ifndef NDEBUG
-        double psum = 0.;
-        for(size_t i = 0; i < np_; ++i) {
-            psum += probs_[i];
-        }
-        std::fprintf(stderr, "psum: %f\n", psum);
+        //std::fprintf(stderr, "total probs: %g\n", total_probs);
 #endif
+        // Because this doesn't necessarily sum to 1.
+        blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np) /= total_probs;
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np, seed));
     }
     auto getweight(size_t ind) const {
-        return weights_ ? weights_[ind]: static_cast<FT>(1.);
+        return weights_ ? weights_->operator[](ind): static_cast<FT>(1.);
     }
     IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0) {
-        if(!sampler_.get()) throw 1;
+        if(unlikely(!sampler_.get())) throw std::runtime_error("Sampler not constructed");
         if(seed) sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
         //const double nsamplinv = 1. / n;
@@ -387,8 +429,10 @@ struct CoresetSampler {
             const auto ind = sampler_->sample();
             ret.indices_[i] = ind;
             ret.weights_[i] = getweight(ind) / (dn * probs_[ind]);
-            //std::fprintf(stderr, "Prob %zu is %g, and so our weight is %g\n", ind, probs_[ind], ret.weights_[i]);
         }
+#if 0
+        // Tried reweighting the coreset to have the same weight as the original data
+        // to try to remove variance, but it may introduce bias and should not be done.
         double sumw = 0.;
         OMP_PRAGMA("omp parallel for reduction(+:sumw)")
         for(size_t i = 0; i < n; ++i) {
@@ -397,7 +441,6 @@ struct CoresetSampler {
         std::fprintf(stderr, "weights sum before: %g\n", blaze::sum(ret.weights_));
         ret.weights_ *= np_ / sumw;
         std::fprintf(stderr, "weights sum after diving by old weight sum: %g\n", blaze::sum(ret.weights_));
-#ifndef NDEBUG
 #endif
         return ret;
     }

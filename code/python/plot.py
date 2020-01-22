@@ -42,6 +42,6 @@ if __name__ == "__main__":
     # To make it clearer who was better
     mxfl, mxbfl, mxu = data[:,0], data[:,2], data[:,4]
     mufl, mubfl, muu = data[:,1], data[:,3], data[:,5]
-    print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Feldman-Langberg", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
-    print_items(data=(mufl, mubfl, muu), xlabels=xlabels, names=("Feldman-Langberg", "BFL", "Uniform"), subgroup="mean", prefix=args.prefix)
+    print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
+    print_items(data=(mufl, mubfl, muu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="mean", prefix=args.prefix)
     

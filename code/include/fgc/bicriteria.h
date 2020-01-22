@@ -35,6 +35,7 @@ thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, size
     if(max_sampled == 0) max_sampled = boost::num_vertices(x);
     using Vertex = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
     // Algorithm E, Thorup p.418
+    //std::fprintf(stderr, "[%s:%s:%d] About to assert connected\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
     assert_connected(x);
     const size_t n = boost::num_vertices(x);
     //m = boost::num_edges(x);
@@ -67,6 +68,7 @@ auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
     std::vector<Vertex> R(boost::vertices(x).first, boost::vertices(x).second);
     std::vector<Vertex> F;
     F.reserve(nperround * 5);
+    //std::fprintf(stderr, "[%s:%s:%d] About to assert connected\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
     assert_connected(x);
     util::ScopedSyntheticVertex<Graph> vx(x);
     auto synthetic_vertex = vx.get();
@@ -77,6 +79,7 @@ auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
         if(R.size() > nperround) {
             do vertices.insert(R[rng() % R.size()]); while(vertices.size() < nperround);
             F.insert(F.end(), vertices.begin(), vertices.end());
+            for(const auto v: vertices) boost::add_edge(v, synthetic_vertex, 0., x);
             vertices.clear();
         } else {
             for(const auto r: R) {
@@ -97,7 +100,8 @@ auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
         auto minv = distances[randel];
         R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
     }
-    assert_connected(x);
+    //std::fprintf(stderr, "[%s:%s:%d] About to assert connected\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+    //assert_connected(x);
     double cost = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:cost)")
     for(size_t i = 0; i < nv - 1; ++i) {

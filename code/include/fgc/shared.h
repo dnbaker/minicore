@@ -42,6 +42,11 @@ INLINE auto checked_posix_write(int fd, const void *buf, ssize_t count) {
     }
     return ret;
 }
+struct Deleter {
+    void operator()(const void *x) const {
+        std::free(const_cast<void *>(x));
+    }
+};
 
 } // shared
 } // fgc
