@@ -132,6 +132,7 @@ int main(int argc, char **argv) {
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
+    bool rectangular = false;
     unsigned coreset_testing_num_iter = 1000;
     //size_t nsampled_max = 0;
     size_t rammax = 16uLL << 30;
@@ -141,10 +142,11 @@ int main(int argc, char **argv) {
         }
     );
     unsigned num_thorup_trials = 15;
-    for(int c;(c = getopt(argc, argv, "T:t:p:o:M:S:z:s:c:k:R:h?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "T:t:p:o:M:S:z:s:c:k:R:rh?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
+            case 'r': rectangular = true; break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
             case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
             case 't': coreset_testing_num_iter = std::atoi(optarg); break;
@@ -221,20 +223,25 @@ int main(int argc, char **argv) {
 
     std::unique_ptr<DiskMat<float>> diskmatptr;
     std::unique_ptr<blaze::DynamicMatrix<float>> rammatptr;
+    const size_t ndatarows = rectangular ? boost::num_vertices(g): sampled.size();
+    std::fprintf(stderr, "rect: %d. ndatarows: %zu\n", rectangular, ndatarows);
 
     using CM = blaze::CustomMatrix<float, blaze::aligned, blaze::padded, blaze::rowMajor>;
-    if(sampled.size() * sampled.size() * sizeof(float) > rammax) {
-        diskmatptr.reset(new DiskMat<float>(graph2diskmat(g, fn, &sampled, true)));
+    if(sampled.size() * ndatarows * sizeof(float) > rammax) {
+        std::fprintf(stderr, "%zu * %zu * sizeof(float) > rammax %zu\n", sampled.size(), ndatarows, rammax);
+        diskmatptr.reset(new DiskMat<float>(graph2diskmat(g, fn, &sampled, !rectangular)));
     } else {
-        rammatptr.reset(new blaze::DynamicMatrix<float>(graph2rammat(g, fn, &sampled, true)));
+        rammatptr.reset(new blaze::DynamicMatrix<float>(graph2rammat(g, fn, &sampled, !rectangular)));
     }
-    CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), sampled.size(), sampled.size(), diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
+    CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), sampled.size(), ndatarows, diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
     if(z != 1.) {
         assert(z > 1.);
         dm = pow(abs(dm), z);
     }
-    for(size_t i = 0; i < center_counts.size(); ++i) {
-        column(dm, i) *= center_counts[i];
+    if(!rectangular) {
+        for(size_t i = 0; i < center_counts.size(); ++i) {
+            column(dm, i) *= center_counts[i];
+        }
     }
     std::fprintf(stderr, "[Phase 2] Distances gathered\n");
 
@@ -289,43 +296,43 @@ int main(int argc, char **argv) {
     }
     coresets::UniformSampler<double, uint32_t> uniform_sampler(costs.size());
     // The first half of these are true coresets, the others are uniformly subsampled.
-    std::vector<coresets::IndexCoreset<uint32_t, double>> coresets;
-    const size_t ncs = coreset_sizes.size();
-    coresets.reserve(ncs * 3);
-    for(auto coreset_size: coreset_sizes) {
-        coresets.emplace_back(sampler.sample(coreset_size));
+    size_t niter = 1;
+    for(size_t i = 0; i < niter; ++i) {
+        std::vector<coresets::IndexCoreset<uint32_t, double>> coresets;
+        const size_t ncs = coreset_sizes.size();
+        coresets.reserve(ncs * 3);
+        for(auto coreset_size: coreset_sizes) {
+            coresets.emplace_back(sampler.sample(coreset_size));
+        }
+        for(auto coreset_size: coreset_sizes) {
+            coresets.emplace_back(bflsampler.sample(coreset_size));
+        }
+        for(auto coreset_size: coreset_sizes) {
+            coresets.emplace_back(uniform_sampler.sample(coreset_size));
+        }
+        std::fprintf(stderr, "[Phase 5] Generated coresets\n");
+        blaze::DynamicVector<double> maxdistortion(coresets.size(), std::numeric_limits<double>::min()),
+                                     distbuffer(boost::num_vertices(g)),
+                                     currentdistortion(coresets.size()),
+                                     meandistortion(coresets.size(), 0.);
+        for(size_t i = 0; i < random_centers.rows(); ++i) {
+            //if(i % 10 == 0)
+            //    std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
+            auto rc = row(random_centers, i);
+            assert(rc.size() == k);
+            calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion, z);
+            maxdistortion = max(maxdistortion, currentdistortion);
+            meandistortion = meandistortion + currentdistortion;
+        }
+        meandistortion /= random_centers.rows();
+        for(size_t i = 0; i < ncs; ++i) {
+            tblout << coreset_sizes[i]
+                   << '\t' << maxdistortion[i] << '\t' << meandistortion[i]
+                   << '\t' << maxdistortion[i + ncs] << '\t' << meandistortion[i + ncs]
+                   << '\t' << maxdistortion[i + ncs * 2] << '\t' << meandistortion[i + ncs * 2]
+                   << '\n';
+        }
+        std::cerr << "mean\n" << meandistortion;
+        std::cerr << "max\n" << maxdistortion;
     }
-    for(auto coreset_size: coreset_sizes) {
-        coresets.emplace_back(bflsampler.sample(coreset_size));
-    }
-    for(auto coreset_size: coreset_sizes) {
-        coresets.emplace_back(uniform_sampler.sample(coreset_size));
-    }
-    std::fprintf(stderr, "[Phase 5] Generated coresets\n");
-    blaze::DynamicVector<double> maxdistortion(coresets.size(), std::numeric_limits<double>::min()),
-                                 distbuffer(boost::num_vertices(g)),
-                                 currentdistortion(coresets.size()),
-                                 mindistortion(coresets.size(), std::numeric_limits<double>::max()),
-                                 meandistortion(coresets.size(), 0.);
-    for(size_t i = 0; i < random_centers.rows(); ++i) {
-        //if(i % 10 == 0)
-        //    std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
-        auto rc = row(random_centers, i);
-        assert(rc.size() == k);
-        calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion, z);
-        maxdistortion = max(maxdistortion, currentdistortion);
-        mindistortion = min(mindistortion, currentdistortion);
-        meandistortion = meandistortion + currentdistortion;
-    }
-    meandistortion /= random_centers.rows();
-    for(size_t i = 0; i < ncs; ++i) {
-        tblout << coreset_sizes[i]
-               << '\t' << maxdistortion[i] << '\t' << meandistortion[i]
-               << '\t' << maxdistortion[i + ncs] << '\t' << meandistortion[i + ncs]
-               << '\t' << maxdistortion[i + ncs * 2] << '\t' << meandistortion[i + ncs * 2]
-               << '\n';
-    }
-    std::cerr << "mean\n" << meandistortion;
-    std::cerr << "max\n" << maxdistortion;
-    std::cerr << "min\n" << mindistortion;
 }

@@ -81,6 +81,7 @@ struct DiskMat {
         ms_.reset(new mmapper(fd, offset, nb));
         mat_ = MatType((VT *)ms_->data(), nr, nc, nperrow);
         assert(s ? (path_.data() && std::strcmp(path_.data(), s)) == 0: path_.empty());
+        std::fprintf(stderr, "Spacing: %zu\n", (~*this).spacing());
     }
     DiskMat(size_t nr, size_t nc, std::string path, size_t offset=0, bool delete_file=false): DiskMat(nr, nc, path.data(), offset, delete_file) {}
     auto operator()(size_t i, size_t j) const {return (~*this)(i, j);}

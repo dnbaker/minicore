@@ -260,6 +260,7 @@ get_costs(Graph &x, const Container &container) {
     costs.resize(nv);
     assert(costs.size() == assignments.size());
     assert(nv == costs.size());
+    std::fprintf(stderr, "Total cost of solution: %g\n", blaze::sum(costs));
     return std::make_pair(std::move(costs), assignments);
 }
 template<typename Graph>

@@ -98,6 +98,7 @@ struct LocalKMedSearcher {
     const double eps_;
     IType k_;
     const size_t nr_, nc_;
+    bool best_improvement_;
 
     // Constructors
 
@@ -107,14 +108,14 @@ struct LocalKMedSearcher {
         std::memset(ptr, 0, sizeof(*this));
         std::swap_ranges(ptr, ptr + sizeof(*this), reinterpret_cast<const uint8_t *>(std::addressof(o)));
     }
-    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01, uint64_t seed=0):
+    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01, uint64_t seed=0, bool best_improvement=false):
         mat_(mat), assignments_(mat.columns(), 0),
         // center_indices_(k),
         //costs_(mat.columns(), std::numeric_limits<value_type>::max()),
         //counts_(k),
         current_cost_(std::numeric_limits<value_type>::max()),
         eps_(eps),
-        k_(k), nr_(mat.rows()), nc_(mat.columns())
+        k_(k), nr_(mat.rows()), nc_(mat.columns()), best_improvement_(best_improvement)
     {
         sol_.reserve(k);
         reseed(seed, true);
@@ -158,7 +159,7 @@ struct LocalKMedSearcher {
         assert(sol_.size() == k_);
         for(const auto center: sol_) {
             assignments_[center] = center;
-            assert(mat_(center, center) == 0.);
+            //assert(mat_(center, center) == 0.);
         }
         for(const auto center: sol_) {
             auto r = row(mat_, center, blaze::unchecked);
@@ -246,58 +247,56 @@ struct LocalKMedSearcher {
         double diffthresh = current_cost_ / k_ * eps_;
         size_t total = 0;
         {
-#if BEST_IMPROVEMENT
             double current_best;
             IType current_best_index, current_best_center;
-#endif
             next:
-#if BEST_IMPROVEMENT
-            current_best = std::numeric_limits<double>::min();
-            current_best_index = -1, current_best_center = -1;
-            for(const auto oldcenter: sol_) {
-                OMP_PFOR
-                for(size_t pi = 0; pi < nr_; ++pi) {
-                    if(sol_.find(pi) == sol_.end()) {
-                        if(const auto val = evaluate_swap(pi, oldcenter, true);
-                           val > diffthresh && val > current_best)
-                        {
-                            OMP_CRITICAL
+            if(best_improvement_) {
+                current_best = std::numeric_limits<double>::min();
+                current_best_index = -1, current_best_center = -1;
+                for(const auto oldcenter: sol_) {
+                    OMP_PFOR
+                    for(size_t pi = 0; pi < nr_; ++pi) {
+                        if(sol_.find(pi) == sol_.end()) {
+                            if(const auto val = evaluate_swap(pi, oldcenter, true);
+                               val > diffthresh && val > current_best)
                             {
-                                current_best = val;
-                                current_best_index = pi;
+                                OMP_CRITICAL
+                                {
+                                    current_best = val;
+                                    current_best_index = pi;
+                                }
+                                current_best_center = oldcenter;
+                                std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
                             }
-                            current_best_center = oldcenter;
-                            std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
+                        }
+                    }
+                }
+                if(current_best_index != IType(-1)) {
+                    sol_.erase(current_best_center);
+                    sol_.insert(current_best_index);
+                    recalculate();
+                    diffthresh = current_cost_ / k_ * eps_;
+                    ++total;
+                    goto next;
+                }
+            } else {
+                for(const auto oldcenter: sol_) {
+                    for(size_t pi = 0; pi < nr_; ++pi) {
+                        if(sol_.find(pi) == sol_.end()) {
+                            if(const auto val = evaluate_swap(pi, oldcenter);
+                               val > diffthresh) {
+                                std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
+                                sol_.erase(oldcenter);
+                                sol_.insert(pi);
+                                recalculate();
+                                diffthresh = current_cost_ / k_ * eps_;
+                                ++total;
+                                goto next; // Meaning we've swapped this guy out and will pick another one.
+                            }
                         }
                     }
                 }
             }
-            if(current_best_index != IType(-1)) {
-                sol_.erase(current_best_center);
-                sol_.insert(current_best_index);
-                recalculate();
-                diffthresh = current_cost_ / k_ * eps_;
-                ++total;
-                goto next;
-            }
-#else
-            for(const auto oldcenter: sol_) {
-                for(size_t pi = 0; pi < nr_; ++pi) {
-                    if(sol_.find(pi) == sol_.end()) {
-                        if(const auto val = evaluate_swap(pi, oldcenter);
-                           val > diffthresh) {
-                            std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
-                            sol_.erase(oldcenter);
-                            sol_.insert(pi);
-                            recalculate();
-                            diffthresh = current_cost_ / k_ * eps_;
-                            ++total;
-                            goto next; // Meaning we've swapped this guy out and will pick another one.
-                        }
-                    }
-                }
-            }
-#endif
         }
         std::fprintf(stderr, "Finished in %zu swaps by exhausting all potential improvements. Final cost: %f\n",
                      total, current_cost_);
