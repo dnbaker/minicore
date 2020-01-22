@@ -48,6 +48,12 @@
 #  ifndef OMP_CRITICAL
 #    define OMP_CRITICAL OMP_PRAGMA("omp critical")
 #  endif
+#  ifndef OMP_SECTIONS
+#    define OMP_SECTIONS OMP_PRAGMA("omp sections")
+#  endif
+#  ifndef OMP_SECTION
+#    define OMP_SECTION OMP_PRAGMA("omp section")
+#  endif
 #else
 #  ifndef OMP_PRAGMA
 #    define OMP_PRAGMA(...)

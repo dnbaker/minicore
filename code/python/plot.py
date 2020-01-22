@@ -36,12 +36,20 @@ if __name__ == "__main__":
         data.append(list(map(float, line.strip().split()[1:])))
     end = 17
     xlabels = np.array(xlabels)[2:end]
+    print(xlabels)
     # xlabels = np.ceil(np.log2(np.array(xlabels)[2:end])).astype(np.int32)
     data = np.array(data)[2:end,:]
     # data = -np.log2(np.array(data))[2:end,:]
     # To make it clearer who was better
     mxfl, mxbfl, mxu = data[:,0], data[:,2], data[:,4]
     mufl, mubfl, muu = data[:,1], data[:,3], data[:,5]
-    print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
-    print_items(data=(mufl, mubfl, muu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="mean", prefix=args.prefix)
+    names = ("Varadarajan-Xiao", "Uniform")
+    mudata=(mufl, muu)
+    mxdata=(mxfl, mxu)
+    # data=(mufl, mubfl, muu)
+    # names=("Varadarajan-Xiao", "BFL", "Uniform")
+    #print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
+    #print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
+    print_items(data=mudata, xlabels=xlabels, names=names, subgroup="mean", prefix=args.prefix)
+    print_items(data=mxdata, xlabels=xlabels, names=names, subgroup="max", prefix=args.prefix)
     

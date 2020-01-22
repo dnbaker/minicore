@@ -320,7 +320,7 @@ struct CoresetSampler {
         } else throw std::runtime_error("Invalid SensitivityMethod");
 #ifndef NDEBUG
         for(unsigned i = 0; i < np; ++i) {
-            std::fprintf(stderr, "point %zu has prob %g\n", i, probs_[i]);
+            std::fprintf(stderr, "point %u has prob %g\n", i, probs_[i]);
         }
 #endif
     }

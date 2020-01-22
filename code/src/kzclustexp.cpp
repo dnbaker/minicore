@@ -313,18 +313,26 @@ int main(int argc, char **argv) {
             coresets.emplace_back(uniform_sampler.sample(coreset_size));
         }
         std::fprintf(stderr, "[Phase 5] Generated coresets\n");
-        blaze::DynamicVector<float> maxdistortion(coresets.size(), std::numeric_limits<float>::min()),
-                                     distbuffer(boost::num_vertices(g)),
-                                     currentdistortion(coresets.size()),
+        blaze::DynamicVector<double> maxdistortion(coresets.size(), std::numeric_limits<double>::min()),
                                      meandistortion(coresets.size(), 0.);
+        OMP_PFOR
         for(size_t i = 0; i < random_centers.rows(); ++i) {
             //if(i % 10 == 0)
             //    std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
             auto rc = row(random_centers, i);
             assert(rc.size() == k);
-            calculate_distortion_centerset(g, rc, distbuffer, coresets, currentdistortion, z);
-            maxdistortion = max(maxdistortion, currentdistortion);
-            meandistortion = meandistortion + currentdistortion;
+            blaze::DynamicVector<double> distbuffer(boost::num_vertices(g));
+            blaze::DynamicVector<double> currentdistortion(coresets.size());
+            decltype(g) gcopy(g);
+            calculate_distortion_centerset(gcopy, rc, distbuffer, coresets, currentdistortion, z);
+            OMP_CRITICAL
+            {
+                maxdistortion = blaze::serial(max(maxdistortion, currentdistortion));
+            }
+            OMP_CRITICAL
+            {
+                meandistortion = blaze::serial(meandistortion + currentdistortion);
+            }
         }
         meandistortion /= random_centers.rows();
         for(size_t i = 0; i < ncs; ++i) {
