@@ -196,10 +196,8 @@ struct LocalKMedSearcher {
                     if(ctr != oc)
                         nv = std::min(mat_(ctr, ind), nv);
                 }
-                potential_gain += old_cost - newcost;
-            } else if(nv < old_cost) {
-                potential_gain += old_cost - nv;
-            }
+            } else if(nv >= old_cost) return;
+            potential_gain += old_cost - nv;
         };
         if(single_threaded) {
             for(size_t i = 0; i < nc_; ++i) {
