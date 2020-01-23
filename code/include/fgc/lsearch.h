@@ -190,14 +190,14 @@ struct LocalKMedSearcher {
             const auto asn = assignments_[ind];
             assert(asn < nr_);
             const auto old_cost = mat_(asn, ind);
+            value_type nv = newr[ind];
             if(asn == oc) {
-                value_type newcost = std::numeric_limits<value_type>::max();
                 for(const auto ctr: sol_) {
                     if(ctr != oc)
-                        newcost = std::min(mat_(ctr, ind), newcost);
+                        nv = std::min(mat_(ctr, ind), nv);
                 }
                 potential_gain += old_cost - newcost;
-            } else if(double nv = newr[ind]; nv < old_cost) {
+            } else if(nv < old_cost) {
                 potential_gain += old_cost - nv;
             }
         };
