@@ -318,7 +318,7 @@ struct CoresetSampler {
         } else if(sens == FL) {
             make_sampler_fl(np, ncenters, costs, assignments, seed);
         } else throw std::runtime_error("Invalid SensitivityMethod");
-#ifndef NDEBUG
+#if 0
         for(unsigned i = 0; i < np; ++i) {
             std::fprintf(stderr, "point %u has prob %g\n", i, probs_[i]);
         }
