@@ -42,11 +42,11 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
 #ifdef _OPENMP
             rowid = omp_get_thread_num();
 #endif
-            auto wrow(row(working_space, rowid));
+            auto wrow(row(working_space, rowid BLAZE_CHECK_DEBUG));
             auto vtx = (*sources)[i];
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&wrow[0]));
             //std::fprintf(stderr, "Calculated dijkstra for row %zu from thread %u\n", i, rowid);
-            row(mat, i) = serial(elements(wrow, sources->data(), sources->size()));
+            row(mat, i BLAZE_CHECK_DEBUG) = blaze::serial(blaze::elements(wrow, sources->data(), sources->size()));
             //std::fprintf(stderr, "Assigned row %zu from thread %u\n", i, rowid);
         }
     } else {
@@ -95,7 +95,7 @@ struct LocalKMedSearcher {
     shared::flat_hash_set<IType> sol_;
     blz::DV<IType> assignments_;
     double current_cost_;
-    const double eps_;
+    double eps_, initial_cost_;
     IType k_;
     const size_t nr_, nc_;
     bool best_improvement_;
@@ -135,6 +135,7 @@ struct LocalKMedSearcher {
                 sol_.insert(rng() % mat_.rows());
         }
         assign();
+        initial_cost_ = current_cost_ / 2 / nc_;
     }
 
     template<typename Container>
@@ -162,7 +163,7 @@ struct LocalKMedSearcher {
             //assert(mat_(center, center) == 0.);
         }
         for(const auto center: sol_) {
-            auto r = row(mat_, center, blaze::unchecked);
+            auto r = row(mat_, center BLAZE_CHECK_DEBUG);
             OMP_PFOR
             for(size_t ci = 0; ci < nc_; ++ci) {
                 if(const auto newcost = r[ci];
@@ -180,31 +181,34 @@ struct LocalKMedSearcher {
         assert(newcenter < mat_.rows());
         assert(oldcenter < mat_.rows());
         //std::fprintf(stderr, "Passed asserts\n");
-#if 0
-        //auto newr = row(mat_, newcenter, blaze::unchecked);
-#else
-        auto newr = row(mat_, newcenter);
-#endif
+        auto newr = row(mat_, newcenter BLAZE_CHECK_DEBUG);
         //std::fprintf(stderr, "Got row: %zu\n", newr.size());
         assert(nc_ == newr.size());
         assert(assignments_.size() == mat_.columns());
         double potential_gain = 0.;
+        auto eval_func = [&,oc=oldcenter](size_t ind) {
+            const auto asn = assignments_[ind];
+            assert(asn < nr_);
+            const auto old_cost = mat_(asn, ind);
+            if(asn == oc) {
+                value_type newcost = std::numeric_limits<value_type>::max();
+                for(const auto ctr: sol_) {
+                    if(ctr != oc)
+                        newcost = std::min(mat_(ctr, ind), newcost);
+                }
+                potential_gain += old_cost - newcost;
+            } else if(double nv = newr[ind]; nv < old_cost) {
+                potential_gain += old_cost - nv;
+            }
+        };
         if(single_threaded) {
             for(size_t i = 0; i < nc_; ++i) {
-                auto asn = assignments_[i];
-                assert(asn < nr_);
-                if(asn == oldcenter || newr[i] < mat_(asn, i)) {
-                    potential_gain += mat_(asn, i) - newr[i];
-                }
+                eval_func(i);
             }
         } else {
             OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
             for(size_t i = 0; i < nc_; ++i) {
-                auto asn = assignments_[i];
-                assert(asn < nr_);
-                if(asn == oldcenter || newr[i] < mat_(asn, i)) {
-                    potential_gain += mat_(asn, i) - newr[i];
-                }
+                eval_func(i);
             }
         }
         return potential_gain;
@@ -244,7 +248,7 @@ struct LocalKMedSearcher {
     }
 
     void run() {
-        double diffthresh = current_cost_ / k_ * eps_;
+        double diffthresh = initial_cost_ / k_ * eps_;
         size_t total = 0;
         {
             double current_best;
@@ -304,8 +308,8 @@ struct LocalKMedSearcher {
 };
 
 template<typename Mat, typename FT=float, typename IType=std::uint32_t>
-auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, uint64_t seed=0) {
-    return LocalKMedSearcher<Mat, FT, IType>(mat, k, eps, seed);
+auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, uint64_t seed=0, bool best_improvement=false) {
+    return LocalKMedSearcher<Mat, FT, IType>(mat, k, eps, seed, best_improvement);
 }
 
 

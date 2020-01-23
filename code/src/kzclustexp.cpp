@@ -87,9 +87,9 @@ max_component(GraphT &g) {
         }
 #ifndef NDEBUG
         ncomp = boost::connected_components(newg, ccomp.get());
-        std::fprintf(stderr, "num components: %u. num edges: %zu. num nodes: %zu\n", ncomp, newg.num_edges(), newg.num_vertices());
         assert(ncomp == 1);
 #endif
+        std::fprintf(stderr, "num components: %u. num edges: %zu. num nodes: %zu\n", ncomp, newg.num_edges(), newg.num_vertices());
         std::swap(newg, g);
     }
     return g;
@@ -136,6 +136,7 @@ int main(int argc, char **argv) {
     unsigned testing_num_centersets = 1000;
     //size_t nsampled_max = 0;
     size_t rammax = 16uLL << 30;
+    bool best_improvement = false;
     unsigned coreset_testing_num_iters = 5;
     uint64_t seed = std::accumulate(argv, argv + argc, uint64_t(0),
         [](auto x, auto y) {
@@ -143,11 +144,12 @@ int main(int argc, char **argv) {
         }
     );
     unsigned num_thorup_trials = 15;
-    for(int c;(c = getopt(argc, argv, "N:T:t:p:o:M:S:z:s:c:k:R:rh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "b:N:T:t:p:o:M:S:z:s:c:k:R:rh?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
             case 'r': rectangular = true; break;
+            case 'b': best_improvement = true; break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
             case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
             case 't': testing_num_centersets = std::atoi(optarg); break;
@@ -199,6 +201,7 @@ int main(int argc, char **argv) {
 
     // Parse the graph
     fgc::Graph<undirectedS, float> g = parse_by_fn(input);
+    std::fprintf(stderr, "nv: %zu. ne: %zu\n", boost::num_vertices(g), boost::num_edges(g));
     // Select only the component with the most edges.
     max_component(g);
     assert_connected(g);
@@ -244,7 +247,7 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "[Phase 2] Distances gathered\n");
 
     // Perform Thorup sample before JV method.
-    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-9, seed * seed + seed);
+    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-2, seed * seed + seed, best_improvement);
     lsearcher.run();
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
