@@ -38,6 +38,7 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
     for(unsigned i = 0; i < nv; ++i) {
         fullcost += costbuffer[i];
     }
+    const double fcinv = 1. / fullcost;
     OMP_PFOR
     for(size_t j = 0; j < ncs; ++j) {
         const auto indices = coresets[j].indices_.data();
@@ -47,12 +48,7 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
         for(unsigned i = 0; i < cssz; ++i) {
             coreset_cost += costbuffer[indices[i]] * weights[i];
         }
-        ret[j] = coreset_cost;
-    }
-    for(size_t j = 0; j < ncs; ++j) {
-        double distortion = std::abs(ret[j] / fullcost - 1.);
-        //std::fprintf(stderr, "distortion for coreset %zu of size %zu is %g\n", j, coresets[j].size(), distortion);
-        ret[j] = distortion;
+        ret[j] = std::abs(coreset_cost * fcinv - 1.);
     }
 }
 
@@ -106,8 +102,9 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
     std::sprintf(buf, "'\n##z: %g\n##nsamples: %u\n##k: %u\n##nv: %zu\n##ne: %zu\n", z, nsamples, k, nv, ne);
     ofs << buf;
     ofs << "#coreset_size\tmax distortion (VX11)\tmean distortion (VX11)\t "
-        << "max distortion (BFL16)\tmean distortion (BFL16)"
+        << "max distortion (BFL16)\tmean distortion (BFL16)\t"
         << "max distortion (uniform sampling)\tmean distortion (uniform sampling)"
+        << "mean distortion on approximate soln [VX11]\tmeandist on approx [BFL16]\tmean distortion on approximate solution, Uniform Sampling"
         << "\n";
 }
 
@@ -308,7 +305,9 @@ int main(int argc, char **argv) {
     const size_t ncs = coreset_sizes.size();
     const size_t distvecsz = ncs * 3;
     blaze::DynamicVector<double> meanmaxdistortion(distvecsz, 0.),
-                                 meanmeandistortion(distvecsz, 0.);
+                                 meanmeandistortion(distvecsz, 0.),
+                                 sumfdistortion(distvecsz, 0.), tmpfdistortion(distvecsz); // distortions on F
+    blaze::DynamicVector<double> fdistbuffer(boost::num_vertices(g)); // For F, for comparisons
     //
     for(size_t i = 0; i < coreset_testing_num_iters; ++i) {
         // The first ncs coresets are VX-sampled, the second ncs are BFL-sampled, and the last ncs
@@ -325,7 +324,7 @@ int main(int argc, char **argv) {
             coresets.emplace_back(uniform_sampler.sample(coreset_size));
         }
         assert(coresets.size() == distvecsz);
-        std::fprintf(stderr, "[Phase 5] Generated coresets\n");
+        std::fprintf(stderr, "[Phase 5] Generated coresets for iter %zu/%u\n", i + 1, coreset_testing_num_iters);
         blaze::DynamicVector<double> maxdistortion(distvecsz, std::numeric_limits<double>::min()),
                                      meandistortion(distvecsz, 0.);
         OMP_PFOR
@@ -347,12 +346,15 @@ int main(int argc, char **argv) {
                 meandistortion = blaze::serial(meandistortion + currentdistortion);
             }
         }
+        calculate_distortion_centerset(g, approx_v, fdistbuffer, coresets, tmpfdistortion, z);
         meanmaxdistortion += maxdistortion;
+        sumfdistortion += tmpfdistortion;
         meandistortion /= random_centers.rows();
         meanmeandistortion += meandistortion;
         std::cerr << "mean [" << i << "]\n" << meandistortion;
         std::cerr << "max  [" <<  i << "]\n" << maxdistortion;
     }
+    sumfdistortion /= coreset_testing_num_iters;
     meanmaxdistortion /= coreset_testing_num_iters;
     meanmeandistortion /= coreset_testing_num_iters;
     for(size_t i = 0; i < ncs; ++i) {
@@ -360,6 +362,9 @@ int main(int argc, char **argv) {
                << '\t' << meanmaxdistortion[i] << '\t' << meanmeandistortion[i]
                << '\t' << meanmaxdistortion[i + ncs] << '\t' << meanmeandistortion[i + ncs]
                << '\t' << meanmaxdistortion[i + ncs * 2] << '\t' << meanmeandistortion[i + ncs * 2]
+               << '\t' << sumfdistortion[i]
+               << '\t' << sumfdistortion[i + ncs]
+               << '\t' << sumfdistortion[i + ncs * 2]
                << '\n';
     }
     return EXIT_SUCCESS;
