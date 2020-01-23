@@ -87,9 +87,9 @@ max_component(GraphT &g) {
         }
 #ifndef NDEBUG
         ncomp = boost::connected_components(newg, ccomp.get());
-        std::fprintf(stderr, "num components: %u. num edges: %zu. num nodes: %zu\n", ncomp, newg.num_edges(), newg.num_vertices());
         assert(ncomp == 1);
 #endif
+        std::fprintf(stderr, "After reducing to largest connected component -- num edges: %zu. num nodes: %zu\n", newg.num_edges(), newg.num_vertices());
         std::swap(newg, g);
     }
     return g;
@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
     std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
     bool rectangular = false;
-    unsigned testing_num_centersets = 1000;
+    unsigned testing_num_centersets = 500;
     //size_t nsampled_max = 0;
     size_t rammax = 16uLL << 30;
     unsigned coreset_testing_num_iters = 5;
@@ -273,9 +273,11 @@ int main(int argc, char **argv) {
                          nullptr, (((seed * 1337) + (seed * seed * seed)) ^ (seed >> 32) ^ (seed << 32)), coresets::BRAVERMAN_FELDMAN_LANG);
     assert(sampler.sampler_.get());
     assert(bflsampler.sampler_.get());
+#if 0
     std::FILE *ofp = std::fopen(fn.data(), "wb");
     sampler.write(ofp);
     std::fclose(ofp);
+#endif
     seed = std::mt19937_64(seed)();
     wy::WyRand<uint32_t, 2> rng(seed);
     std::string ofname = output_prefix + ".table_out.tsv";
