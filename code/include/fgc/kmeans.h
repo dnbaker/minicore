@@ -263,7 +263,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     double total_loss = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:total_loss)")
     for(size_t i = 0; i < nr; ++i) {
-        auto dr = row(data, i, BLAZE_CHECK_DEBUG);
+        auto dr = row(data, i BLAZE_CHECK_DEBUG);
         auto dist = std::numeric_limits<double>::max();
         double newdist;
         unsigned label = -1;
