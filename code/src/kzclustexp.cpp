@@ -216,10 +216,6 @@ int main(int argc, char **argv) {
         OMP_ATOMIC
         ++center_counts[thorup_assignments[i]];
     }
-    for(size_t i = 0; i < sampled.size(); ++i) {
-        if(center_counts[i] > 1u)
-            std::fprintf(stderr, "center %zu is %zu and has %u supporters\n", i, size_t(sampled[i]), center_counts[i]);
-    }
     std::fprintf(stderr, "[Phase 1] Thorup sampling complete. Sampled %zu points from input graph: %zu vertices, %zu edges.\n", sampled.size(), boost::num_vertices(g), boost::num_edges(g));
 
     std::unique_ptr<DiskMat<float>> diskmatptr;
