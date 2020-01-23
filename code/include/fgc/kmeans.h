@@ -249,26 +249,26 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     for(size_t i = 0; i < nr; ++i) {
         assert(assignments[i] < centers.size());
         auto asn = assignments[i];
-        auto dr = row(data, i);
-        auto cr = row(centers, asn);
+        auto dr = row(data, i BLAZE_CHECK_DEBUG);
+        auto cr = row(centers, asn BLAZE_CHECK_DEBUG);
         const auto w = getw(i);
         cr += (dr * w);
         counts[asn] += w;
     }
     for(size_t i = 0; i < centers.rows(); ++i) {
         assert(counts[i]);
-        row(centers, i) /= counts[i];
+        row(centers, i BLAZE_CHECK_DEBUG) /= counts[i];
     }
     // 2. Assign centers
     double total_loss = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:total_loss)")
     for(size_t i = 0; i < nr; ++i) {
-        auto dr = row(data, i);
+        auto dr = row(data, i, BLAZE_CHECK_DEBUG);
         auto dist = std::numeric_limits<double>::max();
         double newdist;
         unsigned label = -1;
         for(size_t j = 0; j < centers.rows(); ++j) {
-            if((newdist = sqrL2Dist(dr, row(centers, i))) < dist) {
+            if((newdist = sqrL2Dist(dr, row(centers, i BLAZE_CHECK_DEBUG))) < dist) {
                 dist = newdist;
                 label = j;
             }
