@@ -52,7 +52,7 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
     } else {
         OMP_PFOR
         for(size_t i = 0; i < nrows; ++i) {
-            auto mr = row(~mat, i);
+            auto mr = row(~mat, i BLAZE_CHECK_DEBUG);
             auto vtx = sources ? (*sources)[i]: vertices[i];
             assert(vtx == vtx_idx_map[vtx]);
             assert(vtx < boost::num_vertices(x));
@@ -190,16 +190,14 @@ struct LocalKMedSearcher {
             const auto asn = assignments_[ind];
             assert(asn < nr_);
             const auto old_cost = mat_(asn, ind);
+            value_type nv = newr[ind];
             if(asn == oc) {
-                value_type newcost = std::numeric_limits<value_type>::max();
                 for(const auto ctr: sol_) {
                     if(ctr != oc)
-                        newcost = std::min(mat_(ctr, ind), newcost);
+                        nv = std::min(mat_(ctr, ind), nv);
                 }
-                potential_gain += old_cost - newcost;
-            } else if(double nv = newr[ind]; nv < old_cost) {
-                potential_gain += old_cost - nv;
-            }
+            } else if(nv >= old_cost) return;
+            potential_gain += old_cost - nv;
         };
         if(single_threaded) {
             for(size_t i = 0; i < nc_; ++i) {
@@ -224,7 +222,7 @@ struct LocalKMedSearcher {
 
         for(auto it = sol_.begin(); ++it != sol_.end();) {
             const auto center = *it;
-            auto crow = row(mat_, center);
+            auto crow = row(mat_, center BLAZE_CHECK_DEBUG);
             assert(crow.size() == nc_);
             OMP_PFOR
             for(size_t i = 0; i < nc_; ++i) {
@@ -249,6 +247,7 @@ struct LocalKMedSearcher {
 
     void run() {
         double diffthresh = initial_cost_ / k_ * eps_;
+        std::fprintf(stderr, "diffthresh: %f\n", diffthresh);
         size_t total = 0;
         {
             double current_best;
@@ -279,7 +278,7 @@ struct LocalKMedSearcher {
                     sol_.erase(current_best_center);
                     sol_.insert(current_best_index);
                     recalculate();
-                    diffthresh = current_cost_ / k_ * eps_;
+                    //diffthresh = current_cost_ / k_ * eps_;
                     ++total;
                     goto next;
                 }
@@ -289,11 +288,11 @@ struct LocalKMedSearcher {
                         if(sol_.find(pi) == sol_.end()) {
                             if(const auto val = evaluate_swap(pi, oldcenter);
                                val > diffthresh) {
-                                std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
+                                std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g. Threshold: %g.\n", pi, oldcenter, total + 1, current_cost_, val, diffthresh);
                                 sol_.erase(oldcenter);
                                 sol_.insert(pi);
                                 recalculate();
-                                diffthresh = current_cost_ / k_ * eps_;
+                                //diffthresh = current_cost_ / k_ * eps_;
                                 ++total;
                                 goto next; // Meaning we've swapped this guy out and will pick another one.
                             }
