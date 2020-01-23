@@ -35,7 +35,7 @@ if __name__ == "__main__":
     xlabels = []
     data = []
     for line in open(args.infname):
-        if len(line) == 0 or line[0] == "#": continue
+        if not line or line[0] == "#": continue
         xlabels.append(int(line.split()[0]))
         data.append(list(map(float, line.strip().split()[1:])))
     
@@ -50,6 +50,13 @@ if __name__ == "__main__":
     mufl, mubfl, muu = data[:,1], data[:,3], data[:,5]
     names = ("Varadarajan-Xiao", "BFL", "Uniform") if use_bfl else ("Varadarajan-Xiao", "Uniform")
     mudata=(mufl, mubfl, muu) if use_bfl else (mufl, muu)
+    if(data.shape[1] > 6):
+        print("has extra fields")
+        muffl, mufbfl, mufu = data[:,6], data[:,7], data[:,8]
+        fdata = (muffl, mufbfl, mufu) if use_bfl else (muffl, mufu)
+    else:
+        fdata = None
+        mudata=(mufl, mubfl, muu) if use_bfl else (mufl, muu)
     mxdata= (mxfl, mxbfl, mxu) if use_bfl else (mxfl, mxu)
     # data=(mufl, mubfl, muu)
     # names=("Varadarajan-Xiao", "BFL", "Uniform")
@@ -61,4 +68,5 @@ if __name__ == "__main__":
             pref += ".bfl"
         print_items(data=mudata, xlabels=xlabels, names=names, subgroup="mean", prefix=pref, end=end)
         print_items(data=mxdata, xlabels=xlabels, names=names, subgroup="max", prefix=pref, end=end)
-    
+        if fdata is not None:
+            print_items(data=fdata, xlabels=xlabels, names=names, subgroup="meanf", prefix=pref, end=end)

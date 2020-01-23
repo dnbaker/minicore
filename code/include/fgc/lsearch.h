@@ -247,12 +247,12 @@ struct LocalKMedSearcher {
 
     void run() {
         double diffthresh = initial_cost_ / k_ * eps_;
-        std::fprintf(stderr, "diffthresh: %f\n", diffthresh);
         size_t total = 0;
         {
             double current_best;
             IType current_best_index, current_best_center;
             next:
+            std::fprintf(stderr, "diffthresh: %f\n", diffthresh);
             if(best_improvement_) {
                 current_best = std::numeric_limits<double>::min();
                 current_best_index = -1, current_best_center = -1;
@@ -278,7 +278,7 @@ struct LocalKMedSearcher {
                     sol_.erase(current_best_center);
                     sol_.insert(current_best_index);
                     recalculate();
-                    //diffthresh = current_cost_ / k_ * eps_;
+                    diffthresh = current_cost_ / k_ * eps_;
                     ++total;
                     goto next;
                 }
@@ -292,7 +292,7 @@ struct LocalKMedSearcher {
                                 sol_.erase(oldcenter);
                                 sol_.insert(pi);
                                 recalculate();
-                                //diffthresh = current_cost_ / k_ * eps_;
+                                diffthresh = current_cost_ / k_ * eps_;
                                 ++total;
                                 goto next; // Meaning we've swapped this guy out and will pick another one.
                             }
