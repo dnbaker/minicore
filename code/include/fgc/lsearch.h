@@ -108,7 +108,7 @@ struct LocalKMedSearcher {
         std::memset(ptr, 0, sizeof(*this));
         std::swap_ranges(ptr, ptr + sizeof(*this), reinterpret_cast<const uint8_t *>(std::addressof(o)));
     }
-    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=0.01, uint64_t seed=0, bool best_improvement=false):
+    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=1e-8, uint64_t seed=0, bool best_improvement=false):
         mat_(mat), assignments_(mat.columns(), 0),
         // center_indices_(k),
         //costs_(mat.columns(), std::numeric_limits<value_type>::max()),
@@ -186,29 +186,35 @@ struct LocalKMedSearcher {
         assert(nc_ == newr.size());
         assert(assignments_.size() == mat_.columns());
         double potential_gain = 0.;
-        auto eval_func = [&,oc=oldcenter](size_t ind) {
-            const auto asn = assignments_[ind];
-            assert(asn < nr_);
-            const auto old_cost = mat_(asn, ind);
-            value_type nv = newr[ind];
-            if(asn == oc) {
-                for(const auto ctr: sol_) {
-                    if(ctr != oc)
-                        nv = std::min(mat_(ctr, ind), nv);
-                }
-            } else if(nv >= old_cost) return;
-            potential_gain += old_cost - nv;
-        };
+#define LOOP_CORE(ind) \
+        do {\
+            const auto asn = assignments_[ind];\
+            assert(asn < nr_);\
+            const auto old_cost = mat_(asn, ind);\
+            if(asn == oldcenter) {\
+                value_type newcost = newr[ind];\
+                for(const auto ctr: sol_) {\
+                    if(ctr != oldcenter)\
+                        newcost = std::min(mat_(ctr, ind), newcost);\
+                }\
+                potential_gain += old_cost - newcost;\
+            } else if(double nv = newr[ind]; nv < old_cost) {\
+                potential_gain += old_cost - nv;\
+            }\
+        } while(0)
+
         if(single_threaded) {
             for(size_t i = 0; i < nc_; ++i) {
-                eval_func(i);
+                LOOP_CORE(i);
             }
         } else {
             OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
             for(size_t i = 0; i < nc_; ++i) {
-                eval_func(i);
+                LOOP_CORE(i);
             }
         }
+#undef LOOP_CORE
+        //std::fprintf(stderr, "potential gain: %g. pg > thresh (%g)?%d\n", potential_gain, initial_cost_ / k_ * eps_, potential_gain > initial_cost_ / k_ * eps_);
         return potential_gain;
     }
 
@@ -246,13 +252,14 @@ struct LocalKMedSearcher {
     }
 
     void run() {
-        double diffthresh = initial_cost_ / k_ * eps_;
+        //const double diffthresh = 0.;
+        const double diffthresh = initial_cost_ / k_ * eps_;
+        std::fprintf(stderr, "diffthresh: %f\n", diffthresh);
         size_t total = 0;
         {
             double current_best;
             IType current_best_index, current_best_center;
             next:
-            std::fprintf(stderr, "diffthresh: %f\n", diffthresh);
             if(best_improvement_) {
                 current_best = std::numeric_limits<double>::min();
                 current_best_index = -1, current_best_center = -1;
@@ -267,8 +274,8 @@ struct LocalKMedSearcher {
                                 {
                                     current_best = val;
                                     current_best_index = pi;
+                                    current_best_center = oldcenter;
                                 }
-                                current_best_center = oldcenter;
                                 std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
                             }
                         }
@@ -278,7 +285,7 @@ struct LocalKMedSearcher {
                     sol_.erase(current_best_center);
                     sol_.insert(current_best_index);
                     recalculate();
-                    diffthresh = current_cost_ / k_ * eps_;
+                    //diffthresh = current_cost_ / k_ * eps_;
                     ++total;
                     goto next;
                 }
@@ -292,7 +299,7 @@ struct LocalKMedSearcher {
                                 sol_.erase(oldcenter);
                                 sol_.insert(pi);
                                 recalculate();
-                                diffthresh = current_cost_ / k_ * eps_;
+                                //diffthresh = current_cost_ / k_ * eps_;
                                 ++total;
                                 goto next; // Meaning we've swapped this guy out and will pick another one.
                             }

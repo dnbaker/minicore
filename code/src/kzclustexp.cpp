@@ -103,7 +103,7 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
     ofs << buf;
     ofs << "#coreset_size\tmax distortion (VX11)\tmean distortion (VX11)\t "
         << "max distortion (BFL16)\tmean distortion (BFL16)\t"
-        << "max distortion (uniform sampling)\tmean distortion (uniform sampling)"
+        << "max distortion (uniform sampling)\tmean distortion (uniform sampling)\t"
         << "mean distortion on approximate soln [VX11]\tmeandist on approx [BFL16]\tmean distortion on approximate solution, Uniform Sampling"
         << "\n";
 }
@@ -126,7 +126,6 @@ void usage(const char *ex) {
 int main(int argc, char **argv) {
     unsigned k = 10;
     double z = 1.; // z = power of the distance norm
-    std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
     bool rectangular = false;
@@ -140,6 +139,7 @@ int main(int argc, char **argv) {
             return x ^ std::hash<std::string>{}(y);
         }
     );
+    std::string fn = std::to_string(seed);
     unsigned num_thorup_trials = 15;
     for(int c;(c = getopt(argc, argv, "b:N:T:t:p:o:M:S:z:s:c:k:R:rh?")) >= 0;) {
         switch(c) {
@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
             case 'T': num_thorup_trials = std::atoi(optarg); break;
             case 'p': OMP_SET_NT(std::atoi(optarg)); break;
             case 'o': output_prefix = optarg; break;
-            case 's': fn = optarg; break;
+            //case 's': fn = optarg; break;
             case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
             case 'S': std::fprintf(stderr, "-S removed\n"); break;
             case 'h': default: usage(argv[0]);
@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "[Phase 2] Distances gathered\n");
 
     // Perform Thorup sample before JV method.
-    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-2, seed * seed + seed, best_improvement);
+    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-6, seed * seed + seed, best_improvement);
     lsearcher.run();
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
@@ -270,11 +270,6 @@ int main(int argc, char **argv) {
                          nullptr, (((seed * 1337) + (seed * seed * seed)) ^ (seed >> 32) ^ (seed << 32)), coresets::BRAVERMAN_FELDMAN_LANG);
     assert(sampler.sampler_.get());
     assert(bflsampler.sampler_.get());
-#if 0
-    std::FILE *ofp = std::fopen(fn.data(), "wb");
-    sampler.write(ofp);
-    std::fclose(ofp);
-#endif
     seed = std::mt19937_64(seed)();
     wy::WyRand<uint32_t, 2> rng(seed);
     std::string ofname = output_prefix + ".table_out.tsv";
@@ -351,8 +346,9 @@ int main(int argc, char **argv) {
         sumfdistortion += tmpfdistortion;
         meandistortion /= random_centers.rows();
         meanmeandistortion += meandistortion;
-        std::cerr << "mean [" << i << "]\n" << meandistortion;
-        std::cerr << "max  [" <<  i << "]\n" << maxdistortion;
+        //std::cerr << "mean [" << i << "]\n" << meandistortion;
+        //std::cerr << "max  [" <<  i << "]\n" << maxdistortion;
+        //std::cerr << "Center distortion:" << (sumfdistortion /(i + 1)) << '\n';
     }
     sumfdistortion /= coreset_testing_num_iters;
     meanmaxdistortion /= coreset_testing_num_iters;
