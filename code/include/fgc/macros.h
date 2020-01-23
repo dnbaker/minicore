@@ -169,4 +169,12 @@
 #  endif
 #endif
 
+#ifndef BLAZE_CHECK_DEBUG
+#  ifndef NDEBUG
+#    define BLAZE_CHECK_DEBUG
+#  else
+#    define BLAZE_CHECK_DEBUG , ::blaze::unchecked
+#  endif
+#endif
+
 #endif /* SKETCH_MACROS_H__ */

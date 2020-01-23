@@ -4,7 +4,9 @@ import sys
 import matplotlib.pyplot as plt
 matplotlib.use("Agg")
 
-def print_items(*, data, xlabels, names, subgroup, prefix="default_out"):
+def print_items(*, data, xlabels, names, subgroup, prefix="default_out", end):
+    xlabels = xlabels[:end]
+    data = tuple(d[:end] for d in data)
     #fig, ax = plt.subplots()
     #lines = [ax.plot(xlabels, f)[0] for f in data]
     for f in data:
@@ -36,11 +38,12 @@ if __name__ == "__main__":
         if len(line) == 0 or line[0] == "#": continue
         xlabels.append(int(line.split()[0]))
         data.append(list(map(float, line.strip().split()[1:])))
-    end = 15
-    xlabels = np.array(xlabels)[2:end]
+    
+    data = np.array(data)[2:]
+    xlabels = np.array(xlabels)[2:]
     print(xlabels)
     # xlabels = np.ceil(np.log2(np.array(xlabels)[2:end])).astype(np.int32)
-    data = np.array(data)[2:end,:]
+    #data = np.array(data)[2:end,:]
     # data = -np.log2(np.array(data))[2:end,:]
     # To make it clearer who was better
     mxfl, mxbfl, mxu = data[:,0], data[:,2], data[:,4]
@@ -52,6 +55,10 @@ if __name__ == "__main__":
     # names=("Varadarajan-Xiao", "BFL", "Uniform")
     #print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
     #print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
-    print_items(data=mudata, xlabels=xlabels, names=names, subgroup="mean", prefix=args.prefix)
-    print_items(data=mxdata, xlabels=xlabels, names=names, subgroup="max", prefix=args.prefix)
+    for end in (12, 17):
+        pref = args.prefix + ".%i" % end
+        if use_bfl:
+            pref += ".bfl"
+        print_items(data=mudata, xlabels=xlabels, names=names, subgroup="mean", prefix=pref, end=end)
+        print_items(data=mxdata, xlabels=xlabels, names=names, subgroup="max", prefix=pref, end=end)
     
