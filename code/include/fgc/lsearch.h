@@ -21,6 +21,8 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
     size_t ncol = sources_only ? nrows: boost::num_vertices(x);
     const typename boost::graph_traits<Graph>::vertex_iterator vertices = boost::vertices(x).first;
     if(mat.rows() != nrows || mat.columns() != ncol) throw std::invalid_argument("mat sizes don't match output");
+    std::atomic<size_t> rows_complete;
+    rows_complete.store(0);
 #ifndef NDEBUG
     auto vtx_idx_map = boost::get(vertex_index, x);
 #endif
@@ -45,9 +47,9 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
             auto wrow(row(working_space, rowid BLAZE_CHECK_DEBUG));
             auto vtx = (*sources)[i];
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&wrow[0]));
-            //std::fprintf(stderr, "Calculated dijkstra for row %zu from thread %u\n", i, rowid);
             row(mat, i BLAZE_CHECK_DEBUG) = blaze::serial(blaze::elements(wrow, sources->data(), sources->size()));
-            //std::fprintf(stderr, "Assigned row %zu from thread %u\n", i, rowid);
+            ++rows_complete;
+            std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", rows_complete.load(), nrows);
         }
     } else {
         OMP_PFOR
@@ -57,6 +59,8 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
             assert(vtx == vtx_idx_map[vtx]);
             assert(vtx < boost::num_vertices(x));
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&mr[0]));
+            ++rows_complete;
+            std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", rows_complete.load(), nrows);
         }
     }
 }
