@@ -5,6 +5,7 @@
 #include "fgc/diskmat.h"
 #include "fgc/kcenter.h"
 #include "pdqsort/pdqsort.h"
+#include <atomic>
 
 /*
  * In this file, we use the local search heuristic for k-median.
