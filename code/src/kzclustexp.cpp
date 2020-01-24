@@ -141,6 +141,7 @@ int main(int argc, char **argv) {
     );
     std::string fn = std::to_string(seed);
     unsigned num_thorup_trials = 15;
+    bool test_samples_from_thorup_sampled = true;
     for(int c;(c = getopt(argc, argv, "b:N:T:t:p:o:M:S:z:s:c:k:R:rh?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
@@ -241,7 +242,7 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "[Phase 2] Distances gathered\n");
 
     // Perform Thorup sample before JV method.
-    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-6, seed * seed + seed, best_improvement);
+    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-3, seed * seed + seed, best_improvement);
     lsearcher.run();
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
@@ -281,11 +282,15 @@ int main(int argc, char **argv) {
         wy::WyRand<uint32_t> rng(seed + i * testing_num_centersets);
         flat_hash_set<uint32_t> centers; centers.reserve(k);
         while(centers.size() < k) {
-            centers.insert(rng() % boost::num_vertices(g));
+            auto rv = rng();
+            auto v = test_samples_from_thorup_sampled
+                ? sampled[rv % sampled.size()]
+                : rv % boost::num_vertices(g);
+            centers.insert(v);
         }
         auto it = centers.begin();
-        for(size_t j = 0; j < r.size(); ++j)
-            r[j] = *it++;
+        for(size_t j = 0; j < r.size(); ++j, ++it)
+            r[j] = *it;
         std::sort(r.begin(), r.end());
     }
     coresets::UniformSampler<float, uint32_t> uniform_sampler(costs.size());
