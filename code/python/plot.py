@@ -29,7 +29,6 @@ if __name__ == "__main__":
     ap.add_argument("--prefix")
     ap.add_argument("--include-bfl", '-B', action='store_true')
     args = ap.parse_args()
-    use_bfl = args.include_bfl
     if args.prefix is None:
         args.prefix = args.infname
     xlabels = []
@@ -48,25 +47,29 @@ if __name__ == "__main__":
     # To make it clearer who was better
     mxfl, mxbfl, mxu = data[:,0], data[:,2], data[:,4]
     mufl, mubfl, muu = data[:,1], data[:,3], data[:,5]
-    names = ("Varadarajan-Xiao", "BFL", "Uniform") if use_bfl else ("Varadarajan-Xiao", "Uniform")
-    mudata=(mufl, mubfl, muu) if use_bfl else (mufl, muu)
+    names = ("Varadarajan-Xiao", "BFL", "Uniform") if args.include_bfl else ("Varadarajan-Xiao", "Uniform")
+    mudata=(mufl, mubfl, muu) if args.include_bfl else (mufl, muu)
     bflmudata = (mufl, mubfl, muu)
     if(data.shape[1] > 6):
         print("has extra fields")
         muffl, mufbfl, mufu = data[:,6], data[:,7], data[:,8]
-        fdata = (muffl, mufbfl, mufu) if use_bfl else (muffl, mufu)
+        fdata = (muffl, mufbfl, mufu) if args.include_bfl else (muffl, mufu)
         bflfdata = (muffl, mufbfl, mufu)
     else:
         fdata = None
-        mudata=(mufl, mubfl, muu) if use_bfl else (mufl, muu)
-    mxdata= (mxfl, mxbfl, mxu) if use_bfl else (mxfl, mxu)
+        mudata=(mufl, mubfl, muu) if args.include_bfl else (mufl, muu)
+    mxdata= (mxfl, mxbfl, mxu) if args.include_bfl else (mxfl, mxu)
     bflmxdata = (mxfl, mxbfl, mxu)
     # data=(mufl, mubfl, muu)
     # names=("Varadarajan-Xiao", "BFL", "Uniform")
     #print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
     #print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
     for end in (12, 17):
-        pref = args.prefix + ".%i" % end
+        pref = args.prefix
+        if args.include_bfl:
+            pref += ".bfl"
+        pref += ".%i" % end
+        print("prefix: " + pref)
         print_items(data=mudata, xlabels=xlabels, names=names, subgroup="mean", prefix=pref, end=end)
         print_items(data=mxdata, xlabels=xlabels, names=names, subgroup="max", prefix=pref, end=end)
         if fdata is not None:

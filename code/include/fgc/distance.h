@@ -178,7 +178,6 @@ struct sqrMaxNorm: sqrBaseNorm<maxNormFunctor> {};
  * TODO:
  * These include:
  * Bernoulli, binomial, Poisson, chi-squared, Laplace, normal, lognormal, inverse gaussian, gamma,
- * inverse gamma, beta, categorical, Dirichlet, Wishart
  */
 
 template<typename FT, bool SO>
@@ -240,33 +239,52 @@ double logsumexp(const SVecScalarMultExpr<SVecSVecAddExpr<VT1, VT2, TF>, Scalar,
     return maxv + std::log(s);
 }
 
+    /* Note: multinomial cumulants for lhs and rhs can be cached as lhc/rhc, such that
+    *  multinomial_cumulant(mean) and the dot products are all that are required
+    *  TODO: optimize for sparse vectors (maybe filt can be eliminated?)
+    *  TODO: cache logs as well as full vectors?
+
+    *  We can turn inf values into 0 because:
+    *  Whenever P ( x ) {P(x)} P(x) is zero the contribution of the corresponding term is interpreted as zero because
+    *  lim_{x->0+}[xlog(x)] = 0
+    *  See https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence#Definition
+
+    *  Alternatively, we can use the Dirichlet prior and avoid any 0s in the first place.
+    *  This is done by replacing parameters mu_n = \frac{n}{\sum_{n \in N}{n}})
+    *  with                                 mu_n = \frac{n+1}{\sum_{n \in N}{n + 1}}
+    *  If this has been done, set filter_nans to be false in any of the downstream functions
+    *  See https://mathoverflow.net/questions/72668/how-to-compute-kl-divergence-when-pmf-contains-0s
+    *  Another possible prior is the Gamma prior with both parameters $\Beta, \Beta$,
+    *  which replaces mu_n with $\frac{n+\Beta}{\sum_{n \in N}{n + \Beta}}$,
+    *  as in https://arxiv.org/abs/1202.6201.
+    */
+
 template<typename VT>
 INLINE double multinomial_cumulant(const VT &x) {return logsumexp(x);}
 
-template<typename FT, bool SO, typename OFT>
+template<typename FT, bool SO, typename OFT, bool filter_nans=true>
 double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs, OFT lhc, OFT rhc) {
-    // Note: multinomial cumulants for lhs and rhs can be cached as lhc/rhc, such that
-    // multinomial_cumulant(mean) and the dot products are all that are required
-    // TODO: optimize for sparse vectors (maybe filt can be eliminated?)
-    // TODO: cache logs as well as full vectors?
-
-    // We can turn inf values into 0 because:
-    // Whenever P ( x ) {P(x)} P(x) is zero the contribution of the corresponding term is interpreted as zero because
-    // lim_{x->0+}[xlog(x)] = 0
-    // See https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence#Definition
     using FloatType = typename FT::ElementType;
 
     auto mean = (~lhs + ~rhs) * .5;
-    auto fi = [](auto x) {return std::isinf(x) ? FloatType(0): x;};
-    auto logmean = blaze::map(blaze::log(mean), fi);
-    auto lhterm = blaze::map(blaze::log(~lhs) - logmean, fi);
-    auto rhterm = blaze::map(blaze::log(~rhs) - logmean, fi);
-    auto lhv = dot(lhterm, ~lhs), rhv = dot(rhterm, ~rhs);
-    const auto retsq = multinomial_cumulant(mean) + (lhv + rhv - lhc - rhc) * .5;
+    double retsq, lhv, rhv;
+    CONST_IF(filter_nans) {
+        auto fi = [](auto x) {return std::isinf(x) ? FloatType(0): x;};
+        auto logmean = blaze::map(blaze::log(mean), fi);
+        auto lhterm = blaze::map(blaze::log(~lhs) - logmean, fi);
+        auto rhterm = blaze::map(blaze::log(~rhs) - logmean, fi);
+        lhv = dot(lhterm, ~lhs);
+        rhv = dot(rhterm, ~rhs);
+    } else {
+        auto logmean = blaze::log(mean);
+        lhv = dot(blaze::log(~lhs) - logmean, ~lhs);
+        rhv = dot(blaze::log(~rhs) - logmean, ~rhs);
+    }
+    retsq = multinomial_cumulant(mean) + (lhv + rhv - lhc - rhc) * .5;
     return std::sqrt(retsq);
 }
 
-template<typename FT, bool SO, typename OFT>
+template<typename FT, bool SO, typename OFT, bool filter_nans=true>
 double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs,
                        // Original vectors
                        const blaze::DenseVector<FT, SO> &lhl, const blaze::DenseVector<FT, SO> &rhl,
@@ -281,15 +299,17 @@ double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::Dense
            == rhl.end());
     auto mean = (~lhs + ~rhs) * .5;
     auto fi = [](auto x) {return std::isinf(x) ? FloatType(0): x;};
-    auto logmean = blaze::map(blaze::log(mean), fi);
-    return std::sqrt(
-               multinomial_cumulant(mean)
-               + .5 * (
-                   + dot(blaze::map(lhl - logmean, fi), ~lhs)
-                   + dot(blaze::map(rhl - logmean, fi), ~rhs)
-                   - lhc - rhc
-               )
-           );
+    double lhv, rhv;
+    CONST_IF(filter_nans) {
+        auto logmean = blaze::map(blaze::log(mean), fi);
+        lhv = dot(blaze::map(lhl - logmean, fi), ~lhs);
+        rhv = dot(blaze::map(rhl - logmean, fi), ~rhs);
+    } else {
+        auto logmean = blaze::log(mean);
+        lhv = dot(lhl - logmean, ~lhs);
+        rhv = dot(rhl - logmean, ~rhs);
+    }
+    return std::sqrt(multinomial_cumulant(mean) + .5 * (lhv + rhv - lhc - rhc));
 }
 
 template<typename FT, bool SO, typename LT, typename OFT>
@@ -332,6 +352,27 @@ INLINE double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs,
     return multinomial_jsd(lhs, rhs, multinomial_cumulant(~lhs), multinomial_cumulant(~rhs));
 }
 
+template<typename FT, bool SO>
+INLINE double multinomial_bregman(const blaze::DenseVector<FT, SO> &lhs,
+                                  const blaze::DenseVector<FT, SO> &rhs,
+                                  const blaze::DenseVector<FT, SO> &lhlog,
+                                  const blaze::DenseVector<FT, SO> &rhlog)
+{
+    assert_all_nonzero(lhs);
+    assert_all_nonzero(rhs);
+    return blaze::dot(lhs, lhlog - rhlog);
+}
+template<typename FT, bool SO>
+INLINE double      poisson_bregman(const blaze::DenseVector<FT, SO> &lhs,
+                                   const blaze::DenseVector<FT, SO> &rhs,
+                                   const blaze::DenseVector<FT, SO> &lhlog,
+                                   const blaze::DenseVector<FT, SO> &rhlog)
+{
+    // Assuming these are all independent (not ideal)
+    assert_all_nonzero(lhs);
+    assert_all_nonzero(rhs);
+    return blaze::dot(lhs, lhlog - rhlog) + blaze::sum(rhs - lhs);
+}
 
 template<typename LHVec, typename RHVec>
 double bhattacharya_measure(const LHVec &lhs, const RHVec &rhs) {

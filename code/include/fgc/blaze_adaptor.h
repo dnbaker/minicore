@@ -1,5 +1,6 @@
 #pragma once
 #include "blaze/Math.h"
+#include <cstdlib>
 #include <vector>
 #include "./shared.h"
 
@@ -235,5 +236,20 @@ template<typename VT, typename Allocator, typename VT2>
 INLINE auto push_back(std::vector<VT, Allocator> &x, VT2 v) {
     return x.push_back(v);
 }
+template<typename MatType>
+static INLINE [[ noreturn ]] void _assert_all_nonzero_(const MatType &x, const char *funcname, const char *filename, int linenum) {
+    const auto nnz = ::blaze::nonZeros(x);
+    if(unlikely(nnz != 0)) {
+        std::fprintf(stderr, "[%s:%s:%d] assert all_nonzero failed: %zu\n", funcname, filename, linenum, size_t(nnz));
+        std::abort();
+    }
+}
+
+#ifndef NDEBUG
+#define assert_all_nonzero(...)
+#else
+#define assert_all_nonzero(x) do {::blz::_assert_all_nonzero_(x, __PRETTY_FUNCTION__, __FILE__, __LINE__);} while(0)
+#endif
+
 using namespace blaze;
 } // namespace blz
