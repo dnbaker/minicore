@@ -27,7 +27,8 @@
 //#include <unordered_set>
 #include <vector>
 #include <cinttypes>
-#include <getopt.h>
+
+#include "fgc/Graph.h"
 
 // The type of index used. This must match the include file above
 using index_type = osmium::index::map::FlexMem<osmium::unsigned_object_id_type, osmium::Location>;
@@ -73,14 +74,18 @@ struct OSM2DimacsHandler : public osmium::handler::Handler {
 }; // struct OSM2DimacsHandler
 
 int main(int argc, char* argv[]) {
-    if (argc < 2 || std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argv + argc) {
-        std::cerr << "Usage: " << argv[0] << " OSMFILE <output ? output: stdout>\n";
+    if (argc < 4 || std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argv + argc) {
+        std::cerr << "Usage: " << argv[0] << " OSMFILE <high_freq_bbox> <output ? output: stdout>\n";
         std::cerr << "Consumes an osm file and emits a DIMACS .gr file which can then be used.\n"
                   << "which ultimately could be transformed into a graph parser, but\n"
-                  << "I see no reason to not just let it be a preprocessing step\n";
+                  << "I see no reason to not just let it be a preprocessing step\n"
+                  << "high_freq_bbox: ;
         std::exit(1);
     }
-    std::FILE *ofp = argc < 3 ? stdout: std::fopen(argv[2], "w");
+    double high_freq_prob = 0.9, low_freq_prob = 0.05;
+    for(int c;(c = getopt(argc, argv, "p:P:h?")) >= 0;) {
+    }
+    std::FILE *ofp = argc < 5 ? stdout: std::fopen(argv[optind], "w");
 
     try {
         // Initialize the reader with the filename from the command line and
