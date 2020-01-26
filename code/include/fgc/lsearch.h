@@ -181,7 +181,7 @@ struct ExhaustiveSearcher {
                 bestsol_ = sol;
             }
         });
-        std::fprintf(stderr, "Total number of combinations checked: %zu\n", nchecked);
+        std::fprintf(stderr, "Best result: %g. Total number of combinations checked: %zu\n", current_cost_, nchecked);
     }
 };
 

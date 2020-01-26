@@ -284,6 +284,11 @@ int main(int argc, char **argv) {
     auto lsearcher = make_kmed_lsearcher(dm, k, 1e-3, seed * seed + seed, best_improvement);
     lsearcher.run();
     timer.report();
+    if(dm.rows() < 100 && k < 7) {
+        Timer newtimer("exhaustive search");
+        auto esearcher = make_kmed_esearcher(dm, k);
+        esearcher.run();
+    }
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
     // Free memory
