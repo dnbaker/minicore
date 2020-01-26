@@ -285,7 +285,7 @@ int main(int argc, char **argv) {
     lsearcher.run();
     timer.report();
     if(dm.rows() < 100 && k < 7) {
-        Timer newtimer("exhaustive search");
+        fgc::util::Timer newtimer("exhaustive search");
         auto esearcher = make_kmed_esearcher(dm, k);
         esearcher.run();
     }
