@@ -281,7 +281,7 @@ int main(int argc, char **argv) {
 
     // Perform Thorup sample before JV method.
     timer.restart("local search:");
-    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-3, seed * seed + seed, best_improvement);
+    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-2, seed * seed + seed, best_improvement);
     lsearcher.run();
     timer.report();
     if(dm.rows() < 100 && k < 7) {

@@ -326,7 +326,7 @@ struct LocalKMedSearcher {
         return k_;
     }
 
-    void recalculate() {
+    bool recalculate() {
         assignments_ = *sol_.begin();
 
         for(auto it = sol_.begin(); ++it != sol_.end();) {
@@ -350,8 +350,13 @@ struct LocalKMedSearcher {
 
 
         //std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
-        assert(newcost <= current_cost_);
+        if(unlikely(newcost > current_cost_)) {
+            std::fprintf(stderr, "Somehow this swap is bad. newcost: %g. old: %g. diff: %g\n", newcost, current_cost_, current_cost_ - newcost);
+            return true;
+        }
+        assert(newcost <= current_cost_ || !std::fprintf(stderr, "newcost: %g. old: %g. diff: %g\n", newcost, current_cost_, current_cost_ - newcost));
         current_cost_ = newcost;
+        return false;
     }
 
     void run() {
@@ -387,10 +392,13 @@ struct LocalKMedSearcher {
                 if(current_best_index != IType(-1)) {
                     sol_.erase(current_best_center);
                     sol_.insert(current_best_index);
-                    recalculate();
+                    if(!recalculate()) {
+                        ++total;
+                        goto next;
+                    }
+                    sol_.insert(current_best_center);
+                    sol_.erase(current_best_index);
                     //diffthresh = current_cost_ / k_ * eps_;
-                    ++total;
-                    goto next;
                 }
             } else {
                 for(const auto oldcenter: sol_) {
@@ -401,8 +409,11 @@ struct LocalKMedSearcher {
                                 std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g. Threshold: %g.\n", pi, oldcenter, total + 1, current_cost_, val, diffthresh);
                                 sol_.erase(oldcenter);
                                 sol_.insert(pi);
-                                recalculate();
-                                //diffthresh = current_cost_ / k_ * eps_;
+                                if(recalculate()) {
+                                    sol_.insert(oldcenter);
+                                    sol_.erase(pi);
+                                    continue;
+                                }
                                 ++total;
                                 goto next; // Meaning we've swapped this guy out and will pick another one.
                             }
