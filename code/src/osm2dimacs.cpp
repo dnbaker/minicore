@@ -7,6 +7,7 @@
 #include <cstdlib>  // for std::exit
 #include <iostream> // for std::cout, std::cerr
 #include <cstdio>   // std::FILE *
+#include "robin-hood-hashing/src/include/robin_hood.h"
 
 // Allow any format of input files (XML, PBF, ...)
 #include <osmium/io/any_input.hpp>
@@ -24,7 +25,6 @@
 // For the NodeLocationForWays handler
 #include <osmium/handler/node_locations_for_ways.hpp>
 //#include <unordered_set>
-#include "flat_hash_map/flat_hash_map.hpp"
 #include <vector>
 #include <cinttypes>
 
@@ -40,7 +40,7 @@ using id_int_t = osmium::object_id_type;
 struct RoadLengthHandler : public osmium::handler::Handler {
 
     //double length = 0;
-    ska::flat_hash_set<id_int_t> node_ids_;
+    robin_hood::unordered_flat_set<id_int_t> node_ids_;
     struct EdgeD {
         id_int_t lhs_, rhs_;
         double dist_;
@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) {
         osmium::apply(reader, location_handler, road_length_handler);
 
         id_int_t assigned_id = 1;
-        ska::flat_hash_map<id_int_t, id_int_t> reassigner;
+        robin_hood::unordered_map<id_int_t, id_int_t> reassigner;
         reassigner.reserve(road_length_handler.node_ids_.size());
         std::fprintf(ofp, "c Auto-generated 9th DIMACS Implementation Challenge: Shortest Paths-format file\n"
                           "c From Open Street Maps [OSM] (https://openstreetmap.org)\n"

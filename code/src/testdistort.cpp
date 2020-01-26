@@ -218,8 +218,8 @@ int main(int argc, char **argv) {
             centers.insert(rng() % boost::num_vertices(g));
         }
         auto it = centers.begin();
-        for(size_t j = 0; j < r.size(); ++j)
-            r[j] = *it++;
+        for(size_t j = 0; j < r.size(); ++j, ++it)
+            r[j] = *it;
         std::sort(r.begin(), r.end());
     }
     coresets::UniformSampler<float, uint32_t> uniform_sampler(boost::num_vertices(g));

@@ -1,6 +1,3 @@
-[submodule "code/flat_hash_map"]
-	path = code/flat_hash_map
-	url = https://github.com/skarupke/flat_hash_map
 [submodule "code/aesctr"]
 	path = code/aesctr
 	url = https://github.com/dnbaker/aesctr

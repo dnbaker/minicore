@@ -24,14 +24,11 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
     if(mat.rows() != nrows || mat.columns() != ncol) throw std::invalid_argument("mat sizes don't match output");
     std::atomic<size_t> rows_complete;
     rows_complete.store(0);
-#ifndef NDEBUG
-    auto vtx_idx_map = boost::get(vertex_index, x);
-#endif
     if(sources_only) {
         // require that mat have nrows * ncol
         if(sources == nullptr) throw std::invalid_argument("sources_only requires non-null sources");
         unsigned nt = 1;
-#ifdef _OPENMP
+#if !defined(USE_BOOST_PARALLEL) && defined(_OPENMP)
         OMP_PRAGMA("omp parallel")
         {
             OMP_PRAGMA("omp single")
@@ -39,25 +36,32 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
         }
 #endif
         blaze::DynamicMatrix<float> working_space(nt, boost::num_vertices(x));
+#ifndef USE_BOOST_PARALLEL
         OMP_PFOR
+#endif
         for(size_t i = 0; i < nrows; ++i) {
             unsigned rowid = 0;
-#ifdef _OPENMP
-            rowid = omp_get_thread_num();
+#if !defined(USE_BOOST_PARALLEL)
+            OMP_ONLY(rowid = omp_get_thread_num();)
 #endif
             auto wrow(row(working_space, rowid BLAZE_CHECK_DEBUG));
             auto vtx = (*sources)[i];
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&wrow[0]));
             row(mat, i BLAZE_CHECK_DEBUG) = blaze::serial(blaze::elements(wrow, sources->data(), sources->size()));
             ++rows_complete;
-            std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", rows_complete.load(), nrows);
+#if 0
+            if(world.rank() == 0)
+#endif
+                std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", rows_complete.load(), nrows);
         }
     } else {
+#ifndef USE_BOOST_PARALLEL
         OMP_PFOR
+#endif
         for(size_t i = 0; i < nrows; ++i) {
             auto mr = row(~mat, i BLAZE_CHECK_DEBUG);
             auto vtx = sources ? (*sources)[i]: vertices[i];
-            assert(vtx == vtx_idx_map[vtx]);
+            assert(vtx == boost::get(vertex_index, x)[vtx]);
             assert(vtx < boost::num_vertices(x));
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&mr[0]));
             ++rows_complete;
@@ -89,10 +93,105 @@ graph2rammat(const Graph &x, std::string, const VType *sources=nullptr, bool sou
     return ret;
 }
 
+namespace detail {
 
-template<typename MatType, typename WFT=float, typename IType=std::uint32_t>
+template<typename T, typename Functor>
+void recursive_combinatorial_for_each(size_t nitems, unsigned r, T &ret, size_t npicks, const Functor &func) {
+    for(unsigned i = nitems; i >= r; i--) {
+        ret[r - 1] = i - 1;
+        if(r > 1) {
+            recursive_combinatorial_for_each(i - 1, r - 1, ret, npicks, func);
+        } else {
+            func(ret);
+        }
+    }
+}
+#if 0
+template<typename IType=uint32_t, size_t N>
+struct CombGenerator
+{
+    using combination_type = blaze::SmallVector<IType, N>;
+
+   CombGenerator(IType N, IType R) :
+       completed(N < 1 || R > N),
+       generated(0),
+       N(N), R(R)
+   {
+       for (IType c = 0; c < R; ++c)
+           current_.pushBack(c);
+   }
+
+   // true while there are more solutions
+   bool completed;
+
+   // count how many generated
+   size_t generated;
+
+   // get current_ent and compute next combination
+   combination_type next()
+   {
+       combination_type ret = current_;
+
+       // find what to increment
+       completed = true;
+       for (IType i = R - 1; i >= 0; --i)
+           if (current_[i] < N - R + i)
+           {
+               IType j = current_[i];
+               while (i <= R-1)
+                   current_[i++] = j++;
+               completed = false;
+               ++generated;
+               break;
+           }
+
+       return ret;
+   }
+
+private:
+
+   const IType N, R;
+   combination_type current_;
+};
+#endif
+
+}
+
+
+template<typename MatType, typename IType=std::uint32_t, size_t N=16>
+struct ExhaustiveSearcher {
+    using value_type = typename MatType::ElementType;
+    const MatType &mat_;
+    blaze::SmallArray<IType, N> bestsol_;
+    double current_cost_;
+    const unsigned k_;
+    ExhaustiveSearcher(const MatType &mat, unsigned k): mat_(mat), bestsol_(k_), current_cost_(std::numeric_limits<double>::max()), k_(k) {}
+    void run() {
+        blaze::SmallArray<IType, N> csol(k_);
+        const size_t nr = mat_.rows();
+        size_t nchecked = 0;
+        detail::recursive_combinatorial_for_each(nr, k_, csol, k_, [&](const auto &sol) {
+            const double cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, sol BLAZE_CHECK_DEBUG)));
+            ++nchecked;
+            if((nchecked & (nchecked - 1)) == 0)
+                std::fprintf(stderr, "iteration %zu completed\n", nchecked);
+            if(cost < current_cost_) {
+                std::fprintf(stderr, "Swapping to new center set with new cost = %g on iteration %zu\n", cost, nchecked);
+                current_cost_ = cost;
+                bestsol_ = sol;
+            }
+        });
+        std::fprintf(stderr, "Total number of combinations checked: %zu\n", nchecked);
+    }
+};
+
+template<typename MatType, typename IType=std::uint32_t>
+auto make_kmed_esearcher(const MatType &mat, unsigned k) {
+    return ExhaustiveSearcher<MatType, IType>(mat, k);
+}
+
+template<typename MatType, typename IType=std::uint32_t>
 struct LocalKMedSearcher {
-    using SolType = blaze::SmallArray<IType, 16>;
     using value_type = typename MatType::ElementType;
 
 
@@ -150,9 +249,9 @@ struct LocalKMedSearcher {
         for(size_t i = 0; i < mat_.columns(); ++i) {
             auto col = column(mat_, i);
             auto it = c.begin();
-            value_type minv = col[*it++];
-            while(it != c.end())
-                minv = std::min(col[*it++], minv);
+            value_type minv = col[*it];
+            while(++it != c.end())
+                minv = std::min(col[*it], minv);
             ret += minv;
         }
         return ret;
@@ -219,7 +318,6 @@ struct LocalKMedSearcher {
             }
         }
 #undef LOOP_CORE
-        //std::fprintf(stderr, "potential gain: %g. pg > thresh (%g)?%d\n", potential_gain, initial_cost_ / k_ * eps_, potential_gain > initial_cost_ / k_ * eps_);
         return potential_gain;
     }
 
@@ -318,9 +416,9 @@ struct LocalKMedSearcher {
     }
 };
 
-template<typename Mat, typename FT=float, typename IType=std::uint32_t>
+template<typename Mat, typename IType=std::uint32_t>
 auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, uint64_t seed=0, bool best_improvement=false) {
-    return LocalKMedSearcher<Mat, FT, IType>(mat, k, eps, seed, best_improvement);
+    return LocalKMedSearcher<Mat, IType>(mat, k, eps, seed, best_improvement);
 }
 
 

@@ -1,9 +1,15 @@
+#if defined(USE_BOOST_PARALLEL) && USE_BOOST_PARALLEL
+#include "boost/graph/use_mpi.hpp"
+#include "boost/graph/distributed/depth_first_search.hpp"
+#include "fgc/relaxed_heap.hpp"
+#endif
 #include "fgc/graph.h"
 #include "fgc/parse.h"
 #include "fgc/bicriteria.h"
 #include "fgc/coreset.h"
 #include "fgc/lsearch.h"
 #include "fgc/jv.h"
+#include "fgc/timer.h"
 #include <ctime>
 #include <getopt.h>
 #include "blaze/util/Serialization.h"
@@ -15,6 +21,7 @@ using namespace fgc;
 using namespace boost;
 
 
+
 template<typename Graph, typename ICon, typename FCon, typename IT, typename RetCon, typename CSWT>
 void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuffer,
                              const std::vector<coresets::IndexCoreset<IT, CSWT>> &coresets,
@@ -23,16 +30,14 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
     assert(ret.size() == coresets.size());
     const size_t nv = boost::num_vertices(x);
     const size_t ncs = coresets.size();
-    util::ScopedSyntheticVertex<Graph> vx(x);
     {
+        util::ScopedSyntheticVertex<Graph> vx(x);
         auto synthetic_vertex = vx.get();
         for(auto idx: indices)
             boost::add_edge(synthetic_vertex, idx, 0., x);
         boost::dijkstra_shortest_paths(x, synthetic_vertex, distance_map(&costbuffer[0]));
     }
-    if(z != 1.) {
-        costbuffer = pow(costbuffer, z);
-    }
+    if(z != 1.) costbuffer = pow(costbuffer, z);
     double fullcost = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:fullcost)")
     for(unsigned i = 0; i < nv; ++i) {
@@ -41,10 +46,13 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
     const double fcinv = 1. / fullcost;
     OMP_PFOR
     for(size_t j = 0; j < ncs; ++j) {
-        const auto indices = coresets[j].indices_.data();
-        const auto weights = coresets[j].weights_.data();
-        const size_t cssz = coresets[j].size();
+        // In theory, this could be 
+        auto &cs = coresets[j];
+        const auto indices = cs.indices_.data();
+        const auto weights = cs.weights_.data();
+        const size_t cssz = cs.size();
         double coreset_cost = 0.;
+        SK_UNROLL_8
         for(unsigned i = 0; i < cssz; ++i) {
             coreset_cost += costbuffer[indices[i]] * weights[i];
         }
@@ -61,15 +69,21 @@ max_component(GraphT &g) {
     if(ncomp != 1) {
         std::fprintf(stderr, "not connected. ncomp: %u\n", ncomp);
         std::vector<unsigned> counts(ncomp);
-        for(size_t i = 0, e = boost::num_vertices(g); i < e; ++counts[ccomp[i++]]);
+        const size_t nv = boost::num_vertices(g);
+        OMP_PFOR
+        for(size_t i = 0; i < nv; ++i) {
+            auto ci = ccomp[i];
+            OMP_ATOMIC
+            ++counts[ci];
+        }
         auto maxcomp = std::max_element(counts.begin(), counts.end()) - counts.begin();
         std::fprintf(stderr, "maxcmp %zu out of total %u\n", maxcomp, ncomp);
         flat_hash_map<uint64_t, uint64_t> remapper;
         size_t id = 0;
-        for(size_t i = 0; i < boost::num_vertices(g); ++i) {
-            if(ccomp[i] == maxcomp) {
+        SK_UNROLL_8
+        for(size_t i = 0; i < nv; ++i) {
+            if(ccomp[i] == maxcomp)
                 remapper[i] = id++;
-            }
         }
         GraphT newg(counts[maxcomp]);
         typename boost::property_map <fgc::Graph<undirectedS>,
@@ -129,6 +143,7 @@ int main(int argc, char **argv) {
     std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
     bool rectangular = false;
+    bool use_thorup_d = true;
     unsigned testing_num_centersets = 500;
     //size_t nsampled_max = 0;
     size_t rammax = 16uLL << 30;
@@ -142,7 +157,7 @@ int main(int argc, char **argv) {
     std::string fn = std::to_string(seed);
     unsigned num_thorup_trials = 15;
     bool test_samples_from_thorup_sampled = true;
-    for(int c;(c = getopt(argc, argv, "b:N:T:t:p:o:M:S:z:s:c:k:R:rh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "b:N:T:t:p:o:M:S:z:s:c:k:R:Drh?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
@@ -150,6 +165,7 @@ int main(int argc, char **argv) {
             case 'b': best_improvement = true; break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
             case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
+            case 'D': use_thorup_d = false; break;
             case 't': testing_num_centersets = std::atoi(optarg); break;
             case 'N': coreset_testing_num_iters = std::atoi(optarg); break;
             case 'T': num_thorup_trials = std::atoi(optarg); break;
@@ -198,22 +214,38 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "Reading from file: %s\n", input.data());
 
     // Parse the graph
+    util::Timer timer("parse time:");
     fgc::Graph<undirectedS, float> g = parse_by_fn(input);
+    timer.stop();
+    timer.display();
     std::fprintf(stderr, "nv: %zu. ne: %zu\n", boost::num_vertices(g), boost::num_edges(g));
     // Select only the component with the most edges.
+    timer.restart("max component:");
     max_component(g);
+    timer.report();
     assert_connected(g);
     // Assert that it's connected, or else the problem has infinite cost.
 
     //std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
     //sampled = thorup_sample(g, k, seed, nsampled_max);
-    auto [sampled, thorup_assignments] = thorup_sample_mincost(g, k, seed, num_thorup_trials);
+    std::vector<uint32_t> thorup_assignments;
+    timer.restart("thorup sampling:");
+    std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
+    if(use_thorup_d) {
+        std::tie(sampled, thorup_assignments) = thorup_sample_mincost(g, k, seed, num_thorup_trials);
+    } else {
+        sampled = thorup_sample(g, k, seed);
+        auto [_, thorup_assignments] = get_costs(g, sampled);
+    }
+    timer.report();
+    timer.restart("center counts:");
     std::vector<uint32_t> center_counts(sampled.size());
     OMP_PFOR
     for(size_t i = 0; i < thorup_assignments.size(); ++i) {
         OMP_ATOMIC
         ++center_counts[thorup_assignments[i]];
     }
+    timer.report();
     std::fprintf(stderr, "[Phase 1] Thorup sampling complete. Sampled %zu points from input graph: %zu vertices, %zu edges.\n", sampled.size(), boost::num_vertices(g), boost::num_edges(g));
 
     std::unique_ptr<DiskMat<float>> diskmatptr;
@@ -221,6 +253,7 @@ int main(int argc, char **argv) {
     const size_t ndatarows = rectangular ? boost::num_vertices(g): sampled.size();
     std::fprintf(stderr, "rect: %d. ndatarows: %zu\n", rectangular, ndatarows);
 
+    timer.restart("distance matrix generation:");
     using CM = blaze::CustomMatrix<float, blaze::aligned, blaze::padded, blaze::rowMajor>;
     if(sampled.size() * ndatarows * sizeof(float) > rammax) {
         std::fprintf(stderr, "%zu * %zu * sizeof(float) > rammax %zu\n", sampled.size(), ndatarows, rammax);
@@ -228,22 +261,29 @@ int main(int argc, char **argv) {
     } else {
         rammatptr.reset(new blaze::DynamicMatrix<float>(graph2rammat(g, fn, &sampled, !rectangular)));
     }
+    timer.report();
     CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), sampled.size(), ndatarows, diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
     if(z != 1.) {
         std::fprintf(stderr, "rescaling distances by the power of z\n");
+        timer.restart("z rescaling");
         assert(z > 1.);
         dm = pow(abs(dm), z);
+        timer.report();
     }
     if(!rectangular) {
+        timer.restart("weighting columns:");
         for(size_t i = 0; i < center_counts.size(); ++i) {
             column(dm, i) *= center_counts[i];
         }
+        timer.report();
     }
     std::fprintf(stderr, "[Phase 2] Distances gathered\n");
 
     // Perform Thorup sample before JV method.
+    timer.restart("local search:");
     auto lsearcher = make_kmed_lsearcher(dm, k, 1e-3, seed * seed + seed, best_improvement);
     lsearcher.run();
+    timer.report();
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
     // Free memory
@@ -259,16 +299,20 @@ int main(int argc, char **argv) {
     }
     // For locality when calculating
     std::sort(approx_v.data(), approx_v.data() + approx_v.size());
+    timer.restart("get costs:");
     auto [costs, assignments] = get_costs(g, approx_v);
     std::fprintf(stderr, "[Phase 4] Calculated costs and assignments for all points\n");
     if(z != 1.)
         costs = blaze::pow(costs, z);
+    timer.report();
     // Build a coreset importance sampler based on it.
     coresets::CoresetSampler<float, uint32_t> sampler, bflsampler;
+    timer.restart("make coreset samplers:");
     sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
                          nullptr, (((seed * 1337) ^ (seed * seed * seed)) - ((seed >> 32) ^ (seed << 32))), coresets::VARADARAJAN_XIAO);
     bflsampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
                          nullptr, (((seed * 1337) + (seed * seed * seed)) ^ (seed >> 32) ^ (seed << 32)), coresets::BRAVERMAN_FELDMAN_LANG);
+    timer.report();
     assert(sampler.sampler_.get());
     assert(bflsampler.sampler_.get());
     seed = std::mt19937_64(seed)();
@@ -277,6 +321,7 @@ int main(int argc, char **argv) {
     std::ofstream tblout(ofname);
     print_header(tblout, argv, testing_num_centersets, k, z, boost::num_vertices(g), boost::num_edges(g));
     blaze::DynamicMatrix<uint32_t> random_centers(testing_num_centersets, k);
+    timer.restart("generate random centers:");
     for(size_t i = 0; i < random_centers.rows(); ++i) {
         auto r = row(random_centers, i);
         wy::WyRand<uint32_t> rng(seed + i * testing_num_centersets);
@@ -293,6 +338,7 @@ int main(int argc, char **argv) {
             r[j] = *it;
         std::sort(r.begin(), r.end());
     }
+    timer.report();
     coresets::UniformSampler<float, uint32_t> uniform_sampler(costs.size());
     // We run the inner loop `coreset_testing_num_iters` times
     // and average the maximum distortion.
@@ -308,7 +354,7 @@ int main(int argc, char **argv) {
                                  meanmeandistortion(distvecsz, 0.),
                                  sumfdistortion(distvecsz, 0.), tmpfdistortion(distvecsz); // distortions on F
     blaze::DynamicVector<double> fdistbuffer(boost::num_vertices(g)); // For F, for comparisons
-    //
+    timer.restart("evaluate random centers " + std::to_string(coreset_testing_num_iters) + " times: ");
     for(size_t i = 0; i < coreset_testing_num_iters; ++i) {
         // The first ncs coresets are VX-sampled, the second ncs are BFL-sampled, and the last ncs
         // are uniformly randomly sampled.
@@ -355,6 +401,8 @@ int main(int argc, char **argv) {
         //std::cerr << "max  [" <<  i << "]\n" << maxdistortion;
         //std::cerr << "Center distortion:" << (sumfdistortion /(i + 1)) << '\n';
     }
+    timer.report();
+    timer.reset();
     sumfdistortion /= coreset_testing_num_iters;
     meanmaxdistortion /= coreset_testing_num_iters;
     meanmeandistortion /= coreset_testing_num_iters;

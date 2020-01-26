@@ -49,7 +49,10 @@ dmlrun: src/dmlsearch.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
 
 fast%: src/%.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -Ofast
+
+mpi%: src/%.cpp $(wildcard include/fgc/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -Ofast -DUSE_BOOST_PARALLEL=1
 
 %pg: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg -o $@
