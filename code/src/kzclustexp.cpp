@@ -142,12 +142,13 @@ int main(int argc, char **argv) {
     double z = 1.; // z = power of the distance norm
     std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
+    std::vector<unsigned> extra_ks;
     bool rectangular = false;
     bool use_thorup_d = true;
     unsigned testing_num_centersets = 500;
-    //size_t nsampled_max = 0;
     size_t rammax = 16uLL << 30;
     bool best_improvement = false;
+    bool local_search_all_vertices = false;
     unsigned coreset_testing_num_iters = 5;
     uint64_t seed = std::accumulate(argv, argv + argc, uint64_t(0),
         [](auto x, auto y) {
@@ -157,10 +158,12 @@ int main(int argc, char **argv) {
     std::string fn = std::to_string(seed);
     unsigned num_thorup_trials = 15;
     bool test_samples_from_thorup_sampled = true;
-    for(int c;(c = getopt(argc, argv, "b:N:T:t:p:o:M:S:z:s:c:k:R:Drh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "N:T:t:p:o:M:S:z:s:c:K:k:R:LbDrh?")) >= 0;) {
         switch(c) {
+            case 'K': extra_ks.push_back(std::atoi(optarg)); break;
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
+            case 'L': local_search_all_vertices = true; break;
             case 'r': rectangular = true; break;
             case 'b': best_improvement = true; break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
@@ -251,15 +254,15 @@ int main(int argc, char **argv) {
     std::unique_ptr<DiskMat<float>> diskmatptr;
     std::unique_ptr<blaze::DynamicMatrix<float>> rammatptr;
     const size_t ndatarows = rectangular ? boost::num_vertices(g): sampled.size();
-    std::fprintf(stderr, "rect: %d. ndatarows: %zu\n", rectangular, ndatarows);
+    std::fprintf(stderr, "rect: %d. lsearch all vertices: %d. ndatarows: %zu\n", rectangular, local_search_all_vertices, ndatarows);
 
     timer.restart("distance matrix generation:");
     using CM = blaze::CustomMatrix<float, blaze::aligned, blaze::padded, blaze::rowMajor>;
     if(sampled.size() * ndatarows * sizeof(float) > rammax) {
         std::fprintf(stderr, "%zu * %zu * sizeof(float) > rammax %zu\n", sampled.size(), ndatarows, rammax);
-        diskmatptr.reset(new DiskMat<float>(graph2diskmat(g, fn, &sampled, !rectangular)));
+        diskmatptr.reset(new DiskMat<float>(graph2diskmat(g, fn, &sampled, !rectangular, local_search_all_vertices)));
     } else {
-        rammatptr.reset(new blaze::DynamicMatrix<float>(graph2rammat(g, fn, &sampled, !rectangular)));
+        rammatptr.reset(new blaze::DynamicMatrix<float>(graph2rammat(g, fn, &sampled, !rectangular, local_search_all_vertices)));
     }
     timer.report();
     CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), sampled.size(), ndatarows, diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
@@ -298,9 +301,11 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "[Phase 3] Local search completed. Cost for solution: %g\n", ccost);
     // Calculate the costs of this solution
     std::vector<uint32_t> approx_v(med_solution.begin(), med_solution.end());
-    for(auto &i: approx_v) {
-        // since these solutions are indices into the subsampled set
-        i = sampled[i];
+    if(!local_search_all_vertices) {
+        for(auto &i: approx_v) {
+            // since these solutions are indices into the subsampled set
+            i = sampled[i];
+        }
     }
     // For locality when calculating
     std::sort(approx_v.data(), approx_v.data() + approx_v.size());

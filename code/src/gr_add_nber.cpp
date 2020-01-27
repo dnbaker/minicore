@@ -67,11 +67,8 @@ int main(int argc, char *argv[]) {
             while(!std::isspace(p[-1])) --p;
             double cdist = std::atof(p);
             max_intracity_distance = std::max(cdist, max_intracity_distance);
-            const char *lhptr = iline.data() + 2;
             nycids.insert(std::strtoull(iline.data() + 2, &p, 10)); // First id
-            const char *rhptr = p + 1;
             nycids.insert(std::strtoull(p + 1, nullptr, 10));       // Second id
-            //std::fprintf(stderr, "lh ptr: %s. rh ptr: %s. distance: %g\n", lhptr, rhptr, cdist);
             nyclines.push_back(std::move(iline));
         }
     } while(std::getline(ifs, iline));
@@ -123,7 +120,7 @@ int main(int argc, char *argv[]) {
     const double maxdist = 3200 * mile2meter;
     for(const auto pair: cityid2gidmap) {
         if(connected_to_nyc.find(pair.first) == connected_to_nyc.end())
-             nyclines.emplace_back(buf, std::sprintf(buf, "a %" PRIu64 " %" PRIu64 " %g", newnode_nyc, pair.second, maxdist));
+             nyclines.emplace_back(buf, std::sprintf(buf, "a %zu %" PRIu64 " %g", newnode_nyc, pair.second, maxdist));
     }
     const size_t nv = nycids.size() + cityid2gidmap.size();
     const size_t ne = nyclines.size();

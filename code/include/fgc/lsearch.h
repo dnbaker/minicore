@@ -17,16 +17,22 @@
 namespace fgc {
 
 template<typename Graph, typename MatType, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
-void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullptr, bool sources_only=false) {
-    const size_t nrows = sources ? sources->size(): boost::num_vertices(x);
-    size_t ncol = sources_only ? nrows: boost::num_vertices(x);
+void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullptr, bool only_sources_as_dests=false, bool all_sources=false) {
+    const size_t nrows = all_sources || (sources == nullptr) ? boost::num_vertices(x)
+                                                             : sources->size();
+    if(only_sources_as_dests && sources == nullptr) throw std::invalid_argument("only_sources_as_dests requires sources be non-null");
+    const size_t ncol = only_sources_as_dests ? sources->size(): boost::num_vertices(x);
     const typename boost::graph_traits<Graph>::vertex_iterator vertices = boost::vertices(x).first;
-    if(mat.rows() != nrows || mat.columns() != ncol) throw std::invalid_argument("mat sizes don't match output");
+    if(mat.rows() != nrows || mat.columns() != ncol) {
+        char buf[256];
+        throw std::invalid_argument(std::string(buf, std::sprintf(buf, "mat sizes (%zu rows, %zu col) don't match output requirements (%zu/%zu)\n",
+                                                                  mat.rows(), mat.columns(), nrows, ncol)));
+    }
     std::atomic<size_t> rows_complete;
     rows_complete.store(0);
-    if(sources_only) {
+    if(only_sources_as_dests) {
         // require that mat have nrows * ncol
-        if(sources == nullptr) throw std::invalid_argument("sources_only requires non-null sources");
+        if(sources == nullptr) throw std::invalid_argument("only_sources_as_dests requires non-null sources");
         unsigned nt = 1;
 #if !defined(USE_BOOST_PARALLEL) && defined(_OPENMP)
         OMP_PRAGMA("omp parallel")
@@ -44,15 +50,12 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
 #if !defined(USE_BOOST_PARALLEL)
             OMP_ONLY(rowid = omp_get_thread_num();)
 #endif
+            auto vtx = all_sources ? vertices[i]: (*sources)[i];
             auto wrow(row(working_space, rowid BLAZE_CHECK_DEBUG));
-            auto vtx = (*sources)[i];
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&wrow[0]));
             row(mat, i BLAZE_CHECK_DEBUG) = blaze::serial(blaze::elements(wrow, sources->data(), sources->size()));
             ++rows_complete;
-#if 0
-            if(world.rank() == 0)
-#endif
-                std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", rows_complete.load(), nrows);
+            std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", rows_complete.load(), nrows);
         }
     } else {
 #ifndef USE_BOOST_PARALLEL
@@ -60,8 +63,7 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
 #endif
         for(size_t i = 0; i < nrows; ++i) {
             auto mr = row(~mat, i BLAZE_CHECK_DEBUG);
-            auto vtx = sources ? (*sources)[i]: vertices[i];
-            assert(vtx == boost::get(vertex_index, x)[vtx]);
+            auto vtx = all_sources || sources == nullptr ? vertices[i]: (*sources)[i];
             assert(vtx < boost::num_vertices(x));
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&mr[0]));
             ++rows_complete;
@@ -72,24 +74,28 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
 
 template<typename Graph, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
 DiskMat<typename Graph::edge_property_type::value_type>
-graph2diskmat(const Graph &x, std::string path, const VType *sources=nullptr, bool sources_only=false) {
+graph2diskmat(const Graph &x, std::string path, const VType *sources=nullptr, bool only_sources_as_dests=false, bool all_sources=false) {
     static_assert(std::is_arithmetic<typename Graph::edge_property_type::value_type>::value, "This should be floating point, or at least arithmetic");
     using FT = typename Graph::edge_property_type::value_type;
-    size_t nv = sources && sources_only ? sources->size(): boost::num_vertices(x), nrows = sources ? sources->size(): nv;
+    size_t nv = sources && only_sources_as_dests ? sources->size(): boost::num_vertices(x);
+    size_t nrows = all_sources || !sources ? boost::num_vertices(x): sources->size();
+    std::fprintf(stderr, "all sources: %d. nrows: %zu\n", all_sources, nrows);
     DiskMat<FT> ret(nrows, nv, path);
-    fill_graph_distmat(x, ret, sources, sources_only);
+    fill_graph_distmat(x, ret, sources, only_sources_as_dests, all_sources);
     return ret;
 }
 
 
 template<typename Graph, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
 blz::DynamicMatrix<typename Graph::edge_property_type::value_type>
-graph2rammat(const Graph &x, std::string, const VType *sources=nullptr, bool sources_only=false) {
+graph2rammat(const Graph &x, std::string, const VType *sources=nullptr, bool only_sources_as_dests=false, bool all_sources=false) {
     static_assert(std::is_arithmetic<typename Graph::edge_property_type::value_type>::value, "This should be floating point, or at least arithmetic");
     using FT = typename Graph::edge_property_type::value_type;
-    size_t nv = sources && sources_only ? sources->size(): boost::num_vertices(x), nrows = sources ? sources->size(): nv;
+    size_t nv = sources && only_sources_as_dests ? sources->size(): boost::num_vertices(x);
+    size_t nrows = all_sources || !sources ? boost::num_vertices(x): sources->size();
+    std::fprintf(stderr, "all sources: %d. nrows: %zu\n", all_sources, nrows);
     blz::DynamicMatrix<FT>  ret(nrows, nv);
-    fill_graph_distmat(x, ret, sources, sources_only);
+    fill_graph_distmat(x, ret, sources, only_sources_as_dests, all_sources);
     return ret;
 }
 

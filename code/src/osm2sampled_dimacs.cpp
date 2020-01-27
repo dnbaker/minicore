@@ -118,7 +118,7 @@ int main(int argc, char* argv[]) {
                      road_length_handler.node_ids_.size(), road_length_handler.edges_.size());
         for(const auto [id, location]: road_length_handler.node_ids_) {
             reassigner[id] = assigned_id;
-            std::fprintf(ofp, "c %" PRId64 "->%" PRId64 "\n", id, assigned_id++);
+            std::fprintf(ofp, "c %" PRId64 "->%" PRId64 "\t%0.12g\t%0.12g\n", id, assigned_id++, location.first, location.second);
         }
         for(const auto &edge: road_length_handler.edges_) {
             auto lhs = reassigner[edge.lhs_], rhs = reassigner[edge.rhs_];
