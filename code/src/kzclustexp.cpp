@@ -20,6 +20,17 @@ template<typename T> class TD;
 using namespace fgc;
 using namespace boost;
 
+static size_t str2nbytes(const char *s) {
+    if(!s) return 0;
+    size_t ret = std::strtoull(s, const_cast<char **>(&s), 10);
+    switch(*s) {
+        case 'G': case 'g': ret <<= 10; [[fallthrough]];
+        case 'M': case 'm': ret <<= 10; [[fallthrough]];
+        case 'K': case 'k': ret <<= 10;
+    }
+    return ret;
+}
+
 
 
 template<typename Graph, typename ICon, typename FCon, typename IT, typename RetCon, typename CSWT>
@@ -60,9 +71,25 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
     }
 }
 
+struct latlon_t: public std::pair<double, double> {
+    using super = std::pair<double, double>;
+    template<typename...Args>
+    latlon_t(Args &&...args): super(std::forward<Args>(args)...) {}
+    template<typename T>
+    latlon_t &operator=(const T &x) {
+        return super::operator=(x);
+    }
+    
+    auto lat() const {return this->first;}
+    auto lon() const {return this->second;}
+    auto &lat() {return this->first;}
+    auto &lon() {return this->second;}
+};
+
+
 template<typename GraphT>
 GraphT &
-max_component(GraphT &g) {
+max_component(GraphT &g, std::vector<latlon_t> &coordinates) {
     auto ccomp = std::make_unique<uint32_t []>(boost::num_vertices(g));
     assert(&ccomp[0] == ccomp.get());
     unsigned ncomp = boost::connected_components(g, ccomp.get());
@@ -84,6 +111,12 @@ max_component(GraphT &g) {
         for(size_t i = 0; i < nv; ++i) {
             if(ccomp[i] == maxcomp)
                 remapper[i] = id++;
+        }
+        if(coordinates.size()) {
+            std::vector<latlon_t> newcoordinates(counts[maxcomp]);
+            for(const auto pair: remapper)
+                newcoordinates[pair.second] = coordinates[pair.first];
+            std::swap(newcoordinates, coordinates);
         }
         GraphT newg(counts[maxcomp]);
         typename boost::property_map <fgc::Graph<undirectedS>,
@@ -125,16 +158,66 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
 void usage(const char *ex) {
     std::fprintf(stderr, "usage: %s <opts> [input file or ../data/dolphins.graph]\n"
                          "-k\tset k [12]\n"
+                         "-z\tset z [1.]\n"
                          "-c\tAppend coreset size. Default: {100} (if empty)\n"
                          "-s\tPath to write coreset sampler to\n"
                          "-S\tSet maximum size of Thorup subsampled data. Default: infinity\n"
                          "-M\tSet maxmimum memory size to use. Default: 16GiB\n"
-                         "-R\tSet random seed. Default: hash based on command-line arguments\n"
-                         "-z\tset z [1.]\n"
                          "-t\tSet number of sampled centers to test [500]\n"
-                         "-T\tNumber of Thorup sampling trials [15]\n",
-                 ex);
+                         "-T\tNumber of Thorup sampling trials [15]\n"
+                         "-K\tAppend an 'extra' k to perform evaluations against. This must be smaller than the 'k' parameter.\n"
+                         "  \tThe purpose of this is to demonstrate that a coreset for a k2 s.t. k2 > k1 is also a coreset for k1."
+                         "-R\tSet random seed. Default: hash based on command-line arguments\n"
+                         "-D\tUse full Thorup E algorithm (use the union of a number of Thorup D iterations for local search instead of the best-performing Thorup D sample).\n"
+                         "-L\tLocal search for all potential centers -- use all vertices as potential sources, not just subsampled centers.\n"
+                         "  \tThis has the potential for being more accurate than more focused searches, at the expense of both space and time\n"
+                         "-r\tUse all potential destinations when generating approximate solution instead of only Thorup subsampled points\n"
+                         "  \tThis has the potential for being more accurate than more focused searches, at the expense of both space and time\n"
+                         "-b\tUse the best improvement at each iteration of local search instead of taking the first one found\n"
+                , ex);
     std::exit(1);
+}
+
+struct BoundingBoxData {
+    double latlo = 0., lathi = 0., lonlo = 0., lonhi = 0.;
+    double p_box = 0., p_nobox = 0.;
+    bool set() const {return latlo || lathi || lonlo || lonhi;}
+};
+
+BoundingBoxData parse_bbdata(const char *s) {
+    /*
+     * lon,lat,lon,lat
+     * %f,%f,%f,%f[,%f][,%f]
+     */
+    double llon, llat, ulon, ulat, highprob = 0.99, loprob=0.01;
+    llon = std::strtod(s, const_cast<char **>(&s));
+    llat = std::strtod(++s, const_cast<char **>(&s));
+    ulon = std::strtod(++s, const_cast<char **>(&s));
+    ulat = std::strtod(++s, const_cast<char **>(&s));
+    
+    if(*s == ',') {
+        highprob = std::strtod(++s, const_cast<char **>(&s));
+        if(*s == ',') {
+            loprob = std::strtod(++s, const_cast<char **>(&s));
+        }
+    }
+    assert(loprob < highprob);
+    return {llat, ulat, llon, ulon, highprob, loprob};
+}
+
+
+void parse_coordinates(std::string fn, std::vector<latlon_t> &ret) {
+    std::ifstream inh(fn);
+    std::string line;
+    while(line.empty() || line.front() != 'p')
+        std::getline(inh, line);
+    for(size_t offset;std::getline(inh, line) && (offset = line.find("->")) != line.npos;) {
+        const char *s = line.data() + offset + 2;
+        size_t index = std::strtoull(s, const_cast<char **>(&s), 10);
+        double lat = std::strtod(++s, const_cast<char **>(&s));
+        double lon = std::strtod(++s, const_cast<char **>(&s));
+        ret[index - 1] = {lat, lon};
+    }
 }
 
 int main(int argc, char **argv) {
@@ -156,9 +239,11 @@ int main(int argc, char **argv) {
         }
     );
     std::string fn = std::to_string(seed);
+    std::string coreset_sampler_path;
     unsigned num_thorup_trials = 15;
     bool test_samples_from_thorup_sampled = true;
-    for(int c;(c = getopt(argc, argv, "N:T:t:p:o:M:S:z:s:c:K:k:R:LbDrh?")) >= 0;) {
+    BoundingBoxData bbox;
+    for(int c;(c = getopt(argc, argv, "B:S:N:T:t:p:o:M:z:s:c:K:k:R:LbDrh?")) >= 0;) {
         switch(c) {
             case 'K': extra_ks.push_back(std::atoi(optarg)); break;
             case 'k': k = std::atoi(optarg); break;
@@ -167,17 +252,22 @@ int main(int argc, char **argv) {
             case 'r': rectangular = true; break;
             case 'b': best_improvement = true; break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
-            case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
+            case 'M': rammax = str2nbytes(optarg); break;
             case 'D': use_thorup_d = false; break;
             case 't': testing_num_centersets = std::atoi(optarg); break;
+            case 'B': bbox = parse_bbdata(optarg); assert(bbox.set()); break;
             case 'N': coreset_testing_num_iters = std::atoi(optarg); break;
             case 'T': num_thorup_trials = std::atoi(optarg); break;
+            case 'S': coreset_sampler_path = optarg; break;
             case 'p': OMP_SET_NT(std::atoi(optarg)); break;
             case 'o': output_prefix = optarg; break;
-            //case 's': fn = optarg; break;
             case 'c': coreset_sizes.push_back(std::atoi(optarg)); break;
-            case 'S': std::fprintf(stderr, "-S removed\n"); break;
             case 'h': default: usage(argv[0]);
+        }
+    }
+    for(auto ek: extra_ks) {
+        if(ek > k) {
+            throw std::runtime_error("extra ks must be less than k");
         }
     }
     if(coreset_sizes.empty()) {
@@ -215,18 +305,26 @@ int main(int argc, char **argv) {
     std::string input = argc == optind ? "../data/dolphins.graph": const_cast<const char *>(argv[optind]);
     std::srand(seed);
     std::fprintf(stderr, "Reading from file: %s\n", input.data());
+    std::vector<latlon_t> coordinates;
 
     // Parse the graph
     util::Timer timer("parse time:");
     fgc::Graph<undirectedS, float> g = parse_by_fn(input);
     timer.stop();
     timer.display();
+    if(bbox.set()) {
+        if(input.find(".gr") != input.npos && input.find(".graph") == input.npos) {
+            coordinates.resize(boost::num_vertices(g));
+            parse_coordinates(input, coordinates);
+        } else throw std::runtime_error("wrong format");
+    }
     std::fprintf(stderr, "nv: %zu. ne: %zu\n", boost::num_vertices(g), boost::num_edges(g));
     // Select only the component with the most edges.
     timer.restart("max component:");
-    max_component(g);
+    max_component(g, coordinates);
     timer.report();
     assert_connected(g);
+    assert(!bbox.set() || coordinates.size() == boost::num_vertices(g));
     // Assert that it's connected, or else the problem has infinite cost.
 
     //std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
@@ -322,12 +420,15 @@ int main(int argc, char **argv) {
                          nullptr, (((seed * 1337) ^ (seed * seed * seed)) - ((seed >> 32) ^ (seed << 32))), coresets::VARADARAJAN_XIAO);
     bflsampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
                          nullptr, (((seed * 1337) + (seed * seed * seed)) ^ (seed >> 32) ^ (seed << 32)), coresets::BRAVERMAN_FELDMAN_LANG);
+    if(!coreset_sampler_path.empty()) {
+        sampler.write(coreset_sampler_path);
+    }
     timer.report();
     assert(sampler.sampler_.get());
     assert(bflsampler.sampler_.get());
     seed = std::mt19937_64(seed)();
     wy::WyRand<uint32_t, 2> rng(seed);
-    std::string ofname = output_prefix + ".table_out.tsv";
+    std::string ofname = output_prefix + ".table_out." + std::to_string(k) + ".tsv";
     std::ofstream tblout(ofname);
     print_header(tblout, argv, testing_num_centersets, k, z, boost::num_vertices(g), boost::num_edges(g));
     blaze::DynamicMatrix<uint32_t> random_centers(testing_num_centersets, k);
@@ -403,8 +504,8 @@ int main(int argc, char **argv) {
             }
         }
         calculate_distortion_centerset(g, approx_v, fdistbuffer, coresets, tmpfdistortion, z);
-        meanmaxdistortion += maxdistortion;
         sumfdistortion += tmpfdistortion;
+        meanmaxdistortion += maxdistortion;
         meandistortion /= random_centers.rows();
         meanmeandistortion += meandistortion;
         //std::cerr << "mean [" << i << "]\n" << meandistortion;
@@ -425,6 +526,51 @@ int main(int argc, char **argv) {
                << '\t' << sumfdistortion[i + ncs]
                << '\t' << sumfdistortion[i + ncs * 2]
                << '\n';
+    }
+    for(auto ek: extra_ks) {
+        std::string ofname_ok = output_prefix + ".table_out.ok." + std::to_string(ek) + ".tsv";
+        std::ofstream ofs(ofname_ok);
+        blaze::DynamicVector<double> maxdistortion(distvecsz, std::numeric_limits<double>::min()),
+                                     meandistortion(distvecsz, 0.);
+        auto random_smallerk_centers = submatrix(random_centers, 0, 0, random_centers.rows(), ek);
+        std::vector<coresets::IndexCoreset<uint32_t, float>> coresets;
+        coresets.reserve(ncs * 3);
+        for(auto coreset_size: coreset_sizes) {
+            coresets.emplace_back(sampler.sample(coreset_size));
+        }
+        for(auto coreset_size: coreset_sizes) {
+            coresets.emplace_back(bflsampler.sample(coreset_size));
+        }
+        for(auto coreset_size: coreset_sizes) {
+            coresets.emplace_back(uniform_sampler.sample(coreset_size));
+        }
+        assert(coresets.size() == distvecsz);
+        OMP_PFOR
+        for(size_t i = 0; i < random_centers.rows(); ++i) {
+            auto r = row(random_smallerk_centers, i BLAZE_CHECK_DEBUG);
+            auto rc = row(random_smallerk_centers, i);
+            assert(rc.size() == k);
+            blaze::DynamicVector<double> distbuffer(boost::num_vertices(g));
+            blaze::DynamicVector<double> currentdistortion(coresets.size());
+            decltype(g) gcopy(g);
+            calculate_distortion_centerset(gcopy, rc, distbuffer, coresets, currentdistortion, z);
+            OMP_CRITICAL
+            {
+                maxdistortion = blaze::serial(max(maxdistortion, currentdistortion));
+            }
+            OMP_CRITICAL
+            {
+                meandistortion = blaze::serial(meandistortion + currentdistortion);
+            }
+        }
+        meandistortion /= random_centers.rows();
+        for(size_t i = 0; i < ncs; ++i) {
+            ofs << coreset_sizes[i]
+                << '\t' << maxdistortion[i] << '\t' << meandistortion[i]
+                << '\t' << maxdistortion[i + ncs] << '\t' << meandistortion[i + ncs]
+                << '\t' << maxdistortion[i + ncs * 2] << '\t' << meandistortion[i + ncs * 2]
+                << '\n';
+        }
     }
     return EXIT_SUCCESS;
 }

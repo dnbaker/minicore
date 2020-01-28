@@ -116,7 +116,7 @@ void recursive_combinatorial_for_each(size_t nitems, unsigned r, T &ret, size_t 
 template<typename IType=uint32_t, size_t N>
 struct CombGenerator
 {
-    using combination_type = blaze::SmallVector<IType, N>;
+    using combination_type = blaze::SmallArray<IType, N>;
 
    CombGenerator(IType N, IType R) :
        completed(N < 1 || R > N),

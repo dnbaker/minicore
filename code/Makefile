@@ -63,6 +63,7 @@ mpi%: src/%.cpp $(wildcard include/fgc/*.h)
 %f: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -fopenmp -o $@
 
+
 osm2dimacs: src/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \

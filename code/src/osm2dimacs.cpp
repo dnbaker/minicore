@@ -28,6 +28,8 @@
 #include <vector>
 #include <cinttypes>
 
+#include "fgc/Graph.h"
+
 // The type of index used. This must match the include file above
 using index_type = osmium::index::map::FlexMem<osmium::unsigned_object_id_type, osmium::Location>;
 
@@ -37,10 +39,11 @@ using location_handler_type = osmium::handler::NodeLocationsForWays<index_type>;
 // This handler only implements the way() function, we are not interested in
 // any other objects.
 using id_int_t = osmium::object_id_type;
-struct RoadLengthHandler : public osmium::handler::Handler {
+struct OSM2DimacsHandler : public osmium::handler::Handler {
+    using LatLon = std::pair<double, double>;
 
     //double length = 0;
-    robin_hood::unordered_flat_set<id_int_t> node_ids_;
+    robin_hood::unordered_flat_map<id_int_t, LatLon> node_ids_;
     struct EdgeD {
         id_int_t lhs_, rhs_;
         double dist_;
@@ -59,25 +62,24 @@ struct RoadLengthHandler : public osmium::handler::Handler {
         size_t j = i;
         while(++j < nodes.size()) {
             if(!nodes[j].location()) continue;
-#define ref positive_ref
             auto jloc = nodes[j].location();
-            node_ids_.insert(nodes[i].ref());
-            node_ids_.insert(nodes[j].ref());
+            node_ids_.emplace(nodes[i].positive_ref(), std::make_pair(nodes[i].location().lat(), nodes[i].location().lon()));
+            node_ids_.emplace(nodes[j].positive_ref(), std::make_pair(jloc.lat(), jloc.lon()));
             auto dist = osmium::geom::haversine::distance(nodes[i].location(), jloc);
-            edges_.push_back(EdgeD({static_cast<id_int_t>(nodes[i].ref()), static_cast<id_int_t>(nodes[j].ref()), dist}));
-#undef ref
+            edges_.push_back(EdgeD({static_cast<id_int_t>(nodes[i].positive_ref()), static_cast<id_int_t>(nodes[j].positive_ref()), dist}));
             i = j;
         }
     }
 
-}; // struct RoadLengthHandler
+}; // struct OSM2DimacsHandler
 
 int main(int argc, char* argv[]) {
     if (argc < 2 || std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argv + argc) {
-        std::cerr << "Usage: " << argv[0] << " OSMFILE <output ? output: stdout>\n";
+        std::cerr << "Usage: " << argv[0] << " OSMFILE <high_freq_bbox> <output ? output: stdout>\n";
         std::cerr << "Consumes an osm file and emits a DIMACS .gr file which can then be used.\n"
                   << "which ultimately could be transformed into a graph parser, but\n"
-                  << "I see no reason to not just let it be a preprocessing step\n";
+                  << "I see no reason to not just let it be a preprocessing step\n"
+                  << "Additionally annotates positions with their latitude and longitude.\n";
         std::exit(1);
     }
     std::FILE *ofp = argc < 3 ? stdout: std::fopen(argv[2], "w");
@@ -97,7 +99,7 @@ int main(int argc, char* argv[]) {
         location_handler.ignore_errors();
 
         // Our handler defined above
-        RoadLengthHandler road_length_handler;
+        OSM2DimacsHandler road_length_handler;
 
         // Apply input data to first the location handler and then our own handler
         osmium::apply(reader, location_handler, road_length_handler);
@@ -111,9 +113,9 @@ int main(int argc, char* argv[]) {
                           "c Following this line are node reassignments from ids to parsed node ids, all marked as comments lines.\n"
                           "p sp %zu %zu\n",
                      road_length_handler.node_ids_.size(), road_length_handler.edges_.size());
-        for(const auto id: road_length_handler.node_ids_) {
+        for(const auto [id, location]: road_length_handler.node_ids_) {
             reassigner[id] = assigned_id;
-            std::fprintf(ofp, "c %" PRId64 "->%" PRId64 "\n", id, assigned_id++);
+            std::fprintf(ofp, "c %" PRId64 "->%" PRId64 "\t%0.12g\t%0.12g\n", id, assigned_id++, location.first, location.second);
         }
         for(const auto &edge: road_length_handler.edges_) {
             auto lhs = reassigner[edge.lhs_], rhs = reassigner[edge.rhs_];
