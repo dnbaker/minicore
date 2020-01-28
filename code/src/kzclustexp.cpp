@@ -184,7 +184,9 @@ struct BoundingBoxData {
     double p_box = 0.99, p_nobox = 0.01;
     bool set() const {return latlo || lathi || lonlo || lonhi;}
     bool valid() const {
-        return lathi >= latlo && lonhi >= lonlo;
+        return lathi >= latlo && lonhi >= lonlo
+            && p_box <= 1. && p_box >= 0.
+            && p_nobox <= 1. && p_nobox >= 0.;
     }
     void print(std::FILE *fp=stderr) const {
         std::fprintf(fp, "lat (%g->%g), lon (%g->%g), probabilities: %f/%f\n", latlo, lathi, lonlo, lonhi, p_box, p_nobox);
@@ -337,12 +339,34 @@ int main(int argc, char **argv) {
     fgc::Graph<undirectedS, float> g = parse_by_fn(input);
     timer.stop();
     timer.display();
+    using Vertex = typename boost::graph_traits<decltype(g)>::vertex_descriptor;
+    std::vector<Vertex> in_vertices, out_vertices, bbox_vertices;
+    size_t nsampled_in = 0, nsampled_out = 0;
     if(bbox.set()) {
         assert(bbox.valid());
         if(input.find(".gr") != input.npos && input.find(".graph") == input.npos) {
             coordinates.resize(boost::num_vertices(g));
             parse_coordinates(input, coordinates, bbox);
         } else throw std::runtime_error("wrong format");
+        wy::WyRand<uint32_t, 2> bbox_rng(coordinates.size() + seed);
+        std::vector<Vertex> out_vertices;
+        std::uniform_real_distribution<float> urd;
+        for(const auto vtx: g.vertices()) {
+            if(bbox.contains(coordinates[vtx])) {
+                in_vertices.push_back(vtx);
+                if(urd(bbox_rng) < bbox.p_box) {
+                    bbox_vertices.push_back(vtx);
+                    ++nsampled_in;
+                }
+            } else {
+                out_vertices.push_back(vtx);
+                if(urd(bbox_rng) < bbox.p_nobox) {
+                    bbox_vertices.push_back(vtx);
+                    ++nsampled_out;
+                }
+            }
+        }
+        std::fprintf(stderr, "sampled in: %zu. sampled out: %zu. sample probs: %g, %g\n", nsampled_in, nsampled_out, bbox.p_box, bbox.p_nobox);
     }
     std::fprintf(stderr, "nv: %zu. ne: %zu\n", boost::num_vertices(g), boost::num_edges(g));
     // Select only the component with the most edges.
