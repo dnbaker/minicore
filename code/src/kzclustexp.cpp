@@ -79,11 +79,12 @@ struct latlon_t: public std::pair<double, double> {
     latlon_t &operator=(const T &x) {
         return super::operator=(x);
     }
+    std::string to_string() const {return std::to_string(lon()) + ',' + std::to_string(lat());}
     
-    auto lat() const {return this->first;}
-    auto lon() const {return this->second;}
-    auto &lat() {return this->first;}
-    auto &lon() {return this->second;}
+    double lat() const {return this->first;}
+    double lon() const {return this->second;}
+    double &lat() {return this->first;}
+    double &lon() {return this->second;}
 };
 
 
@@ -180,8 +181,18 @@ void usage(const char *ex) {
 
 struct BoundingBoxData {
     double latlo = 0., lathi = 0., lonlo = 0., lonhi = 0.;
-    double p_box = 0., p_nobox = 0.;
+    double p_box = 0.99, p_nobox = 0.01;
     bool set() const {return latlo || lathi || lonlo || lonhi;}
+    bool valid() const {
+        return lathi >= latlo && lonhi >= lonlo;
+    }
+    void print(std::FILE *fp=stderr) const {
+        std::fprintf(fp, "lat (%g->%g), lon (%g->%g), probabilities: %f/%f\n", latlo, lathi, lonlo, lonhi, p_box, p_nobox);
+    }
+    bool contains(latlon_t pt) const {
+        return (pt.lat() <= lathi && pt.lat() >= latlo)
+            && (pt.lon() <= lonhi && pt.lon() >= lonlo);
+    }
 };
 
 BoundingBoxData parse_bbdata(const char *s) {
@@ -189,6 +200,7 @@ BoundingBoxData parse_bbdata(const char *s) {
      * lon,lat,lon,lat
      * %f,%f,%f,%f[,%f][,%f]
      */
+    std::fprintf(stderr, "parsing %s\n", s);
     double llon, llat, ulon, ulat, highprob = 0.99, loprob=0.01;
     llon = std::strtod(s, const_cast<char **>(&s));
     llat = std::strtod(++s, const_cast<char **>(&s));
@@ -202,13 +214,16 @@ BoundingBoxData parse_bbdata(const char *s) {
         }
     }
     assert(loprob < highprob);
-    return {llat, ulat, llon, ulon, highprob, loprob};
+    BoundingBoxData ret{llat, ulat, llon, ulon, highprob, loprob};
+    ret.print(stderr);
+    return ret;
 }
 
 
-void parse_coordinates(std::string fn, std::vector<latlon_t> &ret) {
+void parse_coordinates(std::string fn, std::vector<latlon_t> &ret, BoundingBoxData bbd) {
     std::ifstream inh(fn);
     std::string line;
+    size_t inout[2]{0, 0};
     while(line.empty() || line.front() != 'p')
         std::getline(inh, line);
     for(size_t offset;std::getline(inh, line) && (offset = line.find("->")) != line.npos;) {
@@ -216,8 +231,18 @@ void parse_coordinates(std::string fn, std::vector<latlon_t> &ret) {
         size_t index = std::strtoull(s, const_cast<char **>(&s), 10);
         double lat = std::strtod(++s, const_cast<char **>(&s));
         double lon = std::strtod(++s, const_cast<char **>(&s));
-        ret[index - 1] = {lat, lon};
+        ret.at(index - 1) = {lat, lon};
     }
+    OMP_PFOR
+    for(size_t i = 0; i < ret.size(); ++i) {
+        OMP_ATOMIC
+        ++inout[bbd.contains(ret[i])];
+#ifndef NDEBUG
+        if(i < 50u)
+            std::cerr << ret[i].to_string() << '\n';
+#endif
+    }
+    std::cerr << "in: " << inout[1] << ". out: " << inout[0] << '\n';
 }
 
 int main(int argc, char **argv) {
@@ -313,9 +338,10 @@ int main(int argc, char **argv) {
     timer.stop();
     timer.display();
     if(bbox.set()) {
+        assert(bbox.valid());
         if(input.find(".gr") != input.npos && input.find(".graph") == input.npos) {
             coordinates.resize(boost::num_vertices(g));
-            parse_coordinates(input, coordinates);
+            parse_coordinates(input, coordinates, bbox);
         } else throw std::runtime_error("wrong format");
     }
     std::fprintf(stderr, "nv: %zu. ne: %zu\n", boost::num_vertices(g), boost::num_edges(g));
