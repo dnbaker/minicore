@@ -240,11 +240,6 @@ int main(int argc, char **argv) {
             case 'h': default: usage(argv[0]);
         }
     }
-    for(auto ek: extra_ks) {
-        if(ek > k) {
-            throw std::runtime_error("extra ks must be less than k");
-        }
-    }
     if(coreset_sizes.empty()) {
         coreset_sizes = {
 #if USE3
