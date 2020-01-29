@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
         auto it = centers.begin();
         for(size_t j = 0; j < r.size(); ++j, ++it)
             r[j] = *it;
-        std::sort(r.begin(), r.end());
+        shared::sort(r.begin(), r.end());
     }
     coresets::UniformSampler<float, uint32_t> uniform_sampler(boost::num_vertices(g));
     // We run the inner loop `coreset_testing_num_iters` times

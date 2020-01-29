@@ -1,5 +1,6 @@
 #pragma once
 #include "robin-hood-hashing/src/include/robin_hood.h"
+#include "pdqsort/pdqsort.h"
 #include "aesctr/wy.h"
 #include "macros.h"
 #include <system_error>
@@ -47,6 +48,11 @@ struct Deleter {
         std::free(const_cast<void *>(x));
     }
 };
+
+template<typename It, typename Cmp=std::less<>>
+INLINE void sort(It beg, It end, Cmp cmp=Cmp()) {
+    pdqsort(beg, end, cmp);
+}
 
 } // shared
 } // fgc

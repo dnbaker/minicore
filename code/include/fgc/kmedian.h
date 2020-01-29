@@ -3,7 +3,6 @@
 #define FGC_KMEDIAN_H__
 #include "kmeans.h"
 #include <algorithm>
-#include "pdqsort/pdqsort.h"
 
 namespace fgc {
 namespace coresets {
@@ -15,7 +14,7 @@ static inline auto weighted_med(FT *ptr, FT *weights, size_t n, std::pair<FT,FT>
     for(size_t i = 0; i < n; ++i) {
         cbuf[i] = {ptr[i], weights[i]};
     }
-    pdqsort(cbuf, cbuf + n, [](std::pair<FT, FT> x, std::pair<FT, FT> y) {return x.first < y.first;});
+    shared::sort(cbuf, cbuf + n, [](std::pair<FT, FT> x, std::pair<FT, FT> y) {return x.first < y.first;});
     auto wsum = 0.;
     for(auto it = &cbuf[0], eit = &cbuf[n]; it < eit; ++it) {
         auto &i = *it;
@@ -39,13 +38,6 @@ static inline auto weighted_med(FT *ptr, FT *weights, size_t n, bool convex_comb
     return weighted_med(ptr, weights, n, cbuf.get(), convex_comb);
 }
 
-template<typename It, typename Cmp=std::less<>>
-INLINE void sort(It beg, It end, Cmp cmp=Cmp()) {
-#ifdef PDQSORT_H
-    pdqsort(beg, end, cmp);
-#else
-    std::sort(beg, end, cmp);
-}
 #endif
 #if 0
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double>

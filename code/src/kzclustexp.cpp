@@ -213,9 +213,13 @@ int main(int argc, char **argv) {
     std::string coreset_sampler_path;
     unsigned num_thorup_trials = 15;
     bool test_samples_from_thorup_sampled = true;
+    double eps = 0.1;
     BoundingBoxData bbox;
-    for(int c;(c = getopt(argc, argv, "B:S:N:T:t:p:o:M:z:s:c:K:k:R:LbDrh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "e:B:S:N:T:t:p:o:M:z:s:c:K:k:R:LbDrh?")) >= 0;) {
         switch(c) {
+            case 'e': if((eps = std::atof(optarg)) > 1. || eps < 0.)
+                        throw std::runtime_error("Required: 0 >= eps >= 1.");
+                      break;
             case 'K': extra_ks.push_back(std::atoi(optarg)); break;
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
@@ -387,7 +391,7 @@ int main(int argc, char **argv) {
 
     // Perform Thorup sample before JV method.
     timer.restart("local search:");
-    auto lsearcher = make_kmed_lsearcher(dm, k, 1e-2, seed * seed + seed, best_improvement);
+    auto lsearcher = make_kmed_lsearcher(dm, k, eps, seed * seed + seed, best_improvement);
     lsearcher.run();
     timer.report();
     if(dm.rows() < 100 && k < 7) {
@@ -411,7 +415,7 @@ int main(int argc, char **argv) {
         }
     }
     // For locality when calculating
-    std::sort(approx_v.data(), approx_v.data() + approx_v.size());
+    shared::sort(approx_v.data(), approx_v.data() + approx_v.size());
     timer.restart("get costs:");
     auto [costs, assignments] = get_costs(g, approx_v);
     std::fprintf(stderr, "[Phase 4] Calculated costs and assignments for all points\n");
@@ -452,7 +456,7 @@ int main(int argc, char **argv) {
         auto it = centers.begin();
         for(size_t j = 0; j < r.size(); ++j, ++it)
             r[j] = *it;
-        std::sort(r.begin(), r.end());
+        shared::sort(r.begin(), r.end());
     }
     timer.report();
     coresets::UniformSampler<float, uint32_t> uniform_sampler(costs.size());
