@@ -286,7 +286,7 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
             OMP_CRITICAL
             {
                 if(next.second < bestsol.second) {
-                    std::fprintf(stderr, "Replacing old cost of %g with %g\n", bestsol.second, next.second);
+                    std::fprintf(stderr, "Replacing old cost of %g/%zu with %g/%zu\n", bestsol.second, bestsol.first.size(), next.second, next.first.size());
                     std::swap(next, bestsol);
                 }
             }
