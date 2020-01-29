@@ -575,6 +575,9 @@ int main(int argc, char **argv) {
         }
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(uniform_sampler.sample(coreset_size));
+            if(bbox.set()) {
+                for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
+            }
         }
         assert(coresets.size() == distvecsz);
         OMP_PFOR
