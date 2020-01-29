@@ -544,6 +544,8 @@ int main(int argc, char **argv) {
                                  sumfdistortion(distvecsz, 0.), tmpfdistortion(distvecsz); // distortions on F
     blaze::DynamicVector<double> fdistbuffer(boost::num_vertices(g)); // For F, for comparisons
     timer.restart("evaluate random centers " + std::to_string(coreset_testing_num_iters) + " times: ");
+    assert(uniform_sampler.size() == sampler.size());
+    assert(uniform_sampler.size() == bflsampler.size());
     for(size_t i = 0; i < coreset_testing_num_iters; ++i) {
         // The first ncs coresets are VX-sampled, the second ncs are BFL-sampled, and the last ncs
         // are uniformly randomly sampled.
@@ -552,12 +554,10 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "Making VX coresets. sampler size: %zu\n", sampler.size());
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(sampler.sample(coreset_size));
-            std::fprintf(stderr, "About to reset things\n");
             if(bbox.set()) {
-                std::fprintf(stderr, "About to reset things!!!\n");
                 for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
             }
-            show_fraction_in_out(coresets.back(), coordinates, bbox);
+            //show_fraction_in_out(coresets.back(), coordinates, bbox);
         }
         std::fprintf(stderr, "Making BFL coresets.size: %zu\n", bflsampler.size());
         for(auto coreset_size: coreset_sizes) {
@@ -572,8 +572,7 @@ int main(int argc, char **argv) {
             if(bbox.set()) {
                 for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
             }
-            std::fprintf(stderr, "Uniform sampler: \n");
-            show_fraction_in_out(coresets.back(), coordinates, bbox);
+            //show_fraction_in_out(coresets.back(), coordinates, bbox);
         }
         assert(coresets.size() == distvecsz);
         std::fprintf(stderr, "[Phase 5] Generated coresets for iter %zu/%u\n", i + 1, coreset_testing_num_iters);
@@ -584,6 +583,13 @@ int main(int argc, char **argv) {
             //if(i % 10 == 0)
             //    std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
             auto random_centers = generate_random_centers(i + seed + coreset_testing_num_iters, k, x_size, bbox_vertices_ptr);
+#ifndef NDEBUG
+            if(bbox_vertices_ptr) {
+                for(const auto rc: random_centers) {
+                    assert(std::find(bbox_vertices_ptr->begin(), bbox_vertices_ptr->end(), rc) != bbox_vertices_ptr->end());
+                }
+            }
+#endif
             blaze::DynamicVector<double> distbuffer(boost::num_vertices(g));
             blaze::DynamicVector<double> currentdistortion(coresets.size());
 #ifdef _OPENMP
@@ -606,9 +612,6 @@ int main(int argc, char **argv) {
         meanmaxdistortion += maxdistortion;
         meandistortion /= testing_num_centersets;
         meanmeandistortion += meandistortion;
-        //std::cerr << "mean [" << i << "]\n" << meandistortion;
-        //std::cerr << "max  [" <<  i << "]\n" << maxdistortion;
-        //std::cerr << "Center distortion:" << (sumfdistortion /(i + 1)) << '\n';
     }
     timer.report();
     timer.reset();

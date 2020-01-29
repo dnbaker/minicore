@@ -136,8 +136,13 @@ struct UniformSampler {
             ret.indices_[i] = rng_() % np_;
         }
         ret.weights_ = static_cast<FT>(np_) / n; // Ensure final weight = np_
+#ifndef NDEBUG
+        std::fprintf(stderr, "Weights for uniform: %g (%zu / %zu)\n", static_cast<FT>(np_) / n,
+                     np_, n);
+#endif
         return ret;
     }
+    size_t size() {return np_;}
 };
 
 template<typename FT=float, typename IT=std::uint32_t>

@@ -35,6 +35,8 @@ endif
 
 TESTS=tbm coreset_test bztest btest osm2dimacs dmlsearch diskmattest graphtest jvtest kmpptest tbas
 
+clust: kzclustexp fastkzclustexp
+
 tests: $(TESTS)
 print_tests:
 	@echo "Tests: " $(TESTS)
