@@ -4,7 +4,7 @@ import sys
 import matplotlib.pyplot as plt
 matplotlib.use("Agg")
 
-def print_items(*, data, xlabels, names, subgroup, prefix="default_out", end):
+def print_items(*, data, xlabels, names, subgroup, prefix="default_out", end, filename):
     xlabels = xlabels[:end]
     data = tuple(d[:end] for d in data)
     #fig, ax = plt.subplots()
@@ -17,7 +17,7 @@ def print_items(*, data, xlabels, names, subgroup, prefix="default_out", end):
     # *zip(lines, names))
     plt.xlabel("coreset size")
     plt.ylabel("distortion")
-    plt.title("Coreset benchmark: " + subgroup)
+    plt.title("[%s] Coreset benchmark: %s" % (filename, subgroup))
     plt.plot()
     plt.savefig(f"{prefix}{subgroup}.png", dpi=300)
     plt.clf()
@@ -31,10 +31,11 @@ if __name__ == "__main__":
     args = ap.parse_args()
     if args.prefix is None:
         args.prefix = args.infname
+    filename = args.infname
     xlabels = []
     data = []
     for line in open(args.infname):
-        if not line or line[0] == "#": continue
+        if not line or line[0] == "#" or line[0] == '\n': continue
         xlabels.append(int(line.split()[0]))
         data.append(list(map(float, line.strip().split()[1:])))
     
@@ -70,10 +71,10 @@ if __name__ == "__main__":
             pref += ".bfl"
         pref += ".%i" % end
         print("prefix: " + pref)
-        print_items(data=mudata, xlabels=xlabels, names=names, subgroup="mean", prefix=pref, end=end)
-        print_items(data=mxdata, xlabels=xlabels, names=names, subgroup="max", prefix=pref, end=end)
+        print_items(data=mudata, xlabels=xlabels, names=names, subgroup="mean", prefix=pref, end=end, filename=filename)
+        print_items(data=mxdata, xlabels=xlabels, names=names, subgroup="max", prefix=pref, end=end, filename=filename)
         if fdata is not None:
-            print_items(data=fdata, xlabels=xlabels, names=names, subgroup="meanf", prefix=pref, end=end)
+            print_items(data=fdata, xlabels=xlabels, names=names, subgroup="meanf", prefix=pref, end=end, filename=filename)
         '''
         if data.shape[1] > 6:
             lnames = ("Varadarajan-Xiao", "BFL", "Uniform")

@@ -130,9 +130,17 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
     //vx.clear();
     //assert_connected(x);
     double cost = 0.;
-    OMP_PRAGMA("omp parallel for reduction(+:cost)")
-    for(size_t i = 0; i < nv - 1; ++i) {
-        cost += distances[i];
+    if(bbox_vertices_ptr) {
+        const size_t nboxv = bbox_vertices_ptr->size();
+        OMP_PRAGMA("omp parallel for reduction(+:cost)")
+        for(size_t i = 0; i < nboxv; ++i) {
+            cost += distances[bbox_vertices_ptr->operator[](i)];
+        }
+    } else {
+        OMP_PRAGMA("omp parallel for reduction(+:cost)")
+        for(size_t i = 0; i < nv - 1; ++i) {
+            cost += distances[i];
+        }
     }
     return std::make_pair(std::move(F), cost);
 }
