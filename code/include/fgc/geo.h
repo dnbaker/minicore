@@ -41,7 +41,7 @@ struct BoundingBoxData {
     }
     std::string to_string() const {
         char buf[256];
-        return std::string(buf, std::sprintf(buf, "lat (%0.12g->%0.12g), lon (%0.12g->%0.12g), probabilities: %0.12g/%0.12g\n", latlo, lathi, lonlo, lonhi, p_box, p_nobox));
+        return std::string(buf, std::sprintf(buf, "lat (%0.12g->%0.12g), lon (%0.12g->%0.12g), probabilities: %0.12g/%0.12g", latlo, lathi, lonlo, lonhi, p_box, p_nobox));
     }
     void print(std::FILE *fp=stderr) const {
         const std::string str = to_string();
