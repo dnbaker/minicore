@@ -129,29 +129,21 @@ int main(int argc, char **argv) {
     std::string fn = std::string("default_scratch.") + std::to_string(std::rand()) + ".tmp";
     std::string output_prefix;
     std::vector<unsigned> coreset_sizes;
-    bool rectangular = false;
     unsigned testing_num_centersets = 500;
     //size_t nsampled_max = 0;
-    size_t rammax = 16uLL << 30;
-    bool best_improvement = false;
     unsigned coreset_testing_num_iters = 5;
     uint64_t seed = std::accumulate(argv, argv + argc, uint64_t(0),
         [](auto x, auto y) {
             return x ^ std::hash<std::string>{}(y);
         }
     );
-    unsigned num_thorup_trials = 15;
     for(int c;(c = getopt(argc, argv, "b:N:T:t:p:o:M:S:z:s:c:k:R:rh?")) >= 0;) {
         switch(c) {
             case 'k': k = std::atoi(optarg); break;
             case 'z': z = std::atof(optarg); break;
-            case 'r': rectangular = true; break;
-            case 'b': best_improvement = true; break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
-            case 'M': rammax = std::strtoull(optarg, nullptr, 10); break;
             case 't': testing_num_centersets = std::atoi(optarg); break;
             case 'N': coreset_testing_num_iters = std::atoi(optarg); break;
-            case 'T': num_thorup_trials = std::atoi(optarg); break;
             case 'p': OMP_SET_NT(std::atoi(optarg)); break;
             case 'o': output_prefix = optarg; break;
             case 's': fn = optarg; break;

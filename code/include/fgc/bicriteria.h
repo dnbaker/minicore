@@ -14,30 +14,39 @@ struct ScopedSyntheticVertex {
     using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
     Graph &ref_;
     Vertex vtx_;
-    ScopedSyntheticVertex(Graph &ref): ref_(ref), vtx_(boost::add_vertex(ref_)) {}
+    bool cleared_ = false;
+    ScopedSyntheticVertex(Graph &ref): ref_(ref), vtx_(boost::add_vertex(ref_)) {
+    }
     Vertex get() const {return vtx_;}
+    void clear() {
+        if(!cleared_) {
+            boost:: clear_vertex(vtx_, ref_);
+            boost::remove_vertex(vtx_, ref_);
+            cleared_ = true;
+        }
+    }
     ~ScopedSyntheticVertex() {
-        boost:: clear_vertex(vtx_, ref_);
-        boost::remove_vertex(vtx_, ref_);
+        clear();
     }
 };
 } // namespace util
 namespace thorup {
 using namespace boost;
 
-template<typename ...Args>
-auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_round, size_t iterations,
-                        std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor> &container, uint64_t seed);
+template<typename Graph, typename BBoxContainer=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
+std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
+&sample_from_graph(Graph &x, size_t samples_per_round, size_t iterations,
+                        std::vector<typename boost::graph_traits<Graph>::vertex_descriptor> &container, uint64_t seed,
+                        const BBoxContainer *bbox_vertices_ptr=nullptr);
 
-template<typename... Args>
-std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor>
-thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, size_t max_sampled=0) {
+template<typename Graph, typename BBoxContainer=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
+auto
+thorup_sample(Graph &x, unsigned k, uint64_t seed, size_t max_sampled=0, BBoxContainer *bbox_vertices_ptr=nullptr) {
+    using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
     if(max_sampled == 0) max_sampled = boost::num_vertices(x);
-    using Vertex = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
     // Algorithm E, Thorup p.418
-    //std::fprintf(stderr, "[%s:%s:%d] About to assert connected\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
     assert_connected(x);
-    const size_t n = boost::num_vertices(x);
+    const size_t n = bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x);
     //m = boost::num_edges(x);
     const double logn = std::log2(n);
     const double eps  = 1. / std::sqrt(logn);
@@ -50,7 +59,7 @@ thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, size
     std::vector<Vertex> current_buffer;
     std::mt19937_64 mt(seed);
     for(size_t i = 0, nr = std::ceil(std::pow(logn, 1.5)); i < nr; ++i) {
-        sample_from_graph(x, samples_per_round, iterations_per_round, current_buffer, mt());
+        sample_from_graph(x, samples_per_round, iterations_per_round, current_buffer, mt(), bbox_vertices_ptr);
         samples.insert(current_buffer.begin(), current_buffer.end());
         current_buffer.clear();
         if(samples.size() >= max_sampled) break;
@@ -61,71 +70,89 @@ thorup_sample(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed, size
         current_buffer.erase(current_buffer.begin() + max_sampled, current_buffer.end());
     return current_buffer;
 }
-template<typename Graph, typename RNG>
-auto thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds) {
+
+template<typename Graph, typename RNG, template<typename...> class BBoxTemplate=std::vector, typename...BBoxArgs>
+std::pair<std::vector<typename graph_traits<Graph>::vertex_descriptor>,
+          double>
+thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
+         const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr)
+{
     using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
     using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
-    std::vector<Vertex> R(boost::vertices(x).first, boost::vertices(x).second);
-    std::vector<Vertex> F;
-    F.reserve(nperround * 5);
-    //std::fprintf(stderr, "[%s:%s:%d] About to assert connected\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
     assert_connected(x);
+    std::vector<Vertex> R;
+    if(bbox_vertices_ptr) {
+#ifndef NDEBUG
+        for(auto vtx: *bbox_vertices_ptr) assert(vtx < boost::num_vertices(x));
+#endif
+        R.assign(bbox_vertices_ptr->begin(), bbox_vertices_ptr->end());
+    } else {
+        R.assign(boost::vertices(x).first, boost::vertices(x).second);
+    }
+    std::vector<Vertex> F;
+    F.reserve(std::min(nperround * 5, R.size()));
     util::ScopedSyntheticVertex<Graph> vx(x);
     auto synthetic_vertex = vx.get();
     const size_t nv = boost::num_vertices(x);
     std::unique_ptr<edge_cost[]> distances(new edge_cost[nv]);
     flat_hash_set<Vertex> vertices;
     for(size_t i = 0; R.size() && i < maxnumrounds; ++i) {
+        assert(boost::num_vertices(x) == nv);
         if(R.size() > nperround) {
             do vertices.insert(R[rng() % R.size()]); while(vertices.size() < nperround);
             F.insert(F.end(), vertices.begin(), vertices.end());
             for(const auto v: vertices) boost::add_edge(v, synthetic_vertex, 0., x);
             vertices.clear();
+            assert(boost::num_vertices(x) == nv);
         } else {
             for(const auto r: R) {
                 F.push_back(r);
                 boost::add_edge(F.back(), synthetic_vertex, 0., x);
             }
+            //assert_connected(x);
             R.clear();
+            assert(boost::num_vertices(x) == nv);
         }
-        //std::fprintf(stderr, "F size: %zu\n", F.size());
+        assert(boost::num_vertices(x) == nv);
         boost::dijkstra_shortest_paths(x, synthetic_vertex,
                                        distance_map(distances.get()));
-#if VERBOSE_AF
-        for(size_t j = 0; j < nv - 1; ++j)
-            std::fprintf(stderr, "cost %zu at iter %zu is %g\n", j, i, distances[j]);
-#endif
         if(R.empty()) break;
         auto randel = R[rng() % R.size()];
         auto minv = distances[randel];
         R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
     }
-    //std::fprintf(stderr, "[%s:%s:%d] About to assert connected\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+    assert(boost::num_vertices(x) == nv);
+    //vx.clear();
     //assert_connected(x);
     double cost = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:cost)")
     for(size_t i = 0; i < nv - 1; ++i) {
         cost += distances[i];
     }
-    std::fprintf(stderr, "Sampled set of size %zu has cost %f\n", F.size(), cost);
     return std::make_pair(std::move(F), cost);
 }
 
-template<typename...Args>
-auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_round, size_t iterations,
-                        std::vector<typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor> &container, uint64_t seed)
+template<typename Graph, typename BBoxContainer=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
+std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
+&sample_from_graph(Graph &x, size_t samples_per_round, size_t iterations,
+                   std::vector<typename boost::graph_traits<Graph>::vertex_descriptor> &container, uint64_t seed,
+                   const BBoxContainer *bbox_vertices_ptr)
 {
-    using Graph = boost::adjacency_list<Args...>;
     //using edge_descriptor = typename graph_traits<Graph>::edge_descriptor;
     //typename property_map<Graph, edge_weight_t>::type weightmap = get(edge_weight, x);
-    using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<boost::adjacency_list<Args...>>()))>;
+    using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
     //
     // Algorithm D, Thorup p.415
-    using Vertex = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
+    using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
     //using Vertex = graph_traits<Graph>::vertex_descriptor;
-    // Let R = all nodes
-    auto [start, end] = boost::vertices(x);
-    std::vector<Vertex> R(start, end);
+    // Let R = all nodes by default, or if bbox_vertices_ptr is set, all in bbox vertices
+    std::vector<Vertex> R;
+    if(bbox_vertices_ptr) {
+        R.assign(bbox_vertices_ptr->begin(), bbox_vertices_ptr->end());
+    } else {
+        auto [start, end] = boost::vertices(x);
+        R.assign(start, end);
+    }
     auto &F = container;
     F.reserve(std::min(R.size(), iterations * samples_per_round));
     wy::WyRand<uint64_t, 2> rng(seed);
@@ -134,7 +161,7 @@ auto &sample_from_graph(boost::adjacency_list<Args...> &x, size_t samples_per_ro
     auto synthetic_vertex = vx.get();
     // TODO: consider using hash_set distribution for provide randomness for insertion to F.
     // Maybe replace with hash set? Idk.
-    std::unique_ptr<edge_cost[]> distances(new edge_cost[boost::num_vertices(x)]);
+    auto distances = std::make_unique<edge_cost[]>(boost::num_vertices(x));
     for(size_t iter = 0; iter < iterations && R.size() > 0; ++iter) {
         //size_t last_size = F.size();
         // Sample ``samples_per_round'' samples.
@@ -227,27 +254,42 @@ get_costs(Graph &x, const Container &container) {
     std::fprintf(stderr, "Total cost of solution: %g\n", blaze::sum(costs));
     return std::make_pair(std::move(costs), assignments);
 }
-template<typename Graph>
+template<typename Graph, template<typename...> class BBoxTemplate=std::vector, typename...BBoxArgs>
 auto 
-//std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
-thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter) {
+thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
+    const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr)
+{
     // Modification of Thorup, wherein we run Thorup Algorithm E
     // with eps = 0.5 a fixed number of times and return the best result.
+    assert_connected(x);
 
     static constexpr double eps = 0.5;
     wy::WyRand<uint64_t, 2> rng(seed);
-    const size_t n = boost::num_vertices(x);
+    const size_t n = bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x);
     const double logn = std::log2(n);
     const size_t samples_per_round = std::ceil(21. * k * logn / eps);
 
-    //std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
-    auto bestsol = thorup_d(x, rng, samples_per_round, 3 * logn);
-    for(unsigned i = 1; i < num_iter; ++i) {
-        //std::fprintf(stderr, " at tsm %zunv: %zu\n", i, boost::num_vertices(x));
-        auto next = thorup_d(x, rng, samples_per_round, 3 * logn);
+    std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
+    auto func = [&](Graph &localx){return thorup_d(localx, rng, samples_per_round, 3 * logn, bbox_vertices_ptr);};
+    std::pair<std::vector<typename graph_traits<Graph>::vertex_descriptor>,
+              double> bestsol;
+    bestsol.second = std::numeric_limits<double>::max();
+    OMP_PFOR
+    for(unsigned i = 0; i < num_iter; ++i) {
+#ifdef _OPENMP
+        Graph cpy = x;
+        auto next = func(cpy);
+#else
+        auto next = func(x);
+#endif
         if(next.second < bestsol.second) {
-            std::fprintf(stderr, "Replacing old cost of %g with %g\n", bestsol.second, next.second);
-            std::swap(next, bestsol);
+            OMP_CRITICAL
+            {
+                if(next.second < bestsol.second) {
+                    std::fprintf(stderr, "Replacing old cost of %g with %g\n", bestsol.second, next.second);
+                    std::swap(next, bestsol);
+                }
+            }
         }
     }
     auto [_, assignments] = get_costs(x, bestsol.first);

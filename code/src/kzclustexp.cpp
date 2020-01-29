@@ -4,6 +4,7 @@
 #include "fgc/relaxed_heap.hpp"
 #endif
 #include "fgc/graph.h"
+#include "fgc/geo.h"
 #include "fgc/parse.h"
 #include "fgc/bicriteria.h"
 #include "fgc/coreset.h"
@@ -57,7 +58,7 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
     const double fcinv = 1. / fullcost;
     OMP_PFOR
     for(size_t j = 0; j < ncs; ++j) {
-        // In theory, this could be 
+        // In theory, this could be
         auto &cs = coresets[j];
         const auto indices = cs.indices_.data();
         const auto weights = cs.weights_.data();
@@ -70,23 +71,6 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
         ret[j] = std::abs(coreset_cost * fcinv - 1.);
     }
 }
-
-struct latlon_t: public std::pair<double, double> {
-    using super = std::pair<double, double>;
-    template<typename...Args>
-    latlon_t(Args &&...args): super(std::forward<Args>(args)...) {}
-    template<typename T>
-    latlon_t &operator=(const T &x) {
-        return super::operator=(x);
-    }
-    std::string to_string() const {return std::to_string(lon()) + ',' + std::to_string(lat());}
-    
-    double lat() const {return this->first;}
-    double lon() const {return this->second;}
-    double &lat() {return this->first;}
-    double &lon() {return this->second;}
-};
-
 
 template<typename GraphT>
 GraphT &
@@ -179,47 +163,7 @@ void usage(const char *ex) {
     std::exit(1);
 }
 
-struct BoundingBoxData {
-    double latlo = 0., lathi = 0., lonlo = 0., lonhi = 0.;
-    double p_box = 0.99, p_nobox = 0.01;
-    bool set() const {return latlo || lathi || lonlo || lonhi;}
-    bool valid() const {
-        return lathi >= latlo && lonhi >= lonlo
-            && p_box <= 1. && p_box >= 0.
-            && p_nobox <= 1. && p_nobox >= 0.;
-    }
-    void print(std::FILE *fp=stderr) const {
-        std::fprintf(fp, "lat (%g->%g), lon (%g->%g), probabilities: %f/%f\n", latlo, lathi, lonlo, lonhi, p_box, p_nobox);
-    }
-    bool contains(latlon_t pt) const {
-        return (pt.lat() <= lathi && pt.lat() >= latlo)
-            && (pt.lon() <= lonhi && pt.lon() >= lonlo);
-    }
-};
 
-BoundingBoxData parse_bbdata(const char *s) {
-    /*
-     * lon,lat,lon,lat
-     * %f,%f,%f,%f[,%f][,%f]
-     */
-    std::fprintf(stderr, "parsing %s\n", s);
-    double llon, llat, ulon, ulat, highprob = 0.99, loprob=0.01;
-    llon = std::strtod(s, const_cast<char **>(&s));
-    llat = std::strtod(++s, const_cast<char **>(&s));
-    ulon = std::strtod(++s, const_cast<char **>(&s));
-    ulat = std::strtod(++s, const_cast<char **>(&s));
-    
-    if(*s == ',') {
-        highprob = std::strtod(++s, const_cast<char **>(&s));
-        if(*s == ',') {
-            loprob = std::strtod(++s, const_cast<char **>(&s));
-        }
-    }
-    assert(loprob < highprob);
-    BoundingBoxData ret{llat, ulat, llon, ulon, highprob, loprob};
-    ret.print(stderr);
-    return ret;
-}
 
 
 void parse_coordinates(std::string fn, std::vector<latlon_t> &ret, BoundingBoxData bbd) {
@@ -239,7 +183,7 @@ void parse_coordinates(std::string fn, std::vector<latlon_t> &ret, BoundingBoxDa
     for(size_t i = 0; i < ret.size(); ++i) {
         OMP_ATOMIC
         ++inout[bbd.contains(ret[i])];
-#ifndef NDEBUG
+#if VERBOSE_AF
         if(i < 50u)
             std::cerr << ret[i].to_string() << '\n';
 #endif
@@ -282,7 +226,7 @@ int main(int argc, char **argv) {
             case 'M': rammax = str2nbytes(optarg); break;
             case 'D': use_thorup_d = false; break;
             case 't': testing_num_centersets = std::atoi(optarg); break;
-            case 'B': bbox = parse_bbdata(optarg); assert(bbox.set()); break;
+            case 'B': bbox = optarg; assert(bbox.set()); break;
             case 'N': coreset_testing_num_iters = std::atoi(optarg); break;
             case 'T': num_thorup_trials = std::atoi(optarg); break;
             case 'S': coreset_sampler_path = optarg; break;
@@ -300,23 +244,7 @@ int main(int argc, char **argv) {
     if(coreset_sizes.empty()) {
         coreset_sizes = {
 #if USE3
-3,
- 6,
- 9,
- 18,
- 27,
- 54,
- 81,
- 162,
- 243,
- 486,
- 729,
- 1458,
- 2187,
- 4374,
- 6561,
- 13122,
- 19683
+3, 6, 9, 18, 27, 54, 81, 162, 243, 486, 729, 1458, 2187, 4374, 6561, 13122, 19683
 #else
 5, 10, 15, 20, 25, 50, 75, 100, 125, 250, 375, 500, 625, 1250, 1875, 2500, 3125, 3750
 #endif
@@ -340,7 +268,8 @@ int main(int argc, char **argv) {
     timer.stop();
     timer.display();
     using Vertex = typename boost::graph_traits<decltype(g)>::vertex_descriptor;
-    std::vector<Vertex> in_vertices, out_vertices, bbox_vertices;
+    //std::vector<Vertex> in_vertices, out_vertices;
+    std::vector<Vertex> bbox_vertices;
     size_t nsampled_in = 0, nsampled_out = 0;
     if(bbox.set()) {
         assert(bbox.valid());
@@ -348,45 +277,71 @@ int main(int argc, char **argv) {
             coordinates.resize(boost::num_vertices(g));
             parse_coordinates(input, coordinates, bbox);
         } else throw std::runtime_error("wrong format");
+    }
+#ifndef NDEBUG
+    for(const auto vtx: bbox_vertices)
+        assert(vtx < boost::num_vertices(g));
+#endif
+    std::fprintf(stderr, "nv: %zu. ne: %zu\n", boost::num_vertices(g), boost::num_edges(g));
+    // Select only the component with the most edges.
+    timer.restart("max component:");
+    max_component(g, coordinates);
+    timer.report();
+    if(bbox.set()) {
+        timer.restart("bbox sampling:");
         wy::WyRand<uint32_t, 2> bbox_rng(coordinates.size() + seed);
         std::vector<Vertex> out_vertices;
         std::uniform_real_distribution<float> urd;
         for(const auto vtx: g.vertices()) {
-            if(bbox.contains(coordinates[vtx])) {
-                in_vertices.push_back(vtx);
+            assert(vtx < g.num_vertices());
+            if(bbox.contains(coordinates.at(vtx))) {
+                //in_vertices.push_back(vtx);
                 if(urd(bbox_rng) < bbox.p_box) {
                     bbox_vertices.push_back(vtx);
                     ++nsampled_in;
                 }
             } else {
-                out_vertices.push_back(vtx);
+                //out_vertices.push_back(vtx);
                 if(urd(bbox_rng) < bbox.p_nobox) {
                     bbox_vertices.push_back(vtx);
                     ++nsampled_out;
                 }
             }
         }
+        timer.report();
         std::fprintf(stderr, "sampled in: %zu. sampled out: %zu. sample probs: %g, %g\n", nsampled_in, nsampled_out, bbox.p_box, bbox.p_nobox);
     }
-    std::fprintf(stderr, "nv: %zu. ne: %zu\n", boost::num_vertices(g), boost::num_edges(g));
-    // Select only the component with the most edges.
-    timer.restart("max component:");
-    max_component(g, coordinates);
-    timer.report();
-    assert_connected(g);
-    assert(!bbox.set() || coordinates.size() == boost::num_vertices(g));
     // Assert that it's connected, or else the problem has infinite cost.
+    assert_connected(g);
+    // Either the bbox is unset (include all vertices) or there's a bijection between coordinates
+    // and vertices.
+    assert(!bbox.set() || coordinates.size() == boost::num_vertices(g));
 
-    //std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
-    //sampled = thorup_sample(g, k, seed, nsampled_max);
     std::vector<uint32_t> thorup_assignments;
     timer.restart("thorup sampling:");
-    std::vector<typename boost::graph_traits<decltype(g)>::vertex_descriptor> sampled;
+    // nullptr here for the case of using all vertices
+    // but nonzero if a bounding box has been used to select $X \subseteq V$.
+    const std::vector<Vertex> *bbox_vertices_ptr = nullptr;
+    if(bbox_vertices.size()) {
+        bbox_vertices_ptr = &bbox_vertices;
+#ifndef NDEBUG
+        for(auto vtx: bbox_vertices)
+            assert(vtx < boost::num_vertices(g));
+        assert(bbox_vertices_ptr->size() == bbox_vertices.size());
+        for(auto vtx: *bbox_vertices_ptr)
+            assert(vtx < boost::num_vertices(g));
+#endif
+    }
+    std::vector<Vertex> sampled;
     if(use_thorup_d) {
-        std::tie(sampled, thorup_assignments) = thorup_sample_mincost(g, k, seed, num_thorup_trials);
+        assert_connected(g);
+        std::tie(sampled, thorup_assignments) = thorup_sample_mincost(g, k, seed, num_thorup_trials, bbox_vertices_ptr);
     } else {
-        sampled = thorup_sample(g, k, seed);
+    // Use Thorup E, which performs D a number of times and returns the union thereof.
+        sampled = thorup_sample(g, k, seed, /*max_sampled=*/0, bbox_vertices_ptr);
+        // max_sampled = 0 means that the full set of nodes provided may be chosen
         auto [_, thorup_assignments] = get_costs(g, sampled);
+        assert_connected(g);
     }
     timer.report();
     timer.restart("center counts:");

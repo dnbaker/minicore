@@ -212,16 +212,17 @@ struct BidirGraph: public Graph<bidirectionalS, EdgeProps, VtxProps, GraphProps>
     }
 };
 
-template<typename Graph>
 #ifndef NDEBUG
-void assert_connected(const Graph &x) {
+template<typename Graph>
+inline void assert_connected__(const Graph &x, const char *filename, const char *func, int line) {
     auto ccomp = std::make_unique<typename boost::graph_traits<Graph>::vertex_descriptor[]>(boost::num_vertices(x));
-    assert(boost::connected_components(x, ccomp.get()) == 1);
+    auto ncomp = boost::connected_components(x, ccomp.get());
+    assert(ncomp == 1 || !std::fprintf(stderr, "Failure: graph at %p [%s:%s:%d] is not connected (%u comp)\n", (void *)&x, filename, func, line, unsigned(ncomp)));
 }
+#define assert_connected(x) ::fgc::assert_connected__(x, __FILE__, __PRETTY_FUNCTION__, __LINE__)
 #else
-void assert_connected(const Graph &) {
-}
+#define assert_connected(x)
 #endif
 
 
-} // graph
+} // fgc
