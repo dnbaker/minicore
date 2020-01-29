@@ -96,7 +96,8 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
     const size_t nv = boost::num_vertices(x);
     std::unique_ptr<edge_cost[]> distances(new edge_cost[nv]);
     flat_hash_set<Vertex> vertices;
-    for(size_t i = 0; R.size() && i < maxnumrounds; ++i) {
+    size_t i;
+    for(i = 0; R.size() && i < maxnumrounds; ++i) {
         assert(boost::num_vertices(x) == nv);
         if(R.size() > nperround) {
             do vertices.insert(R[rng() % R.size()]); while(vertices.size() < nperround);
@@ -120,6 +121,10 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
         auto randel = R[rng() % R.size()];
         auto minv = distances[randel];
         R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
+    }
+    if(i >= maxnumrounds && R.size()) {
+        // This failed. Do not use this round.
+        return std::make_pair(std::move(F), std::numeric_limits<double>::max());
     }
     assert(boost::num_vertices(x) == nv);
     //vx.clear();
@@ -282,6 +287,11 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
 #else
         auto next = func(x);
 #endif
+        if(next.second == std::numeric_limits<double>::max()) {
+            // This round failed.
+            --i;
+            continue;
+        }
         if(next.second < bestsol.second) {
             OMP_CRITICAL
             {
