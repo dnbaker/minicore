@@ -1,7 +1,0 @@
-##Command-line: './kzclustexppgf -p4 ../data/miniosm.gr'
-##z: 1
-##nsamples: 1000
-##k: 10
-#label	coreset_size	mincost	meancost	maxcost
-fullproblem	12699	8.32907e+06	1.0348e+07	1.49219e+07
-coreset	100	6.64611e+06	9.15993e+06	1.37213e+07
