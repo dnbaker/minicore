@@ -32,6 +32,16 @@ static size_t str2nbytes(const char *s) {
     return ret;
 }
 
+std::vector<uint32_t> generate_random_centers(uint64_t seed, unsigned k, unsigned nvertices) {
+    std::vector<uint32_t> random_centers;
+    wy::WyRand<uint32_t, 2> rng(seed);
+    while(random_centers.size() < k) {
+        auto v = rng() % nvertices;
+        if(std::find(random_centers.begin(), random_centers.end(), v) == random_centers.end())
+            random_centers.push_back(v);
+    }
+    return random_centers;
+}
 
 
 template<typename Graph, typename ICon, typename FCon, typename IT, typename RetCon, typename CSWT>
@@ -45,8 +55,9 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
     {
         util::ScopedSyntheticVertex<Graph> vx(x);
         auto synthetic_vertex = vx.get();
-        for(auto idx: indices)
+        for(auto idx: indices) {
             boost::add_edge(synthetic_vertex, idx, 0., x);
+        }
         boost::dijkstra_shortest_paths(x, synthetic_vertex, distance_map(&costbuffer[0]));
     }
     if(z != 1.) costbuffer = pow(costbuffer, z);
@@ -473,16 +484,14 @@ int main(int argc, char **argv) {
         for(size_t i = 0; i < testing_num_centersets; ++i) {
             //if(i % 10 == 0)
             //    std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
-            blaze::SmallArray<uint32_t, 16> random_centers;
-            wy::WyRand<uint32_t, 2> rng(i + seed + coreset_testing_num_iters);
-            while(random_centers.size() < k) {
-                auto v = rng();
-                if(std::find(random_centers.begin(), random_centers.end(), v) == random_centers.end())
-                    random_centers.pushBack(v);
-            }
+            auto random_centers = generate_random_centers(i + seed + coreset_testing_num_iters, k, boost::num_vertices(g));
             blaze::DynamicVector<double> distbuffer(boost::num_vertices(g));
             blaze::DynamicVector<double> currentdistortion(coresets.size());
+#ifdef _OPENMP
             decltype(g) gcopy(g);
+#else
+            auto &gcopy(g);
+#endif
             calculate_distortion_centerset(gcopy, random_centers, distbuffer, coresets, currentdistortion, z);
             OMP_CRITICAL
             {
@@ -536,16 +545,14 @@ int main(int argc, char **argv) {
         assert(coresets.size() == distvecsz);
         OMP_PFOR
         for(size_t i = 0; i < testing_num_centersets; ++i) {
-            blaze::SmallArray<uint32_t, 16> random_centers;
-            wy::WyRand<uint32_t, 2> rng(i + seed + coreset_testing_num_iters);
-            while(random_centers.size() < k) {
-                auto v = rng();
-                if(std::find(random_centers.begin(), random_centers.end(), v) == random_centers.end())
-                    random_centers.pushBack(v);
-            }
+            auto random_centers = generate_random_centers(i + seed + coreset_testing_num_iters, k, boost::num_vertices(g));
             blaze::DynamicVector<double> distbuffer(boost::num_vertices(g));
             blaze::DynamicVector<double> currentdistortion(coresets.size());
+#ifdef _OPENMP
             decltype(g) gcopy(g);
+#else
+            auto &gcopy(g);
+#endif
             calculate_distortion_centerset(gcopy, random_centers, distbuffer, coresets, currentdistortion, z);
             OMP_CRITICAL
             {
