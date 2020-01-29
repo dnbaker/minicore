@@ -168,6 +168,20 @@ struct sqrL3Norm: sqrBaseNorm<L3Norm> {};
 struct sqrL4Norm: sqrBaseNorm<L4Norm> {};
 struct sqrMaxNorm: sqrBaseNorm<maxNormFunctor> {};
 
+
+// For D^2 sampling.
+template<typename BaseDist>
+struct SqrNormFunctor: public BaseDist {
+    template<typename...Args> SqrNormFunctor(Args &&...args): BaseDist(std::forward<Args>(args)...) {}
+    template<typename C1, typename C2>
+    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+        double basedist = BaseDist::operator()(lhs, rhs);
+        return basedist * basedist;
+    }
+};
+template<>
+struct SqrNormFunctor<L2Norm>: public sqrL2Norm {};
+
 /*
  *
  * Use https://people.eecs.berkeley.edu/~jordan/courses/260-spring10/other-readings/chapter8.pdf

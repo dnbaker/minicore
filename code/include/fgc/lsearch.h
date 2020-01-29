@@ -55,7 +55,9 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&wrow[0]));
             row(mat, i BLAZE_CHECK_DEBUG) = blaze::serial(blaze::elements(wrow, sources->data(), sources->size()));
             ++rows_complete;
-            std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", rows_complete.load(), nrows);
+            const auto val = rows_complete.load();
+            if((val & (val - 1)) == 0)
+                std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", val, nrows);
         }
     } else {
 #ifndef USE_BOOST_PARALLEL
@@ -67,7 +69,9 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
             assert(vtx < boost::num_vertices(x));
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&mr[0]));
             ++rows_complete;
-            std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", rows_complete.load(), nrows);
+            const auto val = rows_complete.load();
+            if((val & (val - 1)) == 0)
+                std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", val, nrows);
         }
     }
 }
