@@ -634,9 +634,15 @@ int main(int argc, char **argv) {
         coresets.reserve(ncs * 3);
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(sampler.sample(coreset_size));
+            if(bbox.set()) {
+                for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
+            }
         }
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(bflsampler.sample(coreset_size));
+            if(bbox.set()) {
+                for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
+            }
         }
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(uniform_sampler.sample(coreset_size));
