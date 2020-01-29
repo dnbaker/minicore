@@ -430,10 +430,43 @@ struct LocalKMedSearcher {
                         }
                     }
                 }
+#if !NDEBUG
+                exhaustive_manual_check();
+#endif
             }
         }
         std::fprintf(stderr, "Finished in %zu swaps by exhausting all potential improvements. Final cost: %f\n",
                      total, current_cost_);
+    }
+    void exhaustive_manual_check() {
+        const std::vector<IType> csol(sol_.begin(), sol_.end());
+        std::vector<IType> wsol = csol, fsol = csol;
+        double ccost = current_cost_, ocost = current_cost_;
+        size_t extra_rounds = 0;
+        bool improvement_made;
+        start:
+        improvement_made = false;
+        for(size_t si = 0; si < k_; ++si) {
+            for(size_t ci = 0; ci < nr_; ++ci) {
+                if(std::find(wsol.begin(), wsol.end(), ci) != wsol.end()) continue;
+                wsol[si] = ci;
+                const double cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, wsol)));
+                if(cost < ccost) {
+                    std::fprintf(stderr, "Found a better one: %g vs %g (%g)\n", cost, ccost, ccost - cost);
+                    ccost = cost;
+                    fsol = wsol;
+                    wsol = fsol;
+                    improvement_made = true;
+                    ++extra_rounds;
+                    goto start;
+                }
+            }
+            wsol[si] = csol[si];
+        }
+        if(improvement_made) goto start;
+        current_cost_ = ccost;
+        std::fprintf(stderr, "improved cost for %zu rounds and a total improvemnet of %g\n", extra_rounds, ocost - current_cost_);
+        assert(std::abs(ocost - current_cost_) < ((initial_cost_ / k_ * eps_) + 1e-5));  // 1e-5 for numeric stability issues
     }
 };
 
