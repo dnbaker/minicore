@@ -1,5 +1,8 @@
 #ifndef FGC_GEO_H__
 #define FGC_GEO_H__
+#include <stdexcept>
+#include <cstdio>
+#include <cstdlib>
 #include <utility>
 #include <string>
 
@@ -36,8 +39,14 @@ struct BoundingBoxData {
             && p_box <= 1. && p_box >= 0.
             && p_nobox <= 1. && p_nobox >= 0.;
     }
+    std::string to_string() const {
+        char buf[256];
+        return std::string(buf, std::sprintf(buf, "lat (%0.12g->%0.12g), lon (%0.12g->%0.12g), probabilities: %0.12g/%0.12g\n", latlo, lathi, lonlo, lonhi, p_box, p_nobox));
+    }
     void print(std::FILE *fp=stderr) const {
-        std::fprintf(fp, "lat (%g->%g), lon (%g->%g), probabilities: %g/%g\n", latlo, lathi, lonlo, lonhi, p_box, p_nobox);
+        const std::string str = to_string();
+        if(std::fwrite(str.data(), 1, str.size(), fp) != str.size())
+            throw std::runtime_error("Failed to write to file");
     }
     bool contains(latlon_t pt) const {
         return (pt.lat() <= lathi && pt.lat() >= latlo)

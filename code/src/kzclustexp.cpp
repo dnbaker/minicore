@@ -33,13 +33,20 @@ static size_t str2nbytes(const char *s) {
     return ret;
 }
 
-std::vector<uint32_t> generate_random_centers(uint64_t seed, unsigned k, unsigned nvertices) {
+std::vector<uint32_t>
+generate_random_centers(uint64_t seed, unsigned k, unsigned x_size,
+                 const std::vector<size_t> *bbox_vertices_ptr=nullptr) {
     std::vector<uint32_t> random_centers;
     wy::WyRand<uint32_t, 2> rng(seed);
     while(random_centers.size() < k) {
-        auto v = rng() % nvertices;
+        auto v = rng() % x_size;
         if(std::find(random_centers.begin(), random_centers.end(), v) == random_centers.end())
             random_centers.push_back(v);
+    }
+    if(bbox_vertices_ptr) {
+        assert(x_size == bbox_vertices_ptr->size());
+        for(auto &rc: random_centers)
+            rc = bbox_vertices_ptr->operator[](rc);
     }
     return random_centers;
 }
@@ -48,7 +55,9 @@ std::vector<uint32_t> generate_random_centers(uint64_t seed, unsigned k, unsigne
 template<typename Graph, typename ICon, typename FCon, typename IT, typename RetCon, typename CSWT>
 void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuffer,
                              const std::vector<coresets::IndexCoreset<IT, CSWT>> &coresets,
-                             RetCon &ret, double z)
+                             RetCon &ret, double z,
+                             const std::vector<typename boost::graph_traits<Graph>::vertex_descriptor> *
+                             bbox_vertices_ptr = nullptr)
 {
     assert(ret.size() == coresets.size());
     const size_t nv = boost::num_vertices(x);
@@ -63,9 +72,17 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
     }
     if(z != 1.) costbuffer = pow(costbuffer, z);
     double fullcost = 0.;
-    OMP_PRAGMA("omp parallel for reduction(+:fullcost)")
-    for(unsigned i = 0; i < nv; ++i) {
-        fullcost += costbuffer[i];
+    if(bbox_vertices_ptr) {
+        const size_t nbox_vertices = bbox_vertices_ptr->size();
+        OMP_PRAGMA("omp parallel for reduction(+:fullcost)")
+        for(unsigned i = 0; i < nbox_vertices; ++i) {
+            fullcost += costbuffer[bbox_vertices_ptr->operator[](i)];
+        }
+    } else {
+        OMP_PRAGMA("omp parallel for reduction(+:fullcost)")
+        for(unsigned i = 0; i < nv; ++i) {
+            fullcost += costbuffer[i];
+        }
     }
     const double fcinv = 1. / fullcost;
     OMP_PFOR
@@ -85,10 +102,12 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
 }
 template<typename CS, typename CoorCon, typename BBox>
 void show_fraction_in_out(const CS &coreset, const CoorCon &coordinates, const BBox bbox) {
-    uint32_t in = 0;
-    for(size_t i = 0; i < coreset.size(); ++i)
-        in += bbox.contains(coordinates[coreset.indices_[i]]);
-    std::fprintf(stderr, "coreset has %zu in and %zu out\n", size_t(in), coreset.size() - in);
+    if(bbox.set()) {
+        uint32_t in = 0;
+        for(size_t i = 0; i < coreset.size(); ++i)
+            in += bbox.contains(coordinates.at(coreset.indices_.at(i)));
+        std::fprintf(stderr, "coreset has %zu in and %zu out\n", size_t(in), coreset.size() - in);
+    }
 }
 
 template<typename GraphT>
@@ -142,7 +161,9 @@ max_component(GraphT &g, std::vector<latlon_t> &coordinates) {
     return g;
 }
 
-void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k, double z, size_t nv, size_t ne) {
+void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k, double z, size_t nv, size_t ne,
+                  BoundingBoxData bd, const std::vector<std::size_t> &in_vertices, const std::vector<std::size_t> &out_vertices)
+{
     ofs << "##Command-line: '";
     while(*argv) {
         ofs << *argv;
@@ -152,6 +173,10 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
     char buf[128];
     std::sprintf(buf, "'\n##z: %g\n##nsamples: %u\n##k: %u\n##nv: %zu\n##ne: %zu\n", z, nsamples, k, nv, ne);
     ofs << buf;
+    if(bd.set()) {
+        ofs << "##Subsampled: " << in_vertices.size() << " within bounding box, " << out_vertices.size()
+            << " outside " << bd.to_string() << '\n';
+    }
     ofs << "#coreset_size\tmax distortion (VX11)\tmean distortion (VX11)\t "
         << "max distortion (BFL16)\tmean distortion (BFL16)\t"
         << "max distortion (uniform sampling)\tmean distortion (uniform sampling)\t"
@@ -357,6 +382,7 @@ int main(int argc, char **argv) {
     // nullptr here for the case of using all vertices
     // but nonzero if a bounding box has been used to select $X \subseteq V$.
     const std::vector<Vertex> *bbox_vertices_ptr = nullptr;
+    const size_t x_size = bbox_vertices.empty() ? boost::num_vertices(g): bbox_vertices.size();
     if(bbox_vertices.size()) {
         bbox_vertices_ptr = &bbox_vertices;
 #ifndef NDEBUG
@@ -381,10 +407,19 @@ int main(int argc, char **argv) {
     timer.report();
     timer.restart("center counts:");
     std::vector<uint32_t> center_counts(sampled.size());
-    OMP_PFOR
-    for(size_t i = 0; i < thorup_assignments.size(); ++i) {
-        OMP_ATOMIC
-        ++center_counts[thorup_assignments[i]];
+    if(bbox.set()) {
+        OMP_PFOR
+        for(size_t i = 0; i < bbox_vertices.size(); ++i) {
+            assert(bbox_vertices[i] < thorup_assignments.size());
+            OMP_ATOMIC
+            ++center_counts[thorup_assignments[bbox_vertices[i]]];
+        }
+    } else {
+        OMP_PFOR
+        for(size_t i = 0; i < thorup_assignments.size(); ++i) {
+            OMP_ATOMIC
+            ++center_counts[thorup_assignments[i]];
+        }
     }
     timer.report();
     std::fprintf(stderr, "[Phase 1] Thorup sampling complete. Sampled %zu points from input graph: %zu vertices, %zu edges.\n", sampled.size(), boost::num_vertices(g), boost::num_edges(g));
@@ -458,13 +493,31 @@ int main(int argc, char **argv) {
     }
     // Build a coreset importance sampler based on it.
     coresets::CoresetSampler<float, uint32_t> sampler, bflsampler;
-    timer.restart("make coreset samplers:");
-    sampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
-                         nullptr, (((seed * 1337) ^ (seed * seed * seed)) - ((seed >> 32) ^ (seed << 32))), coresets::VARADARAJAN_XIAO);
-    bflsampler.make_sampler(costs.size(), med_solution.size(), costs.data(), assignments.data(),
-                         nullptr, (((seed * 1337) + (seed * seed * seed)) ^ (seed >> 32) ^ (seed << 32)), coresets::BRAVERMAN_FELDMAN_LANG);
-    if(!coreset_sampler_path.empty()) {
-        sampler.write(coreset_sampler_path);
+    {
+        timer.restart("make coreset samplers:");
+        std::unique_ptr<float[]> bbox_costs;
+        std::unique_ptr<uint32_t[]> bbox_assignments;
+        const float *cost_data = costs.data();
+        const uint32_t *assignments_data = assignments.data();
+        if(bbox.set()) {
+            bbox_costs.reset(new float[x_size]);
+            bbox_assignments.reset(new uint32_t[x_size]);
+            OMP_PFOR
+            for(size_t i = 0; i < bbox_vertices.size(); ++i) {
+                const uint32_t bvi = bbox_vertices[i];
+                bbox_costs[i] = costs[bvi];
+                bbox_assignments[i] = assignments[bvi];
+            }
+            cost_data = bbox_costs.get();
+            assignments_data = bbox_assignments.get();
+        }
+        sampler.make_sampler(x_size, k, cost_data, assignments_data,
+                             nullptr, seed * 137, coresets::VARADARAJAN_XIAO);
+        bflsampler.make_sampler(x_size, k, cost_data, assignments_data,
+                             nullptr, seed * 662607, coresets::BRAVERMAN_FELDMAN_LANG);
+        if(coreset_sampler_path.size()) {
+            sampler.write(coreset_sampler_path);
+        }
     }
     timer.report();
     assert(sampler.sampler_.get());
@@ -473,8 +526,9 @@ int main(int argc, char **argv) {
     wy::WyRand<uint32_t, 2> rng(seed);
     std::string ofname = output_prefix + ".table_out." + std::to_string(k) + ".tsv";
     std::ofstream tblout(ofname);
-    print_header(tblout, argv, testing_num_centersets, k, z, boost::num_vertices(g), boost::num_edges(g));
-    coresets::UniformSampler<float, uint32_t> uniform_sampler(bbox.set() ? bbox_vertices.size(): costs.size());
+    print_header(tblout, argv, testing_num_centersets, k, z, boost::num_vertices(g), boost::num_edges(g), bbox, in_vertices, out_vertices);
+    std::fprintf(stderr, "Making uniform sampler\n");
+    coresets::UniformSampler<float, uint32_t> uniform_sampler(x_size);
     // We run the inner loop `coreset_testing_num_iters` times
     // and average the maximum distortion.
     // We do this because there are two sources of randomness:
@@ -495,13 +549,24 @@ int main(int argc, char **argv) {
         // are uniformly randomly sampled.
         std::vector<coresets::IndexCoreset<uint32_t, float>> coresets;
         coresets.reserve(ncs * 3);
+        std::fprintf(stderr, "Making VX coresets. sampler size: %zu\n", sampler.size());
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(sampler.sample(coreset_size));
+            std::fprintf(stderr, "About to reset things\n");
+            if(bbox.set()) {
+                std::fprintf(stderr, "About to reset things!!!\n");
+                for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
+            }
             show_fraction_in_out(coresets.back(), coordinates, bbox);
         }
+        std::fprintf(stderr, "Making BFL coresets.size: %zu\n", bflsampler.size());
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(bflsampler.sample(coreset_size));
+            if(bbox.set()) {
+                for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
+            }
         }
+        std::fprintf(stderr, "Making Uniform coresets\n");
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(uniform_sampler.sample(coreset_size));
             if(bbox.set()) {
@@ -518,7 +583,7 @@ int main(int argc, char **argv) {
         for(size_t i = 0; i < testing_num_centersets; ++i) {
             //if(i % 10 == 0)
             //    std::fprintf(stderr, "Calculating distortion %zu/%zu\n", i, random_centers.rows());
-            auto random_centers = generate_random_centers(i + seed + coreset_testing_num_iters, k, boost::num_vertices(g));
+            auto random_centers = generate_random_centers(i + seed + coreset_testing_num_iters, k, x_size, bbox_vertices_ptr);
             blaze::DynamicVector<double> distbuffer(boost::num_vertices(g));
             blaze::DynamicVector<double> currentdistortion(coresets.size());
 #ifdef _OPENMP
@@ -526,7 +591,7 @@ int main(int argc, char **argv) {
 #else
             auto &gcopy(g);
 #endif
-            calculate_distortion_centerset(gcopy, random_centers, distbuffer, coresets, currentdistortion, z);
+            calculate_distortion_centerset(gcopy, random_centers, distbuffer, coresets, currentdistortion, z, bbox_vertices_ptr);
             OMP_CRITICAL
             {
                 maxdistortion = blaze::serial(max(maxdistortion, currentdistortion));
@@ -536,7 +601,7 @@ int main(int argc, char **argv) {
                 meandistortion = blaze::serial(meandistortion + currentdistortion);
             }
         }
-        calculate_distortion_centerset(g, approx_v, fdistbuffer, coresets, tmpfdistortion, z);
+        calculate_distortion_centerset(g, approx_v, fdistbuffer, coresets, tmpfdistortion, z, bbox_vertices_ptr);
         sumfdistortion += tmpfdistortion;
         meanmaxdistortion += maxdistortion;
         meandistortion /= testing_num_centersets;
@@ -582,7 +647,7 @@ int main(int argc, char **argv) {
         assert(coresets.size() == distvecsz);
         OMP_PFOR
         for(size_t i = 0; i < testing_num_centersets; ++i) {
-            auto random_centers = generate_random_centers(i + seed + coreset_testing_num_iters, k, boost::num_vertices(g));
+            auto random_centers = generate_random_centers(i + seed + coreset_testing_num_iters, k, x_size, bbox_vertices_ptr);
             blaze::DynamicVector<double> distbuffer(boost::num_vertices(g));
             blaze::DynamicVector<double> currentdistortion(coresets.size());
 #ifdef _OPENMP
@@ -590,7 +655,7 @@ int main(int argc, char **argv) {
 #else
             auto &gcopy(g);
 #endif
-            calculate_distortion_centerset(gcopy, random_centers, distbuffer, coresets, currentdistortion, z);
+            calculate_distortion_centerset(gcopy, random_centers, distbuffer, coresets, currentdistortion, z, bbox_vertices_ptr);
             OMP_CRITICAL
             {
                 maxdistortion = blaze::serial(max(maxdistortion, currentdistortion));
