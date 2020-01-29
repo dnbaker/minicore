@@ -1,7 +1,7 @@
 #if defined(USE_BOOST_PARALLEL) && USE_BOOST_PARALLEL
 #include "boost/graph/use_mpi.hpp"
 #include "boost/graph/distributed/depth_first_search.hpp"
-#define USE3 1
+#define USE3 0
 #include "fgc/relaxed_heap.hpp"
 #endif
 #include "fgc/graph.h"
