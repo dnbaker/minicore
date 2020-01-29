@@ -370,6 +370,11 @@ int main(int argc, char **argv) {
         }
         timer.report();
         std::fprintf(stderr, "sampled in: %zu. sampled out: %zu. sample probs: %g, %g\n", nsampled_in, nsampled_out, bbox.p_box, bbox.p_nobox);
+        auto coord_fn = output_prefix + ".coords.txt";
+        std::ofstream cfs(coord_fn);
+        for(const auto vtx: bbox_vertices) {
+            cfs << coordinates[vtx].lon() << '\t' << coordinates[vtx].lat() << '\n';
+        }
     }
     // Assert that it's connected, or else the problem has infinite cost.
     assert_connected(g);
