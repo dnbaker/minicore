@@ -1,6 +1,7 @@
 #if defined(USE_BOOST_PARALLEL) && USE_BOOST_PARALLEL
 #include "boost/graph/use_mpi.hpp"
 #include "boost/graph/distributed/depth_first_search.hpp"
+#define USE3 1
 #include "fgc/relaxed_heap.hpp"
 #endif
 #include "fgc/graph.h"
@@ -81,6 +82,13 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
         }
         ret[j] = std::abs(coreset_cost * fcinv - 1.);
     }
+}
+template<typename CS, typename CoorCon, typename BBox>
+void show_fraction_in_out(const CS &coreset, const CoorCon &coordinates, const BBox bbox) {
+    uint32_t in = 0;
+    for(size_t i = 0; i < coreset.size(); ++i)
+        in += bbox.contains(coordinates[coreset.indices_[i]]);
+    std::fprintf(stderr, "coreset has %zu in and %zu out\n", size_t(in), coreset.size() - in);
 }
 
 template<typename GraphT>
@@ -202,6 +210,24 @@ void parse_coordinates(std::string fn, std::vector<latlon_t> &ret, BoundingBoxDa
     std::cerr << "in: " << inout[1] << ". out: " << inout[0] << '\n';
 }
 
+template<typename T, typename Costs>
+void show_partition_stats(const T &in_vertices, const T &out_vertices, const Costs &costs) {
+    double insum = 0.;
+    OMP_PRAGMA("omp parallel for reduction(+:insum)")
+    for(size_t i = 0; i < in_vertices.size(); ++i) {
+        insum += costs[in_vertices[i]];
+    }
+    double outsum = 0.;
+    OMP_PRAGMA("omp parallel for reduction(+:outsum)")
+    for(size_t i = 0; i < out_vertices.size(); ++i) {
+        outsum += costs[out_vertices[i]];
+    }
+    double total = insum + outsum;
+    std::fprintf(stderr, "Average cost in: %g. Average cost out: %g\n", insum / in_vertices.size(), outsum / out_vertices.size());
+    std::fprintf(stderr, "Total cost in: %g. Total cost out: %g\n", insum, outsum);
+    std::fprintf(stderr, "Percentage each of in, out: %%%0.4f. Total cost out: %%%0.4f\n", insum * 100. / total, outsum * 100. / total);
+}
+
 int main(int argc, char **argv) {
     unsigned k = 10;
     double z = 1.; // z = power of the distance norm
@@ -278,7 +304,7 @@ int main(int argc, char **argv) {
     timer.stop();
     timer.display();
     using Vertex = typename boost::graph_traits<decltype(g)>::vertex_descriptor;
-    //std::vector<Vertex> in_vertices, out_vertices;
+    std::vector<Vertex> in_vertices, out_vertices;
     std::vector<Vertex> bbox_vertices;
     size_t nsampled_in = 0, nsampled_out = 0;
     if(bbox.set()) {
@@ -300,19 +326,18 @@ int main(int argc, char **argv) {
     if(bbox.set()) {
         timer.restart("bbox sampling:");
         wy::WyRand<uint32_t, 2> bbox_rng(coordinates.size() + seed);
-        std::vector<Vertex> out_vertices;
         std::uniform_real_distribution<float> urd;
         for(const auto vtx: g.vertices()) {
             assert(vtx < g.num_vertices());
             if(bbox.contains(coordinates.at(vtx))) {
-                //in_vertices.push_back(vtx);
                 if(urd(bbox_rng) < bbox.p_box) {
+                    in_vertices.push_back(vtx);
                     bbox_vertices.push_back(vtx);
                     ++nsampled_in;
                 }
             } else {
-                //out_vertices.push_back(vtx);
                 if(urd(bbox_rng) < bbox.p_nobox) {
+                    out_vertices.push_back(vtx);
                     bbox_vertices.push_back(vtx);
                     ++nsampled_out;
                 }
@@ -428,6 +453,9 @@ int main(int argc, char **argv) {
     if(z != 1.)
         costs = blaze::pow(costs, z);
     timer.report();
+    if(in_vertices.size() || out_vertices.size()) {
+        show_partition_stats(in_vertices, out_vertices, costs);
+    }
     // Build a coreset importance sampler based on it.
     coresets::CoresetSampler<float, uint32_t> sampler, bflsampler;
     timer.restart("make coreset samplers:");
@@ -446,7 +474,7 @@ int main(int argc, char **argv) {
     std::string ofname = output_prefix + ".table_out." + std::to_string(k) + ".tsv";
     std::ofstream tblout(ofname);
     print_header(tblout, argv, testing_num_centersets, k, z, boost::num_vertices(g), boost::num_edges(g));
-    coresets::UniformSampler<float, uint32_t> uniform_sampler(costs.size());
+    coresets::UniformSampler<float, uint32_t> uniform_sampler(bbox.set() ? bbox_vertices.size(): costs.size());
     // We run the inner loop `coreset_testing_num_iters` times
     // and average the maximum distortion.
     // We do this because there are two sources of randomness:
@@ -469,12 +497,18 @@ int main(int argc, char **argv) {
         coresets.reserve(ncs * 3);
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(sampler.sample(coreset_size));
+            show_fraction_in_out(coresets.back(), coordinates, bbox);
         }
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(bflsampler.sample(coreset_size));
         }
         for(auto coreset_size: coreset_sizes) {
             coresets.emplace_back(uniform_sampler.sample(coreset_size));
+            if(bbox.set()) {
+                for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
+            }
+            std::fprintf(stderr, "Uniform sampler: \n");
+            show_fraction_in_out(coresets.back(), coordinates, bbox);
         }
         assert(coresets.size() == distvecsz);
         std::fprintf(stderr, "[Phase 5] Generated coresets for iter %zu/%u\n", i + 1, coreset_testing_num_iters);
