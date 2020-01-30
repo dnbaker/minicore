@@ -425,13 +425,15 @@ struct LocalKMedSearcher {
                                     continue;
                                 }
                                 ++total;
-                                goto next; // Meaning we've swapped this guy out and will pick another one.
+                                goto next;
                             }
                         }
                     }
                 }
                 // The solution is usually extremely close even if there is a change here. (less than 1e-6 of the cost)
+#ifndef NDEBUG
                 exhaustive_manual_check();
+#endif
             }
         }
         std::fprintf(stderr, "Finished in %zu swaps by exhausting all potential improvements. Final cost: %f\n",
