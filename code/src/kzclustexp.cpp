@@ -16,11 +16,8 @@
 #include <getopt.h>
 #include "blaze/util/Serialization.h"
 
-template<typename T> class TD;
-
 
 using namespace fgc;
-using namespace boost;
 
 static size_t str2nbytes(const char *s) {
     if(!s) return 0;
@@ -188,7 +185,7 @@ void usage(const char *ex) {
     std::fprintf(stderr, "usage: %s <opts> [input file or ../data/dolphins.graph]\n"
                          "-k\tset k [12]\n"
                          "-z\tset z [1.]\n"
-                         "-c\tAppend coreset size. Default: {100} (if empty)\n"
+                         "-c\tAppend coreset size. Default: {5, 10, 15, 20, 25, 50, 75, 100, 125, 250, 375, 500, 625, 1250, 1875, 2500, 3125, 3750} (if empty)\n"
                          "-s\tPath to write coreset sampler to\n"
                          "-S\tSet maximum size of Thorup subsampled data. Default: infinity\n"
                          "-M\tSet maxmimum memory size to use. Default: 16GiB\n"
@@ -254,6 +251,12 @@ void show_partition_stats(const T &in_vertices, const T &out_vertices, const Cos
 }
 
 int main(int argc, char **argv) {
+    if(std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "--help") == 0;}) != argv + argc)
+        usage(argv[0]);
+    std::fprintf(stderr, "[main] Command-line arguments: '");
+    std::for_each(argv, argv + argc, [](auto x) {std::fprintf(stderr, "%s ", x);});
+    std::fprintf(stderr, "'\n");
+
     unsigned k = 10;
     double z = 1.; // z = power of the distance norm
     std::string output_prefix;
@@ -273,17 +276,19 @@ int main(int argc, char **argv) {
     );
     std::string fn = std::to_string(seed);
     std::string coreset_sampler_path;
+    std::string cache_prefix;
     unsigned num_thorup_trials = 15;
     //bool test_samples_from_thorup_sampled = true;
     double eps = 0.1;
     BoundingBoxData bbox;
-    for(int c;(c = getopt(argc, argv, "e:B:S:N:T:t:p:o:M:z:s:c:K:k:R:LbDrh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "C:e:B:S:N:T:t:p:o:M:z:s:c:K:k:R:LbDrh?")) >= 0;) {
         switch(c) {
             case 'e': if((eps = std::atof(optarg)) > 1. || eps < 0.)
                         throw std::runtime_error("Required: 0 >= eps >= 1.");
                       break;
             case 'K': extra_ks.push_back(std::atoi(optarg)); break;
             case 'k': k = std::atoi(optarg); break;
+            case 'C': cache_prefix = optarg; break;
             case 'z': z = std::atof(optarg); break;
             case 'L': local_search_all_vertices = true; break;
             case 'r': rectangular = true; break;
@@ -437,8 +442,18 @@ int main(int argc, char **argv) {
     timer.restart("distance matrix generation:");
     using CM = blaze::CustomMatrix<float, blaze::aligned, blaze::padded, blaze::rowMajor>;
     if(sampled.size() * ndatarows * sizeof(float) > rammax) {
+#if 0
+        if(cache_prefix.empty()) 
+            std::fprintf(stderr, "%zu * %zu * sizeof(float) > rammax %zu\n", sampled.size(), ndatarows, rammax);
+        else
+            std::fprintf(stderr, "Calculating matrix directly to disk\n");
+#else
+#endif
         std::fprintf(stderr, "%zu * %zu * sizeof(float) > rammax %zu\n", sampled.size(), ndatarows, rammax);
-        diskmatptr.reset(new DiskMat<float>(graph2diskmat(g, fn, &sampled, !rectangular, local_search_all_vertices)));
+        std::string cached_diskmat = fn + ".mmap.matrix";
+        diskmatptr.reset(new DiskMat<float>(graph2diskmat(g, cached_diskmat, &sampled, !rectangular, local_search_all_vertices)));
+        if(cache_prefix.size())
+            diskmatptr->delete_file_ = false;
     } else {
         rammatptr.reset(new blaze::DynamicMatrix<float>(graph2rammat(g, fn, &sampled, !rectangular, local_search_all_vertices)));
     }
@@ -505,6 +520,7 @@ int main(int argc, char **argv) {
         const float *cost_data = costs.data();
         const uint32_t *assignments_data = assignments.data();
         if(bbox.set()) {
+            std::fprintf(stderr, "fetching bbox costs/assignments\n");
             bbox_costs.reset(new float[x_size]);
             bbox_assignments.reset(new uint32_t[x_size]);
             OMP_PFOR
@@ -516,12 +532,22 @@ int main(int argc, char **argv) {
             cost_data = bbox_costs.get();
             assignments_data = bbox_assignments.get();
         }
+        std::fprintf(stderr, "Building coreset samplers with %p/%p pointers and set cardinality %zu\n",
+                     static_cast<const void *>(cost_data), static_cast<const void *>(assignments_data),
+                     x_size);
         sampler.make_sampler(x_size, k, cost_data, assignments_data,
                              nullptr, seed * 137, coresets::VARADARAJAN_XIAO);
         bflsampler.make_sampler(x_size, k, cost_data, assignments_data,
                              nullptr, seed * 662607, coresets::BRAVERMAN_FELDMAN_LANG);
         if(coreset_sampler_path.size()) {
             sampler.write(coreset_sampler_path);
+        }
+        if(cache_prefix.size()) {
+            sampler.write(cache_prefix + ".coreset_sampler");
+            std::fprintf(stderr, "Attempting to write to disk. dm dimensions: %zu/%zu\n", dm.rows(), dm.columns());
+            blaze::Archive<std::ofstream> distances(cache_prefix + ".blaze");
+            distances << dm;
+            std::fprintf(stderr, "Wrote to disk. dm dimensions: %zu/%zu\n", dm.rows(), dm.columns());
         }
     }
     timer.report();
@@ -687,6 +713,10 @@ int main(int argc, char **argv) {
                 << '\t' << maxdistortion[i + ncs * 2] << '\t' << meandistortion[i + ncs * 2]
                 << '\n';
         }
+    }
+    if(cache_prefix.size()) {
+        DiskMat<float> newdistmat(graph2diskmat(g, cache_prefix + ".complete.mmap.matrix"));
+        newdistmat.delete_file_ = false;
     }
     return EXIT_SUCCESS;
 }

@@ -123,7 +123,7 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
 }
 
 void usage(const char *ex) {
-    std::fprintf(stderr, "usage: %s <opts> [input file or ../data/dolphins.graph]\n"
+    std::fprintf(stderr, "usage: %s <opts> input.gr input.coreset_sampler \n"
                          "-k\tset k [12]\n"
                          "-c\tAppend coreset size. Default: {100} (if empty)\n"
                          "-M\tSet maxmimum memory size to use. Default: 16GiB\n"
@@ -157,7 +157,8 @@ int main(int argc, char **argv) {
     }
     if(output_prefix.empty())
         output_prefix = std::to_string(seed);
-    std::string input = argc == optind ? "../data/dolphins.graph": const_cast<const char *>(argv[optind]);
+    if(optind + 2 != argc) usage(argv[0]);
+    std::string input = const_cast<const char *>(argv[optind]);
     std::srand(seed);
     std::fprintf(stderr, "Reading from file: %s\n", input.data());
 
@@ -172,6 +173,9 @@ int main(int argc, char **argv) {
     max_component(g);
     timer.report();
     assert_connected(g);
+    coresets::CoresetSampler<float, uint32_t> sampler;
+    sampler.read(argv[optind + 1]);
+    if(sampler.size() != boost::num_vertices(g)) throw std::runtime_error("Needs to match");
     // Assert that it's connected, or else the problem has infinite cost.
 
     std::unique_ptr<DiskMat<float>> diskmatptr;
