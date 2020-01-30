@@ -26,6 +26,7 @@ struct DiskMat {
     using MatType = blaze::CustomMatrix<VT, AF, PF, SO>;
     MatType mat_;
     std::string path_;
+
     DiskMat(const DiskMat &o) = delete;
     DiskMat(DiskMat &&o): path_(o.path_) {
         uint8_t *ptr = reinterpret_cast<uint8_t *>(this), *optr = reinterpret_cast<uint8_t *>(std::addressof(o));

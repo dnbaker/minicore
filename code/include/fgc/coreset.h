@@ -179,7 +179,7 @@ struct CoresetSampler {
         this->write(fp);
         gzclose(fp);
     }
-    void read(const std::string &s) const {
+    void read(const std::string &s) {
         gzFile fp = gzopen(s.data(), "rb");
         if(!fp) throw std::runtime_error("Failed to open file");
         this->read(fp);

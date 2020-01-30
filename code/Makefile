@@ -35,7 +35,7 @@ endif
 
 TESTS=tbm coreset_test bztest btest osm2dimacs dmlsearch diskmattest graphtest jvtest kmpptest tbas
 
-clust: kzclustexp fastkzclustexp
+clust: kzclustexp fastkzclustexp kzclustexpf
 
 tests: $(TESTS)
 print_tests:
