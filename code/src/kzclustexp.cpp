@@ -459,7 +459,7 @@ int main(int argc, char **argv) {
         rammatptr.reset(new blaze::DynamicMatrix<float>(graph2rammat(g, fn, &sampled, !rectangular, local_search_all_vertices)));
     }
     timer.report();
-    CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), sampled.size(), ndatarows, diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
+    CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), ndatarows, ncol, diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
     std::fprintf(stderr, "dm size: %zu rows, %zu columns\n", dm.rows(), dm.columns());
     {
         fgc::util::Timer newtimer("full distance matrix serialization");

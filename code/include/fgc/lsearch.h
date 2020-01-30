@@ -23,6 +23,8 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
     if(only_sources_as_dests && sources == nullptr) throw std::invalid_argument("only_sources_as_dests requires sources be non-null");
     const size_t ncol = only_sources_as_dests ? sources->size(): boost::num_vertices(x);
     const typename boost::graph_traits<Graph>::vertex_iterator vertices = boost::vertices(x).first;
+    assert(mat.rows() == nrows);
+    assert(mat.columns() == ncol);
     if(mat.rows() != nrows || mat.columns() != ncol) {
         char buf[256];
         throw std::invalid_argument(std::string(buf, std::sprintf(buf, "mat sizes (%zu rows, %zu col) don't match output requirements (%zu/%zu)\n",
@@ -30,9 +32,6 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
     }
     std::atomic<size_t> rows_complete;
     rows_complete.store(0);
-#ifndef NDEBUG
-    std::fprintf(stderr, "only sources as dests: %d.\n", only_sources_as_dests);
-#endif
     if(only_sources_as_dests) {
         // require that mat have nrows * ncol
         if(sources == nullptr) throw std::invalid_argument("only_sources_as_dests requires non-null sources");
@@ -63,6 +62,12 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
                 std::fprintf(stderr, "Completed dijkstra for row %zu/%zu\n", val, nrows);
         }
     } else {
+        assert(ncol == boost::num_vertices(x));
+#ifndef NDEBUG
+        if(all_sources) {
+            assert(boost::num_vertices(x) == nrows);
+        }
+#endif
 #ifndef USE_BOOST_PARALLEL
         OMP_PFOR
 #endif
