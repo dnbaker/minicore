@@ -487,9 +487,20 @@ int main(int argc, char **argv) {
     }
     auto med_solution = lsearcher.sol_;
     auto ccost = lsearcher.current_cost_;
-    // Free memory
-    if(diskmatptr) diskmatptr.reset();
-    if(rammatptr) rammatptr.reset();
+    // Write if necessary, free memory.
+    {
+        fgc::util::Timer newtimer("full distance matrix serialization");
+        blaze::Archive<std::ofstream> distances(cache_prefix + ".blaze");
+        distances << dm;
+        if(bbox.set()) {
+            blaze::Archive<std::ofstream> bboxfh(cache_prefix + ".bbox_vertices.blaze");
+            blaze::CustomVector<Vertex, blaze::unaligned, blaze::unpadded> cv(bbox_vertices.data(), bbox_vertices.size());
+            bboxfh << cv;
+        }
+        std::fprintf(stderr, "Wrote to disk. dm dimensions: %zu/%zu\n", dm.rows(), dm.columns());
+        if(diskmatptr) diskmatptr.reset();
+        if(rammatptr) rammatptr.reset();
+    }
 
     std::fprintf(stderr, "[Phase 3] Local search completed. Cost for solution: %g\n", ccost);
     // Calculate the costs of this solution
@@ -544,10 +555,6 @@ int main(int argc, char **argv) {
         }
         if(cache_prefix.size()) {
             sampler.write(cache_prefix + ".coreset_sampler");
-            std::fprintf(stderr, "Attempting to write to disk. dm dimensions: %zu/%zu\n", dm.rows(), dm.columns());
-            blaze::Archive<std::ofstream> distances(cache_prefix + ".blaze");
-            distances << dm;
-            std::fprintf(stderr, "Wrote to disk. dm dimensions: %zu/%zu\n", dm.rows(), dm.columns());
         }
     }
     timer.report();
@@ -714,9 +721,11 @@ int main(int argc, char **argv) {
                 << '\n';
         }
     }
+#if 0
     if(cache_prefix.size()) {
         DiskMat<float> newdistmat(graph2diskmat(g, cache_prefix + ".complete.mmap.matrix"));
         newdistmat.delete_file_ = false;
     }
+#endif
     return EXIT_SUCCESS;
 }
