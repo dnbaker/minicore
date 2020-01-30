@@ -188,7 +188,7 @@ void usage(const char *ex) {
                          "-c\tAppend coreset size. Default: {5, 10, 15, 20, 25, 50, 75, 100, 125, 250, 375, 500, 625, 1250, 1875, 2500, 3125, 3750} (if empty)\n"
                          "-s\tPath to write coreset sampler to\n"
                          "-S\tSet maximum size of Thorup subsampled data. Default: infinity\n"
-                         "-M\tSet maxmimum memory size to use. Default: 16GiB\n"
+                         "-M\tSet maximum memory size to use. Default: 16GiB\n"
                          "-t\tSet number of sampled centers to test [500]\n"
                          "-T\tNumber of Thorup sampling trials [15]\n"
                          "-K\tAppend an 'extra' k to perform evaluations against. This must be smaller than the 'k' parameter.\n"
@@ -459,6 +459,16 @@ int main(int argc, char **argv) {
     }
     timer.report();
     CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), sampled.size(), ndatarows, diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
+    {
+        fgc::util::Timer newtimer("full distance matrix serialization");
+        blaze::Archive<std::ofstream> distances(cache_prefix + ".blaze");
+        distances << dm;
+        if(bbox.set()) {
+            blaze::Archive<std::ofstream> bboxfh(cache_prefix + ".bbox_vertices.blaze");
+            blaze::CustomVector<Vertex, blaze::unaligned, blaze::unpadded> cv(bbox_vertices.data(), bbox_vertices.size());
+            bboxfh << cv;
+        }
+    }
     if(z != 1.) {
         std::fprintf(stderr, "rescaling distances by the power of z\n");
         timer.restart("z rescaling");
@@ -489,14 +499,6 @@ int main(int argc, char **argv) {
     auto ccost = lsearcher.current_cost_;
     // Write if necessary, free memory.
     {
-        fgc::util::Timer newtimer("full distance matrix serialization");
-        blaze::Archive<std::ofstream> distances(cache_prefix + ".blaze");
-        distances << dm;
-        if(bbox.set()) {
-            blaze::Archive<std::ofstream> bboxfh(cache_prefix + ".bbox_vertices.blaze");
-            blaze::CustomVector<Vertex, blaze::unaligned, blaze::unpadded> cv(bbox_vertices.data(), bbox_vertices.size());
-            bboxfh << cv;
-        }
         std::fprintf(stderr, "Wrote to disk. dm dimensions: %zu/%zu\n", dm.rows(), dm.columns());
         if(diskmatptr) diskmatptr.reset();
         if(rammatptr) rammatptr.reset();
@@ -666,6 +668,7 @@ int main(int argc, char **argv) {
                << '\t' << sumfdistortion[i + ncs * 2]
                << '\n';
     }
+    tblout.flush();
     for(auto ek: extra_ks) {
         std::string ofname_ok = output_prefix + ".table_out.ok." + std::to_string(ek) + ".tsv";
         std::ofstream ofs(ofname_ok);
