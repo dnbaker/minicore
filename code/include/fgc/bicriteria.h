@@ -127,8 +127,6 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
         return std::make_pair(std::move(F), std::numeric_limits<double>::max());
     }
     assert(boost::num_vertices(x) == nv);
-    //vx.clear();
-    //assert_connected(x);
     double cost = 0.;
     if(bbox_vertices_ptr) {
         const size_t nboxv = bbox_vertices_ptr->size();
