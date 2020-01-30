@@ -30,6 +30,9 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
     }
     std::atomic<size_t> rows_complete;
     rows_complete.store(0);
+#ifndef NDEBUG
+    std::fprintf(stderr, "only sources as dests: %d.\n", only_sources_as_dests);
+#endif
     if(only_sources_as_dests) {
         // require that mat have nrows * ncol
         if(sources == nullptr) throw std::invalid_argument("only_sources_as_dests requires non-null sources");

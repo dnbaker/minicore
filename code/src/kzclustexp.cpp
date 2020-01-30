@@ -436,12 +436,13 @@ int main(int argc, char **argv) {
 
     std::unique_ptr<DiskMat<float>> diskmatptr;
     std::unique_ptr<blaze::DynamicMatrix<float>> rammatptr;
-    const size_t ndatarows = rectangular ? boost::num_vertices(g): sampled.size();
+    const size_t ndatarows = local_search_all_vertices ? boost::num_vertices(g): sampled.size();
+    const size_t ncol = rectangular ? boost::num_vertices(g): sampled.size();
     std::fprintf(stderr, "rect: %d. lsearch all vertices: %d. ndatarows: %zu\n", rectangular, local_search_all_vertices, ndatarows);
 
     timer.restart("distance matrix generation:");
     using CM = blaze::CustomMatrix<float, blaze::aligned, blaze::padded, blaze::rowMajor>;
-    if(sampled.size() * ndatarows * sizeof(float) > rammax) {
+    if(ncol * ndatarows * sizeof(float) > rammax) {
 #if 0
         if(cache_prefix.empty()) 
             std::fprintf(stderr, "%zu * %zu * sizeof(float) > rammax %zu\n", sampled.size(), ndatarows, rammax);
@@ -459,6 +460,7 @@ int main(int argc, char **argv) {
     }
     timer.report();
     CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), sampled.size(), ndatarows, diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
+    std::fprintf(stderr, "dm size: %zu rows, %zu columns\n", dm.rows(), dm.columns());
     {
         fgc::util::Timer newtimer("full distance matrix serialization");
         blaze::Archive<std::ofstream> distances(cache_prefix + ".blaze");
