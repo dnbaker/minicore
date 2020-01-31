@@ -268,7 +268,8 @@ get_costs(Graph &x, const Container &container) {
 template<typename Graph, template<typename...> class BBoxTemplate=std::vector, typename...BBoxArgs>
 auto 
 thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
-    const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr)
+    const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr,
+    double npermult=21., double nroundmult=3.)
 {
     // Modification of Thorup, wherein we run Thorup Algorithm E
     // with eps = 0.5 a fixed number of times and return the best result.
@@ -278,10 +279,10 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
     wy::WyRand<uint64_t, 2> rng(seed);
     const size_t n = bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x);
     const double logn = std::log2(n);
-    const size_t samples_per_round = std::ceil(21. * k * logn / eps);
+    const size_t samples_per_round = std::ceil(npermult * logn * k * logn / eps);
 
     std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
-    auto func = [&](Graph &localx){return thorup_d(localx, rng, samples_per_round, 3 * logn, bbox_vertices_ptr);};
+    auto func = [&](Graph &localx){return thorup_d(localx, rng, samples_per_round, nroundmult * logn, bbox_vertices_ptr);};
     std::pair<std::vector<typename graph_traits<Graph>::vertex_descriptor>,
               double> bestsol;
     bestsol.second = std::numeric_limits<double>::max();

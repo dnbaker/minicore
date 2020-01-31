@@ -22,14 +22,14 @@ void emit_sol_cost(const Mat &dm, const Con &sol, std::string label) {
 
 template<typename Mat, typename RNG>
 auto
-thorup_d(const Mat &mat, RNG &rng, unsigned k)
+thorup_d(const Mat &mat, RNG &rng, unsigned k, double perroundmult=21., double nroundmult=3.)
 {
     static constexpr double EPS = 0.5;
     size_t nr = mat.rows();
     assert(nr = mat.columns());
     double logn = std::log(nr);
-    const size_t nperround = std::ceil(21. * k * logn / EPS);
-    const size_t maxnumrounds = std::ceil(3. * logn);
+    const size_t nperround = std::ceil(perroundmult * k * logn / EPS);
+    const size_t maxnumrounds = std::ceil(nroundmult * logn);
     std::vector<size_t> R(mat.rows());
     std::iota(R.begin(), R.end(), size_t(0));
     std::vector<size_t> F;
@@ -66,10 +66,10 @@ thorup_d(const Mat &mat, RNG &rng, unsigned k)
 template<typename Mat, typename RNG>
 auto
 thorup_mincost(const Mat &mat, RNG &rng, unsigned k, unsigned ntries) {
-    auto ret = thorup_d(mat, rng, k);
+    auto ret = thorup_d(mat, rng, k, 6., 2.);
     unsigned trynum = 0;
     while(++trynum < ntries) {
-        auto nextsamp = thorup_d(mat, rng, k);
+        auto nextsamp = thorup_d(mat, rng, k, 6., 2.);
         if(nextsamp.second < ret.second)
             std::swap(ret, nextsamp);
         else if(nextsamp.second == std::numeric_limits<float>::max()) --trynum;
@@ -79,13 +79,18 @@ thorup_mincost(const Mat &mat, RNG &rng, unsigned k, unsigned ntries) {
 
 int main(int argc, char **argv) {
     std::vector<unsigned> coreset_sizes{
-        5, 10, 15, 20, 25, 50, 75, 100, 125, 250, 375, 500, 625, 1250, 1875, 2500, 3125, 3750
+        50, 75, 100, 125, 250, 375, 500, 625, 1250, 1875, 2500, 3125, 3750, 5000
     };
     if(argc < 4 || argc > 5) usage(argv[0]);
     std::string msg = "'";
     for(auto av = argv; *av; ++av) {
         msg = msg + *av + (av[1] ? ' ': '\'');
     }
+#ifdef _OPENMP
+    if(const char *s = std::getenv("OMP_NUM_THREADS")) {
+        omp_set_num_threads(std::atoi(s));
+    }
+#endif
     std::fprintf(stderr, "command-line: %s\n", msg.data());
     blaze::DynamicMatrix<float> dm;
     {
@@ -164,5 +169,6 @@ int main(int argc, char **argv) {
             i = coreset.indices_.at(i);
         }
         emit_sol_cost(dm, sxs_sol, std::string("sxs") + csstr);
+        timer.reset();
     }
 }
