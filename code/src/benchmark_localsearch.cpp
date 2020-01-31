@@ -98,7 +98,6 @@ int main(int argc, char **argv) {
     std::srand(std::time(nullptr));
     wy::WyRand<uint32_t, 2> rng(std::rand());
     auto thorup_sampled = thorup_mincost(dm, rng, k, 5);
-    //if(thorup_sampled.first.size() == dm.rows()) throw std::runtime_error("Need to pick a thorup which is smaller\n");
     blaze::DynamicMatrix<float> thorup_dm(columns(rows(dm, thorup_sampled.first), thorup_sampled.first));
     std::fprintf(stderr, "Thorup sampled down to %zu from %zu\n", thorup_sampled.first.size(), dm.rows());
 
@@ -122,7 +121,6 @@ int main(int argc, char **argv) {
     timer.report();
     fullsol.assign(lsearcher.sol_.begin(), lsearcher.sol_.end());
     emit_sol_cost(dm, fullsol, "Full cost");
-#if 0
     auto thorup_lsearcher = fgc::make_kmed_lsearcher(thorup_dm, k, 1e-3, 13);
     timer.restart("Thorup local search");
     thorup_lsearcher.run();
@@ -130,7 +128,6 @@ int main(int argc, char **argv) {
     emit_sol_cost(dm, thorup_sol, "Thorup");
     timer.report();
     timer.reset();
-#endif
     for(const auto coreset_size: coreset_sizes) {
         auto csstr = std::to_string(coreset_size);
         timer.restart(std::string("coreset sample: ") + csstr);
@@ -148,7 +145,7 @@ int main(int argc, char **argv) {
             column(coreset_dm, i) *= coreset.weights_[i];
         std::fprintf(stderr, "reweighted. Optimizing\n");
         auto lsearcher = fgc::make_kmed_lsearcher(coreset_dm, k, 1e-3, 13);
-        timer.restart("optimize over V x S");
+        timer.restart(std::string("optimize over V x S") + csstr);
         lsearcher.run();
         timer.report();
         vxs_sol.assign(lsearcher.sol_.begin(), lsearcher.sol_.end());
@@ -158,7 +155,7 @@ int main(int argc, char **argv) {
         assert(cd.rows() == cd.columns());
         std::fprintf(stderr, "cd rows: %zu\n", cd.rows());
         auto sxs_searcher = fgc::make_kmed_lsearcher(coreset_dm, k, 1e-3, 13);
-        timer.restart("optimize over S x S");
+        timer.restart(std::string("optimize over S x S") + csstr);
         sxs_searcher.run();
         timer.report();
         sxs_sol.assign(sxs_searcher.sol_.begin(), sxs_searcher.sol_.end());
