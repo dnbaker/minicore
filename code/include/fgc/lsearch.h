@@ -430,7 +430,7 @@ struct LocalKMedSearcher {
                                     continue;
                                 }
                                 ++total;
-                                goto next; // Meaning we've swapped this guy out and will pick another one.
+                                goto next;
                             }
                         }
                     }

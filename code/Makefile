@@ -51,7 +51,7 @@ dmlrun: src/dmlsearch.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
 
 %: src/%.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -Ofast
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -O3
 
 mpi%: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -Ofast -DUSE_BOOST_PARALLEL=1

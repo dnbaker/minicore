@@ -279,7 +279,6 @@ INLINE double multinomial_cumulant(const VT &x) {return logsumexp(x);}
 template<typename FT, bool SO, typename OFT, bool filter_nans=true>
 double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs, OFT lhc, OFT rhc) {
     using FloatType = typename FT::ElementType;
-
     auto mean = (~lhs + ~rhs) * .5;
     double retsq, lhv, rhv;
     CONST_IF(filter_nans) {
@@ -290,13 +289,37 @@ double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::Dense
         lhv = dot(lhterm, ~lhs);
         rhv = dot(rhterm, ~rhs);
     } else {
+        assert(blaze::min(~lhs) > 0.);
+        assert(blaze::min(~rhs) > 0.);
         auto logmean = blaze::log(mean);
         lhv = dot(blaze::log(~lhs) - logmean, ~lhs);
         rhv = dot(blaze::log(~rhs) - logmean, ~rhs);
     }
+#ifndef NDEBUG
+    std::fprintf(stderr, "cumulant: %g. lhv: %g. rhv: %g. lhc: %g. rhc: %g\n", multinomial_cumulant(mean), lhv, rhv, lhc, rhc);
+#endif
     retsq = multinomial_cumulant(mean) + (lhv + rhv - lhc - rhc) * .5;
     return std::sqrt(retsq);
 }
+
+template<typename VT, bool SO, typename OFT, typename OBufType>
+double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
+                       const blaze::DenseVector<VT, SO> &rhs,
+                       const blaze::DenseVector<VT, SO> &lhlog,
+                       const blaze::DenseVector<VT, SO> &rhlog,
+                       OFT lhc, OFT rhc,
+                       OBufType &meanbuf,
+                       OBufType &logmeanbuf)
+{
+    assert(blaze::min(lhs) > 0. || !std::fprintf(stderr, "This version of the function requires 0s be removed\n"));
+    assert(blaze::min(rhs) > 0. || !std::fprintf(stderr, "This version of the function requires 0s be removed\n"));
+    ~(*meanbuf) = (~lhs + ~rhs) * .5;
+    ~*logmeanbuf = blaze::log(~*meanbuf);
+    return multinomial_cumulant(~*meanbuf) +
+        (0.5 * (dot(lhlog - ~*logmeanbuf, ~lhs) +
+          + dot(rhlog - ~*logmeanbuf, ~rhs) - lhc - rhc));
+}
+
 
 template<typename FT, bool SO, typename OFT, bool filter_nans=true>
 double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs,
@@ -305,12 +328,12 @@ double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::Dense
                        // cached logs
                        OFT lhc, OFT rhc) {
     using FloatType = typename FT::ElementType;
-    assert(std::find_if(lhl.begin(), lhl.end(), [](auto x)
+    assert(std::find_if((~lhl).begin(), (~lhl).end(), [](auto x)
                         {return std::isinf(x) || std::isnan(x);})
-           == lhl.end());
-    assert(std::find_if(rhl.begin(), rhl.end(), [](auto x)
+           == (~lhl).end());
+    assert(std::find_if((~rhl).begin(), (~rhl).end(), [](auto x)
                         {return std::isinf(x) || std::isnan(x);})
-           == rhl.end());
+           == (~rhl).end());
     auto mean = (~lhs + ~rhs) * .5;
     auto fi = [](auto x) {return std::isinf(x) ? FloatType(0): x;};
     double lhv, rhv;
@@ -365,6 +388,82 @@ INLINE double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs,
     assert((~lhs).size() == (~rhs).size());
     return multinomial_jsd(lhs, rhs, multinomial_cumulant(~lhs), multinomial_cumulant(~rhs));
 }
+
+enum Prior {
+    NONE,       // Do not modify values. Requires that there are no nonzero parameters
+    DIRICHLET,  // Uniform smoothing
+    GAMMA_BETA, // Requires a parameter
+    FEATURE_SPECIFIC_PRIOR // Requires a vector of parameters
+};
+
+template<typename DenseType>
+class MultinomialJSDApplicator {
+    using FT = typename DenseType::ElementType;
+
+    //using opposite_type = typename base_type::OppositeType;
+    DenseType &data_;
+    DenseType *logdata_;
+    blaze::DynamicVector<FT> cached_cumulants_;
+public:
+    const Prior prior_;
+    template<typename PriorContainer=blaze::DynamicVector<FT, blaze::rowVector>>
+    MultinomialJSDApplicator(DenseType &ref,
+                             Prior prior=DIRICHLET,
+                             const PriorContainer *c=nullptr):
+        data_(ref), logdata_(nullptr), prior_(prior)
+    {
+        prep(c);
+    }
+    void set_logs(DenseType &ref) {
+        if(ref.rows() = data_.rows() || ref.columns() != data_.columns())
+            throw std::invalid_argument("set_logs requires a matrix of the same dimensions");
+        logdata_ = &ref;
+        ref = blaze::log(data_);
+    }
+    double operator()(size_t lhind, size_t rhind) const {
+        return jsd(lhind, rhind);
+    }
+    double jsd(size_t lhind, size_t rhind) const {
+        assert(lhind < cached_cumulants_.size());
+        assert(rhind < cached_cumulants_.size());
+        const auto lhv = cached_cumulants_[lhind],
+                   rhv = cached_cumulants_[rhind];
+        if(logdata_) {
+            assert(logdata_->rows() == data_.rows());
+            return multinomial_jsd(row(data_, lhind BLAZE_CHECK_DEBUG),
+                                   row(data_, rhind BLAZE_CHECK_DEBUG),
+                                   row(*logdata_, lhind BLAZE_CHECK_DEBUG),
+                                   row(*logdata_, rhind BLAZE_CHECK_DEBUG),
+                                   lhv,
+                                   rhv);
+        } else {
+            return multinomial_jsd(row(data_, lhind BLAZE_CHECK_DEBUG),
+                                   row(data_, rhind BLAZE_CHECK_DEBUG),
+                                   lhv,
+                                   rhv);
+        }
+    }
+private:
+    template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>
+    void prep(const Container *c=nullptr) {
+        switch(prior_) {
+            case NONE:
+            assert(min(data_) > 0.);
+            return;
+            case DIRICHLET: data_ += (1. / data_.columns()); break;
+            case GAMMA_BETA:
+                if(c == nullptr) throw std::invalid_argument("Can't do gamma_beta with null pointer");
+                 data_ += (1. / *std::begin(*c)); break;
+            case FEATURE_SPECIFIC_PRIOR:
+                if(c == nullptr) throw std::invalid_argument("Can't do feature-specific with null pointer");
+                for(auto rw: blz::rowiterator(data_))
+                    rw += *c;
+        }
+        cached_cumulants_.resize(data_.rows());
+        for(size_t i = 0; i < data_.rows(); ++i)
+            cached_cumulants_[i] = multinomial_cumulant(row(data_, i BLAZE_CHECK_DEBUG));
+    }
+};
 
 template<typename FT, bool SO>
 INLINE double multinomial_bregman(const blaze::DenseVector<FT, SO> &lhs,
