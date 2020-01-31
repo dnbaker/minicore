@@ -10,6 +10,7 @@ namespace fgc {
 
 template<typename VT, bool SO=blaze::rowMajor, bool isPadded=blaze::padded, bool isAligned=blaze::aligned>
 struct DiskMat {
+    using This = DiskMat<VT, SO, isPadded, isAligned>;
     size_t nr_, nc_;
     using mmapper = mio::mmap_sink;
     std::unique_ptr<mmapper> ms_;

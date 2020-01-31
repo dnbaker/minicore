@@ -42,6 +42,9 @@
 #  ifndef OMP_PFOR
 #    define OMP_PFOR OMP_PRAGMA("omp parallel for")
 #  endif
+#  ifndef OMP_ELSE
+#    define OMP_ELSE(x, y) x
+#  endif
 #  ifndef OMP_ATOMIC
 #    define OMP_ATOMIC OMP_PRAGMA("omp atomic")
 #  endif
@@ -63,6 +66,9 @@
 #  endif
 #  ifndef OMP_ONLY
 #    define OMP_ONLY(...)
+#  endif
+#  ifndef OMP_ELSE
+#    define OMP_ELSE(x, y) y
 #  endif
 #  ifndef OMP_PFOR
 #    define OMP_PFOR

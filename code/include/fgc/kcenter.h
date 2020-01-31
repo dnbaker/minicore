@@ -19,24 +19,21 @@ using blz::push_back;
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 std::vector<IT>
-kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm())
+kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), size_t maxdest=0)
 {
     static_assert(sizeof(typename RNG::result_type) == sizeof(IT), "IT must have the same size as the result type of the RNG");
     static_assert(std::is_arithmetic<FT>::value, "FT must be arithmetic");
     auto dm = make_index_dm(first, norm);
     size_t np = end - first;
+    if(maxdest == 0) maxdest = np;
     std::vector<IT> centers(k);
     std::vector<FT> distances(np, 0.);
     VERBOSE_ONLY(std::fprintf(stderr, "[%s] Starting kcenter_greedy_2approx\n", __PRETTY_FUNCTION__);)
     {
-        auto fc = rng() % np;
+        auto fc = rng() % maxdest;
         centers[0] = fc;
-#ifdef _OPENMP
-        OMP_PFOR
-#else
-        SK_UNROLL_8
-#endif
-        for(size_t i = 0; i < np; ++i) {
+        OMP_ELSE(OMP_PFOR, SK_UNROLL_8)
+        for(size_t i = 0; i < maxdest; ++i) {
             if(unlikely(i == fc)) continue;
             distances[i] = dm(fc, i);
         }
@@ -44,18 +41,13 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
     }
 
     for(size_t ci = 0; ci < k; ++ci) {
-        auto it = std::max_element(
-#ifdef USE_TBB
-            std::execution::par_unseq,
-#endif
-            distances.begin(), distances.end());
+        auto it = std::max_element(distances.begin(), distances.end());
         VERBOSE_ONLY(std::fprintf(stderr, "maxelement is %zd from start\n", std::distance(distances.begin(), it));)
         uint64_t newc = it - distances.begin();
-        assert(newc != np);
         centers[ci] = newc;
         distances[newc] = 0.;
         OMP_PFOR
-        for(IT i = 0; i < np; ++i) {
+        for(IT i = 0; i < maxdest; ++i) {
             if(unlikely(i == newc)) continue;
             auto &ldist = distances[i];
             const auto dist = dm(newc, i);

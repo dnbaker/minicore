@@ -17,6 +17,8 @@ int main() {
     ~dm = 0;
     assert(dm(1, 4) == 0.);
     assert(blaze::sum(~dm) == 0);
+    randomize(~dm);
+    ~dm = abs(~dm + 1e-15);
     auto r1 = row(dm, 1), r0 = row(dm, 0);
     randomize(r1);
     randomize(r0);
@@ -27,6 +29,8 @@ int main() {
     r0 *= r0;
     r1 /= l2Norm(r1);
     r0 /= l2Norm(r0);
+    blaze::DynamicMatrix<float> cpy(~dm);
+    MultinomialJSDApplicator<decltype(cpy)> jsd(cpy);
     blaze::CompressedVector<float> c1(r0.size()), c0(r0.size());
     c1.reserve(r1.size() - 2);
     c0.reserve(r0.size() - 1);
@@ -38,4 +42,5 @@ int main() {
     }
     std::fprintf(stderr, "multinomial jsd: %f\n", distance::multinomial_jsd(r1, r0));
     std::fprintf(stderr, "multinomial jsd: %f\n", distance::multinomial_jsd(c1, c0));
+    std::fprintf(stderr, "multinomial jsd from applicator: %f\n", jsd(0, 1));
 }
