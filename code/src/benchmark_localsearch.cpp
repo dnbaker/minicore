@@ -14,6 +14,11 @@ void usage(const char *x) {
     std::exit(1);
 }
 using namespace fgc;
+template<typename Mat, typename Con>
+void emit_sol_cost(const Mat &dm, const Con &sol, std::string label) {
+    std::fprintf(stderr, "cost for %s: %0.12g\n", label.data(),
+                 blz::sum(blz::min<blz::columnwise>(rows(dm, sol))));
+}
 
 template<typename Mat, typename RNG>
 auto
@@ -73,6 +78,9 @@ thorup_mincost(const Mat &mat, RNG &rng, unsigned k, unsigned ntries) {
 }
 
 int main(int argc, char **argv) {
+    std::vector<unsigned> coreset_sizes{
+        5, 10, 15, 20, 25, 50, 75, 100, 125, 250, 375, 500, 625, 1250, 1875, 2500, 3125, 3750
+    };
     if(argc < 4 || argc > 5) usage(argv[0]);
     std::string msg = "'";
     for(auto av = argv; *av; ++av) {
@@ -87,30 +95,77 @@ int main(int argc, char **argv) {
     unsigned k = std::atoi(argv[3]);
     if(k <= 0) throw std::runtime_error("k must be > 0");
 
-    wy::WyRand<uint32_t, 2> rng(std::hash<std::string>()(msg));
-    auto thorup_sampled = thorup_mincost(dm, rng, k, 8);
-    if(thorup_sampled.first.size() == dm.rows()) throw std::runtime_error("Need to pick a thorup which is smaller\n");
+    std::srand(std::time(nullptr));
+    wy::WyRand<uint32_t, 2> rng(std::rand());
+    auto thorup_sampled = thorup_mincost(dm, rng, k, 5);
+    //if(thorup_sampled.first.size() == dm.rows()) throw std::runtime_error("Need to pick a thorup which is smaller\n");
     blaze::DynamicMatrix<float> thorup_dm(columns(rows(dm, thorup_sampled.first), thorup_sampled.first));
+    std::fprintf(stderr, "Thorup sampled down to %zu from %zu\n", thorup_sampled.first.size(), dm.rows());
 
-    blaze::DynamicVector<size_t> subset_indices;
+    blaze::DynamicVector<uint32_t> subset_indices;
     std::fprintf(stderr, "size of dm: %zu/%zu\n", dm.rows(), dm.columns());
     fgc::coresets::CoresetSampler<float, uint32_t> cs;
     cs.read(argv[2]);
     std::fprintf(stderr, "size of coreset sampler: %zu\n", cs.size());
+#if 0
     if(std::ifstream isfile(argv[4]); isfile) {
         blaze::Archive<std::ifstream> ifs(argv[4]);
         ifs >> subset_indices;
     }
     if(subset_indices.size())
         std::fprintf(stderr, "size of selected indices: %zu\n", subset_indices.size());
+#endif
     auto lsearcher = fgc::make_kmed_lsearcher(dm, k, 1e-3, 13);
     util::Timer timer("full local search");
+    std::vector<uint32_t> fullsol, thorup_sol;
     lsearcher.run();
     timer.report();
+    fullsol.assign(lsearcher.sol_.begin(), lsearcher.sol_.end());
+    emit_sol_cost(dm, fullsol, "Full cost");
+#if 0
     auto thorup_lsearcher = fgc::make_kmed_lsearcher(thorup_dm, k, 1e-3, 13);
     timer.restart("Thorup local search");
     thorup_lsearcher.run();
+    thorup_sol.assign(thorup_lsearcher.sol_.begin(), thorup_lsearcher.sol_.end());
+    emit_sol_cost(dm, thorup_sol, "Thorup");
     timer.report();
-    // Next, sample coresets of a set of sizes and measure runtime of Local Search for each of them, along with the cost of their solution
-    // Then compare the accuracy to the best found on the full dataset.
+    timer.reset();
+#endif
+    for(const auto coreset_size: coreset_sizes) {
+        auto csstr = std::to_string(coreset_size);
+        timer.restart(std::string("coreset sample: ") + csstr);
+        auto coreset = cs.sample(coreset_size);
+        assert(coreset.indices_.data());
+        assert(coreset.weights_.data());
+        for(const auto idx: coreset.indices_) {
+            assert(idx < dm.rows() || !std::fprintf(stderr, "idx: %u\n", unsigned(idx)));
+        }
+        timer.report();
+        blaze::DynamicMatrix<float> coreset_dm(columns(dm, coreset.indices_.data(), coreset.indices_.size()));
+        std::fprintf(stderr, "Made coreset dm. cols: %zu. rows: %zu\n", coreset_dm.columns(), coreset_dm.rows());
+        std::vector<uint32_t> vxs_sol, sxs_sol;
+        for(unsigned i = 0; i < coreset_dm.columns(); ++i)
+            column(coreset_dm, i) *= coreset.weights_[i];
+        std::fprintf(stderr, "reweighted. Optimizing\n");
+        auto lsearcher = fgc::make_kmed_lsearcher(coreset_dm, k, 1e-3, 13);
+        timer.restart("optimize over V x S");
+        lsearcher.run();
+        timer.report();
+        vxs_sol.assign(lsearcher.sol_.begin(), lsearcher.sol_.end());
+        emit_sol_cost(dm, vxs_sol, std::string("vxs") + csstr);
+        coreset_dm = rows(coreset_dm, coreset.indices_.data(), coreset.indices_.size());
+        auto &cd = coreset_dm;
+        assert(cd.rows() == cd.columns());
+        std::fprintf(stderr, "cd rows: %zu\n", cd.rows());
+        auto sxs_searcher = fgc::make_kmed_lsearcher(coreset_dm, k, 1e-3, 13);
+        timer.restart("optimize over S x S");
+        sxs_searcher.run();
+        timer.report();
+        sxs_sol.assign(sxs_searcher.sol_.begin(), sxs_searcher.sol_.end());
+        for(auto &i: sxs_sol) {
+            std::fprintf(stderr, "sol is %u of %zu\n", i, coreset_dm.rows());
+            i = coreset.indices_.at(i);
+        }
+        emit_sol_cost(dm, sxs_sol, std::string("sxs") + csstr);
+    }
 }

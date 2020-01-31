@@ -353,20 +353,17 @@ struct LocalKMedSearcher {
             assert(crow.size() == nc_);
             OMP_PFOR
             for(size_t i = 0; i < nc_; ++i) {
-                if(const auto cost(crow[i]); cost < mat_(assignments_[i], i))
+                if(const auto cost(crow[i]); cost < mat_(assignments_[i], i)) {
                     assignments_[i] = center;
+                }
             }
         }
-#ifndef NDEBUG
-        for(const auto asn: assignments_)
-            assert(std::find(sol_.begin(), sol_.end(), asn) != sol_.end());
-#endif
-        double newcost = 0.;
+
+        value_type newcost = 0.;
         OMP_PRAGMA("omp parallel for reduction(+:newcost)")
-        for(size_t i = 0; i < nc_; ++i)
-            newcost += mat_(assignments_[i], i);
-
-
+        for(size_t i = 0; i < assignments_.size(); ++i) {
+                newcost += mat_(assignments_[i], i);
+        }
         //std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
         if(unlikely(newcost > current_cost_)) {
             std::fprintf(stderr, "Somehow this swap is bad. newcost: %g. old: %g. diff: %g\n", newcost, current_cost_, current_cost_ - newcost);
@@ -439,7 +436,9 @@ struct LocalKMedSearcher {
                     }
                 }
                 // The solution is usually extremely close even if there is a change here. (less than 1e-6 of the cost)
+#ifndef NDEBUG
                 exhaustive_manual_check();
+#endif
             }
         }
         std::fprintf(stderr, "Finished in %zu swaps by exhausting all potential improvements. Final cost: %f\n",
@@ -477,7 +476,7 @@ struct LocalKMedSearcher {
         current_cost_ = ccost;
 #ifndef NDEBUG
         std::fprintf(stderr, "improved cost for %zu rounds and a total improvemnet of %g\n", extra_rounds, ocost - current_cost_);
-        assert(std::abs(ocost - current_cost_) < ((initial_cost_ / k_ * eps_) + 0.1));  // 1e-5 for numeric stability issues
+        //assert(std::abs(ocost - current_cost_) < ((initial_cost_ / k_ * eps_) + 0.1));  // 1e-5 for numeric stability issues
 #endif
     }
 };
