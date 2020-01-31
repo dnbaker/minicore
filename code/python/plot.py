@@ -4,7 +4,7 @@ import sys
 import matplotlib.pyplot as plt
 matplotlib.use("Agg")
 
-def print_items(*, data, xlabels, names, subgroup, prefix="default_out", end, filename):
+def print_items(*, data, xlabels, names, subgroup, prefix="default_out", end, filename, title=None):
     xlabels = xlabels[:end]
     data = tuple(d[:end] for d in data)
     #fig, ax = plt.subplots()
@@ -17,7 +17,10 @@ def print_items(*, data, xlabels, names, subgroup, prefix="default_out", end, fi
     # *zip(lines, names))
     plt.xlabel("coreset size")
     plt.ylabel("distortion")
-    plt.title("[%s] Coreset benchmark: %s" % (filename, subgroup))
+    if title is None:
+        plt.title("[%s] Coreset accuracy benchmark: %s" % (filename, subgroup))
+    else:
+        plt.title(title)
     plt.plot()
     plt.savefig(f"{prefix}{subgroup}.png", dpi=300)
     plt.clf()
@@ -28,6 +31,7 @@ if __name__ == "__main__":
     ap.add_argument("infname")
     ap.add_argument("--prefix")
     ap.add_argument("--include-bfl", '-B', action='store_true')
+    ap.add_argument("--title", default=None)
     args = ap.parse_args()
     if args.prefix is None:
         args.prefix = args.infname
@@ -48,7 +52,8 @@ if __name__ == "__main__":
     # To make it clearer who was better
     mxfl, mxbfl, mxu = data[:,0], data[:,2], data[:,4]
     mufl, mubfl, muu = data[:,1], data[:,3], data[:,5]
-    names = ("Varadarajan-Xiao", "BFL", "Uniform") if args.include_bfl else ("Varadarajan-Xiao", "Uniform")
+    # Ours = "Varadarajan-Xiao"
+    names = ("Ours", "BFL", "Uniform") if args.include_bfl else ("Ours", "Uniform")
     mudata=(mufl, mubfl, muu) if args.include_bfl else (mufl, muu)
     bflmudata = (mufl, mubfl, muu)
     if(data.shape[1] > 6):
@@ -72,7 +77,7 @@ if __name__ == "__main__":
         pref += ".%i" % end
         print("prefix: " + pref)
         print_items(data=mudata, xlabels=xlabels, names=names, subgroup="mean", prefix=pref, end=end, filename=filename)
-        print_items(data=mxdata, xlabels=xlabels, names=names, subgroup="max", prefix=pref, end=end, filename=filename)
+        print_items(data=mxdata, xlabels=xlabels, names=names, subgroup="max", prefix=pref, end=end, filename=filename, title=args.title)
         if fdata is not None:
             print_items(data=fdata, xlabels=xlabels, names=names, subgroup="meanf", prefix=pref, end=end, filename=filename)
         '''
