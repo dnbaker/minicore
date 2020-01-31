@@ -13,8 +13,8 @@ LDFLAGS+=-lz
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LDFLAGS)
       
 
-EX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
-FEX=$(patsubst %,fast%,$(EX))
+EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
+FEX=$(patsubst %,%,$(EX))
 PGEX=$(patsubst %,%pg,$(EX))
 PGFEX=$(patsubst %,%pgf,$(EX))
 all: $(EX)
@@ -35,13 +35,13 @@ endif
 
 TESTS=tbm coreset_test bztest btest osm2dimacs dmlsearch diskmattest graphtest jvtest kmpptest tbas
 
-clust: kzclustexp fastkzclustexp kzclustexpf
+clust: kzclustexpdbg kzclustexp kzclustexpf
 
 tests: $(TESTS)
 print_tests:
 	@echo "Tests: " $(TESTS)
 
-%: src/%.cpp $(wildcard include/fgc/*.h)
+%dbg: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
 graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
@@ -50,7 +50,7 @@ graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
 dmlrun: src/dmlsearch.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
 
-fast%: src/%.cpp $(wildcard include/fgc/*.h)
+%: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -Ofast
 
 mpi%: src/%.cpp $(wildcard include/fgc/*.h)
@@ -66,12 +66,12 @@ mpi%: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -fopenmp -o $@
 
 
-osm2dimacs: src/osm2dimacs.cpp
+osm2dimacsdbg: src/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@
 
-fastosm2dimacs: src/osm2dimacs.cpp
+osm2dimacs: src/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@ -O3 -fopenmp -DNDEBUG

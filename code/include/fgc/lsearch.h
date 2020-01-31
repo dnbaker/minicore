@@ -250,7 +250,7 @@ struct LocalKMedSearcher {
         sol_.clear();
         if(do_kcenter) {
             auto rowits = rowiterator(mat_);
-            auto approx = coresets::kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k_, MatrixLookup(), mat_.columns());
+            auto approx = coresets::kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k_, MatrixLookup(), std::min(mat_.rows(), mat_.columns()));
             for(const auto c: approx) sol_.insert(c);
         } else {
             while(sol_.size() < k_)
