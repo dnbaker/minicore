@@ -71,11 +71,12 @@ thorup_sample(Graph &x, unsigned k, uint64_t seed, size_t max_sampled=0, BBoxCon
     return current_buffer;
 }
 
-template<typename Graph, typename RNG, template<typename...> class BBoxTemplate=std::vector, typename...BBoxArgs>
+template<typename Graph, typename RNG, template<typename...> class BBoxTemplate=std::vector, typename WFT=double, typename...BBoxArgs>
 std::pair<std::vector<typename graph_traits<Graph>::vertex_descriptor>,
           double>
 thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
-         const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr)
+         const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr,
+         const WFT *weights=nullptr)
 {
     using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
     using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
@@ -279,7 +280,7 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
     wy::WyRand<uint64_t, 2> rng(seed);
     const size_t n = bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x);
     const double logn = std::log2(n);
-    const size_t samples_per_round = std::ceil(npermult * logn * k * logn / eps);
+    const size_t samples_per_round = std::ceil(npermult * logn * k / eps);
 
     std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
     auto func = [&](Graph &localx){return thorup_d(localx, rng, samples_per_round, nroundmult * logn, bbox_vertices_ptr);};
