@@ -70,7 +70,6 @@ void fill_cand_distance_mat(const Graph &x, Mat &mat, const std::vector<typename
         // Now the row c(r, i) has the distances from candidate facility candidates[i] to
         // all nodes.
     }
-    
 }
 
 /*

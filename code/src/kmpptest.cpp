@@ -19,7 +19,7 @@ template<typename Mat, typename RNG>
 void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {
     auto matrowit = blz::rowiterator(mat);
     auto start = t();
-    auto cs = outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), rng, npoints, eps, 
+    auto cs = outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), rng, npoints, eps,
                 /*mu=*/1);
     auto maxv = *std::max_element(cs.indices_.begin(), cs.indices_.end());
     std::fprintf(stderr, "max index: %u\n", unsigned(maxv));
