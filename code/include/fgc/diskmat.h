@@ -131,9 +131,7 @@ class PolymorphicMat {
     std::unique_ptr<blaze::DynamicMatrix<VT, SO>> rammat_;
     CMType cm_;
 public:
-    
     static constexpr size_t MAX_BYTES_RAM = max_nbytes;
-    
     PolymorphicMat(size_t nr, size_t nc, size_t maxmem=MAX_BYTES_RAM, const char *s=nullptr) {
         size_t spacing = blaze::nextMultiple(nc, blaze::SIMDTrait<VT>::size);
         size_t total_bytes = nr * spacing * sizeof(VT);
