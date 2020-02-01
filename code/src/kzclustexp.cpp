@@ -263,7 +263,7 @@ int main(int argc, char **argv) {
     std::vector<unsigned> coreset_sizes;
     std::vector<unsigned> extra_ks;
     bool rectangular = false;
-    bool use_thorup_d = true;
+    bool use_thorup_d = true, use_thorup_iterative = false;
     unsigned testing_num_centersets = 500;
     size_t rammax = 16uLL << 30;
     bool best_improvement = false;
@@ -281,7 +281,7 @@ int main(int argc, char **argv) {
     //bool test_samples_from_thorup_sampled = true;
     double eps = 0.1;
     BoundingBoxData bbox;
-    for(int c;(c = getopt(argc, argv, "C:e:B:S:N:T:t:p:o:M:z:s:c:K:k:R:LbDrh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "C:e:B:S:N:T:t:p:o:M:z:s:c:K:k:R:ILbDrh?")) >= 0;) {
         switch(c) {
             case 'e': if((eps = std::atof(optarg)) > 1. || eps < 0.)
                         throw std::runtime_error("Required: 0 >= eps >= 1.");
@@ -296,6 +296,7 @@ int main(int argc, char **argv) {
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
             case 'M': rammax = str2nbytes(optarg); break;
             case 'D': use_thorup_d = false; break;
+            case 'I': use_thorup_iterative = true; use_thorup_d = true; break;
             case 't': testing_num_centersets = std::atoi(optarg); break;
             case 'B': bbox = optarg; assert(bbox.set()); break;
             case 'N': coreset_testing_num_iters = std::atoi(optarg); break;
@@ -405,8 +406,11 @@ int main(int argc, char **argv) {
     }
     std::vector<Vertex> sampled;
     if(use_thorup_d) {
-        assert_connected(g);
-        std::tie(sampled, thorup_assignments) = thorup_sample_mincost(g, k, seed, num_thorup_trials, bbox_vertices_ptr);
+        if(use_thorup_iterative) {
+            std::tie(sampled, thorup_assignments) = thorup_sample_iterative(g, k, seed, num_thorup_trials, bbox_vertices_ptr);
+        } else {
+            std::tie(sampled, thorup_assignments) = thorup_sample_mincost(g, k, seed, num_thorup_trials, bbox_vertices_ptr);
+        }
     } else {
     // Use Thorup E, which performs D a number of times and returns the union thereof.
         sampled = thorup_sample(g, k, seed, /*max_sampled=*/0, bbox_vertices_ptr);
@@ -444,7 +448,7 @@ int main(int argc, char **argv) {
     using CM = blaze::CustomMatrix<float, blaze::aligned, blaze::padded, blaze::rowMajor>;
     if(ncol * ndatarows * sizeof(float) > rammax) {
 #if 0
-        if(cache_prefix.empty()) 
+        if(cache_prefix.empty())
             std::fprintf(stderr, "%zu * %zu * sizeof(float) > rammax %zu\n", sampled.size(), ndatarows, rammax);
         else
             std::fprintf(stderr, "Calculating matrix directly to disk\n");

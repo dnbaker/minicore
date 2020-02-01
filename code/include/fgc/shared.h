@@ -8,14 +8,23 @@
 #include <unistd.h>
 
 #if defined(USE_TBB)
-#include <execution>
-#  define inclusive_scan(x, y, z) inclusive_scan(::std::execution::par_unseq, x, y, z)
+#  include <execution>
+#  define inclusive_scan(...) inclusive_scan(::std::execution::par_unseq, __VA_ARGS__)
+#  ifndef NDEBUG
+#    pragma message("Using parallel inclusive scan")
+#  endif
 #else
-#  define inclusive_scan(x, y, z) ::std::partial_sum(x, y, z)
+#  ifndef NDEBUG
+#    pragma message("Using partial sum")
+#  endif
+#  define inclusive_scan(...) ::std::partial_sum(__VA_ARGS__)
 #endif
 
 namespace fgc {
 
+#ifdef USE_TBB
+using std::inclusive_scan;
+#endif
 
 #if !NDEBUG
 template<typename T> class TD; // Debugging only

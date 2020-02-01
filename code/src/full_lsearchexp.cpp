@@ -46,7 +46,6 @@ void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuf
     const double fcinv = 1. / fullcost;
     OMP_PFOR
     for(size_t j = 0; j < ncs; ++j) {
-        // In theory, this could be 
         auto &cs = coresets[j];
         const auto indices = cs.indices_.data();
         const auto weights = cs.weights_.data();

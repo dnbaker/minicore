@@ -30,6 +30,7 @@ struct ScopedSyntheticVertex {
     }
 };
 } // namespace util
+
 namespace thorup {
 using namespace boost;
 
@@ -71,11 +72,12 @@ thorup_sample(Graph &x, unsigned k, uint64_t seed, size_t max_sampled=0, BBoxCon
     return current_buffer;
 }
 
-template<typename Graph, typename RNG, template<typename...> class BBoxTemplate=std::vector, typename...BBoxArgs>
+template<typename Graph, typename RNG, template<typename...> class BBoxTemplate=std::vector, typename WType=uint32_t, typename...BBoxArgs>
 std::pair<std::vector<typename graph_traits<Graph>::vertex_descriptor>,
           double>
 thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
-         const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr)
+         const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr,
+         WType *weights=nullptr)
 {
     using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
     using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
@@ -96,43 +98,103 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
     const size_t nv = boost::num_vertices(x);
     std::unique_ptr<edge_cost[]> distances(new edge_cost[nv]);
     flat_hash_set<Vertex> vertices;
+    std::unique_ptr<Vertex[]> pmap;
     size_t i;
-    for(i = 0; R.size() && i < maxnumrounds; ++i) {
-        assert(boost::num_vertices(x) == nv);
-        if(R.size() > nperround) {
-            do vertices.insert(R[rng() % R.size()]); while(vertices.size() < nperround);
-            F.insert(F.end(), vertices.begin(), vertices.end());
-            for(const auto v: vertices) boost::add_edge(v, synthetic_vertex, 0., x);
-            vertices.clear();
-            assert(boost::num_vertices(x) == nv);
-        } else {
-            for(const auto r: R) {
-                F.push_back(r);
-                boost::add_edge(F.back(), synthetic_vertex, 0., x);
+    if(weights) {
+        if(!bbox_vertices_ptr) throw std::runtime_error("bbox_vertices_ptr must be provided to use weights");
+        flat_hash_map<Vertex, Vertex> r2wi;
+        for(size_t i = 0; i < bbox_vertices_ptr->size(); ++i) {
+            r2wi[R[i]] = i;
+        }
+        auto cdf = std::make_unique<WType[]>(R.size());
+        pmap.reset(new Vertex[boost::num_vertices(x)]);
+        for(i = 0; R.size() && i < maxnumrounds; ++i) {
+            const size_t rsz = R.size();
+            inclusive_scan(R.data(), R.data() + rsz,
+                           cdf.get(), [weights,&r2wi](auto csum, auto newv){return csum + weights[r2wi[newv]];});
+            std::uniform_real_distribution<float> urd;
+            auto weighted_select = [&]() {
+                return std::lower_bound(cdf.get(), cdf.get() + rsz, cdf[rsz - 1] * urd(rng)) - cdf.get();
+            };
+            if(R.size() > nperround) {
+                WType sampled_sum = 0;
+                do {
+                    auto v = R[weighted_select()];
+                    if(vertices.find(v) != vertices.end()) continue;
+                    vertices.insert(v);
+                    sampled_sum += weights[r2wi[v]];
+                } while(sampled_sum < nperround);
+                F.insert(F.end(), vertices.begin(), vertices.end());
+                for(const auto v: vertices) boost::add_edge(v, synthetic_vertex, 0., x);
+                vertices.clear();
+            } else {
+                F.insert(F.end(), R.begin(), R.end());
+                for(const auto r: R)
+                    boost::add_edge(r, synthetic_vertex, 0., x);
+                R.clear();
             }
-            //assert_connected(x);
-            R.clear();
-            assert(boost::num_vertices(x) == nv);
+            boost::dijkstra_shortest_paths(x, synthetic_vertex,
+                                           distance_map(distances.get()).predecessor_map(pmap.get()));
+            if(R.empty()) break;
+            auto randel = weighted_select();
+            auto minv = distances[randel];
+            R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
+        }
+        if(i >= maxnumrounds && R.size()) {
+            // This failed. Do not use this round.
+          return std::make_pair(std::move(F), std::numeric_limits<double>::max());
+        }
+    } else {
+        for(i = 0; R.size() && i < maxnumrounds; ++i) {
+            if(R.size() > nperround) {
+                do vertices.insert(R[rng() % R.size()]); while(vertices.size() < nperround);
+                F.insert(F.end(), vertices.begin(), vertices.end());
+                for(const auto v: vertices) boost::add_edge(v, synthetic_vertex, 0., x);
+                vertices.clear();
+            } else {
+                for(const auto r: R) {
+                    F.push_back(r);
+                    boost::add_edge(r, synthetic_vertex, 0., x);
+                }
+                R.clear();
+            }
+            boost::dijkstra_shortest_paths(x, synthetic_vertex,
+                                           distance_map(distances.get()));
+            if(R.empty()) break;
+            auto randel = R[rng() % R.size()];
+            auto minv = distances[randel];
+            R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
+        }
+        if(i >= maxnumrounds && R.size()) {
+            // This failed. Do not use this round.
+            return std::make_pair(std::move(F), std::numeric_limits<double>::max());
         }
         assert(boost::num_vertices(x) == nv);
-        boost::dijkstra_shortest_paths(x, synthetic_vertex,
-                                       distance_map(distances.get()));
-        if(R.empty()) break;
-        auto randel = R[rng() % R.size()];
-        auto minv = distances[randel];
-        R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
     }
-    if(i >= maxnumrounds && R.size()) {
-        // This failed. Do not use this round.
-        return std::make_pair(std::move(F), std::numeric_limits<double>::max());
-    }
-    assert(boost::num_vertices(x) == nv);
     double cost = 0.;
     if(bbox_vertices_ptr) {
         const size_t nboxv = bbox_vertices_ptr->size();
-        OMP_PRAGMA("omp parallel for reduction(+:cost)")
-        for(size_t i = 0; i < nboxv; ++i) {
-            cost += distances[bbox_vertices_ptr->operator[](i)];
+        if(weights) {
+            flat_hash_map<Vertex, Vertex> Fmap;
+            for(size_t i = 0; i < F.size(); ++i)
+                Fmap[F[i]] = i;
+            auto newweights = std::make_unique<WType[]>(Fmap.size());
+            OMP_PRAGMA("omp parallel for reduction(+:cost)")
+            for(size_t i = 0; i < nboxv; ++i) {
+                auto p = bbox_vertices_ptr->operator[](i), pc = p;
+                typename flat_hash_map<Vertex, Vertex>::iterator it;
+                while((it = Fmap.find(p)) == Fmap.end())
+                    p = pmap[p];
+                cost += weights[i] * distances[bbox_vertices_ptr->operator[](i)];
+                OMP_ATOMIC
+                newweights[it->second] += weights[pc];
+            }
+            std::copy(newweights.get(), newweights.get() + Fmap.size(), weights);
+        } else {
+            OMP_PRAGMA("omp parallel for reduction(+:cost)")
+            for(size_t i = 0; i < nboxv; ++i) {
+                cost += distances[bbox_vertices_ptr->operator[](i)];
+            }
         }
     } else {
         OMP_PRAGMA("omp parallel for reduction(+:cost)")
@@ -266,7 +328,41 @@ get_costs(Graph &x, const Container &container) {
     return std::make_pair(std::move(costs), assignments);
 }
 template<typename Graph, template<typename...> class BBoxTemplate=std::vector, typename...BBoxArgs>
-auto 
+auto
+thorup_sample_iterative(Graph &x, unsigned k, uint64_t seed,
+    unsigned nrounds,
+    const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr,
+    double npermult=21., double nroundmult=3.)
+{
+    static constexpr double eps = 0.5;
+    wy::WyRand<uint64_t, 2> rng(seed);
+    const size_t n = bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x);
+    const double logn = std::ceil(std::log2(n));
+    const size_t samples_per_round = std::ceil(npermult * logn * k / eps);
+    std::vector<uint32_t> weights(n, 1);
+    std::unique_ptr<std::vector<size_t>> allbbox;
+    if(bbox_vertices_ptr == nullptr) {
+        allbbox.reset(new std::vector<size_t>(n));
+        std::iota(allbbox->begin(), allbbox->end(), size_t(0));
+        bbox_vertices_ptr = allbbox.get();
+    }
+    auto first_sample = thorup_d(x, rng, samples_per_round, nroundmult * logn, bbox_vertices_ptr, weights.data());
+    weights.resize(first_sample.first.size()); // Pop off weights for removed items
+    assert(std::accumulate(weights.begin(), weights.end(), 0u) == n);
+    for(unsigned i = 1; i < nrounds; ++i) {
+        std::fprintf(stderr, "Original Thorup sample at round %u: %zu/%zu\n", i, first_sample.first.size(), n);
+        auto next_sample = thorup_d(x, rng, samples_per_round, nroundmult * logn, &first_sample.first, weights.data());
+        std::swap(first_sample, next_sample);
+        weights.resize(first_sample.first.size());
+        assert(std::accumulate(weights.begin(), weights.end(), 0u) == n);
+    }
+    std::fprintf(stderr, "Original Thorup sample after all rounds: %zu/%zu\n", first_sample.first.size(), n);
+    auto [_, assignments] = get_costs(x, first_sample.first);
+    return std::make_pair(std::move(first_sample.first), std::move(assignments));
+}
+
+template<typename Graph, template<typename...> class BBoxTemplate=std::vector, typename...BBoxArgs>
+auto
 thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
     const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr,
     double npermult=21., double nroundmult=3.)
@@ -279,7 +375,7 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
     wy::WyRand<uint64_t, 2> rng(seed);
     const size_t n = bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x);
     const double logn = std::log2(n);
-    const size_t samples_per_round = std::ceil(npermult * logn * k * logn / eps);
+    const size_t samples_per_round = std::ceil(npermult * logn * k / eps);
 
     std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
     auto func = [&](Graph &localx){return thorup_d(localx, rng, samples_per_round, nroundmult * logn, bbox_vertices_ptr);};
@@ -318,135 +414,6 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
 
 } // thorup
 
-#if 0
-template<typename Graph, typename RNG>
-void sample_cost_full(Graph &x, RNG &rng, std::ofstream &ofs, unsigned k, unsigned nsamples=1000) {
-    blaze::SmallArray<unsigned, 32> indices;
-    indices.reserve(k);
-    std::vector<float> costs(boost::num_vertices(x) + 1, 0.);
-    double maxcost = std::numeric_limits<double>::min(),
-           mincost = std::numeric_limits<double>::max(),
-           meancost = 0.;
-    for(unsigned i = 0; i < nsamples; ++i) {
-        double cost = sample_full_costs(x, rng, k, indices, costs);
-        maxcost = std::max(cost, maxcost);
-        mincost = std::min(cost, mincost);
-        meancost += cost;
-        indices.clear();
-    }
-    meancost /= nsamples;
-    ofs << "fullproblem\t" << boost::num_vertices(x) << '\t' << mincost << '\t' << meancost << '\t' << maxcost << '\n';
-}
-#endif
 using namespace thorup;
-
-namespace tnk {
-// Todo, Nakamura and Kudo
-// MLG '19, August 05, 2019, Anchorage, AK
-
-template<typename T, typename A>
-auto random_sample(const std::vector<T, A> &v, size_t n, uint64_t seed) {
-    wy::WyRand<uint64_t, 2> gen(seed);
-    std::vector<T> ret;
-    if(n >= v.size()) throw 1;
-    ret.reserve(n);
-    while(ret.size() < n) {
-        auto item = v[gen() % v.size()];
-        if(std::find(ret.begin(), ret.end(), item) == ret.end())
-            ret.push_back(item);
-    }
-    return ret;
-}
-
-#if 0
-template<typename Graph>
-typename boost::graph_traits<Graph>::vertex_descriptor
-goldman_1median(const Graph &x,
-                const std::vector<typename boost::graph_traits<Graph>::vertex_descriptor> &p,
-                typename boost::graph_traits<Graph>::vertex_descriptor source)
-{
-    typename boost::graph_traits<Graph>::vertex_descriptor ret;
-    throw std::runtime_error("Not implemented");
-    return ret;
-}
-#endif
-template<typename PVec, typename Graph>
-std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
-parallel_goldman_1median(const PVec &p, const PVec &s, const Graph &x) {
-    using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
-    std::vector<Vertex> ret;
-    // 1. Make trees (1 pass, serial, or each one parses the list)
-    // 2. Run goldman to get 1-medians
-    // 3. ??? Profit
-    std::vector<std::thread> threads;
-    threads.reserve(s.size());
-    throw std::runtime_error("Not implemented");
-#if 0
-    for(const auto source: s) {
-        threads.emplace_back(goldman_1median(x, p, s));
-    }
-#endif
-    for(auto &t: threads) t.join();
-    return ret;
-}
-
-
-template<typename ...Args>
-auto idnc(boost::adjacency_list<Args...> &x, unsigned k, uint64_t seed = 0) {
-    using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<boost::adjacency_list<Args...>>()))>;
-    using Vertex    = typename boost::graph_traits<boost::adjacency_list<Args...>>::vertex_descriptor;
-    //using Edge      = typename boost::graph_traits<boost::adjacency_list<Args...>>::edge_descriptor;
-    using Graph     = decltype(x);
-    //Iteratively Decreasing NonCentrality
-    std::mt19937_64 mt(seed);
-    // TODO: check to make sure it's either bidir or undir, not dir
-    auto [start, end] = boost::vertices(x);
-
-    std::vector<Vertex> R(start, end);
-    std::vector<Vertex> sp = random_sample(R, k, mt()); // S' [IDNC:1]
-    std::vector<Vertex> s;                              // S  [IDNC:3]
-    s.reserve(k);
-    util::ScopedSyntheticVertex<Graph> vx(x);
-    auto synthetic_vertex = vx.get();
-    edge_cost last_cost = std::numeric_limits<edge_cost>::max(), current_cost = last_cost;
-
-    // For holding output of SPF / Dijkstra with multiple roots
-    boost::clear_vertex(synthetic_vertex, x);
-    std::vector<edge_cost> distances(boost::num_vertices(x));
-    std::vector<Vertex> p(boost::num_vertices(x));
-
-    for(const auto vertex: sp)
-        boost::add_edge(synthetic_vertex, vertex, 0., x);
-    boost::dijkstra_shortest_paths(x, synthetic_vertex,
-                                   distance_map(&distances[0]).predecessor_map(&p[0]));
-    last_cost = std::accumulate(distances.begin(), distances.end(), static_cast<edge_cost>(0));
-    for(;;) {
-        s = sp;
-        sp.clear();
-        std::vector<Vertex> best_vertices = parallel_goldman_1median(p, s, x);
-        // Make the tree for each subset mapping best to the current solution
-        // Run the acyclic algorithm from http://www.cs.kent.edu/~dragan/ST/papers/GOLDMAN-71.pdf
-        // Optimal Center Location in Simple Networks
-        // This can be done in linear time with the size of the tree because it's acyclic
-        // and it's acyclic because it's a shortest paths tree
-#if 0
-        for(auto it = start; it != end; ++it) {
-            Vertex cvert = *it;
-            // Skip if item is a candidate center
-            if(std::find(s.begin(), s.end(), cvert) != s.end()) continue;
-            Vertex parent = p[cvert];
-            typename std::vector<Vertex>::iterator itp;
-            while((itp = std::find(s.begin(), s.end(), cvert)) == s.end());
-            auto index = itp - s.begin();
-            if(best_vertices[index] == static_cast<Vertex>(-1)) {
-                best_vertices[index] = cvert;
-            }
-        }
-#endif
-        if(last_cost <= current_cost) break;
-    }
-}
-
-} // namespace tnk
 
 } // namespace fgc
