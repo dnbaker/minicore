@@ -98,42 +98,74 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
     std::unique_ptr<edge_cost[]> distances(new edge_cost[nv]);
     flat_hash_set<Vertex> vertices;
     size_t i;
-    for(i = 0; R.size() && i < maxnumrounds; ++i) {
-        assert(boost::num_vertices(x) == nv);
-        if(R.size() > nperround) {
-            do vertices.insert(R[rng() % R.size()]); while(vertices.size() < nperround);
-            F.insert(F.end(), vertices.begin(), vertices.end());
-            for(const auto v: vertices) boost::add_edge(v, synthetic_vertex, 0., x);
-            vertices.clear();
+    if(weights) {
+        throw std::runtime_error("NotImplemented: weighted sampling from R");
+        //std::discrete_distribution<Vertex>(make_weighted(
+        for(i = 0; R.size() && i < maxnumrounds; ++i) {
             assert(boost::num_vertices(x) == nv);
-        } else {
-            for(const auto r: R) {
-                F.push_back(r);
-                boost::add_edge(F.back(), synthetic_vertex, 0., x);
+            if(R.size() > nperround) {
+                do vertices.insert(R[rng() % R.size()]); while(vertices.size() < nperround);
+                F.insert(F.end(), vertices.begin(), vertices.end());
+                for(const auto v: vertices) boost::add_edge(v, synthetic_vertex, 0., x);
+                vertices.clear();
+            } else {
+                for(const auto r: R) {
+                    F.push_back(r);
+                    boost::add_edge(F.back(), synthetic_vertex, 0., x);
+                }
+                R.clear();
             }
-            //assert_connected(x);
-            R.clear();
-            assert(boost::num_vertices(x) == nv);
+            boost::dijkstra_shortest_paths(x, synthetic_vertex,
+                                           distance_map(distances.get()));
+            if(R.empty()) break;
+            auto randel = R[rng() % R.size()];
+            auto minv = distances[randel];
+            R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
+        }
+        if(i >= maxnumrounds && R.size()) {
+            // This failed. Do not use this round.
+          return std::make_pair(std::move(F), std::numeric_limits<double>::max());
+        }
+    } else {
+        for(i = 0; R.size() && i < maxnumrounds; ++i) {
+            if(R.size() > nperround) {
+                do vertices.insert(R[rng() % R.size()]); while(vertices.size() < nperround);
+                F.insert(F.end(), vertices.begin(), vertices.end());
+                for(const auto v: vertices) boost::add_edge(v, synthetic_vertex, 0., x);
+                vertices.clear();
+            } else {
+                for(const auto r: R) {
+                    F.push_back(r);
+                    boost::add_edge(F.back(), synthetic_vertex, 0., x);
+                }
+                R.clear();
+            }
+            boost::dijkstra_shortest_paths(x, synthetic_vertex,
+                                           distance_map(distances.get()));
+            if(R.empty()) break;
+            auto randel = R[rng() % R.size()];
+            auto minv = distances[randel];
+            R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
+        }
+        if(i >= maxnumrounds && R.size()) {
+            // This failed. Do not use this round.
+            return std::make_pair(std::move(F), std::numeric_limits<double>::max());
         }
         assert(boost::num_vertices(x) == nv);
-        boost::dijkstra_shortest_paths(x, synthetic_vertex,
-                                       distance_map(distances.get()));
-        if(R.empty()) break;
-        auto randel = R[rng() % R.size()];
-        auto minv = distances[randel];
-        R.erase(std::remove_if(R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
     }
-    if(i >= maxnumrounds && R.size()) {
-        // This failed. Do not use this round.
-        return std::make_pair(std::move(F), std::numeric_limits<double>::max());
-    }
-    assert(boost::num_vertices(x) == nv);
     double cost = 0.;
     if(bbox_vertices_ptr) {
         const size_t nboxv = bbox_vertices_ptr->size();
-        OMP_PRAGMA("omp parallel for reduction(+:cost)")
-        for(size_t i = 0; i < nboxv; ++i) {
-            cost += distances[bbox_vertices_ptr->operator[](i)];
+        if(weights) {
+            OMP_PRAGMA("omp parallel for reduction(+:cost)")
+            for(size_t i = 0; i < nboxv; ++i) {
+                cost += weights[i] * distances[bbox_vertices_ptr->operator[](i)];
+            }
+        } else {
+            OMP_PRAGMA("omp parallel for reduction(+:cost)")
+            for(size_t i = 0; i < nboxv; ++i) {
+                cost += distances[bbox_vertices_ptr->operator[](i)];
+            }
         }
     } else {
         OMP_PRAGMA("omp parallel for reduction(+:cost)")
