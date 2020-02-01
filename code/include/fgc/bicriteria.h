@@ -187,7 +187,7 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
                     p = pmap[p];
                 cost += weights[i] * distances[bbox_vertices_ptr->operator[](i)];
                 OMP_ATOMIC
-                newweights[it->second] += weights[pc];
+                newweights[it->second] += weights[i];
             }
             std::copy(newweights.get(), newweights.get() + Fmap.size(), weights);
         } else {

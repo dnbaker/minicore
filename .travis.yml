@@ -21,14 +21,14 @@ install:
 script:
   - cd code || echo "already in code"
   - make tests -j8
-  - ./coreset_test
-  - ./btest
-  - ./kmpptest
-  - ./jvtest
-  - ./tbm
-  - ./tbas
-  - ./diskmattest
-  - ./dmlsearch
+  - ./coreset_testdbg
+  - ./btestdbg
+  - ./kmpptestdbg
+  - ./jvtestdbg
+  - ./tbmdbg
+  - ./tbasdbg
+  - ./diskmattestdbg
+  - ./dmlsearchdbg
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:
