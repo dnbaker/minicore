@@ -53,7 +53,7 @@ struct IndexCoreset {
     size_t size() const {return indices_.size();}
     IndexCoreset(IndexCoreset &&o) = default;
     IndexCoreset(const IndexCoreset &o) = default;
-    void compact(bool shrink_to_fit=false) {
+    void compact(bool shrink_to_fit=true) {
         // TODO: replace with hash map and compact
         std::map<std::pair<IT, FT>, uint32_t> m;
         for(IT i = 0; i < indices_.size(); ++i) {
@@ -125,6 +125,7 @@ auto make_dumbrange(T beg, T end) {return dumbrange<T>(beg, end);}
 
 template<typename FT=float, typename IT=std::uint32_t>
 struct UniformSampler {
+    using CoresetType = IndexCoreset<IT, FT>;
     const size_t np_;
     wy::WyRand<IT, 2> rng_;
     UniformSampler(size_t np, uint64_t seed=0): np_(np), rng_(seed) {
@@ -148,6 +149,7 @@ struct UniformSampler {
 template<typename FT=float, typename IT=std::uint32_t>
 struct CoresetSampler {
     using Sampler = alias::AliasSampler<FT, wy::WyRand<IT, 2>, IT>;
+    using CoresetType = IndexCoreset<IT, FT>;
     std::unique_ptr<Sampler> sampler_;
     std::unique_ptr<FT []>     probs_;
     std::unique_ptr<blz::DV<FT>> weights_;
@@ -455,11 +457,6 @@ struct CoresetSampler {
         return ret;
     }
     size_t size() const {return np_;}
-};
-
-template<typename FT, bool SO=blaze::rowMajor>
-struct MetricCoreset {
-    blaze::DynamicMatrix<FT, SO> distances_;
 };
 
 

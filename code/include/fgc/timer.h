@@ -45,6 +45,8 @@ struct Timer {
         start_ = now();
     }
 
+    uint64_t diff() const {return timediff2ms(start_, stop_);}
+
     void stop() {
         stop_ = now();
     }

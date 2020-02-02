@@ -15,6 +15,7 @@
  */
 
 namespace fgc {
+template<typename T> class TD;
 
 template<typename Graph, typename MatType, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
 void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullptr, bool only_sources_as_dests=false, bool all_sources=false) {
@@ -175,6 +176,11 @@ private:
 
 }
 
+#if 0
+std::vector<uint32_t> kcenter_matrix(const Mat &mat, RNG &rng, unsigned k) {
+}
+                auto approx = kcenter_matrix(mat_, rng, k_);
+#endif
 
 template<typename MatType, typename IType=std::uint32_t, size_t N=16>
 struct ExhaustiveSearcher {
@@ -217,7 +223,7 @@ struct LocalKMedSearcher {
     shared::flat_hash_set<IType> sol_;
     blz::DV<IType> assignments_;
     double current_cost_;
-    double eps_, initial_cost_;
+    double eps_, initial_cost_, init_cost_div_;
     IType k_;
     const size_t nr_, nc_;
     bool best_improvement_;
@@ -230,7 +236,9 @@ struct LocalKMedSearcher {
         std::memset(ptr, 0, sizeof(*this));
         std::swap_ranges(ptr, ptr + sizeof(*this), reinterpret_cast<const uint8_t *>(std::addressof(o)));
     }
-    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=1e-8, uint64_t seed=0, bool best_improvement=false):
+    template<typename IndexContainer=std::vector<uint32_t>>
+    LocalKMedSearcher(const MatType &mat, unsigned k, double eps=1e-8, uint64_t seed=0,
+                      bool best_improvement=false, const IndexContainer *wc=nullptr):
         mat_(mat), assignments_(mat.columns(), 0),
         // center_indices_(k),
         //costs_(mat.columns(), std::numeric_limits<value_type>::max()),
@@ -239,25 +247,62 @@ struct LocalKMedSearcher {
         eps_(eps),
         k_(k), nr_(mat.rows()), nc_(mat.columns()), best_improvement_(best_improvement)
     {
+        static_assert(std::is_integral_v<std::decay_t<decltype(wc->operator[](0))>>, "index container must contain integral values");
         sol_.reserve(k);
-        reseed(seed, true);
+        init_cost_div_ = wc
+                       ? double(std::accumulate(wc->begin() + 1, wc->end(), wc->operator[](0)))
+                       : double(mat.columns());
+        reseed(seed, true, wc);
     }
 
-    void reseed(uint64_t seed, bool do_kcenter=false) {
+    template<typename IndexContainer=std::vector<uint32_t>>
+    void reseed(uint64_t seed, bool do_kcenter=false, const IndexContainer *wc=nullptr) {
         assignments_ = 0;
         current_cost_ = std::numeric_limits<value_type>::max();
         wy::WyRand<IType, 2> rng(seed);
         sol_.clear();
-        if(do_kcenter) {
+#if 0
+        if(wc) {
+            // Reweight
+            for(unsigned i = 0; i < wc->size(); ++i) {
+                column(mat_, i BLAZE_CHECK_DEBUG) *= wc->operator[](col);
+            }
+        }
+#endif
+        if(mat_.rows() <= k_) {
+            for(unsigned i = 0; i < mat_.rows(); ++i)
+                sol_.insert(i);
+        } else if(do_kcenter && mat_.rows() == mat_.columns()) {
+            std::fprintf(stderr, "Using kcenter\n");
             auto rowits = rowiterator(mat_);
             auto approx = coresets::kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k_, MatrixLookup(), std::min(mat_.rows(), mat_.columns()));
             for(const auto c: approx) sol_.insert(c);
+#ifndef NDEBUG
+            std::fprintf(stderr, "k_: %u. sol size: %zu. rows: %zu. columns: %zu\n", k_, sol_.size(),
+                         mat_.rows(), mat_.columns());
+#endif
+            assert(sol_.size() == k_ || sol_.size() == mat_.rows());
         } else {
-            while(sol_.size() < k_)
-                sol_.insert(rng() % mat_.rows());
+            if(!do_kcenter || wc == nullptr || wc->size() != mat_.columns()) {
+                while(sol_.size() < k_)
+                    sol_.insert(rng() % mat_.rows());
+            } else {
+                std::fprintf(stderr, "Using submatrix to perform kcenter approximation on an asymmetric matrix. rows/cols before: %zu, %zu\n", mat_.rows(), mat_.columns());
+                auto subm = blaze::rows(mat_, wc->data(), wc->size());
+                std::cerr << subm << '\n';
+                std::vector<uint32_t> approx{rng() % mat.rows()};
+                auto first = approx.front();
+                blz::DV<float, blaze::rowVector> mincosts = row(subm, first);
+                while(approx.size() < k) {
+                    auto nextind = std::max_element(mincosts.begin(), mincosts.end()) = mincosts.begin();
+                    approx.push_back(nextind);
+                    mincosts = blaze::min(mincosts, row(subm, nextind));
+                }
+                for(auto i: approx)
+                    sol_.insert(wc->operator[](i));
+            }
         }
         assign();
-        initial_cost_ = current_cost_ / 2 / nc_;
     }
 
     template<typename Container>
@@ -279,11 +324,8 @@ struct LocalKMedSearcher {
 
     void assign() {
         assert(assignments_.size() == nc_);
-        assert(sol_.size() == k_);
-        for(const auto center: sol_) {
-            assignments_[center] = center;
-            //assert(mat_(center, center) == 0.);
-        }
+        assert(sol_.size() == k_ || sol_.size() == mat_.rows());
+        DBG_ONLY(std::fprintf(stderr, "Initialized assignments at size %zu\n", assignments_.size());)
         for(const auto center: sol_) {
             auto r = row(mat_, center BLAZE_CHECK_DEBUG);
             OMP_PFOR
@@ -295,7 +337,10 @@ struct LocalKMedSearcher {
                 }
             }
         }
+        DBG_ONLY(std::fprintf(stderr, "Set assignments for size %zu\n", assignments_.size());)
         current_cost_ = cost_for_sol(sol_);
+        DBG_ONLY(std::fprintf(stderr, "Got costs for size %zu with centers size = %zu\n", assignments_.size(), sol_.size());)
+        initial_cost_ = current_cost_ / 2 / init_cost_div_;
     }
 
     double evaluate_swap(IType newcenter, IType oldcenter, bool single_threaded=false) const {
@@ -375,6 +420,7 @@ struct LocalKMedSearcher {
     }
 
     void run() {
+        if(mat_.rows() < k_) return;
         //const double diffthresh = 0.;
         const double diffthresh = initial_cost_ / k_ * eps_;
         std::fprintf(stderr, "diffthresh: %f\n", diffthresh);
@@ -481,9 +527,10 @@ struct LocalKMedSearcher {
     }
 };
 
-template<typename Mat, typename IType=std::uint32_t>
-auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, uint64_t seed=0, bool best_improvement=false) {
-    return LocalKMedSearcher<Mat, IType>(mat, k, eps, seed, best_improvement);
+template<typename Mat, typename IType=std::uint32_t, typename IndexContainer=std::vector<uint32_t>>
+auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, uint64_t seed=0, bool best_improvement=false,
+                         const IndexContainer *wc=nullptr) {
+    return LocalKMedSearcher<Mat, IType>(mat, k, eps, seed, best_improvement, wc);
 }
 
 

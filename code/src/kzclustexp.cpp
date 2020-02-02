@@ -48,10 +48,106 @@ generate_random_centers(uint64_t seed, unsigned k, unsigned x_size,
     return random_centers;
 }
 
-template<typename Samp, typename Graph, typename VType=std::vector<size_t>>
-void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, Graph &g, const VType *bbox_vertices_ptr, std::vector<unsigned> &coreset_sizes, std::string outpath)
+template<typename Samp, typename Graph, typename RNG, typename VType=std::vector<size_t>>
+void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Graph &g, const VType *bbox_vertices_ptr, std::vector<unsigned> &coreset_sizes, std::string outpath, RNG &rng)
 {
-    
+    using CoresetType = typename Samp::CoresetType;
+    std::ofstream ofs(outpath);
+    ofs << "##In this table, items marked * are for coresets where |S| < k\n";
+    ofs << "#Coreset size\tDijkstra time\tVxS time\tVxS cost\tSxS time\tSxS cost\n";
+    for(const auto csz: coreset_sizes) {
+        if(csz > (boost::num_vertices(g) * 2)) continue;
+        ofs << csz;
+        if(csz < k) ofs << '*';
+        ofs << '\t';
+        CoresetType cs = sampler.sample(csz);
+        //cs.compact();
+        blz::DM<float> distances(csz, boost::num_vertices(g)), sqdistances(csz, csz);
+        util::Timer t;
+        t.start();
+        OMP_PFOR
+        for(unsigned csidx = 0; csidx < csz; ++csidx) {
+            auto idx = bbox_vertices_ptr ? bbox_vertices_ptr->operator[](cs.indices_[csidx])
+                                         : cs.indices_[csidx];
+            boost::dijkstra_shortest_paths(g, idx, distance_map(&distances(csidx, 0)));
+        }
+#if !NDEBUG
+        for(size_t i = 0; i < csz; ++i) {
+            auto lhr = row(distances, i);
+            auto lhid = bbox_vertices_ptr ? bbox_vertices_ptr->operator[](cs.indices_[i])
+                                          : cs.indices_[i];
+            for(size_t j = i + 1; j < csz; ++j) {
+                auto rhr = row(distances, j);
+                auto rhid = bbox_vertices_ptr ? bbox_vertices_ptr->operator[](cs.indices_[j])
+                                              : cs.indices_[j];
+                auto l2r = lhr[rhid], r2l = rhr[lhid];
+                assert(std::abs(l2r - r2l) < 1e-5);
+            }
+        }
+#endif
+        if(z != 1.)
+            distances = blaze::pow(distances, z);
+        if(bbox_vertices_ptr) {
+            distances = columns(distances, bbox_vertices_ptr->data(), bbox_vertices_ptr->size());
+        }
+        for(unsigned i = 0; i < csz; ++i) {
+            row(distances, i BLAZE_CHECK_DEBUG) *= cs.weights_[i];
+        }
+        std::fprintf(stderr, "distances rows/col before: %zu/%zu\n", distances.rows(), distances.columns());
+#if 0
+        for(unsigned i = 0; i < csz; ++i) {
+            auto r = row(distances, i);
+            std::cerr << r << '\n';
+            auto idx = bbox_vertices_ptr ? bbox_vertices_ptr->operator[](cs.indices_[i])
+                                         : cs.indices_[i];
+            std::cerr << "should be zero at " << r[idx] << '\n';
+        }
+#endif
+        blaze::transpose(distances); // Rows are now vertices, columns are now coreset nodes
+        std::fprintf(stderr, "distances rows/col after: %zu/%zu\n", distances.rows(), distances.columns());
+        t.stop();
+        ofs << t.diff() << '\t';
+        t.reset();
+        t.start();
+        auto vxs_lsearcher = make_kmed_lsearcher(distances, k, 1e-2, rng(), false, &cs.indices_);
+        vxs_lsearcher.run();
+        std::fprintf(stderr, "optimizing over vxs: %zu/%zu. cs weight size: %zu\n", distances.rows(), distances.columns(), cs.weights_.size());
+        std::vector<size_t> solution(vxs_lsearcher.sol_.begin(), vxs_lsearcher.sol_.end());
+        t.stop();
+        ofs << t.diff() << '\t';
+        auto [costs, _] = get_costs(g, solution);
+        auto get_cost_of_solution = [&]() {
+            double cost = 0.;
+            if(bbox_vertices_ptr) {
+                OMP_PRAGMA("omp parallel for reduction(+:cost)")
+                for(size_t i = 0; i < bbox_vertices_ptr->size(); ++i) {
+                    cost += costs[bbox_vertices_ptr->operator[](i)];
+                }
+            } else {
+                OMP_PRAGMA("omp parallel for reduction(+:cost)")
+                for(size_t i = 0; i < boost::num_vertices(g); ++i) {
+                    cost += costs[i];
+                }
+            }
+            return cost;
+        };
+        double cost = get_cost_of_solution();
+        ofs << cost << '\t';
+        t.reset(); t.start();
+        sqdistances = blaze::rows(distances, cs.indices_.data(), cs.indices_.size());
+        //sqdistances = blaze::rows(distances, cs.indices_.data(), cs.indices_.size());
+        auto sxs_lsearcher = make_kmed_lsearcher(sqdistances, k, 1e-2, rng());
+        sxs_lsearcher.run();
+        solution.assign(sxs_lsearcher.sol_.begin(), sxs_lsearcher.sol_.end());
+        for(auto &i: solution) i = cs.indices_[i];
+        t.stop();
+        t.reset();
+        ofs << t.diff() << '\t';
+        std::tie(costs, _) = get_costs(g, solution);
+        cost = get_cost_of_solution();
+        ofs << cost << '\n';
+        ofs.flush();
+    }
 }
 
 
@@ -508,7 +604,7 @@ int main(int argc, char **argv) {
     auto lsearcher = make_kmed_lsearcher(dm, k, eps, seed * seed + seed, best_improvement);
     lsearcher.run();
     timer.report();
-    if(dm.rows() < 100 && k < 7) {
+    if(dm.rows() < 100 && k < 6) {
         fgc::util::Timer newtimer("exhaustive search");
         auto esearcher = make_kmed_esearcher(dm, k);
         esearcher.run();
@@ -742,7 +838,7 @@ int main(int argc, char **argv) {
                 << '\n';
         }
     }
-    emit_coreset_optimization_runtime(sampler, k, g, bbox_vertices_ptr, coreset_sizes, output_prefix + ".coreset.runtime");
+    emit_coreset_optimization_runtime(sampler, k, z, g, bbox_vertices_ptr, coreset_sizes, output_prefix + "coreset.runtime", rng);
 #if 0
     if(cache_prefix.size()) {
         DiskMat<float> newdistmat(graph2diskmat(g, cache_prefix + ".complete.mmap.matrix"));
