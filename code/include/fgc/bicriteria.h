@@ -473,9 +473,9 @@ thorup_sample_mincost_with_weights(Graph &x, unsigned k, uint64_t seed,
     assert(firstset.first.size());
 #ifndef NDEBUG
     std::fprintf(stderr, "sum ccounts before anything: %u/%zu\n", blaze::sum(ccounts), ccounts.size());
-#endif
     auto check_sum = [&](const auto &countcontainer) {return sum(countcontainer) == (bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x));};
     assert(check_sum(ccounts));
+#endif
     for(unsigned i = 1; i < num_iter; ++i) {
         assert(ccounts.size() == firstset.first.size());
         auto ccountcpy = ccounts;
@@ -483,7 +483,7 @@ thorup_sample_mincost_with_weights(Graph &x, unsigned k, uint64_t seed,
 #if VERBOSE_AF
         std::fprintf(stderr, "Starting thorup sample mincost with set of elements %zu in size\n", ccountcpy.size());
 #endif
-        auto nextset = thorup_sample_mincost(x, k, seed, num_trials, &(firstset.first), ccountcpy.data(), npermult, nroundmult);
+        auto nextset = thorup_sample_mincost(x, k, seed + 1, num_trials, &(firstset.first), ccountcpy.data(), npermult, nroundmult);
         ccountcpy = histogram_assignments(nextset.second, nextset.first.size(), *bbox_vertices_ptr);
 #if VERBOSE_AF
         std::fprintf(stderr, "sum ccountcpy after recalc: %u/%zu\n", blaze::sum(ccountcpy), ccountcpy.size());

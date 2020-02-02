@@ -14,7 +14,7 @@ CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LDFLAGS)
       
 
 EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
-FEX=$(patsubst %,%,$(EX))
+FEX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
 PGEX=$(patsubst %,%pg,$(EX))
 PGFEX=$(patsubst %,%pgf,$(EX))
 all: $(EX)
@@ -88,4 +88,4 @@ osm2dimacspg: src/osm2dimacs.cpp
 
 
 clean:
-	rm -f $(EX) graphrun dmlrun $(FEX) $(PGEX) $(PGFEX)
+	rm -f $(EX) graphrun dmlrun $(FEX) $(PGEX) $(PGFEX) $(EX)
