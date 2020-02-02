@@ -200,6 +200,8 @@ void usage(const char *ex) {
                          "-r\tUse all potential destinations when generating approximate solution instead of only Thorup subsampled points\n"
                          "  \tThis has the potential for being more accurate than more focused searches, at the expense of both space and time\n"
                          "-b\tUse the best improvement at each iteration of local search instead of taking the first one found\n"
+                         "-I\tUse iterated Thorup D mincost.\n"
+                         "-i\tSet number of Thorup mincost iterations for iterative Thorup D mincost. Implied -I\n"
                 , ex);
     std::exit(1);
 }
@@ -282,7 +284,7 @@ int main(int argc, char **argv) {
     //bool test_samples_from_thorup_sampled = true;
     double eps = 0.1;
     BoundingBoxData bbox;
-    for(int c;(c = getopt(argc, argv, "C:e:B:S:N:T:t:p:o:M:z:s:c:K:k:R:ILbDrh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "C:e:B:S:N:T:t:p:o:M:z:s:c:K:k:R:i:ILbDrh?")) >= 0;) {
         switch(c) {
             case 'e': if((eps = std::atof(optarg)) > 1. || eps < 0.)
                         throw std::runtime_error("Required: 0 >= eps >= 1.");
@@ -297,6 +299,7 @@ int main(int argc, char **argv) {
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
             case 'M': rammax = str2nbytes(optarg); break;
             case 'D': use_thorup_d = false; break;
+            case 'i': num_thorup_iter = std::atoi(optarg); [[fallthrough]];
             case 'I': use_thorup_iterative = true; use_thorup_d = true; break;
             case 't': testing_num_centersets = std::atoi(optarg); break;
             case 'B': bbox = optarg; assert(bbox.set()); break;
