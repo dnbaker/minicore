@@ -287,19 +287,40 @@ struct LocalKMedSearcher {
                 while(sol_.size() < k_)
                     sol_.insert(rng() % mat_.rows());
             } else {
-                std::fprintf(stderr, "Using submatrix to perform kcenter approximation on an asymmetric matrix. rows/cols before: %zu, %zu\n", mat_.rows(), mat_.columns());
-                auto subm = blaze::rows(mat_, wc->data(), wc->size());
-                std::cerr << subm << '\n';
-                std::vector<uint32_t> approx{rng() % mat.rows()};
+                //std::fprintf(stderr, "Using submatrix to perform kcenter approximation on an asymmetric matrix. rows/cols before: %zu, %zu\n", mat_.rows(), mat_.columns());
+                blaze::DynamicMatrix<value_type> subm = blaze::rows(mat_, wc->data(), wc->size());
+                //std::cerr << subm << '\n';
+                //std::fprintf(stderr, "subm rows: %zu\n", subm.rows());
+                std::vector<uint32_t> approx{uint32_t(rng() % subm.rows())};
                 auto first = approx.front();
-                blz::DV<float, blaze::rowVector> mincosts = row(subm, first);
-                while(approx.size() < k) {
-                    auto nextind = std::max_element(mincosts.begin(), mincosts.end()) = mincosts.begin();
+                blz::DV<value_type, blaze::rowVector> mincosts = row(subm, first);
+                std::vector<uint32_t> remaining(subm.rows());
+                std::iota(remaining.begin(), remaining.end(), 0u);
+                while(approx.size() < std::min(subm.rows(), size_t(k_))) {
+                    //std::fputc('\n', stderr);
+                    double maxcost = -1.;
+                    unsigned maxind = -1;
+                    for(unsigned i = 0; i < remaining.size(); ++i) {
+                        auto ri = remaining[i];
+                        if(std::find(approx.begin(), approx.end(), ri) != approx.end()) continue;
+                        auto r = row(subm, ri);
+                        auto cost = blaze::max(r);
+                        if(cost > maxcost) maxcost = cost, maxind = i;
+                    }
+                    auto nextind = remaining[maxind];
                     approx.push_back(nextind);
+                    std::swap(remaining[maxind], remaining.back());
+                    remaining.pop_back();
                     mincosts = blaze::min(mincosts, row(subm, nextind));
                 }
                 for(auto i: approx)
-                    sol_.insert(wc->operator[](i));
+                    sol_.insert(wc->at(i));
+
+                while(sol_.size() < k_) {
+                    // Add random entries until desired sizeA
+                    sol_.insert(rng() % mat_.rows());
+                }
+                //std::fprintf(stderr, "used submatrix. sol size: %zu\n", sol_.size());
             }
         }
         assign();
@@ -324,6 +345,8 @@ struct LocalKMedSearcher {
 
     void assign() {
         assert(assignments_.size() == nc_);
+        std::fprintf(stderr, "rows: %zu. cols: %zu. sol size: %zu. k: %u\n",
+                     mat_.rows(), mat_.columns(), sol_.size(), k_);
         assert(sol_.size() == k_ || sol_.size() == mat_.rows());
         DBG_ONLY(std::fprintf(stderr, "Initialized assignments at size %zu\n", assignments_.size());)
         for(const auto center: sol_) {
