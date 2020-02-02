@@ -77,7 +77,7 @@ std::pair<std::vector<typename graph_traits<Graph>::vertex_descriptor>,
           double>
 thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
          const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr,
-         WType *weights=nullptr)
+         const WType *weights=nullptr)
 {
     using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
     using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
@@ -178,18 +178,21 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
             flat_hash_map<Vertex, Vertex> Fmap;
             for(size_t i = 0; i < F.size(); ++i)
                 Fmap[F[i]] = i;
-            auto newweights = std::make_unique<WType[]>(Fmap.size());
+            //auto newweights = std::make_unique<WType[]>(Fmap.size());
+            //std::memset(newweights.get(), 0, Fmap.size() * sizeof(WType));
             OMP_PRAGMA("omp parallel for reduction(+:cost)")
             for(size_t i = 0; i < nboxv; ++i) {
-                auto p = bbox_vertices_ptr->operator[](i), pc = p;
+#if 0
+                auto p = bbox_vertices_ptr->operator[](i);
                 typename flat_hash_map<Vertex, Vertex>::iterator it;
                 while((it = Fmap.find(p)) == Fmap.end())
                     p = pmap[p];
+#endif
                 cost += weights[i] * distances[bbox_vertices_ptr->operator[](i)];
-                OMP_ATOMIC
-                newweights[it->second] += weights[i];
+                //OMP_ATOMIC
+                //newweights[it->second] += weights[i];
             }
-            std::copy(newweights.get(), newweights.get() + Fmap.size(), weights);
+            //std::copy(newweights.get(), newweights.get() + Fmap.size(), weights);
         } else {
             OMP_PRAGMA("omp parallel for reduction(+:cost)")
             for(size_t i = 0; i < nboxv; ++i) {
@@ -327,6 +330,7 @@ get_costs(Graph &x, const Container &container) {
     std::fprintf(stderr, "Total cost of solution: %g\n", blaze::sum(costs));
     return std::make_pair(std::move(costs), assignments);
 }
+#if 0
 template<typename Graph, template<typename...> class BBoxTemplate=std::vector, typename...BBoxArgs>
 auto
 thorup_sample_iterative(Graph &x, unsigned k, uint64_t seed,
@@ -360,11 +364,13 @@ thorup_sample_iterative(Graph &x, unsigned k, uint64_t seed,
     auto [_, assignments] = get_costs(x, first_sample.first);
     return std::make_pair(std::move(first_sample.first), std::move(assignments));
 }
+#endif
 
-template<typename Graph, template<typename...> class BBoxTemplate=std::vector, typename...BBoxArgs>
+template<typename Graph, template<typename...> class BBoxTemplate=std::vector, typename WeightType=uint32_t, typename...BBoxArgs>
 auto
 thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
     const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr,
+    const WeightType *weights=nullptr,
     double npermult=21., double nroundmult=3.)
 {
     // Modification of Thorup, wherein we run Thorup Algorithm E
@@ -376,9 +382,19 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
     const size_t n = bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x);
     const double logn = std::log2(n);
     const size_t samples_per_round = std::ceil(npermult * logn * k / eps);
+#if 0
+    std::vector<WeightType> wcopy;
+    if(weights) {
+        wcopy.insert(wcopy.end(), weights, weights + n);
+    }
+#endif
+    
 
     std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
-    auto func = [&](Graph &localx){return thorup_d(localx, rng, samples_per_round, nroundmult * logn, bbox_vertices_ptr);};
+    auto func = [&](Graph &localx){
+        //auto wworking = wcopy;
+        return thorup_d(localx, rng, samples_per_round, nroundmult * logn, bbox_vertices_ptr, weights);
+    };
     std::pair<std::vector<typename graph_traits<Graph>::vertex_descriptor>,
               double> bestsol;
     bestsol.second = std::numeric_limits<double>::max();
@@ -406,9 +422,77 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
         }
     }
     auto [_, assignments] = get_costs(x, bestsol.first);
+    assert(assignments.size() == boost::num_vertices(x));
     //auto assignments(get_assignments(x, bestsol.first));
     //std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
     return std::make_pair(std::move(bestsol.first), std::move(assignments));
+}
+
+template<typename Con, typename IType=std::uint32_t, typename VertexContainer>
+blz::DV<IType> histogram_assignments(const Con &c, unsigned ncenters, const VertexContainer &vtces) {
+    const size_t n = std::size(vtces);
+    blz::DV<IType>ret(ncenters, static_cast<IType>(0));
+    OMP_PFOR
+    for(size_t i = 0; i < n; ++i) {
+        OMP_ATOMIC
+        ++ret.at(c[vtces[i]]);
+    }
+#ifndef NDEBUG
+    std::fprintf(stderr, "Sum of center counts: %u\n", blaze::sum(ret));
+#endif
+    return ret;
+}
+
+/*
+ *
+ *
+ *
+ * thorup_sample_mincost_with_weights performs sets of Thorup D ``num_trials'' in a row,
+ * selecting the one with lowest cost, performing this iteration ``num_iter'' times.
+ * This way, we are quite likely to have among the best solutions,
+ * but with smaller and smaller set sizes.
+ * It could be made faster, certainly, but it is very complicated and easy to do incorrectly.
+ *
+ */
+
+template<typename Graph, template<typename...> class BBoxTemplate=std::vector, typename WeightType=uint32_t, typename...BBoxArgs>
+auto
+thorup_sample_mincost_with_weights(Graph &x, unsigned k, uint64_t seed,
+                                   unsigned num_trials, unsigned num_iter,
+    const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr,
+    WeightType *weights=nullptr,
+    double npermult=21., double nroundmult=3.)
+{
+    auto firstset = thorup_sample_mincost(x, k, seed, num_trials, bbox_vertices_ptr, weights, npermult, nroundmult);
+    BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> bbcpy;
+    if(!bbox_vertices_ptr) {
+        bbcpy.assign(boost::vertices(x).first, boost::vertices(x).second);
+        bbox_vertices_ptr = &bbcpy;
+    }
+    auto ccounts = histogram_assignments(firstset.second, firstset.first.size(), *bbox_vertices_ptr);
+    assert(firstset.first.size());
+#ifndef NDEBUG
+    std::fprintf(stderr, "sum ccounts before anything: %u/%zu\n", blaze::sum(ccounts), ccounts.size());
+#endif
+    auto check_sum = [&](const auto &countcontainer) {return sum(countcontainer) == (bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x));};
+    assert(check_sum(ccounts));
+    for(unsigned i = 1; i < num_iter; ++i) {
+        assert(ccounts.size() == firstset.first.size());
+        auto ccountcpy = ccounts;
+        assert(check_sum(ccountcpy));
+#if VERBOSE_AF
+        std::fprintf(stderr, "Starting thorup sample mincost with set of elements %zu in size\n", ccountcpy.size());
+#endif
+        auto nextset = thorup_sample_mincost(x, k, seed, num_trials, &(firstset.first), ccountcpy.data(), npermult, nroundmult);
+        ccountcpy = histogram_assignments(nextset.second, nextset.first.size(), *bbox_vertices_ptr);
+#if VERBOSE_AF
+        std::fprintf(stderr, "sum ccountcpy after recalc: %u/%zu\n", blaze::sum(ccountcpy), ccountcpy.size());
+#endif
+        assert(ccountcpy.size() == nextset.first.size());
+        ccounts = std::move(ccountcpy);
+        std::swap(firstset, nextset);
+    }
+    return firstset;
 }
 
 

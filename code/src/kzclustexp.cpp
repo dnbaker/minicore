@@ -278,6 +278,7 @@ int main(int argc, char **argv) {
     std::string coreset_sampler_path;
     std::string cache_prefix;
     unsigned num_thorup_trials = 15;
+    unsigned num_thorup_iter = 5;
     //bool test_samples_from_thorup_sampled = true;
     double eps = 0.1;
     BoundingBoxData bbox;
@@ -407,7 +408,8 @@ int main(int argc, char **argv) {
     std::vector<Vertex> sampled;
     if(use_thorup_d) {
         if(use_thorup_iterative) {
-            std::tie(sampled, thorup_assignments) = thorup_sample_iterative(g, k, seed, num_thorup_trials, bbox_vertices_ptr);
+            std::tie(sampled, thorup_assignments) =
+            thorup_sample_mincost_with_weights(g, k, seed, num_thorup_trials, num_thorup_iter, bbox_vertices_ptr);
         } else {
             std::tie(sampled, thorup_assignments) = thorup_sample_mincost(g, k, seed, num_thorup_trials, bbox_vertices_ptr);
         }
