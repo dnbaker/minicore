@@ -48,6 +48,12 @@ generate_random_centers(uint64_t seed, unsigned k, unsigned x_size,
     return random_centers;
 }
 
+template<typename Samp, typename Graph, typename VType=std::vector<size_t>>
+void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, Graph &g, const VType *bbox_vertices_ptr, std::vector<unsigned> &coreset_sizes, std::string outpath)
+{
+    
+}
+
 
 template<typename Graph, typename ICon, typename FCon, typename IT, typename RetCon, typename CSWT>
 void calculate_distortion_centerset(Graph &x, const ICon &indices, FCon &costbuffer,
@@ -328,6 +334,7 @@ int main(int argc, char **argv) {
     }
     if(output_prefix.empty())
         output_prefix = std::to_string(seed);
+    output_prefix += '.' + std::to_string(k) + '.';
     std::string input = argc == optind ? "../data/dolphins.graph": const_cast<const char *>(argv[optind]);
     std::srand(seed);
     std::fprintf(stderr, "Reading from file: %s\n", input.data());
@@ -735,6 +742,7 @@ int main(int argc, char **argv) {
                 << '\n';
         }
     }
+    emit_coreset_optimization_runtime(sampler, k, g, bbox_vertices_ptr, coreset_sizes, output_prefix + ".coreset.runtime");
 #if 0
     if(cache_prefix.size()) {
         DiskMat<float> newdistmat(graph2diskmat(g, cache_prefix + ".complete.mmap.matrix"));
