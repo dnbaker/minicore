@@ -74,6 +74,7 @@ static inline BoundingBoxData parse_bbdata(const char *s) {
     assert(loprob < highprob);
     BoundingBoxData ret{llat, ulat, llon, ulon, highprob, loprob};
     ret.print(stderr);
+    std::fputc('\n', stderr);
     return ret;
 }
 
