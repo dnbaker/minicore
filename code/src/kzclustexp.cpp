@@ -65,6 +65,8 @@ void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Grap
         ofs << '\t';
         CoresetType cs = sampler.sample(csz);
         //cs.compact();
+        // Not needed for theoeretical guarantees, but compacting may be of practical importance
+        // , especially for the case of larger coresets.
         blz::DM<float> distances(csz, boost::num_vertices(g)), sqdistances(csz, csz);
         util::Timer t;
         t.start();
