@@ -1,0 +1,333 @@
+nohup: ignoring input
+[main] Command-line arguments: 'fastkzclustexp -Lrp30 -k15 -T5 ../data/brooklyn-1-16.annotated.gr -obrooklynfull30t -M100G '
+Reading from file: ../data/brooklyn-1-16.annotated.gr
+graphtype: p
+n: 131986. m: 161484
+[---Timer---] parse time: 659ms
+nv: 131986. ne: 161484
+not connected. ncomp: 790
+maxcmp 0 out of total 790
+After reducing to largest connected component -- num edges: 154912. num nodes: 125167
+[---Timer---] max component: 808ms
+nv: 125167
+Replacing old cost of 1.79769e+308/0 with 3.9465e+06/23955
+Replacing old cost of 3.9465e+06/23955 with 3.56569e+06/31534
+Replacing old cost of 3.56569e+06/31534 with 2.792e+06/34217
+Replacing old cost of 2.792e+06/34217 with 1.91249e+06/43318
+Total cost of solution: 1.91249e+06
+[---Timer---] thorup sampling: 2832ms
+[---Timer---] center counts: 2ms
+[Phase 1] Thorup sampling complete. Sampled 43318 points from input graph: 125167 vertices, 154912 edges.
+rect: 1. lsearch all vertices: 1. ndatarows: 125167
+all sources: 1. nrows: 125167
+Completed dijkstra for row 1/125167
+Completed dijkstra for row 2/125167
+Completed dijkstra for row 4/125167
+Completed dijkstra for row 8/125167
+Completed dijkstra for row 16/125167
+Completed dijkstra for row 32/125167
+Completed dijkstra for row 64/125167
+Completed dijkstra for row 128/125167
+Completed dijkstra for row 256/125167
+Completed dijkstra for row 512/125167
+Completed dijkstra for row 1024/125167
+Completed dijkstra for row 2048/125167
+Completed dijkstra for row 4096/125167
+Completed dijkstra for row 8192/125167
+Completed dijkstra for row 16384/125167
+Completed dijkstra for row 32768/125167
+Completed dijkstra for row 65536/125167
+[---Timer---] distance matrix generation: 273935ms
+dm size: 125167 rows, 125167 columns
+[---Timer---] full distance matrix serialization 789406ms
+[Phase 2] Distances gathered
+Using kcenter
+rows: 125167. cols: 125167. sol size: 15. k: 15
+diffthresh: 15.593963
+Swapping 1 for 72469. Swap number 1. Current cost: 5.85555e+08. Improvement: 2.39868e+07. Threshold: 15.594.
+Swapping 0 for 49168. Swap number 2. Current cost: 5.46212e+08. Improvement: 3.44884e+07. Threshold: 15.594.
+Swapping 18 for 0. Swap number 3. Current cost: 5.11723e+08. Improvement: 7.53497e+06. Threshold: 15.594.
+Swapping 2 for 117428. Swap number 4. Current cost: 5.04188e+08. Improvement: 5.33754e+06. Threshold: 15.594.
+Swapping 0 for 68948. Swap number 5. Current cost: 4.98851e+08. Improvement: 7.18259e+06. Threshold: 15.594.
+Swapping 3 for 0. Swap number 6. Current cost: 4.91668e+08. Improvement: 1.92458e+06. Threshold: 15.594.
+Swapping 0 for 37631. Swap number 7. Current cost: 4.89744e+08. Improvement: 8.18736e+06. Threshold: 15.594.
+Swapping 5 for 0. Swap number 8. Current cost: 4.81556e+08. Improvement: 1.53349e+07. Threshold: 15.594.
+Swapping 0 for 39220. Swap number 9. Current cost: 4.66221e+08. Improvement: 8.04454e+06. Threshold: 15.594.
+Swapping 4 for 0. Swap number 10. Current cost: 4.58177e+08. Improvement: 702846. Threshold: 15.594.
+Swapping 9 for 4. Swap number 11. Current cost: 4.57474e+08. Improvement: 4.69149e+06. Threshold: 15.594.
+Swapping 6 for 1. Swap number 12. Current cost: 4.52783e+08. Improvement: 2.89211e+06. Threshold: 15.594.
+Swapping 0 for 124455. Swap number 13. Current cost: 4.4989e+08. Improvement: 8.72316e+06. Threshold: 15.594.
+Swapping 4 for 0. Swap number 14. Current cost: 4.41167e+08. Improvement: 29419.9. Threshold: 15.594.
+Swapping 13 for 4. Swap number 15. Current cost: 4.41138e+08. Improvement: 2.16108e+06. Threshold: 15.594.
+Swapping 14 for 13. Swap number 16. Current cost: 4.38977e+08. Improvement: 6.9683e+06. Threshold: 15.594.
+Swapping 19 for 14. Swap number 17. Current cost: 4.32008e+08. Improvement: 2.39651e+07. Threshold: 15.594.
+Swapping 0 for 33322. Swap number 18. Current cost: 4.08043e+08. Improvement: 1.34953e+07. Threshold: 15.594.
+Swapping 4 for 0. Swap number 19. Current cost: 3.94548e+08. Improvement: 29419.9. Threshold: 15.594.
+Swapping 13 for 4. Swap number 20. Current cost: 3.94519e+08. Improvement: 2.16108e+06. Threshold: 15.594.
+Swapping 14 for 13. Swap number 21. Current cost: 3.92358e+08. Improvement: 6.9683e+06. Threshold: 15.594.
+Swapping 28 for 14. Swap number 22. Current cost: 3.85389e+08. Improvement: 3.54233e+06. Threshold: 15.594.
+Swapping 0 for 66906. Swap number 23. Current cost: 3.81847e+08. Improvement: 1.06372e+07. Threshold: 15.594.
+Swapping 24 for 0. Swap number 24. Current cost: 3.7121e+08. Improvement: 2.26623e+06. Threshold: 15.594.
+Swapping 29 for 24. Swap number 25. Current cost: 3.68944e+08. Improvement: 1.60093e+07. Threshold: 15.594.
+Swapping 31 for 18. Swap number 26. Current cost: 3.52934e+08. Improvement: 4.1004e+06. Threshold: 15.594.
+Swapping 134 for 31. Swap number 27. Current cost: 3.48834e+08. Improvement: 2.25171e+06. Threshold: 15.594.
+Swapping 214 for 134. Swap number 28. Current cost: 3.46582e+08. Improvement: 1.39622e+06. Threshold: 15.594.
+Swapping 25 for 5. Swap number 29. Current cost: 3.45186e+08. Improvement: 308957. Threshold: 15.594.
+Swapping 0 for 124057. Swap number 30. Current cost: 3.44877e+08. Improvement: 2.15939e+07. Threshold: 15.594.
+Swapping 18 for 0. Swap number 31. Current cost: 3.23283e+08. Improvement: 997867. Threshold: 15.594.
+Swapping 31 for 18. Swap number 32. Current cost: 3.22285e+08. Improvement: 3.93219e+06. Threshold: 15.594.
+Swapping 222 for 31. Swap number 33. Current cost: 3.18353e+08. Improvement: 1.45929e+06. Threshold: 15.594.
+Swapping 876 for 222. Swap number 34. Current cost: 3.16894e+08. Improvement: 40357.8. Threshold: 15.594.
+Swapping 18125 for 876. Swap number 35. Current cost: 3.16853e+08. Improvement: 18962. Threshold: 15.594.
+Swapping 0 for 62412. Swap number 36. Current cost: 3.16834e+08. Improvement: 3.43398e+06. Threshold: 15.594.
+Swapping 1 for 0. Swap number 37. Current cost: 3.134e+08. Improvement: 1.00841e+06. Threshold: 15.594.
+Swapping 4 for 1. Swap number 38. Current cost: 3.12392e+08. Improvement: 4.31894e+06. Threshold: 15.594.
+Swapping 14 for 4. Swap number 39. Current cost: 3.08073e+08. Improvement: 412914. Threshold: 15.594.
+Swapping 26 for 14. Swap number 40. Current cost: 3.0766e+08. Improvement: 830258. Threshold: 15.594.
+Swapping 54 for 26. Swap number 41. Current cost: 3.0683e+08. Improvement: 70075.7. Threshold: 15.594.
+Swapping 58 for 2. Swap number 42. Current cost: 3.0676e+08. Improvement: 65473.1. Threshold: 15.594.
+Swapping 0 for 47574. Swap number 43. Current cost: 3.06694e+08. Improvement: 5.13804e+06. Threshold: 15.594.
+Swapping 1 for 0. Swap number 44. Current cost: 3.01556e+08. Improvement: 1.00841e+06. Threshold: 15.594.
+Swapping 4 for 1. Swap number 45. Current cost: 3.00548e+08. Improvement: 4.31603e+06. Threshold: 15.594.
+Swapping 50 for 4. Swap number 46. Current cost: 2.96232e+08. Improvement: 71344.6. Threshold: 15.594.
+Swapping 83 for 50. Swap number 47. Current cost: 2.96161e+08. Improvement: 354437. Threshold: 15.594.
+Swapping 231 for 83. Swap number 48. Current cost: 2.95806e+08. Improvement: 1.20253e+06. Threshold: 15.594.
+Swapping 592 for 231. Swap number 49. Current cost: 2.94604e+08. Improvement: 605631. Threshold: 15.594.
+Swapping 2051 for 592. Swap number 50. Current cost: 2.93998e+08. Improvement: 49580.8. Threshold: 15.594.
+Swapping 4451 for 2051. Swap number 51. Current cost: 2.93948e+08. Improvement: 194480. Threshold: 15.594.
+Swapping 0 for 83356. Swap number 52. Current cost: 2.93754e+08. Improvement: 5.72463e+06. Threshold: 15.594.
+Swapping 1 for 0. Swap number 53. Current cost: 2.88029e+08. Improvement: 1.29316e+06. Threshold: 15.594.
+Swapping 4 for 1. Swap number 54. Current cost: 2.86736e+08. Improvement: 4.38494e+06. Threshold: 15.594.
+Swapping 251 for 4. Swap number 55. Current cost: 2.82351e+08. Improvement: 1.05506e+06. Threshold: 15.594.
+Swapping 785 for 251. Swap number 56. Current cost: 2.81296e+08. Improvement: 274080. Threshold: 15.594.
+Swapping 2127 for 785. Swap number 57. Current cost: 2.81022e+08. Improvement: 227038. Threshold: 15.594.
+Swapping 4102 for 54. Swap number 58. Current cost: 2.80795e+08. Improvement: 24952.1. Threshold: 15.594.
+Swapping 6000 for 4102. Swap number 59. Current cost: 2.8077e+08. Improvement: 26960.4. Threshold: 15.594.
+Swapping 6263 for 6000. Swap number 60. Current cost: 2.80743e+08. Improvement: 99599.9. Threshold: 15.594.
+Swapping 6505 for 6263. Swap number 61. Current cost: 2.80643e+08. Improvement: 124829. Threshold: 15.594.
+Swapping 26004 for 6505. Swap number 62. Current cost: 2.80519e+08. Improvement: 38254.5. Threshold: 15.594.
+Swapping 26900 for 26004. Swap number 63. Current cost: 2.8048e+08. Improvement: 12352.1. Threshold: 15.594.
+Swapping 38 for 28. Swap number 64. Current cost: 2.80468e+08. Improvement: 2.03098e+06. Threshold: 15.594.
+Swapping 0 for 122877. Swap number 65. Current cost: 2.78437e+08. Improvement: 6.16926e+06. Threshold: 15.594.
+Swapping 1 for 0. Swap number 66. Current cost: 2.72268e+08. Improvement: 101238. Threshold: 15.594.
+Swapping 11 for 1. Swap number 67. Current cost: 2.72167e+08. Improvement: 275110. Threshold: 15.594.
+Swapping 16 for 11. Swap number 68. Current cost: 2.71891e+08. Improvement: 2.66797e+06. Threshold: 15.594.
+Swapping 6272 for 4451. Swap number 69. Current cost: 2.69224e+08. Improvement: 6183.34. Threshold: 15.594.
+Swapping 12898 for 6272. Swap number 70. Current cost: 2.69217e+08. Improvement: 109352. Threshold: 15.594.
+Swapping 41882 for 18125. Swap number 71. Current cost: 2.69108e+08. Improvement: 4160.85. Threshold: 15.594.
+Swapping 68913 for 41882. Swap number 72. Current cost: 2.69104e+08. Improvement: 4330.5. Threshold: 15.594.
+Swapping 72320 for 68913. Swap number 73. Current cost: 2.691e+08. Improvement: 28629.5. Threshold: 15.594.
+Swapping 69 for 25. Swap number 74. Current cost: 2.69071e+08. Improvement: 350498. Threshold: 15.594.
+Swapping 335 for 69. Swap number 75. Current cost: 2.6872e+08. Improvement: 61140.6. Threshold: 15.594.
+Swapping 1028 for 335. Swap number 76. Current cost: 2.68659e+08. Improvement: 111254. Threshold: 15.594.
+Swapping 3003 for 1028. Swap number 77. Current cost: 2.68548e+08. Improvement: 245986. Threshold: 15.594.
+Swapping 3069 for 3003. Swap number 78. Current cost: 2.68302e+08. Improvement: 21036.3. Threshold: 15.594.
+Swapping 4520 for 3069. Swap number 79. Current cost: 2.68281e+08. Improvement: 213144. Threshold: 15.594.
+Swapping 614 for 38. Swap number 80. Current cost: 2.68068e+08. Improvement: 183736. Threshold: 15.594.
+Swapping 776 for 614. Swap number 81. Current cost: 2.67884e+08. Improvement: 185100. Threshold: 15.594.
+Swapping 1529 for 776. Swap number 82. Current cost: 2.67699e+08. Improvement: 787509. Threshold: 15.594.
+Swapping 23678 for 1529. Swap number 83. Current cost: 2.66912e+08. Improvement: 45015.6. Threshold: 15.594.
+Swapping 26201 for 23678. Swap number 84. Current cost: 2.66866e+08. Improvement: 158686. Threshold: 15.594.
+Swapping 115 for 9. Swap number 85. Current cost: 2.66708e+08. Improvement: 1.11376e+06. Threshold: 15.594.
+Swapping 4505 for 26201. Swap number 86. Current cost: 2.65594e+08. Improvement: 92377.2. Threshold: 15.594.
+Swapping 5069 for 4505. Swap number 87. Current cost: 2.65502e+08. Improvement: 28522.6. Threshold: 15.594.
+Swapping 9109 for 5069. Swap number 88. Current cost: 2.65473e+08. Improvement: 30409.6. Threshold: 15.594.
+Swapping 33549 for 9109. Swap number 89. Current cost: 2.65443e+08. Improvement: 72644.8. Threshold: 15.594.
+Swapping 49939 for 33549. Swap number 90. Current cost: 2.6537e+08. Improvement: 11571.4. Threshold: 15.594.
+Swapping 324 for 115. Swap number 91. Current cost: 2.65359e+08. Improvement: 335153. Threshold: 15.594.
+Swapping 42415 for 26900. Swap number 92. Current cost: 2.65023e+08. Improvement: 49829.9. Threshold: 15.594.
+Swapping 59851 for 42415. Swap number 93. Current cost: 2.64974e+08. Improvement: 38140.5. Threshold: 15.594.
+Swapping 75036 for 59851. Swap number 94. Current cost: 2.64935e+08. Improvement: 9675.31. Threshold: 15.594.
+Swapping 24 for 19. Swap number 95. Current cost: 2.64926e+08. Improvement: 3.83122e+06. Threshold: 15.594.
+Swapping 116 for 24. Swap number 96. Current cost: 2.61094e+08. Improvement: 303450. Threshold: 15.594.
+Swapping 124 for 116. Swap number 97. Current cost: 2.60791e+08. Improvement: 127858. Threshold: 15.594.
+Swapping 506 for 124. Swap number 98. Current cost: 2.60663e+08. Improvement: 38734.1. Threshold: 15.594.
+Swapping 1021 for 506. Swap number 99. Current cost: 2.60624e+08. Improvement: 92810.3. Threshold: 15.594.
+Swapping 2647 for 1021. Swap number 100. Current cost: 2.60532e+08. Improvement: 54663.7. Threshold: 15.594.
+Swapping 39178 for 2647. Swap number 101. Current cost: 2.60477e+08. Improvement: 2372.84. Threshold: 15.594.
+Swapping 90729 for 39178. Swap number 102. Current cost: 2.60475e+08. Improvement: 25962.2. Threshold: 15.594.
+Swapping 1 for 6. Swap number 103. Current cost: 2.60449e+08. Improvement: 1.66726e+06. Threshold: 15.594.
+Swapping 22 for 1. Swap number 104. Current cost: 2.58781e+08. Improvement: 265643. Threshold: 15.594.
+Swapping 83 for 12898. Swap number 105. Current cost: 2.58516e+08. Improvement: 52046.7. Threshold: 15.594.
+Swapping 307 for 83. Swap number 106. Current cost: 2.58464e+08. Improvement: 647300. Threshold: 15.594.
+Swapping 4103 for 72320. Swap number 107. Current cost: 2.57816e+08. Improvement: 60726.3. Threshold: 15.594.
+Swapping 12204 for 4103. Swap number 108. Current cost: 2.57756e+08. Improvement: 1537.16. Threshold: 15.594.
+Swapping 18034 for 12204. Swap number 109. Current cost: 2.57754e+08. Improvement: 27984. Threshold: 15.594.
+Swapping 39681 for 18034. Swap number 110. Current cost: 2.57726e+08. Improvement: 13338.4. Threshold: 15.594.
+Swapping 520 for 307. Swap number 111. Current cost: 2.57713e+08. Improvement: 791645. Threshold: 15.594.
+Swapping 2659 for 520. Swap number 112. Current cost: 2.56921e+08. Improvement: 14924.6. Threshold: 15.594.
+Swapping 3297 for 2659. Swap number 113. Current cost: 2.56906e+08. Improvement: 63048.3. Threshold: 15.594.
+Swapping 900 for 39681. Swap number 114. Current cost: 2.56843e+08. Improvement: 67595.3. Threshold: 15.594.
+Swapping 10350 for 900. Swap number 115. Current cost: 2.56776e+08. Improvement: 100331. Threshold: 15.594.
+Swapping 520 for 3297. Swap number 116. Current cost: 2.56675e+08. Improvement: 33164.3. Threshold: 15.594.
+Swapping 2659 for 520. Swap number 117. Current cost: 2.56642e+08. Improvement: 33491.1. Threshold: 15.594.
+Swapping 6744 for 2659. Swap number 118. Current cost: 2.56609e+08. Improvement: 8513.81. Threshold: 15.594.
+Swapping 322 for 22. Swap number 119. Current cost: 2.566e+08. Improvement: 933625. Threshold: 15.594.
+Swapping 802 for 322. Swap number 120. Current cost: 2.55667e+08. Improvement: 151426. Threshold: 15.594.
+Swapping 4392 for 802. Swap number 121. Current cost: 2.55515e+08. Improvement: 11444.3. Threshold: 15.594.
+Swapping 5472 for 4392. Swap number 122. Current cost: 2.55504e+08. Improvement: 345507. Threshold: 15.594.
+Swapping 7588 for 5472. Swap number 123. Current cost: 2.55158e+08. Improvement: 604202. Threshold: 15.594.
+Swapping 9062 for 7588. Swap number 124. Current cost: 2.54554e+08. Improvement: 107986. Threshold: 15.594.
+Swapping 17584 for 9062. Swap number 125. Current cost: 2.54446e+08. Improvement: 14914. Threshold: 15.594.
+Swapping 107205 for 17584. Swap number 126. Current cost: 2.54431e+08. Improvement: 9142.53. Threshold: 15.594.
+Swapping 2659 for 6744. Swap number 127. Current cost: 2.54422e+08. Improvement: 33111. Threshold: 15.594.
+Swapping 8827 for 2659. Swap number 128. Current cost: 2.54389e+08. Improvement: 82487.2. Threshold: 15.594.
+Swapping 14161 for 8827. Swap number 129. Current cost: 2.54306e+08. Improvement: 87880. Threshold: 15.594.
+Swapping 29890 for 14161. Swap number 130. Current cost: 2.54218e+08. Improvement: 10716.9. Threshold: 15.594.
+Swapping 0 for 17915. Swap number 131. Current cost: 2.54208e+08. Improvement: 2.42948e+06. Threshold: 15.594.
+Swapping 1 for 0. Swap number 132. Current cost: 2.51778e+08. Improvement: 4.14824e+06. Threshold: 15.594.
+Swapping 33 for 1. Swap number 133. Current cost: 2.4763e+08. Improvement: 737492. Threshold: 15.594.
+Swapping 49 for 33. Swap number 134. Current cost: 2.46892e+08. Improvement: 148392. Threshold: 15.594.
+Swapping 118 for 49. Swap number 135. Current cost: 2.46744e+08. Improvement: 106933. Threshold: 15.594.
+Swapping 116 for 90729. Swap number 136. Current cost: 2.46637e+08. Improvement: 139475. Threshold: 15.594.
+Swapping 738 for 118. Swap number 137. Current cost: 2.46498e+08. Improvement: 552336. Threshold: 15.594.
+Swapping 3058 for 738. Swap number 138. Current cost: 2.45945e+08. Improvement: 62191. Threshold: 15.594.
+Swapping 23174 for 3058. Swap number 139. Current cost: 2.45883e+08. Improvement: 11168.3. Threshold: 15.594.
+Swapping 793 for 116. Swap number 140. Current cost: 2.45872e+08. Improvement: 68857.5. Threshold: 15.594.
+Swapping 13918 for 793. Swap number 141. Current cost: 2.45803e+08. Improvement: 15342.1. Threshold: 15.594.
+Swapping 118444 for 13918. Swap number 142. Current cost: 2.45788e+08. Improvement: 14501. Threshold: 15.594.
+Swapping 67967 for 23174. Swap number 143. Current cost: 2.45773e+08. Improvement: 52067.5. Threshold: 15.594.
+Swapping 18034 for 10350. Swap number 144. Current cost: 2.45721e+08. Improvement: 4494.64. Threshold: 15.594.
+Swapping 39681 for 18034. Swap number 145. Current cost: 2.45717e+08. Improvement: 3814.34. Threshold: 15.594.
+Swapping 60706 for 39681. Swap number 146. Current cost: 2.45713e+08. Improvement: 7401.25. Threshold: 15.594.
+Swapping 88944 for 60706. Swap number 147. Current cost: 2.45706e+08. Improvement: 31373.3. Threshold: 15.594.
+Swapping 247 for 58. Swap number 148. Current cost: 2.45674e+08. Improvement: 41307. Threshold: 15.594.
+Swapping 284 for 247. Swap number 149. Current cost: 2.45633e+08. Improvement: 529106. Threshold: 15.594.
+Swapping 4362 for 284. Swap number 150. Current cost: 2.45104e+08. Improvement: 120326. Threshold: 15.594.
+Swapping 5955 for 4362. Swap number 151. Current cost: 2.44983e+08. Improvement: 22909.5. Threshold: 15.594.
+Swapping 11728 for 5955. Swap number 152. Current cost: 2.44961e+08. Improvement: 132431. Threshold: 15.594.
+Swapping 34145 for 11728. Swap number 153. Current cost: 2.44828e+08. Improvement: 1581.98. Threshold: 15.594.
+Swapping 82818 for 34145. Swap number 154. Current cost: 2.44826e+08. Improvement: 21475.6. Threshold: 15.594.
+Swapping 89472 for 82818. Swap number 155. Current cost: 2.44805e+08. Improvement: 1472.62. Threshold: 15.594.
+Swapping 106010 for 89472. Swap number 156. Current cost: 2.44804e+08. Improvement: 10198.2. Threshold: 15.594.
+Swapping 74 for 16. Swap number 157. Current cost: 2.44793e+08. Improvement: 801070. Threshold: 15.594.
+Swapping 174 for 74. Swap number 158. Current cost: 2.43992e+08. Improvement: 301700. Threshold: 15.594.
+Swapping 254 for 174. Swap number 159. Current cost: 2.43691e+08. Improvement: 225452. Threshold: 15.594.
+Swapping 276 for 254. Swap number 160. Current cost: 2.43465e+08. Improvement: 781408. Threshold: 15.594.
+Swapping 3985 for 276. Swap number 161. Current cost: 2.42684e+08. Improvement: 215119. Threshold: 15.594.
+Swapping 43604 for 29890. Swap number 162. Current cost: 2.42469e+08. Improvement: 60148.3. Threshold: 15.594.
+Swapping 76264 for 43604. Swap number 163. Current cost: 2.42408e+08. Improvement: 18250.2. Threshold: 15.594.
+Swapping 142 for 3. Swap number 164. Current cost: 2.4239e+08. Improvement: 792682. Threshold: 15.594.
+Swapping 744 for 142. Swap number 165. Current cost: 2.41597e+08. Improvement: 409641. Threshold: 15.594.
+Swapping 3435 for 744. Swap number 166. Current cost: 2.41188e+08. Improvement: 35716.9. Threshold: 15.594.
+Swapping 4136 for 3435. Swap number 167. Current cost: 2.41152e+08. Improvement: 186917. Threshold: 15.594.
+Swapping 4988 for 4136. Swap number 168. Current cost: 2.40965e+08. Improvement: 73250.1. Threshold: 15.594.
+Swapping 15821 for 4988. Swap number 169. Current cost: 2.40892e+08. Improvement: 8509.42. Threshold: 15.594.
+Swapping 19060 for 15821. Swap number 170. Current cost: 2.40883e+08. Improvement: 19474.6. Threshold: 15.594.
+Swapping 1044 for 324. Swap number 171. Current cost: 2.40864e+08. Improvement: 208082. Threshold: 15.594.
+Swapping 6673 for 1044. Swap number 172. Current cost: 2.40656e+08. Improvement: 246409. Threshold: 15.594.
+Swapping 10142 for 6673. Swap number 173. Current cost: 2.4041e+08. Improvement: 41138.8. Threshold: 15.594.
+Swapping 5977 for 2127. Swap number 174. Current cost: 2.40368e+08. Improvement: 8071.31. Threshold: 15.594.
+Swapping 6846 for 5977. Swap number 175. Current cost: 2.4036e+08. Improvement: 1621.76. Threshold: 15.594.
+Swapping 30980 for 6846. Swap number 176. Current cost: 2.40359e+08. Improvement: 16929. Threshold: 15.594.
+Swapping 109124 for 30980. Swap number 177. Current cost: 2.40342e+08. Improvement: 3879.51. Threshold: 15.594.
+Swapping 7508 for 3985. Swap number 178. Current cost: 2.40338e+08. Improvement: 54617.8. Threshold: 15.594.
+Swapping 11786 for 7508. Swap number 179. Current cost: 2.40283e+08. Improvement: 74925.7. Threshold: 15.594.
+Swapping 31224 for 11786. Swap number 180. Current cost: 2.40208e+08. Improvement: 250.572. Threshold: 15.594.
+Swapping 88355 for 49939. Swap number 181. Current cost: 2.40208e+08. Improvement: 16746.9. Threshold: 15.594.
+Swapping 113199 for 88355. Swap number 182. Current cost: 2.40191e+08. Improvement: 39700.5. Threshold: 15.594.
+Swapping 5 for 4520. Swap number 183. Current cost: 2.40152e+08. Improvement: 1.13542e+06. Threshold: 15.594.
+Swapping 35 for 5. Swap number 184. Current cost: 2.39016e+08. Improvement: 174635. Threshold: 15.594.
+Swapping 1863 for 67967. Swap number 185. Current cost: 2.38842e+08. Improvement: 163210. Threshold: 15.594.
+Swapping 26556 for 1863. Swap number 186. Current cost: 2.38678e+08. Improvement: 1205.77. Threshold: 15.594.
+Swapping 70009 for 26556. Swap number 187. Current cost: 2.38677e+08. Improvement: 24216.5. Threshold: 15.594.
+Swapping 81 for 35. Swap number 188. Current cost: 2.38653e+08. Improvement: 1.10159e+06. Threshold: 15.594.
+Swapping 37801 for 70009. Swap number 189. Current cost: 2.37551e+08. Improvement: 23768.9. Threshold: 15.594.
+Swapping 5294 for 88944. Swap number 190. Current cost: 2.37528e+08. Improvement: 54676.5. Threshold: 15.594.
+Swapping 7354 for 5294. Swap number 191. Current cost: 2.37473e+08. Improvement: 14725.8. Threshold: 15.594.
+Swapping 365 for 29. Swap number 192. Current cost: 2.37458e+08. Improvement: 73790.2. Threshold: 15.594.
+Swapping 11786 for 31224. Swap number 193. Current cost: 2.37384e+08. Improvement: 81.375. Threshold: 15.594.
+Swapping 103749 for 76264. Swap number 194. Current cost: 2.37384e+08. Improvement: 1783.54. Threshold: 15.594.
+Swapping 839 for 365. Swap number 195. Current cost: 2.37383e+08. Improvement: 729713. Threshold: 15.594.
+Swapping 29890 for 103749. Swap number 196. Current cost: 2.36653e+08. Improvement: 32862.8. Threshold: 15.594.
+Swapping 31224 for 11786. Swap number 197. Current cost: 2.3662e+08. Improvement: 1138.72. Threshold: 15.594.
+Swapping 2803 for 839. Swap number 198. Current cost: 2.36619e+08. Improvement: 146344. Threshold: 15.594.
+Swapping 13410 for 2803. Swap number 199. Current cost: 2.36472e+08. Improvement: 38925.1. Threshold: 15.594.
+Swapping 33437 for 13410. Swap number 200. Current cost: 2.36434e+08. Improvement: 41783.7. Threshold: 15.594.
+Swapping 102807 for 33437. Swap number 201. Current cost: 2.36392e+08. Improvement: 10188.5. Threshold: 15.594.
+Swapping 76264 for 29890. Swap number 202. Current cost: 2.36382e+08. Improvement: 63609.2. Threshold: 15.594.
+Swapping 18034 for 7354. Swap number 203. Current cost: 2.36318e+08. Improvement: 41868.7. Threshold: 15.594.
+Swapping 39681 for 18034. Swap number 204. Current cost: 2.36276e+08. Improvement: 68004.8. Threshold: 15.594.
+Swapping 95 for 214. Swap number 205. Current cost: 2.36208e+08. Improvement: 2.31889e+06. Threshold: 15.594.
+Swapping 133 for 95. Swap number 206. Current cost: 2.33889e+08. Improvement: 72345.1. Threshold: 15.594.
+Swapping 171 for 133. Swap number 207. Current cost: 2.33817e+08. Improvement: 94333.7. Threshold: 15.594.
+Swapping 5043 for 118444. Swap number 208. Current cost: 2.33722e+08. Improvement: 11106.2. Threshold: 15.594.
+Swapping 25804 for 5043. Swap number 209. Current cost: 2.33711e+08. Improvement: 36197.9. Threshold: 15.594.
+Swapping 204 for 171. Swap number 210. Current cost: 2.33675e+08. Improvement: 416642. Threshold: 15.594.
+Swapping 2647 for 25804. Swap number 211. Current cost: 2.33258e+08. Improvement: 1110.06. Threshold: 15.594.
+Swapping 90729 for 2647. Swap number 212. Current cost: 2.33257e+08. Improvement: 62218.6. Threshold: 15.594.
+Swapping 215 for 204. Swap number 213. Current cost: 2.33195e+08. Improvement: 111905. Threshold: 15.594.
+Swapping 309 for 215. Swap number 214. Current cost: 2.33083e+08. Improvement: 403539. Threshold: 15.594.
+Swapping 952 for 309. Swap number 215. Current cost: 2.3268e+08. Improvement: 123455. Threshold: 15.594.
+Swapping 793 for 90729. Swap number 216. Current cost: 2.32556e+08. Improvement: 58745.3. Threshold: 15.594.
+Swapping 5043 for 793. Swap number 217. Current cost: 2.32497e+08. Improvement: 28663.2. Threshold: 15.594.
+Swapping 25804 for 5043. Swap number 218. Current cost: 2.32469e+08. Improvement: 36170.8. Threshold: 15.594.
+Swapping 3079 for 952. Swap number 219. Current cost: 2.32433e+08. Improvement: 163413. Threshold: 15.594.
+Swapping 4236 for 3079. Swap number 220. Current cost: 2.32269e+08. Improvement: 8001.18. Threshold: 15.594.
+Swapping 58600 for 4236. Swap number 221. Current cost: 2.32261e+08. Improvement: 5261.66. Threshold: 15.594.
+Swapping 113530 for 58600. Swap number 222. Current cost: 2.32256e+08. Improvement: 16823.5. Threshold: 15.594.
+Swapping 11728 for 106010. Swap number 223. Current cost: 2.32239e+08. Improvement: 110369. Threshold: 15.594.
+Swapping 29225 for 19060. Swap number 224. Current cost: 2.32129e+08. Improvement: 3182.56. Threshold: 15.594.
+Swapping 1124 for 11728. Swap number 225. Current cost: 2.32126e+08. Improvement: 12103.7. Threshold: 15.594.
+Swapping 1379 for 1124. Swap number 226. Current cost: 2.32113e+08. Improvement: 43742. Threshold: 15.594.
+Swapping 1719 for 1379. Swap number 227. Current cost: 2.3207e+08. Improvement: 378454. Threshold: 15.594.
+Swapping 14257 for 1719. Swap number 228. Current cost: 2.31691e+08. Improvement: 34464.2. Threshold: 15.594.
+Swapping 6418 for 37801. Swap number 229. Current cost: 2.31657e+08. Improvement: 5594.89. Threshold: 15.594.
+Swapping 23460 for 6418. Swap number 230. Current cost: 2.31651e+08. Improvement: 6341.54. Threshold: 15.594.
+Swapping 27842 for 14257. Swap number 231. Current cost: 2.31645e+08. Improvement: 27685.3. Threshold: 15.594.
+Swapping 28636 for 27842. Swap number 232. Current cost: 2.31617e+08. Improvement: 69611.2. Threshold: 15.594.
+Swapping 1412 for 29225. Swap number 233. Current cost: 2.31548e+08. Improvement: 60186.9. Threshold: 15.594.
+Swapping 2775 for 1412. Swap number 234. Current cost: 2.31487e+08. Improvement: 31034.2. Threshold: 15.594.
+Swapping 7044 for 2775. Swap number 235. Current cost: 2.31456e+08. Improvement: 84592.5. Threshold: 15.594.
+Swapping 31575 for 7044. Swap number 236. Current cost: 2.31372e+08. Improvement: 6911.29. Threshold: 15.594.
+Swapping 31744 for 31575. Swap number 237. Current cost: 2.31365e+08. Improvement: 59447.3. Threshold: 15.594.
+Swapping 37801 for 23460. Swap number 238. Current cost: 2.31305e+08. Improvement: 10502.5. Threshold: 15.594.
+Swapping 49347 for 37801. Swap number 239. Current cost: 2.31295e+08. Improvement: 2618.88. Threshold: 15.594.
+Swapping 152 for 81. Swap number 240. Current cost: 2.31292e+08. Improvement: 332417. Threshold: 15.594.
+Swapping 50151 for 113199. Swap number 241. Current cost: 2.3096e+08. Improvement: 26717.9. Threshold: 15.594.
+Swapping 37801 for 49347. Swap number 242. Current cost: 2.30933e+08. Improvement: 8812.24. Threshold: 15.594.
+Swapping 21690 for 75036. Swap number 243. Current cost: 2.30924e+08. Improvement: 24015.5. Threshold: 15.594.
+Swapping 80126 for 21690. Swap number 244. Current cost: 2.309e+08. Improvement: 795.19. Threshold: 15.594.
+Swapping 96894 for 80126. Swap number 245. Current cost: 2.309e+08. Improvement: 12575.4. Threshold: 15.594.
+Swapping 341 for 152. Swap number 246. Current cost: 2.30887e+08. Improvement: 213206. Threshold: 15.594.
+Swapping 629 for 341. Swap number 247. Current cost: 2.30674e+08. Improvement: 203452. Threshold: 15.594.
+Swapping 6418 for 37801. Swap number 248. Current cost: 2.3047e+08. Improvement: 2627.28. Threshold: 15.594.
+Swapping 23460 for 6418. Swap number 249. Current cost: 2.30468e+08. Improvement: 6374.95. Threshold: 15.594.
+Swapping 44886 for 23460. Swap number 250. Current cost: 2.30461e+08. Improvement: 1893.26. Threshold: 15.594.
+Swapping 49347 for 44886. Swap number 251. Current cost: 2.30459e+08. Improvement: 12297.7. Threshold: 15.594.
+Swapping 760 for 629. Swap number 252. Current cost: 2.30447e+08. Improvement: 187462. Threshold: 15.594.
+Swapping 9558 for 760. Swap number 253. Current cost: 2.3026e+08. Improvement: 60095.3. Threshold: 15.594.
+Swapping 16820 for 9558. Swap number 254. Current cost: 2.302e+08. Improvement: 48014.3. Threshold: 15.594.
+Swapping 21265 for 16820. Swap number 255. Current cost: 2.30152e+08. Improvement: 36348.6. Threshold: 15.594.
+Swapping 100675 for 21265. Swap number 256. Current cost: 2.30115e+08. Improvement: 2770.47. Threshold: 15.594.
+Finished in 256 swaps by exhausting all potential improvements. Final cost: 230112448.000000
+[---Timer---] local search: 7492141ms
+Wrote to disk. dm dimensions: 125167/125167
+[Phase 3] Local search completed. Cost for solution: 2.30112e+08
+Total cost of solution: 2.30112e+08
+[Phase 4] Calculated costs and assignments for all points
+[---Timer---] get costs: 218ms
+Building coreset samplers with 0x34d6e20/0x3551210 pointers and set cardinality 125167
+[---Timer---] make coreset samplers: 32ms
+Making uniform sampler
+Making VX coresets. sampler size: 125167
+Making BFL coresets.size: 125167
+Making Uniform coresets
+[Phase 5] Generated coresets for iter 1/5
+Making VX coresets. sampler size: 125167
+Making BFL coresets.size: 125167
+Making Uniform coresets
+[Phase 5] Generated coresets for iter 2/5
+Making VX coresets. sampler size: 125167
+Making BFL coresets.size: 125167
+Making Uniform coresets
+[Phase 5] Generated coresets for iter 3/5
+Making VX coresets. sampler size: 125167
+Making BFL coresets.size: 125167
+Making Uniform coresets
+[Phase 5] Generated coresets for iter 4/5
+Making VX coresets. sampler size: 125167
+Making BFL coresets.size: 125167
+Making Uniform coresets
+[Phase 5] Generated coresets for iter 5/5
+[---Timer---] evaluate random centers 5 times:  38266ms
