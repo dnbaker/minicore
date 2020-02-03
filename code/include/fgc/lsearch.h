@@ -238,7 +238,7 @@ struct LocalKMedSearcher {
     }
     template<typename IndexContainer=std::vector<uint32_t>>
     LocalKMedSearcher(const MatType &mat, unsigned k, double eps=1e-8, uint64_t seed=0,
-                      bool best_improvement=false, const IndexContainer *wc=nullptr):
+                      bool best_improvement=false, const IndexContainer *wc=nullptr, double initdiv=0.):
         mat_(mat), assignments_(mat.columns(), 0),
         // center_indices_(k),
         //costs_(mat.columns(), std::numeric_limits<value_type>::max()),
@@ -249,9 +249,7 @@ struct LocalKMedSearcher {
     {
         static_assert(std::is_integral_v<std::decay_t<decltype(wc->operator[](0))>>, "index container must contain integral values");
         sol_.reserve(k);
-        init_cost_div_ = wc
-                       ? double(std::accumulate(wc->begin() + 1, wc->end(), wc->operator[](0)))
-                       : double(mat.columns());
+        init_cost_div_ = initdiv ? initdiv: double(mat.columns());
         reseed(seed, true, wc);
     }
 
@@ -552,8 +550,8 @@ struct LocalKMedSearcher {
 
 template<typename Mat, typename IType=std::uint32_t, typename IndexContainer=std::vector<uint32_t>>
 auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, uint64_t seed=0, bool best_improvement=false,
-                         const IndexContainer *wc=nullptr) {
-    return LocalKMedSearcher<Mat, IType>(mat, k, eps, seed, best_improvement, wc);
+                         const IndexContainer *wc=nullptr, double initdiv=0.) {
+    return LocalKMedSearcher<Mat, IType>(mat, k, eps, seed, best_improvement, wc, initdiv);
 }
 
 
