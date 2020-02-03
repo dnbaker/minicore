@@ -48,6 +48,9 @@ generate_random_centers(uint64_t seed, unsigned k, unsigned x_size,
     return random_centers;
 }
 
+#ifndef CORESET_COMPACT
+#define CORESET_COMPACT 1
+#endif
 template<typename Samp, typename Graph, typename RNG, typename VType=std::vector<size_t>>
 void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Graph &g, const VType *bbox_vertices_ptr, std::vector<unsigned> &coreset_sizes, std::string outpath, RNG &rng,
                                        bool skip_vxs=false)
@@ -55,16 +58,24 @@ void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Grap
     using CoresetType = typename Samp::CoresetType;
     std::ofstream ofs(outpath);
     ofs << "##In this table, items marked * are for coresets where |S| < k\n";
-    ofs << "#Coreset size\tDijkstra time\t";
+    ofs << "#Coreset size\t";
+#if CORESET_COMPACT
+    ofs << "Compacted Coreset Size\t";
+#endif
+    ofs << "Dijkstra time\t";
     if(!skip_vxs) ofs << "VxS time\tVxS cost\t";
     ofs << "SxS time\tSxS cost\n";
-    for(const auto csz: coreset_sizes) {
+    for(auto csz: coreset_sizes) {
         if(csz > (boost::num_vertices(g) * 2)) continue;
         ofs << csz;
         if(csz < k) ofs << '*';
-        ofs << '\t';
         CoresetType cs = sampler.sample(csz);
-        //cs.compact();
+#if CORESET_COMPACT
+        cs.compact();
+        csz = cs.size();
+        ofs << '\t' << cs.size();
+#endif
+        ofs<< '\t';
         // Not needed for theoeretical guarantees, but compacting may be of practical importance
         // , especially for the case of larger coresets.
         blz::DM<float> distances(csz, boost::num_vertices(g)), sqdistances(csz, csz);

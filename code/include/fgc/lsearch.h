@@ -432,7 +432,9 @@ struct LocalKMedSearcher {
         }
         //std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
         if(unlikely(newcost > current_cost_)) {
+#ifndef NDEBUG
             std::fprintf(stderr, "Somehow this swap is bad. newcost: %g. old: %g. diff: %g\n", newcost, current_cost_, current_cost_ - newcost);
+#endif
             return true;
         }
         assert(newcost <= current_cost_ || !std::fprintf(stderr, "newcost: %g. old: %g. diff: %g\n", newcost, current_cost_, current_cost_ - newcost));
@@ -466,7 +468,7 @@ struct LocalKMedSearcher {
                                     current_best_index = pi;
                                     current_best_center = oldcenter;
                                 }
-                                std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
+                                std::fprintf(stderr, "[Best improvement] Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
                             }
                         }
                     }
@@ -488,7 +490,9 @@ struct LocalKMedSearcher {
                         if(sol_.find(pi) == sol_.end()) {
                             if(const auto val = evaluate_swap(pi, oldcenter);
                                val > diffthresh) {
+#ifndef NDEBUG
                                 std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g. Threshold: %g.\n", pi, oldcenter, total + 1, current_cost_, val, diffthresh);
+#endif
                                 sol_.erase(oldcenter);
                                 sol_.insert(pi);
                                 if(recalculate()) {
@@ -497,6 +501,7 @@ struct LocalKMedSearcher {
                                     continue;
                                 }
                                 ++total;
+                                std::fprintf(stderr, "Swap number %zu with cost %0.12g\n", total, current_cost_);
                                 goto next;
                             }
                         }

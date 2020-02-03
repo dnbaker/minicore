@@ -61,6 +61,9 @@ struct IndexCoreset {
             //++m[std::make_pair(p.first, p.second)];
         }
         if(m.size() == indices_.size()) return;
+        size_t newsz = m.size();
+        assert(newsz < indices_.size());
+        DBG_ONLY(std::fprintf(stderr, "m size: %zu\n", m.size());)
         auto it = &indices_[0];
         auto wit = &weights_[0];
         for(const auto &pair: m) {
@@ -69,10 +72,9 @@ struct IndexCoreset {
             *it++ = idx;
             *wit++ = count * weight; // Add the weights together
         }
-        size_t newsz = m.size();
-        assert(newsz < indices_.size());
         indices_.resize(newsz);
         weights_.resize(newsz);
+        DBG_ONLY(std::fprintf(stderr, "Shrinking to fit\n");)
         if(shrink_to_fit) indices_.shrinkToFit(), weights_.shrinkToFit();
 #if 0
         std::fprintf(stderr, "compacted\n");

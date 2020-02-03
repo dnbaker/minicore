@@ -137,11 +137,13 @@ int main(int argc, char **argv) {
         auto csstr = std::to_string(coreset_size);
         timer.restart(std::string("coreset sample: ") + csstr);
         auto coreset = cs.sample(coreset_size);
+#ifndef NDEBUG
         assert(coreset.indices_.data());
         assert(coreset.weights_.data());
         for(const auto idx: coreset.indices_) {
             assert(idx < dm.rows() || !std::fprintf(stderr, "idx: %u\n", unsigned(idx)));
         }
+#endif
         timer.report();
         blaze::DynamicMatrix<float> coreset_dm(columns(dm, coreset.indices_.data(), coreset.indices_.size()));
         std::fprintf(stderr, "Made coreset dm. cols: %zu. rows: %zu\n", coreset_dm.columns(), coreset_dm.rows());
