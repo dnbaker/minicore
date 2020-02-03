@@ -127,6 +127,12 @@ void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Grap
             vxs_lsearcher.run();
             std::fprintf(stderr, "optimizing over vxs: %zu/%zu. cs weight size: %zu\n", distances.rows(), distances.columns(), cs.weights_.size());
             std::vector<size_t> solution(vxs_lsearcher.sol_.begin(), vxs_lsearcher.sol_.end());
+            if(bbox_vertices_ptr) {
+                for(auto &i: solution) {
+                    assert(i < bbox_vertices_ptr->size());
+                    i = bbox_vertices_ptr->operator[](i);
+                }
+            }
             t.stop();
             ofs << t.diff() << '\t';
             std::tie(costs, _) = get_costs(g, solution);
@@ -139,7 +145,13 @@ void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Grap
         auto sxs_lsearcher = make_kmed_lsearcher(sqdistances, k, 1e-2, rng(), blaze::sum(cs.weights_));
         sxs_lsearcher.run();
         std::vector<size_t> solution(sxs_lsearcher.sol_.begin(), sxs_lsearcher.sol_.end());
-        for(auto &i: solution) i = cs.indices_[i];
+        for(auto &i: solution) {
+            i = cs.indices_[i];
+            if(bbox_vertices_ptr) {
+                assert(i < bbox_vertices_ptr->size());
+                i = bbox_vertices_ptr->operator[](i);
+            }
+        }
         t.stop();
         ofs << t.diff() << '\t';
         t.reset();
