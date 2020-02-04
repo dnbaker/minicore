@@ -368,10 +368,9 @@ struct LocalKMedSearcher {
         blz::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
         *std::find(as.begin(), as.end(), oldcenter) = newcenter;
         double cost;
-        if(single_threaded)
-            cost = blaze::serial(blz::sum(blz::min<blz::columnwise>(rows(mat_, as))));
-        else
-            cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
+        if(single_threaded) {
+            cost = blaze::serial(blz::sum(blz::serial(blz::min<blz::columnwise>(rows(mat_, as)))));
+        } else cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
         return current_cost_ - cost;
 #if 0
         //std::fprintf(stderr, "[%s] function starting: %u/%u\n", __PRETTY_FUNCTION__, newcenter, oldcenter);
@@ -420,39 +419,6 @@ struct LocalKMedSearcher {
         return k_;
     }
 
-    bool recalculate() {
-        assignments_ = *sol_.begin();
-
-        for(auto it = sol_.begin(); ++it != sol_.end();) {
-            const auto center = *it;
-            auto crow = row(mat_, center BLAZE_CHECK_DEBUG);
-            assert(crow.size() == nc_);
-            OMP_PFOR
-            for(size_t i = 0; i < nc_; ++i) {
-                if(const auto cost(crow[i]); cost < mat_(assignments_[i], i)) {
-                    assignments_[i] = center;
-                }
-            }
-        }
-
-        value_type newcost = 0.;
-        OMP_PRAGMA("omp parallel for reduction(+:newcost)")
-        for(size_t i = 0; i < assignments_.size(); ++i) {
-                newcost += mat_(assignments_[i], i);
-        }
-        //std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
-        if(unlikely(newcost > current_cost_)) {
-            assert(false);
-#ifndef NDEBUG
-            std::fprintf(stderr, "Somehow this swap is bad. newcost: %g. old: %g. diff: %g\n", newcost, current_cost_, current_cost_ - newcost);
-#endif
-            return true;
-        }
-        assert(newcost <= current_cost_ || !std::fprintf(stderr, "newcost: %g. old: %g. diff: %g\n", newcost, current_cost_, current_cost_ - newcost));
-        current_cost_ = newcost;
-        return false;
-    }
-
     void run() {
         if(mat_.rows() < k_) return;
         //const double diffthresh = 0.;
@@ -470,17 +436,17 @@ struct LocalKMedSearcher {
                     OMP_PFOR
                     for(size_t pi = 0; pi < nr_; ++pi) {
                         if(sol_.find(pi) == sol_.end()) {
-                            auto oldcurrent_best = current_best;
                             if(const auto val = evaluate_swap(pi, oldcenter, true);
                                val > diffthresh && val > current_best)
                             {
                                 OMP_CRITICAL
                                 {
-                                    if(val > oldcurrent_best) {
+                                    if(val > current_best) {
                                         current_best = val;
                                         current_best_index = pi;
                                         current_best_center = oldcenter;
                                     }
+                                    current_cost_ -= val;
                                 }
                                 std::fprintf(stderr, "[Best improvement] Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
                             }
@@ -490,12 +456,8 @@ struct LocalKMedSearcher {
                 if(current_best_index != IType(-1)) {
                     sol_.erase(current_best_center);
                     sol_.insert(current_best_index);
-                    if(!recalculate()) {
-                        ++total;
-                        goto next;
-                    }
-                    sol_.insert(current_best_center);
-                    sol_.erase(current_best_index);
+                    ++total;
+                    goto next;
                     //diffthresh = current_cost_ / k_ * eps_;
                 }
             } else {
@@ -509,22 +471,14 @@ struct LocalKMedSearcher {
 #endif
                                 sol_.erase(oldcenter);
                                 sol_.insert(pi);
-                                if(recalculate()) {
-                                    sol_.insert(oldcenter);
-                                    sol_.erase(pi);
-                                    continue;
-                                }
                                 ++total;
+                                current_cost_ -= val;
                                 std::fprintf(stderr, "Swap number %zu with cost %0.12g\n", total, current_cost_);
                                 goto next;
                             }
                         }
                     }
                 }
-                // The solution is usually extremely close even if there is a change here. (less than 1e-6 of the cost)
-#ifndef NDEBUG
-                exhaustive_manual_check();
-#endif
             }
         }
         std::fprintf(stderr, "Finished in %zu swaps by exhausting all potential improvements. Final cost: %f\n",

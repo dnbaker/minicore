@@ -645,7 +645,6 @@ int main(int argc, char **argv) {
     auto ccost = lsearcher.current_cost_;
     // Write if necessary, free memory.
     {
-        std::fprintf(stderr, "Wrote to disk. dm dimensions: %zu/%zu\n", dm.rows(), dm.columns());
         if(diskmatptr) diskmatptr.reset();
         if(rammatptr) rammatptr.reset();
     }
@@ -698,9 +697,8 @@ int main(int argc, char **argv) {
                              nullptr, seed * 137, coresets::VARADARAJAN_XIAO);
         bflsampler.make_sampler(x_size, k, cost_data, assignments_data,
                              nullptr, seed * 662607, coresets::BRAVERMAN_FELDMAN_LANG);
-        if(coreset_sampler_path.size()) {
-            sampler.write(coreset_sampler_path);
-        }
+        auto sampler_path = coreset_sampler_path.size() ? coreset_sampler_path: std::to_string(seed);
+        sampler.write(sampler_path);
         if(cache_prefix.size()) {
             sampler.write(cache_prefix + ".coreset_sampler");
         }
