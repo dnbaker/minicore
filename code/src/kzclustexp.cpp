@@ -814,62 +814,68 @@ int main(int argc, char **argv) {
     }
     tblout.flush();
     for(auto ek: extra_ks) {
+        blaze::DynamicVector<double> meanmaxdistortion(distvecsz, 0.),
+                                     meanmeandistortion(distvecsz, 0.),
+                                     sumfdistortion(distvecsz, 0.), tmpfdistortion(distvecsz); // distortions on F
+        blaze::DynamicVector<double> fdistbuffer(boost::num_vertices(g)); // For F, for comparisons
         std::string ofname_ok = output_prefix + ".table_out.ok." + std::to_string(ek) + ".tsv";
         std::ofstream ofs(ofname_ok);
-        blaze::DynamicVector<double> maxdistortion(distvecsz, std::numeric_limits<double>::min()),
-                                     meandistortion(distvecsz, 0.);
-        std::vector<coresets::IndexCoreset<uint32_t, float>> coresets;
-        coresets.reserve(ncs * 3);
-        for(auto coreset_size: coreset_sizes) {
-            coresets.emplace_back(sampler.sample(coreset_size));
-            if(bbox.set()) {
-                for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
+        for(unsigned i = 0; i < coreset_testing_num_iters; ++i) {
+            blaze::DynamicVector<double> maxdistortion(distvecsz, std::numeric_limits<double>::min()),
+                                         meandistortion(distvecsz, 0.);
+            std::vector<coresets::IndexCoreset<uint32_t, float>> coresets;
+            coresets.reserve(ncs * 3);
+            for(auto coreset_size: coreset_sizes) {
+                coresets.emplace_back(sampler.sample(coreset_size));
+                if(bbox.set()) {
+                    for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
+                }
             }
+            for(auto coreset_size: coreset_sizes) {
+                coresets.emplace_back(bflsampler.sample(coreset_size));
+                if(bbox.set()) {
+                    for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
+                }
+            }
+            for(auto coreset_size: coreset_sizes) {
+                coresets.emplace_back(uniform_sampler.sample(coreset_size));
+                if(bbox.set()) {
+                    for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
+                }
+            }
+            assert(coresets.size() == distvecsz);
+            OMP_PFOR
+            for(size_t i = 0; i < testing_num_centersets; ++i) {
+                auto random_centers = generate_random_centers(i + seed + coreset_testing_num_iters, k, x_size, bbox_vertices_ptr);
+                blaze::DynamicVector<double> distbuffer(boost::num_vertices(g));
+                blaze::DynamicVector<double> currentdistortion(coresets.size());
+                OMP_ELSE(decltype(g), auto &) gcopy(g);
+                calculate_distortion_centerset(gcopy, random_centers, distbuffer, coresets, currentdistortion, z, bbox_vertices_ptr);
+                OMP_CRITICAL
+                {
+                    maxdistortion = blaze::serial(max(maxdistortion, currentdistortion));
+                }
+                OMP_CRITICAL
+                {
+                    meandistortion = blaze::serial(meandistortion + currentdistortion);
+                }
+            }
+            meandistortion /= testing_num_centersets;
+            meanmaxdistortion += maxdistortion;
+            meanmeandistortion += meandistortion;
+            if(i == 0 && optimize_coresets)
+                emit_coreset_optimization_runtime(sampler, k, z, g, bbox_vertices_ptr, coreset_sizes, output_prefix + "coreset.runtime", rng, skip_vxs);
         }
-        for(auto coreset_size: coreset_sizes) {
-            coresets.emplace_back(bflsampler.sample(coreset_size));
-            if(bbox.set()) {
-                for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
-            }
-        }
-        for(auto coreset_size: coreset_sizes) {
-            coresets.emplace_back(uniform_sampler.sample(coreset_size));
-            if(bbox.set()) {
-                for(auto &idx: coresets.back().indices_) idx = bbox_vertices.at(idx);
-            }
-        }
-        assert(coresets.size() == distvecsz);
-        OMP_PFOR
-        for(size_t i = 0; i < testing_num_centersets; ++i) {
-            auto random_centers = generate_random_centers(i + seed + coreset_testing_num_iters, k, x_size, bbox_vertices_ptr);
-            blaze::DynamicVector<double> distbuffer(boost::num_vertices(g));
-            blaze::DynamicVector<double> currentdistortion(coresets.size());
-#ifdef _OPENMP
-            decltype(g) gcopy(g);
-#else
-            auto &gcopy(g);
-#endif
-            calculate_distortion_centerset(gcopy, random_centers, distbuffer, coresets, currentdistortion, z, bbox_vertices_ptr);
-            OMP_CRITICAL
-            {
-                maxdistortion = blaze::serial(max(maxdistortion, currentdistortion));
-            }
-            OMP_CRITICAL
-            {
-                meandistortion = blaze::serial(meandistortion + currentdistortion);
-            }
-        }
-        meandistortion /= testing_num_centersets;
+        meanmaxdistortion /= coreset_testing_num_iters;
+        meanmeandistortion /= coreset_testing_num_iters;
         for(size_t i = 0; i < ncs; ++i) {
             ofs << coreset_sizes[i]
-                << '\t' << maxdistortion[i] << '\t' << meandistortion[i]
-                << '\t' << maxdistortion[i + ncs] << '\t' << meandistortion[i + ncs]
-                << '\t' << maxdistortion[i + ncs * 2] << '\t' << meandistortion[i + ncs * 2]
+                << '\t' << meanmaxdistortion[i] << '\t' << meanmeandistortion[i]
+                << '\t' << meanmaxdistortion[i + ncs] << '\t' << meanmeandistortion[i + ncs]
+                << '\t' << meanmaxdistortion[i + ncs * 2] << '\t' << meanmeandistortion[i + ncs * 2]
                 << '\n';
         }
     }
-    if(optimize_coresets)
-        emit_coreset_optimization_runtime(sampler, k, z, g, bbox_vertices_ptr, coreset_sizes, output_prefix + "coreset.runtime", rng, skip_vxs);
 #if 0
     if(cache_prefix.size()) {
         DiskMat<float> newdistmat(graph2diskmat(g, cache_prefix + ".complete.mmap.matrix"));
