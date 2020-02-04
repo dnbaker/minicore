@@ -514,6 +514,7 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "sampled in: %zu. sampled out: %zu. sample probs: %g, %g\n", nsampled_in, nsampled_out, bbox.p_box, bbox.p_nobox);
         auto coord_fn = output_prefix + ".coords.txt";
         std::ofstream cfs(coord_fn);
+        cfs << std::setprecision(12);
         for(const auto vtx: bbox_vertices) {
             cfs << coordinates[vtx].lon() << '\t' << coordinates[vtx].lat() << '\n';
         }
