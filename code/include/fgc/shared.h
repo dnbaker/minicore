@@ -14,9 +14,6 @@
 #    pragma message("Using parallel inclusive scan")
 #  endif
 #else
-#  ifndef NDEBUG
-#    pragma message("Using partial sum")
-#  endif
 #  define inclusive_scan(...) ::std::partial_sum(__VA_ARGS__)
 #endif
 
