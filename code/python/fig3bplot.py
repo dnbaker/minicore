@@ -44,9 +44,8 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("infnamefile")
-    ap.add_argument("counts")
+    ap.add_argument("labels")
     #ap.add_argument("names")
-    ap.add_argument("--include-bfl", '-B', action='store_true')
     args = ap.parse_args()
     filename = args.infnamefile
     paths = list(map(str.strip, open(filename)))
@@ -56,11 +55,16 @@ if __name__ == "__main__":
     #names = list(map(str.strip, open(args.names)))
     #assert len(names) == len(dats)
     xlabels = dats[0][0]
-    counts = [l.strip() for l in open(args.counts)]
-    assert len(dats) == len(counts)
+    labels = [l.strip() for l in open(args.labels)]
+    assert len(dats) == len(labels)
     assert all(np.all(dats[0][0] == dats[i][0]) for i in range(1, len(paths)))
     maxes = np.vstack([d[:,0] for _, d in dats])
-    names = list(map(str, counts))
+    try:
+        max_uniforms =  np.vstack([d[:,5] for _, d in dats])
+    except Exeption as e:
+        print(e)
+        # Don't care.
+    names = list(map(str, labels))
     print(maxes.shape)
     print(xlabels)
     #print(maxes)
