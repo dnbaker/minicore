@@ -70,7 +70,7 @@ if __name__ == "__main__":
     # names=("Varadarajan-Xiao", "BFL", "Uniform")
     #print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
     #print_items(data=(mxfl, mxbfl, mxu), xlabels=xlabels, names=("Varadarajan-Xiao", "BFL", "Uniform"), subgroup="max", prefix=args.prefix)
-    for end in (12, 17):
+    for end in (12, 17, 22):
         pref = args.prefix
         if args.include_bfl:
             pref += ".bfl"

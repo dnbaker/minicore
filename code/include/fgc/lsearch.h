@@ -325,7 +325,7 @@ struct LocalKMedSearcher {
     }
 
     template<typename Container>
-    double cost_for_sol(const Container &c) {
+    double cost_for_sol(const Container &c) const {
         double ret = 0.;
         OMP_PRAGMA("omp parallel for reduction(+:ret)")
         for(size_t i = 0; i < mat_.columns(); ++i) {
@@ -365,6 +365,15 @@ struct LocalKMedSearcher {
     }
 
     double evaluate_swap(IType newcenter, IType oldcenter, bool single_threaded=false) const {
+        blz::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
+        *std::find(as.begin(), as.end(), oldcenter) = newcenter;
+        double cost;
+        if(single_threaded)
+            cost = blaze::serial(blz::sum(blz::min<blz::columnwise>(rows(mat_, as))));
+        else
+            cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
+        return current_cost_ - cost;
+#if 0
         //std::fprintf(stderr, "[%s] function starting: %u/%u\n", __PRETTY_FUNCTION__, newcenter, oldcenter);
         assert(newcenter < mat_.rows());
         assert(oldcenter < mat_.rows());
@@ -403,6 +412,7 @@ struct LocalKMedSearcher {
         }
 #undef LOOP_CORE
         return potential_gain;
+#endif
     }
 
     // Getters
@@ -432,6 +442,7 @@ struct LocalKMedSearcher {
         }
         //std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
         if(unlikely(newcost > current_cost_)) {
+            assert(false);
 #ifndef NDEBUG
             std::fprintf(stderr, "Somehow this swap is bad. newcost: %g. old: %g. diff: %g\n", newcost, current_cost_, current_cost_ - newcost);
 #endif
@@ -459,14 +470,17 @@ struct LocalKMedSearcher {
                     OMP_PFOR
                     for(size_t pi = 0; pi < nr_; ++pi) {
                         if(sol_.find(pi) == sol_.end()) {
+                            auto oldcurrent_best = current_best;
                             if(const auto val = evaluate_swap(pi, oldcenter, true);
                                val > diffthresh && val > current_best)
                             {
                                 OMP_CRITICAL
                                 {
-                                    current_best = val;
-                                    current_best_index = pi;
-                                    current_best_center = oldcenter;
+                                    if(val > oldcurrent_best) {
+                                        current_best = val;
+                                        current_best_index = pi;
+                                        current_best_center = oldcenter;
+                                    }
                                 }
                                 std::fprintf(stderr, "[Best improvement] Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g\n", pi, oldcenter, total + 1, current_cost_, val);
                             }

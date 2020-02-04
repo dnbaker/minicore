@@ -98,7 +98,7 @@ void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Grap
                 auto rhid = bbox_vertices_ptr ? bbox_vertices_ptr->operator[](cs.indices_[j])
                                               : cs.indices_[j];
                 auto l2r = lhr[rhid], r2l = rhr[lhid];
-                assert(std::abs(l2r - r2l) < 1e-5);
+                assert(std::abs(l2r - r2l) < 1e-2 || !std::fprintf(stderr, "rhs: %0.12g. lhs: %0.12g\n", r2l, l2r));
             }
         }
 #endif
@@ -155,7 +155,7 @@ void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Grap
         t.reset(); t.start();
         sqdistances = blaze::rows(distances, cs.indices_.data(), cs.indices_.size());
         //sqdistances = blaze::rows(distances, cs.indices_.data(), cs.indices_.size());
-        auto sxs_lsearcher = make_kmed_lsearcher(sqdistances, k, 1e-2, rng(), false, blaze::sum(cs.weights_));
+        auto sxs_lsearcher = make_kmed_lsearcher(sqdistances, k, 1e-2, rng(), false, static_cast<std::vector<unsigned> *>(nullptr), blaze::sum(cs.weights_));
         sxs_lsearcher.run();
         std::vector<size_t> solution(sxs_lsearcher.sol_.begin(), sxs_lsearcher.sol_.end());
         for(auto &i: solution) {
@@ -514,6 +514,7 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "sampled in: %zu. sampled out: %zu. sample probs: %g, %g\n", nsampled_in, nsampled_out, bbox.p_box, bbox.p_nobox);
         auto coord_fn = output_prefix + ".coords.txt";
         std::ofstream cfs(coord_fn);
+        cfs << std::setprecision(12);
         for(const auto vtx: bbox_vertices) {
             cfs << coordinates[vtx].lon() << '\t' << coordinates[vtx].lat() << '\n';
         }
