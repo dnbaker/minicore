@@ -115,15 +115,6 @@ template<> VT<double>{using type = __m512d;}
 #endif
 
 
-template<typename T>
-struct dumbrange {
-    T beg, e_;
-    dumbrange(T beg, T end): beg(beg), e_(end) {}
-    auto begin() const {return beg;}
-    auto end()   const {return e_;}
-};
-template<typename T>
-auto make_dumbrange(T beg, T end) {return dumbrange<T>(beg, end);}
 
 template<typename FT=float, typename IT=std::uint32_t>
 struct UniformSampler {
@@ -147,6 +138,29 @@ struct UniformSampler {
     }
     size_t size() {return np_;}
 };
+
+template<typename IT, typename FT, template<typename...> class MapType=flat_hash_map, typename...Extra>
+struct MapCoreset {
+    using MT = MapType<IT, FT, Extra...>;
+    MT data_;
+    template<typename...Args>
+    MapCoreset(Args &&...args): data_(std::forward<Args>(args)...) {}
+    void insert(IT ind, FT w) {
+        auto it = data_.find(ind);
+        if(it == data_.end())
+            data_.emplace(ind, w);
+        else
+            it->second += w;
+    }
+};
+template<typename IT, typename FT, template<typename...> class MapType=flat_hash_map, typename...Extra>
+auto map2index(const MapCoreset<IT, FT, MapType, Extra...> &map) {
+    IndexCoreset<IT, FT> ret(map.size());
+    size_t ind = 0;
+    for(const auto &pair: map)
+        ret.indices_[ind] = pair.first, ret.weights_[ind] = pair.second;
+    return ret;
+}
 
 template<typename FT=float, typename IT=std::uint32_t>
 struct CoresetSampler {

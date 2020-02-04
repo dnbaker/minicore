@@ -57,32 +57,46 @@ def parse_data(lines):
 
 if __name__ == '__main__':
     import sys
+    import argparse
+    ap = argparse.ArgumentParser()
+    aa = ap.add_argument
+    aa("coords")
+    aa("-B", "--bounding-box", default=None)
+    aa("--title")
+    args = ap.parse_args()
+    fn = args.coords
+    lons, lats = parse_data(open(fn).read())
     
-    fn = sys.argv[1]
-    lons, lats = parse_data(open(sys.argv[1]).read())
+    #title = sys.argv[2] if sys.argv[2:] else "Dataset: " + sys.argv[1].split("/")[-1].split(".")[0]
     color = ['k'] * len(lons)
     marker = '.'
     bbox = None
     inpts, outpts = [], []
-    if sys.argv[2:]:
-        #-74.027596,40.701724,-73.920479,40.880295
-        bbox = list(map(float, sys.argv[2].split(",")))[:4]
+    if args.bounding_box:
+        bbox = list(map(float, args.bounding_box.split(",")))[:4]
         if len(bbox) != 4: raise Exception("the Roof")
         for ind in range(len(lons)):
             if lons[ind] > bbox[0] and lons[ind] < bbox[2] and \
                 lats[ind] > bbox[1] and lats[ind] < bbox[3]:
                     inpts.append(ind)
-                    color[ind] = 'r'
+                    color[ind] = 'b'
             else:
                 outpts.append(ind)
+        rep = {'b': 'k', 'k': 'b'}
+        color = [rep[c] for c in color]
     else:
         outpts = list(range(len(lons)))
     #plt.scatter(x=lons[inpts], y=lats[inpts], alpha=.9, s=.1, c='r', marker='.')
     #plt.scatter(x=lons[outpts], y=lats[outpts], alpha=.9, s=1.5, c='k', marker='o')
-    plt.scatter(x=lons, y=lats, alpha=0.75, s=.75, c='k', marker='x')
+    print("lats: %s" % lats[:5])
+    print("lons: %s" % lons[:5])
+    #lons, lats = lats, lons
+    plt.scatter(x=lons, y=lats, alpha=0.9, s=.75, c=color, marker='x')
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
-    plt.title("Dataset: %s" % sys.argv[1].split("/")[-1].split(".")[0])
-    ofname = f"{fn.split('/')[-1].split('.')[0]}.png"
+    #title = args.title if args.title else "Dataset: %s" % args.coords.split("/")[-1].split(".")[0]
+    #plt.title(title)
+    ofname = f"{fn.split('/')[-1].split('.')[0]}.svg"
     plt.savefig(ofname)
+    plt.savefig(ofname.replace("svg", "png"))
         

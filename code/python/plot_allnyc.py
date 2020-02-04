@@ -53,14 +53,14 @@ def parse_data(lines):
         lat = float(i[1])
         lons.append(lon)
         lats.append(lat)
-    return tuple(map(np.array, (lons, lats)))
+    return tuple(map(np.array, (lats, lons)))
 
 if __name__ == '__main__':
     import sys
     
     fn = sys.argv[1]
     lons, lats = parse_data(open(sys.argv[1]).read())
-    color = ['k'] * len(lons)
+    color = ['b'] * len(lons)
     marker = '.'
     bbox = None
     inpts, outpts = [], []
@@ -79,10 +79,12 @@ if __name__ == '__main__':
         outpts = list(range(len(lons)))
     #plt.scatter(x=lons[inpts], y=lats[inpts], alpha=.9, s=.1, c='r', marker='.')
     #plt.scatter(x=lons[outpts], y=lats[outpts], alpha=.9, s=1.5, c='k', marker='o')
-    plt.scatter(x=lons, y=lats, alpha=0.6, s=.01, c='k', marker='.')
-    plt.xlabel("Longitude")
+    print(f"lons: {lons[:5]}")
+    print(f"lats: {lats[:5]}")
+    plt.scatter(y=lats, x=lons, alpha=0.6, s=.01, c='k', marker='.')
     plt.ylabel("Latitude")
-    plt.title("Dataset: All New York City")
+    plt.xlabel("Longitude")
+    #plt.title("New York City")
     ofname = f"{fn.split('/')[-1].split('.')[0]}.png"
     plt.savefig(ofname)
-        
+    plt.savefig(ofname.replace("png", "svg"))
