@@ -1,4 +1,4 @@
-#pragma once
+\pragma once
 #ifndef FGC_LOCAL_SEARCH_H__
 #define FGC_LOCAL_SEARCH_H__
 #include "fgc/graph.h"
@@ -325,7 +325,7 @@ struct LocalKMedSearcher {
     }
 
     template<typename Container>
-    double cost_for_sol(const Container &c) {
+    double cost_for_sol(const Container &c) const {
         double ret = 0.;
         OMP_PRAGMA("omp parallel for reduction(+:ret)")
         for(size_t i = 0; i < mat_.columns(); ++i) {
@@ -367,7 +367,12 @@ struct LocalKMedSearcher {
     double evaluate_swap(IType newcenter, IType oldcenter, bool single_threaded=false) const {
         blz::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
         *std::find(as.begin(), as.end(), oldcenter) = newcenter;
-        return current_cost_ - cost_for_sol(as);
+        double cost;
+        if(single_threaded)
+            cost = blaze::serial(blz::sum(blz::min<blz::columnwise>(rows(mat_, as))));
+        else
+            cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
+        return current_cost_ - cost;
 #if 0
         //std::fprintf(stderr, "[%s] function starting: %u/%u\n", __PRETTY_FUNCTION__, newcenter, oldcenter);
         assert(newcenter < mat_.rows());
@@ -437,6 +442,7 @@ struct LocalKMedSearcher {
         }
         //std::fprintf(stderr, "newcost: %f. old cost: %f\n", newcost, current_cost_);
         if(unlikely(newcost > current_cost_)) {
+            assert(false);
 #ifndef NDEBUG
             std::fprintf(stderr, "Somehow this swap is bad. newcost: %g. old: %g. diff: %g\n", newcost, current_cost_, current_cost_ - newcost);
 #endif
