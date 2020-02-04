@@ -59,6 +59,15 @@ template<typename It, typename Cmp=std::less<>>
 INLINE void sort(It beg, It end, Cmp cmp=Cmp()) {
     pdqsort(beg, end, cmp);
 }
+template<typename T>
+struct dumbrange {
+    T beg, e_;
+    dumbrange(T beg, T end): beg(beg), e_(end) {}
+    auto begin() const {return beg;}
+    auto end()   const {return e_;}
+};
+template<typename T>
+inline dumbrange<T> make_dumbrange(T beg, T end) {return dumbrange<T>(beg, end);}
 
 } // shared
 } // fgc
