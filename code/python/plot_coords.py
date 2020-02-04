@@ -94,8 +94,8 @@ if __name__ == '__main__':
     plt.scatter(x=lons, y=lats, alpha=0.9, s=.75, c=color, marker='x')
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
-    title = args.title if args.title else "Dataset: %s" % args.coords.split("/")[-1].split(".")[0]
-    plt.title(title)
+    #title = args.title if args.title else "Dataset: %s" % args.coords.split("/")[-1].split(".")[0]
+    #plt.title(title)
     ofname = f"{fn.split('/')[-1].split('.')[0]}.svg"
     plt.savefig(ofname)
     plt.savefig(ofname.replace("svg", "png"))
