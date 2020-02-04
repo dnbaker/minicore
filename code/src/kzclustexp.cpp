@@ -155,7 +155,7 @@ void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Grap
         t.reset(); t.start();
         sqdistances = blaze::rows(distances, cs.indices_.data(), cs.indices_.size());
         //sqdistances = blaze::rows(distances, cs.indices_.data(), cs.indices_.size());
-        auto sxs_lsearcher = make_kmed_lsearcher(sqdistances, k, 1e-2, rng(), blaze::sum(cs.weights_));
+        auto sxs_lsearcher = make_kmed_lsearcher(sqdistances, k, 1e-2, rng(), false, blaze::sum(cs.weights_));
         sxs_lsearcher.run();
         std::vector<size_t> solution(sxs_lsearcher.sol_.begin(), sxs_lsearcher.sol_.end());
         for(auto &i: solution) {
