@@ -1,4 +1,4 @@
-\pragma once
+#pragma once
 #ifndef FGC_LOCAL_SEARCH_H__
 #define FGC_LOCAL_SEARCH_H__
 #include "fgc/graph.h"
