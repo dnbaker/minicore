@@ -604,13 +604,15 @@ int main(int argc, char **argv) {
     CM dm(diskmatptr ? diskmatptr->data(): rammatptr->data(), ndatarows, ncol, diskmatptr ? diskmatptr->spacing(): rammatptr->spacing());
     std::fprintf(stderr, "dm size: %zu rows, %zu columns\n", dm.rows(), dm.columns());
     {
-        fgc::util::Timer newtimer("full distance matrix serialization");
-        blaze::Archive<std::ofstream> distances(cache_prefix + ".blaze");
-        distances << dm;
-        if(bbox.set()) {
-            blaze::Archive<std::ofstream> bboxfh(cache_prefix + ".bbox_vertices.blaze");
-            blaze::CustomVector<Vertex, blaze::unaligned, blaze::unpadded> cv(bbox_vertices.data(), bbox_vertices.size());
-            bboxfh << cv;
+        if(cache_prefix.size()) {
+            fgc::util::Timer newtimer("full distance matrix serialization");
+            blaze::Archive<std::ofstream> distances(cache_prefix + ".blaze");
+            distances << dm;
+            if(bbox.set()) {
+                blaze::Archive<std::ofstream> bboxfh(cache_prefix + ".bbox_vertices.blaze");
+                blaze::CustomVector<Vertex, blaze::unaligned, blaze::unpadded> cv(bbox_vertices.data(), bbox_vertices.size());
+                bboxfh << cv;
+            }
         }
     }
     if(z != 1.) {
