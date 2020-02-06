@@ -15,8 +15,8 @@ def print_items(*, data, xlabels, names, subgroup, prefix="default_out", end, fi
     plt.legend(names)
     #legends = [ax.legend(handles=[line], label=name) for line, name in zip(lines, names)]
     # *zip(lines, names))
-    plt.xlabel("coreset size")
-    plt.ylabel("distortion")
+    plt.xlabel("coreset size", fontsize=16)
+    plt.ylabel("distortion", fontsize=16)
     if title is None:
         plt.title("[%s] Coreset accuracy benchmark: %s" % (filename, subgroup))
     else:

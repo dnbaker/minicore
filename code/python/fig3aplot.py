@@ -66,17 +66,20 @@ if __name__ == "__main__":
     #print(maxes)
     #print("\n".join(", ".join(map(str, maxes[i,:])) for i in range(maxes.shape[0])))
     plt.plot(xlabels, maxes.T)
-    plt.xlabel("Coreset Size")
-    plt.ylabel("Empirical Error")
+    plt.xlabel("Coreset Size", fontsize=16)
+    plt.ylabel("Empirical Error", fontsize=16)
     plt.legend(names)
     plt.savefig(args.infnamefile + ".save.svg")
     plt.savefig(args.infnamefile + ".save.png", dpi=600)
     for n in (9, 13, 17, 22):
         plt.clf()
         #print(maxes.shape)
-        plt.plot(xlabels[:n], maxes.T[:n,:])
-        plt.xlabel("Coreset Size")
-        plt.ylabel("Empirical Error")
+        subx = xlabels[:n]
+        submax = maxes.T[:n,:]
+        for subset, ls in zip(submax.T, ['-', '-.', ':', '--']):
+            plt.plot(subx, subset, linestyle=ls)
+        plt.xlabel("Coreset Size", fontsize=16)
+        plt.ylabel("Empirical Error", fontsize=16)
         plt.legend(names)
         plt.savefig(args.infnamefile + "%d.save.svg" % n)
         plt.savefig(args.infnamefile + "%d.save.png" % n, dpi=600)

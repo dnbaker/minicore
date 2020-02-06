@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import matplotlib
 import sys
 import matplotlib.pyplot as plt
@@ -15,12 +16,14 @@ def autolabel(ax, rects):
                     ha='center', va='bottom')
 
 def single_table(labels, data_list, rect_cnt, rect_label, width, ylabel, title, scale = 1.0, numbering = False):
-    plt.rcParams.update({'font.size': int(14 * scale)})
+    plt.rcParams.update({'font.size': int(14 * scale), 'text.latex.preamble': [r'\usepackage{amsmath}'], 'text.usetex': True})
+    # plt.rcParams['text.latex.preamble'] = [r'\usepackage{amsmath}']
 
     hatches = ['', '//', '\\\\', 'xx', '...', '//', '*', '\\\\', '---', '\\\\', '//', '', '...', '////', '\\\\\\', 'xxxx', '....', '//', '*', '\\\\', '---', '\\\\', '//', '', '...']
     x = np.arange(len(labels))
     #plt.xlabel("Coreset Size", fontsize=10)
     fig, ax = plt.subplots()
+    plt.xlabel("Coreset Size", fontsize=16)
     fig.canvas.set_window_title(title)
     rects = [ ax.bar(x = x - width / 2 + width / rect_cnt / 2 + i * width / rect_cnt,
     height=data_list[i], edgecolor='black',
@@ -32,7 +35,7 @@ def single_table(labels, data_list, rect_cnt, rect_label, width, ylabel, title, 
     #    bottom=data_list[i]) for i in range(rect_cnt)])
 
 
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(ylabel, fontsize=16)
     #ax.set_title(title)
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=10)
@@ -87,40 +90,52 @@ plt.rcParams["mathtext.fontset"] = "cm"
 plt.style.use('tableau-colorblind10')
 
 
-rect_label = [r'$T$', r'$T^{pre}_{cs}$', r'$T^{opt}_{cs} V\times S$', r'$T^{opt}_{cs} S\times S$']
-labels = list(map(str, coreset_sizes))
-construction_times = [total_cs_construction_time for label in labels]
-full_times = [total_full_time for label in labels]
-Y = 'run time (ms)'
-#for coreset_size, dijkstra_time, vxs_time, vxs_cost, sxs_time, sxs_cost in zip(coreset_sizes, dijkstra_times, vxs_times, vxs_costs, sxs_times, sxs_costs):
+rect_label = [r'$T_{X \times V}$', r'$T_{cs}$', r'$T_{D \times V}$', r'$T_{D\times D}$']
+labels = np.array(list(map(str, coreset_sizes)))
+construction_times = np.array([total_cs_construction_time for label in labels])
+full_times = np.array([total_full_time for label in labels])
+Y = 'Runtime (ms)'
+selection = np.array([3,5,7,9,11], dtype=np.uint32).astype(int)
 if __name__ == "__main__":
-    single_table(labels, [full_times, construction_times, vxs_times, sxs_times], 4, rect_label, 0.6, Y, "runtime")
+    slab = labels[selection]
+    single_table(labels[selection],
+                 [full_times[selection], construction_times[selection], vxs_times[selection], sxs_times[selection]], 4, rect_label, 0.6, Y, "runtime")
     plt.savefig("fig4.png", dpi=600)
     plt.savefig("fig4.svg")
     plt.clf()
-Y = 'Base-2 logorithmic run time (ms)'
+Y = 'Base-2 Logarithmic Runtime (ms)'
 full_times = np.log2(full_times)
 construction_times = np.log2(construction_times)
 vxs_times = np.log2(vxs_times)
 sxs_times = np.log2(sxs_times)
 if __name__ == "__main__":
-    single_table(labels, [full_times, construction_times, vxs_times, sxs_times], 4, rect_label, 0.6, Y, "runtime")
+    single_table(labels[selection],
+                 [full_times[selection], construction_times[selection], vxs_times[selection], sxs_times[selection]], 4, rect_label, 0.6, Y, "runtime")
+    #single_table(labels, [full_times, construction_times, vxs_times, sxs_times], 4, rect_label, 0.6, Y, "runtime")
     plt.savefig("fig4.log2.png", dpi=600)
     plt.savefig("fig4.log2.svg")
     plt.clf()
 
-newlabels = ["Full", "Thorup"] + labels
-Y = "Solution Cost"
+# newlabels = ["Full", "Thorup"] + labels
+Y = r"Objective Value ($10^8$ m)"
 
 if __name__ == "__main__":
-    plt.plot(labels, np.vstack([sxs_costs, vxs_costs]).T)
-    plt.axhline(y=full_opt_cost, color='r', linestyle=':')
-    plt.axhline(y=thorup_opt_cost, color='k', linestyle='--')
+    sxs_costs *= 1e-8
+    vxs_costs *= 1e-8
+    #thorup_opt_cost *= 1e-8
+    full_opt_cost *= 1e-8
+    plt.plot(labels, sxs_costs.T, linewidth=1.5, linestyle='--')
+    plt.plot(labels, vxs_costs.T, linewidth=1.5, linestyle='-.')
+    plt.axhline(y=full_opt_cost, color='r',
+                #linestyle='',
+                linewidth=2)
+    #plt.axhline(y=thorup_opt_cost, color='k', linestyle='--')
     
-    plt.legend((r"$S\times S$", r"$V\times S$", r"$V\times V$", r"$F\times F$")) 
-    plt.xlabel("Coreset Size", fontsize=16)
+    #plt.legend((r"$D\times D$", r"$D\times V$", r"$V\times V$", r"$T_{\text{cs}}$")) 
+    plt.legend((r"$D\times D$", r"$D\times V$", r"$X\times V$")) 
+    plt.xlabel("Coreset Size", fontsize=18)
     plt.xticks(fontsize=10)
-    plt.ylabel(Y)
+    plt.ylabel(Y, fontsize=18)
     plt.savefig("fig4b.png", dpi=600)
     plt.savefig("fig4b.svg")
     plt.tight_layout()

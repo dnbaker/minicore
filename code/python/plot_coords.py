@@ -63,7 +63,9 @@ if __name__ == '__main__':
     aa("coords")
     aa("-B", "--bounding-box", default=None)
     aa("--title")
+    aa("--font-size", "-f", default=16, type=int)
     args = ap.parse_args()
+    fontsize = args.font_size
     fn = args.coords
     lons, lats = parse_data(open(fn).read())
     
@@ -92,11 +94,11 @@ if __name__ == '__main__':
     print("lons: %s" % lons[:5])
     #lons, lats = lats, lons
     plt.scatter(x=lons, y=lats, alpha=0.9, s=.75, c=color, marker='x')
-    plt.xlabel("Longitude")
-    plt.ylabel("Latitude")
+    plt.xlabel("Longitude", fontsize=fontsize)
+    plt.ylabel("Latitude", fontsize=fontsize)
     #title = args.title if args.title else "Dataset: %s" % args.coords.split("/")[-1].split(".")[0]
     #plt.title(title)
-    ofname = f"{fn.split('/')[-1].split('.')[0]}.svg"
+    ofname = f"{fn.split('/')[-1].split('.')[0]}.{fontsize}.svg"
     plt.savefig(ofname)
     plt.savefig(ofname.replace("svg", "png"))
         

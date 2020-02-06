@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -59,7 +60,7 @@ if __name__ == '__main__':
     import sys
     
     fn = sys.argv[1]
-    lons, lats = parse_data(open(sys.argv[1]).read())
+    lons, lats = parse_data(open(fn if sys.argv[1:] else "all_nyc.txt").read())
     color = ['b'] * len(lons)
     marker = '.'
     bbox = None
@@ -81,10 +82,11 @@ if __name__ == '__main__':
     #plt.scatter(x=lons[outpts], y=lats[outpts], alpha=.9, s=1.5, c='k', marker='o')
     print(f"lons: {lons[:5]}")
     print(f"lats: {lats[:5]}")
+    fs=16
     plt.scatter(y=lats, x=lons, alpha=0.6, s=.01, c='k', marker='.')
-    plt.ylabel("Latitude")
-    plt.xlabel("Longitude")
+    plt.ylabel("Latitude", fontsize=fs)
+    plt.xlabel("Longitude", fontsize=fs)
     #plt.title("New York City")
     ofname = f"{fn.split('/')[-1].split('.')[0]}.png"
-    plt.savefig(ofname)
+    plt.savefig(ofname, dpi=600)
     plt.savefig(ofname.replace("png", "svg"))
