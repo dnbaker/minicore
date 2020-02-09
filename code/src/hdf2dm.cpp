@@ -29,7 +29,7 @@ void write_dataset_to_fname(std::string path, std::string dskey, H5::Group &grou
     auto dt = dataset.getDataType();
     auto itemsz = dt.getSize();
     size_t nbytes = itemsz * nitems;
-    std::fprintf(stderr, "nbytes: %zu. nitems: %zu. Size per item: %zu\n", nbytes, nitems, itemsz);
+    std::fprintf(stderr, "[%s] nbytes: %zu. nitems: %zu. Size per item: %zu\n", dskey.data(), nbytes, nitems, itemsz);
     std::FILE *ofp = std::fopen(path.data(), "a+");
     auto fd = fileno(ofp);
     ::ftruncate(fd, nbytes);
