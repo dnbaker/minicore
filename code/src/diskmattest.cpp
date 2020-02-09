@@ -62,5 +62,5 @@ int main() {
     std::fprintf(stderr, "Sparse,random vectors sharing a subset: %g\n", distance::multinomial_jsd(c3, c3));
     std::fprintf(stderr, "Dense versions of random vector and itself: %g\n", distance::multinomial_jsd(dc3, dc3));
     std::fprintf(stderr, "Dense versions of random vectors sharing a subset: %g\n", distance::multinomial_jsd(dc3, dpo));
-    std::fprintf(stderr, "Dense versions of random vectors sharing a subset, no filter: %g\n", distance::multinomial_jsd(dc3, dpo, distance::FilterNans<false>()));
+    //std::fprintf(stderr, "Dense versions of random vectors sharing a subset, no filter: %g\n", distance::multinomial_jsd(dc3, dpo, distance::FilterNans<false>()));
 }

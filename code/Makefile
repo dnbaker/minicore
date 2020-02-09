@@ -53,6 +53,12 @@ dmlrun: src/dmlsearch.cpp $(wildcard include/fgc/*.h)
 %: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -O3
 
+
+HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
+hdf2sparseblz: src/hdf2sparseblz.cpp $(wildcard include/fgc/*.h)
+	ls $(HDFPATH)/lib && \
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -O3 $(HDFLAGS)
+
 mpi%: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -Ofast -DUSE_BOOST_PARALLEL=1
 
