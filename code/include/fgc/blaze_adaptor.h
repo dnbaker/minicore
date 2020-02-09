@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <vector>
 #include "./shared.h"
+#include "./Inf2Zero.h"
 
 namespace blz {
 using blaze::unchecked;
@@ -143,7 +144,7 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     ADD_FUNCS
 };
 
-template< typename Type, bool AF, bool PF, bool SO >
+template< typename Type, blaze::AlignmentFlag AF, blaze::PaddingFlag PF, bool SO >
 struct CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     using super = blaze::CustomMatrix<Type, AF, PF, SO>;
     using this_type = CustomMatrix<Type, AF, PF, SO>;
@@ -171,9 +172,9 @@ template<typename FT, bool SO=blaze::rowMajor>
 using DM = DynamicMatrix<FT, SO>;
 template<typename FT, bool TF=blaze::columnVector>
 using DV = blaze::DynamicVector<FT, TF>;
-template<typename FT, bool AF=blaze::unaligned, bool PF=blaze::unpadded, bool SO=blaze::rowMajor>
+template<typename FT, blaze::AlignmentFlag AF=blaze::unaligned, blaze::PaddingFlag PF=blaze::unpadded, bool SO=blaze::rowMajor>
 using CM = CustomMatrix<FT, AF, PF, SO>;
-template<typename FT, bool AF=blaze::unaligned, bool PF=blaze::unpadded, bool TF=blaze::columnVector>
+template<typename FT, blaze::AlignmentFlag AF=blaze::unaligned, blaze::PaddingFlag PF=blaze::unpadded, bool TF=blaze::columnVector>
 using CV = blaze::CustomVector<FT, AF, PF, TF>;
 
 

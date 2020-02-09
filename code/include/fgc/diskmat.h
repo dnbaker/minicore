@@ -22,8 +22,8 @@ struct DiskMat {
     //  alignment -- if offset is 0, it's already aligned.
     //            -- otherwise, allocate enough extra so that it is
 
-    static constexpr bool AF = isAligned;
-    static constexpr bool PF = isPadded;
+    static constexpr blaze::AlignmentFlag AF = isAligned ? blaze::aligned: blaze::unaligned;
+    static constexpr blaze::PaddingFlag PF = isPadded ? blaze::padded: blaze::unpadded;
     using MatType = blaze::CustomMatrix<VT, AF, PF, SO>;
     MatType mat_;
     std::string path_;

@@ -2,9 +2,7 @@
 #define FGC_DISTANCE_AND_MEANING_H__
 #include "blaze_adaptor.h"
 #include <vector>
-#if VERBOSE_AF
 #include <iostream>
-#endif
 
 namespace blz {
 
@@ -14,53 +12,27 @@ template<typename FT, bool SO>\
 INLINE double norm##Dist(const blaze::DynamicVector<FT, SO> &lhs, const blaze::DynamicVector<FT, SO> &rhs) {\
     return norm##Norm(rhs - lhs);\
 }\
-template<typename FT, bool SO>\
-INLINE double norm##Dist(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs) {\
+template<typename VT, typename VT2, bool SO>\
+INLINE double norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, SO> &rhs) {\
     return norm##Norm(~rhs - ~lhs);\
 }\
 \
-template<typename FT, bool SO>\
-INLINE double norm##Dist(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, !SO> &rhs) {\
+template<typename VT, typename VT2, bool SO>\
+INLINE double norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, !SO> &rhs) {\
     return norm##Norm(~rhs - trans(~lhs));\
 }\
 \
-template<typename FT, bool SO>\
-INLINE double norm##Dist(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs) {\
+template<typename VT, typename VT2, bool SO>\
+INLINE double norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, SO> &rhs) {\
     return norm##Norm(~rhs - ~lhs);\
 }\
 \
-template<typename FT, bool SO>\
-INLINE double norm##Dist(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, !SO> &rhs) {\
+template<typename VT, typename VT2, bool SO>\
+INLINE double norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, !SO> &rhs) {\
     return norm##Norm(~rhs - trans(~lhs));\
 }\
-\
-template<typename FT, bool AF, bool PF, bool SO, bool OAF, bool OPF>\
-INLINE double norm##Dist(const blaze::CustomVector<FT, AF, PF, SO> &lhs,\
-                      const blaze::CustomVector<FT, OAF, OPF, SO> &rhs)\
-{\
-    return norm##Norm(rhs - lhs);\
-}\
-\
-template<typename FT, bool AF, bool PF, bool SO, bool OAF, bool OPF>\
-INLINE double norm##Dist(const blaze::CustomVector<FT, AF, PF, SO> &lhs,\
-                      const blaze::CustomVector<FT, OAF, OPF, !SO> &rhs)\
-{\
-    return norm##Norm(rhs - trans(lhs));\
-}\
-\
-template<typename MatType1, typename MatType2, bool SO, bool isDense, bool isDense2, bool isSymmetric>\
-INLINE double norm##Dist(const blaze::Row<MatType1, SO, isDense, isSymmetric> &lhs,\
-                      const blaze::Row<MatType2, SO, isDense2, isSymmetric> &rhs)\
-{\
-    return norm##Norm(rhs - lhs);\
-}\
-\
-template<typename MatType1, typename MatType2, bool SO, bool isDense, bool isDense2, bool isSymmetric>\
-INLINE double norm##Dist(const blaze::Column<MatType1, SO, isDense, isSymmetric> &lhs,\
-                      const blaze::Column<MatType2, SO, isDense2, isSymmetric> &rhs)\
-{\
-    return norm##Norm(rhs - lhs);\
-}
+
+
 DECL_DIST(l1)
 DECL_DIST(l2)
 DECL_DIST(sqr)
@@ -79,7 +51,7 @@ template<typename FT, bool SO>
 inline double sqrL2Dist(const blz::DynamicVector<FT, SO> &v1, const blz::DynamicVector<FT, SO> &v2) {
     return l2Dist(v1, v2);
 }
-template<typename FT, bool AF, bool PF, bool SO, bool OAF, bool OPF, bool OSO>
+template<typename FT, blaze::AlignmentFlag AF, blaze::PaddingFlag PF, bool SO, blaze::AlignmentFlag OAF, blaze::PaddingFlag OPF, bool OSO>
 inline double sqrL2Dist(const blz::CustomVector<FT, AF, PF, SO> &v1, const blz::CustomVector<FT, OAF, OPF, OSO> &v2) {
     return l2Dist(v1, v2);
 }
@@ -276,16 +248,22 @@ double logsumexp(const SVecScalarMultExpr<SVecSVecAddExpr<VT1, VT2, TF>, Scalar,
 template<typename VT>
 INLINE double multinomial_cumulant(const VT &x) {return logsumexp(x);}
 
+template<bool VT>
+struct FilterNans {
+    static constexpr bool value = VT;
+};
+
 template<typename FT, bool SO, typename OFT, bool filter_nans=true>
-double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs, OFT lhc, OFT rhc) {
+double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs, OFT lhc, OFT rhc, [[maybe_unused]] FilterNans<filter_nans> fn=FilterNans<filter_nans>()) {
+    DBG_ONLY(if(filter_nans) std::fprintf(stderr, "[%s] Filtering nans\n", __PRETTY_FUNCTION__);)
     using FloatType = typename FT::ElementType;
     auto mean = (~lhs + ~rhs) * .5;
     double retsq, lhv, rhv;
     CONST_IF(filter_nans) {
-        auto fi = [](auto x) {return std::isinf(x) ? FloatType(0): x;};
-        auto logmean = blaze::map(blaze::log(mean), fi);
-        auto lhterm = blaze::map(blaze::log(~lhs) - logmean, fi);
-        auto rhterm = blaze::map(blaze::log(~rhs) - logmean, fi);
+        NegInf2Zero ni;
+        auto logmean = blaze::map(blaze::log(mean), ni);
+        auto lhterm = blaze::map(blaze::log(~lhs), ni) - logmean;
+        auto rhterm = blaze::map(blaze::log(~rhs), ni) - logmean;
         lhv = dot(lhterm, ~lhs);
         rhv = dot(rhterm, ~rhs);
     } else {
@@ -295,38 +273,41 @@ double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::Dense
         lhv = dot(blaze::log(~lhs) - logmean, ~lhs);
         rhv = dot(blaze::log(~rhs) - logmean, ~rhs);
     }
+    retsq = std::max(multinomial_cumulant(mean) + (lhv + rhv - lhc - rhc) * .5, 0.);
 #ifndef NDEBUG
-    std::fprintf(stderr, "cumulant: %g. lhv: %g. rhv: %g. lhc: %g. rhc: %g\n", multinomial_cumulant(mean), lhv, rhv, lhc, rhc);
+    std::fprintf(stderr, "cumulant: %g. lhv: %g. rhv: %g. lhc: %g. rhc: %g. retsq: %g\n", multinomial_cumulant(mean), lhv, rhv, lhc, rhc, retsq);
 #endif
-    retsq = multinomial_cumulant(mean) + (lhv + rhv - lhc - rhc) * .5;
     return std::sqrt(retsq);
 }
 
-template<typename VT, bool SO, typename OFT, typename OBufType>
+template<typename VT, typename VT2, bool SO, typename OFT, typename OBufType>
 double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
                        const blaze::DenseVector<VT, SO> &rhs,
-                       const blaze::DenseVector<VT, SO> &lhlog,
-                       const blaze::DenseVector<VT, SO> &rhlog,
+                       const blaze::DenseVector<VT2, SO> &lhlog,
+                       const blaze::DenseVector<VT2, SO> &rhlog,
                        OFT lhc, OFT rhc,
                        OBufType &meanbuf,
                        OBufType &logmeanbuf)
 {
-    assert(blaze::min(lhs) > 0. || !std::fprintf(stderr, "This version of the function requires 0s be removed\n"));
     assert(blaze::min(rhs) > 0. || !std::fprintf(stderr, "This version of the function requires 0s be removed\n"));
     ~(*meanbuf) = (~lhs + ~rhs) * .5;
-    ~*logmeanbuf = blaze::log(~*meanbuf);
+    ~*logmeanbuf = blaze::map(blaze::log(~*meanbuf), blaze::NegInf2Zero());
     return multinomial_cumulant(~*meanbuf) +
         (0.5 * (dot(lhlog - ~*logmeanbuf, ~lhs) +
           + dot(rhlog - ~*logmeanbuf, ~rhs) - lhc - rhc));
 }
 
 
-template<typename FT, bool SO, typename OFT, bool filter_nans=true>
+template<typename FT, typename VT2, bool SO, typename OFT, bool filter_nans=true>
 double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs,
                        // Original vectors
-                       const blaze::DenseVector<FT, SO> &lhl, const blaze::DenseVector<FT, SO> &rhl,
+                       const blaze::DenseVector<VT2, SO> &lhl, const blaze::DenseVector<VT2, SO> &rhl,
                        // cached logs
-                       OFT lhc, OFT rhc) {
+                       OFT lhc, OFT rhc,
+                       [[maybe_unused]] FilterNans<filter_nans> fn=FilterNans<filter_nans>())
+{
+    std::cout << "lhl: \n" << lhl << '\n';
+    DBG_ONLY(if(filter_nans) std::fprintf(stderr, "[%s] Filtering nans\n", __PRETTY_FUNCTION__);)
     using FloatType = typename FT::ElementType;
     assert(std::find_if((~lhl).begin(), (~lhl).end(), [](auto x)
                         {return std::isinf(x) || std::isnan(x);})
@@ -335,12 +316,11 @@ double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::Dense
                         {return std::isinf(x) || std::isnan(x);})
            == (~rhl).end());
     auto mean = (~lhs + ~rhs) * .5;
-    auto fi = [](auto x) {return std::isinf(x) ? FloatType(0): x;};
     double lhv, rhv;
     CONST_IF(filter_nans) {
-        auto logmean = blaze::map(blaze::log(mean), fi);
-        lhv = dot(blaze::map(lhl - logmean, fi), ~lhs);
-        rhv = dot(blaze::map(rhl - logmean, fi), ~rhs);
+        auto logmean = blaze::map(blaze::log(mean), NegInf2Zero());
+        lhv = dot(lhl - logmean, ~lhs);
+        rhv = dot(rhl - logmean, ~rhs);
     } else {
         auto logmean = blaze::log(mean);
         lhv = dot(lhl - logmean, ~lhs);
@@ -364,14 +344,13 @@ double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::Spar
            == rhl.end());
     auto mean = (~lhs + ~rhs) * .5;
     auto logmean = blaze::log(mean);
-    return std::sqrt(
-               multinomial_cumulant(mean)
-               + .5 * (
-                   + dot(lhl - logmean, ~lhs)
-                   + dot(rhl - logmean, ~rhs)
-                   - lhc - rhc
-               )
-           );
+    double lhv = dot(lhl - logmean, ~lhs);
+    double rhv = dot(rhl - logmean, ~rhs);
+    double retsq = std::max(multinomial_cumulant(mean) +  .5 * (lhv + rhv - lhc - rhc), 0.);
+#ifndef NDEBUG
+    std::fprintf(stderr, "cumulant: %g. lhv: %g. rhv: %g. lhc: %g. rhc: %g. retsq: %g\n", multinomial_cumulant(mean), lhv, rhv, lhc, rhc, retsq);
+#endif
+    return std::sqrt(retsq);
 }
 
 template<typename FT, bool SO>
@@ -381,12 +360,13 @@ double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::Spar
     return multinomial_jsd(lhs, rhs, lhl, rhl, multinomial_cumulant(lhs), multinomial_cumulant(rhs));
 }
 
-template<typename FT, bool SO>
+template<typename FT, bool SO, bool filter_nans=true>
 INLINE double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs,
-                              const blaze::DenseVector<FT, SO> &rhs)
+                              const blaze::DenseVector<FT, SO> &rhs,
+                              FilterNans<filter_nans> fn=FilterNans<filter_nans>())
 {
     assert((~lhs).size() == (~rhs).size());
-    return multinomial_jsd(lhs, rhs, multinomial_cumulant(~lhs), multinomial_cumulant(~rhs));
+    return multinomial_jsd(lhs, rhs, multinomial_cumulant(~lhs), multinomial_cumulant(~rhs), fn);
 }
 
 enum Prior {
@@ -402,8 +382,8 @@ class MultinomialJSDApplicator {
 
     //using opposite_type = typename base_type::OppositeType;
     DenseType &data_;
-    DenseType *logdata_;
     blaze::DynamicVector<FT> cached_cumulants_;
+    std::unique_ptr<blaze::DynamicMatrix<FT>> logdata_;
 public:
     const Prior prior_;
     template<typename PriorContainer=blaze::DynamicVector<FT, blaze::rowVector>>
@@ -418,7 +398,7 @@ public:
         if(ref.rows() = data_.rows() || ref.columns() != data_.columns())
             throw std::invalid_argument("set_logs requires a matrix of the same dimensions");
         logdata_ = &ref;
-        ref = blaze::log(data_);
+        ref = blaze::map(blaze::log(data_), NegInf2Zero());
     }
     double operator()(size_t lhind, size_t rhind) const {
         return jsd(lhind, rhind);
@@ -459,6 +439,11 @@ private:
                 for(auto rw: blz::rowiterator(data_))
                     rw += *c;
         }
+        for(size_t i = 0; i < data_.rows(); ++i)
+            row(data_, i) /= blaze::l2Norm(row(data_, i));
+        logdata_.reset(new blaze::DynamicMatrix<FT>(data_.rows(), data_.columns()));
+        *logdata_ = map(map(data_, Log()), NegInf2Zero());
+        std::cout << row(*logdata_, 0);
         cached_cumulants_.resize(data_.rows());
         for(size_t i = 0; i < data_.rows(); ++i)
             cached_cumulants_[i] = multinomial_cumulant(row(data_, i BLAZE_CHECK_DEBUG));
