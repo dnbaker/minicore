@@ -371,7 +371,7 @@ template<typename...Args>
 INLINE decltype(auto) multinomial_jsm(Args &&...args) {
     using blaze::sqrt;
     using std::sqrt;
-    return sqrt(multinomial_jsd(std::forward<Args(args)...));
+    return sqrt(multinomial_jsd(std::forward<Args>(args)...));
 }
 
 enum Prior {
