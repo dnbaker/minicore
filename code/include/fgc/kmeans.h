@@ -210,6 +210,58 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
 }
 
+/*
+ * Implementation of the $KMC^2$ algorithm from:
+ * Bachem, et al. Approximate K-Means++ in Sublinear Time (2016)
+ * Available at https://www.aaai.org/ocs/index.php/AAAI/AAAI16/paper/view/12147/11759
+ */
+
+template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
+std::vector<IT>
+kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm=Norm()) {
+    if(m == 0) throw std::invalid_argument("m must be nonzero");
+    auto dm = make_index_dm(first, norm);
+    static_assert(std::is_floating_point<FT>::value, "FT must be fp");
+    size_t np = end - first;
+    flat_hash_set<IT> centers{IT(rng() % np)};
+    // Helper function for minimum distance
+    auto mindist = [&centers,&dm](auto newind) {
+        typename flat_hash_set<IT>::const_iterator it = centers.begin(), end = centers.end();
+        auto dist = dm(*it, newind);
+        while(++it != end)
+            dist = std::min(dist, dm(*it, newind));
+        return dist;
+    };
+
+    while(centers.size() < k) {
+        // At this point, the cdf has been prepared, and we are ready to sample.
+        // add new element
+        auto x = rng() % np;
+        auto xdist = mindist(x);
+        auto baseseed = rng();
+        OMP_PFOR
+        for(unsigned j = 1; j < m; ++j) {
+            uint64_t local_seed = baseseed + j;
+            wy::wyhash64_stateless(&local_seed);
+            auto y = local_seed % np;
+            auto ydist = mindist(y);
+            auto rat = ydist / xdist;
+            wy::wyhash64_stateless(&local_seed);
+            auto urd_val = double(local_seed) / std::numeric_limits<uint64_t>::max();
+            if(rat > urd_val) {
+                OMP_CRITICAL
+                {
+                    if(rat > urd_val)
+                        x = y, xdist = ydist;
+                }
+            }
+        }
+        centers.insert(x);
+    }
+    return std::vector<IT>(centers.begin(), centers.end());
+}
+
 
 template<typename FT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>

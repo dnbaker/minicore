@@ -45,8 +45,8 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "%d threads used\n", nt);
 #endif
     std::srand(0);
-    size_t n = argc == 1 ? 100000: std::atoi(argv[1]);
-    size_t npoints = argc <= 2 ? 50: std::atoi(argv[2]);
+    size_t n = argc == 1 ? 1000000: std::atoi(argv[1]);
+    size_t npoints = argc <= 2 ? 500: std::atoi(argv[2]);
     size_t nd = argc <= 3 ? 40: std::atoi(argv[3]);
     double eps = argc <= 4 ? 0.5: std::atof(argv[3]);
     auto ptr = static_cast<std::vector<FLOAT_TYPE> *>(std::malloc(n * sizeof(std::vector<FLOAT_TYPE>)));
@@ -69,7 +69,11 @@ int main(int argc, char *argv[]) {
     auto centers = kmeanspp(ptr, ptr + n, gen, npoints);
     auto stop = t();
     std::fprintf(stderr, "Time for kmeans++: %gs\n", double((stop - start).count()) / 1e9);
-    // centers contains [centers, distances]
+    // centers contains [centers, assignments, distances]
+    start = t();
+    auto kmc2_centers = kmc2(ptr, ptr + n, gen, npoints, 200);
+    stop = t();
+    std::fprintf(stderr, "Time for kmc^2: %gs\n", double((stop - start).count()) / 1e9);
     // then, a coreset can be constructed
     start = t();
     auto kc = kcenter_greedy_2approx(ptr, ptr + n, gen, npoints);
