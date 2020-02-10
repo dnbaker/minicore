@@ -4,23 +4,6 @@
 #include <memory>
 //#include <h5cpp/hdf5.hpp>
 #include <iostream>
-#if 0
-herr_t
-file_info(hid_t loc_id, const char *name, const H5L_info_t *linfo, void *opdata)
-{
-    hid_t group;
-    /*
-     * Open the group using its name.
-     */
-    group = H5Gopen2(loc_id, name, H5P_DEFAULT);
-    /*
-     * Display group name.
-     */
-    std::cout << "Name : " << name << '\n';
-    H5Gclose(group);
-    return 0;
-}
-#endif
 
 
 void write_dataset_to_fname(std::string path, std::string dskey, H5::Group &group) {
@@ -29,7 +12,7 @@ void write_dataset_to_fname(std::string path, std::string dskey, H5::Group &grou
     auto dt = dataset.getDataType();
     auto itemsz = dt.getSize();
     size_t nbytes = itemsz * nitems;
-    std::fprintf(stderr, "nbytes: %zu. nitems: %zu. Size per item: %zu\n", nbytes, nitems, itemsz);
+    std::fprintf(stderr, "[%s] nbytes: %zu. nitems: %zu. Size per item: %zu\n", dskey.data(), nbytes, nitems, itemsz);
     std::FILE *ofp = std::fopen(path.data(), "a+");
     auto fd = fileno(ofp);
     ::ftruncate(fd, nbytes);

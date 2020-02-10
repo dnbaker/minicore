@@ -256,7 +256,6 @@ struct FilterNans {
 template<typename FT, bool SO, typename OFT, bool filter_nans=true>
 double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs, OFT lhc, OFT rhc, [[maybe_unused]] FilterNans<filter_nans> fn=FilterNans<filter_nans>()) {
     DBG_ONLY(if(filter_nans) std::fprintf(stderr, "[%s] Filtering nans\n", __PRETTY_FUNCTION__);)
-    using FloatType = typename FT::ElementType;
     auto mean = (~lhs + ~rhs) * .5;
     double retsq, lhv, rhv;
     CONST_IF(filter_nans) {
@@ -308,7 +307,6 @@ double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::Dense
 {
     std::cout << "lhl: \n" << lhl << '\n';
     DBG_ONLY(if(filter_nans) std::fprintf(stderr, "[%s] Filtering nans\n", __PRETTY_FUNCTION__);)
-    using FloatType = typename FT::ElementType;
     assert(std::find_if((~lhl).begin(), (~lhl).end(), [](auto x)
                         {return std::isinf(x) || std::isnan(x);})
            == (~lhl).end());
@@ -350,7 +348,7 @@ double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::Spar
 #ifndef NDEBUG
     std::fprintf(stderr, "cumulant: %g. lhv: %g. rhv: %g. lhc: %g. rhc: %g. retsq: %g\n", multinomial_cumulant(mean), lhv, rhv, lhc, rhc, retsq);
 #endif
-    return std::sqrt(retsq);
+    return retsq;
 }
 
 template<typename FT, bool SO>
@@ -367,6 +365,13 @@ INLINE double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs,
 {
     assert((~lhs).size() == (~rhs).size());
     return multinomial_jsd(lhs, rhs, multinomial_cumulant(~lhs), multinomial_cumulant(~rhs), fn);
+}
+
+template<typename...Args>
+INLINE decltype(auto) multinomial_jsm(Args &&...args) {
+    using blaze::sqrt;
+    using std::sqrt;
+    return sqrt(multinomial_jsd(std::forward<Args>(args)...));
 }
 
 enum Prior {
@@ -422,6 +427,9 @@ public:
                                    lhv,
                                    rhv);
         }
+    }
+    double jsm(size_t lhind, size_t rhind) const {
+        return std::sqrt(jsd(lhind, rhind));
     }
 private:
     template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>
