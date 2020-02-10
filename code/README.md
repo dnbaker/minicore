@@ -13,6 +13,8 @@
 3. [kcenter problem](#kcenterh)
 4. [k-metric proble](#kmeansh)
 5. [blaze-lib row/column iterator wrappers](#blaze_adaptorh)
+6. [disk-based matrix](#diskmath)
+7. [distances and norms](#distanceh)
 
 
 
@@ -44,6 +46,7 @@ Greedy Strategy Works for k-Center Clustering with Outliers and Coreset Construc
 1. k-means++ initialization scheme (for the purposes of an approximate solution for importance sampling)
 2. k-means coreset construction using the above approximation
 3. Weighted Lloyd's algorithm
+4. KMC^2 algorithm (for sublinear time kmeans++)
 
 
 ## coreset.h
@@ -67,6 +70,17 @@ functions allowing range-based loops over the the rows or columns of a matrix.
 #### Norm structs
 structs providing distances under given norms (effectively distance oracles), use in `kmeans.h`
 
+#### diskmat.h
+Uses [mio](https://github.com/mandreyel/mio) for mmap'd IO. Some of our software uses
+in-memory matrices up to a certain size and then falls back to mmap.
+
+### distance.h
+Provides norms and distances.
+Includes L1, L2, L3, L4, general p-norms, Bhattacharya, Matusita,
+Multinomial and Poisson Bregman divergences, Multinomial Jensen-Shannon Divergence,
+and the Multinomial Jensen-Shannon Metric, optionally with priors.
+
+
 
 ## References
 
@@ -82,15 +96,13 @@ for an initial graph bicriteria approximation.
 
 ### TODO
 
-1. K-means
-    1. Extensions for other metrics (https://arxiv.org/abs/1309.7109)
-2. Metric K-median
-    1. Implement weighted k-median clustering on graph using local search heuristics
-        a. Algorithm: http://homepage.divms.uiowa.edu/~kvaradar/sp2016/scribe\_week5.pdf
-        b. Runtime: n^2+
-    2. Jain/Vazirani UFL & k-median
+1. More distances
+    1. Bregman divergences
+    2. Jensen-Shannon
 3. K-center
     1. Test accuracy of k-center method on real data
     2. Use coreset for clustering solutions
-4. Python bindings
+3. Python bindings
     1. This will use the blaze::CustomMatrix interface to speak to Numpy and (maybe Torch?)
+4. JV solver
+    1. It currently is very slow, but perhaps this can be fixed with some effort.
