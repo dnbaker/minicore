@@ -176,6 +176,10 @@ template<typename FT, blaze::AlignmentFlag AF=blaze::unaligned, blaze::PaddingFl
 using CM = CustomMatrix<FT, AF, PF, SO>;
 template<typename FT, blaze::AlignmentFlag AF=blaze::unaligned, blaze::PaddingFlag PF=blaze::unpadded, bool TF=blaze::columnVector>
 using CV = blaze::CustomVector<FT, AF, PF, TF>;
+template<typename FT, bool SO=blaze::rowMajor>
+using SM = blaze::CompressedMatrix<FT, SO>;
+template<typename FT, bool TF=blaze::columnVector>
+using SV = blaze::CompressedVector<FT, TF>;
 
 
 template<typename MatType>
