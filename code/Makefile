@@ -19,8 +19,9 @@ STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -pedantic -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers
 OPT?=O3
 LDFLAGS+=-lz
-CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LIBS) $(LDFLAGS)
-      
+CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LIBS) $(LDFLAGS) \
+    -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 # -flto
+
 
 EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
 FEX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
@@ -34,15 +35,18 @@ that:
 ALL: pgall pgfall \
     all that fall
 
-ifdef OMP
-CXXFLAGS += -fopenmp
+ifneq (,$(findstring clang++,$(CXX)))
+    OMP_STR:=-lomp
+else
+    OMP_STR:=-fopenmp#-simd
 endif
 
 ifdef TBBDIR
 CXXFLAGS += -DUSE_TBB -L$(TBBDIR)/lib -I$(TBBDIR)/include -ltbb
 endif
 
-TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg
+TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
+      jsdtestdbg jsdkmeanstestdbg
 
 clust: kzclustexpdbg kzclustexp kzclustexpf
 
@@ -51,34 +55,34 @@ print_tests:
 	@echo "Tests: " $(TESTS)
 
 %dbg: src/%.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@
+	$(CXX) $(CXXFLAGS) $< -o $@ # -fsanitize=address
 
 graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
 dmlrun: src/dmlsearch.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
 %: src/%.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -O3
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
 hdf2dm: src/hdf2dm.cpp $(wildcard include/fgc/*.h)
 	ls $(HDFPATH)/lib && \
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -O3 $(HDFLAGS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(HDFLAGS)
 
 mpi%: src/%.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG -fopenmp -Ofast -DUSE_BOOST_PARALLEL=1
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -Ofast -DUSE_BOOST_PARALLEL=1
 
 %pg: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg -o $@
 
 %pgf: src/%.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -pg -fopenmp -o $@
+	$(CXX) $(CXXFLAGS) $< -pg $(OMP_STR) -o $@
 
 %f: src/%.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -fopenmp -o $@
+	$(CXX) $(CXXFLAGS) $< $(OMP_STR) -o $@
 
 
 osm2dimacsdbg: src/osm2dimacs.cpp
@@ -89,12 +93,12 @@ osm2dimacsdbg: src/osm2dimacs.cpp
 osm2dimacs: src/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lz -lbz2 -lexpat -o $@ -O3 -fopenmp -DNDEBUG
+        $< -lz -lbz2 -lexpat -o $@ -O3 $(OMP_STR) -DNDEBUG
 
 osm2dimacspgf: src/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg -DNDEBUG -fopenmp
+        $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg -DNDEBUG $(OMP_STR)
 
 osm2dimacspg: src/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \

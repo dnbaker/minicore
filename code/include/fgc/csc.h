@@ -32,25 +32,24 @@ struct CSCMatrixView {
 };
 
 template<typename FT=float>
-blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool normalized=true) {
+blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool skip_empty=false) {
     blz::SM<FT, blaze::rowMajor> ret(mat.n_, mat.nf_);
     ret.reserve(mat.nnz_);
-    for(unsigned i = 0; i < mat.n_; ++i) {
+    size_t used_rows = 0, i;
+    for(i = 0; i < mat.n_; ++i) {
         auto col = mat.column(i);
+        if(skip_empty && 0u == col.nnz()) continue;
         for(auto s = col.start_; s < col.stop_; ++s) {
-            ret.append(i, mat.indices_[s], mat.data_[s]);
+            ret.append(used_rows, mat.indices_[s], mat.data_[s]);
         }
-        ret.finalize(i);
-        if(normalized) {
-            auto r = row(ret, i);
-            r *= 1./ blaze::l2Norm(row(ret, i));
-        }
+        ret.finalize(used_rows++);
     }
+    if(used_rows != i) std::fprintf(stderr, "Only used %zu/%zu rows, skipping empty rows\n", used_rows, i);
     return ret;
 }
 
 template<typename FT=float>
-blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool normalized=true) {
+blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=false) {
     std::string indptrn  = prefix + "indptr.file";
     std::string indicesn = prefix + "indices.file";
     std::string datan    = prefix + "data.file";
@@ -66,8 +65,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool normalized=true
     CSCMatrixView matview((const uint64_t *)indptr.data(), (const uint64_t *)indices.data(),
                           (const uint32_t *)data.data(), indices.size() / (sizeof(uint64_t) / sizeof(indices[0])),
                           nfeat, nsamples);
-    blz::SM<FT, blaze::rowMajor> ret = csc2sparse(matview, normalized);
-    return ret;
+    return csc2sparse(matview, skip_empty);
 }
 
 

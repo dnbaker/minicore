@@ -31,3 +31,6 @@
 [submodule "code/sleef"]
 	path = code/sleef
 	url = https://github.com/shibatch/sleef
+[submodule "code/distmat"]
+	path = code/distmat
+	url = https://github.com/dnbaker/distmat

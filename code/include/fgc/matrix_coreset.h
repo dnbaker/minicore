@@ -46,22 +46,18 @@ void resize_and_assign(Mat &dest, const View &view) {
 template<typename FT, typename IT, typename MatrixType, typename CMatrixType=blaze::DynamicMatrix<FT>>
 MatrixCoreset<MatrixType, FT>
 index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
-             bool rowwise=(blaze::StorageOrder_v<MatrixType> == blaze::rowMajor))
+             bool rowwise=(blaze::StorageOrder_v<MatrixType> == blaze::rowMajor))   
 {
     auto weights = ic.weights_;
     CMatrixType ret;
     const auto icdat = ic.indices_.data();
     const size_t icsz = ic.indices_.size();
-#ifndef NDEBUG
-    const size_t lim = rowwise ? mat.rows(): mat.columns();
-    for(const auto ind: ic.indices_)
-        assert(ind < lim || !std::fprintf(stderr, "index %u is too big\n", ind));
-#endif
     if(rowwise) {
 #if !NDEBUG
-        for(size_t i = 0; i < icsz; ++i) assert(icdat[icsz] < mat.rows());
+        for(size_t i = 0; i < icsz; ++i) assert(icdat[i] < mat.rows());
 #endif
         auto rows = blaze::rows(mat, icdat, icsz);
+        std::fprintf(stderr, "blaze row selection: %zu/%zu of matrix %zu/%zu\n", rows.rows(), rows.columns(), mat.rows(), mat.columns());
         resize_and_assign(ret, rows);
     } else {
 #if !NDEBUG
@@ -75,7 +71,6 @@ index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
 #endif
     return MatrixCoreset<MatrixType, FT>{std::move(ret), std::move(weights), rowwise};
 } // index2matrix
-
 } // coresets
 
 } // fgc

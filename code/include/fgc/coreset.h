@@ -455,6 +455,7 @@ struct CoresetSampler {
         const double dn = n;
         for(size_t i = 0; i < n; ++i) {
             const auto ind = sampler_->sample();
+            assert(ind < np_);
             ret.indices_[i] = ind;
             ret.weights_[i] = getweight(ind) / (dn * probs_[ind]);
         }
