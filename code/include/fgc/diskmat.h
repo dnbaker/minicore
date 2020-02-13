@@ -28,7 +28,9 @@ struct DiskMat {
     MatType mat_;
     std::string path_;
 
-    DiskMat(const DiskMat &o) = delete;
+    DiskMat(const DiskMat &o): DiskMat(o.nr_, o.nc_, nullptr) {
+        std::memcpy(ms_->data(), o.ms_->data(), o.ms_->size());
+    }
     DiskMat(DiskMat &&o): path_(o.path_) {
         uint8_t *ptr = reinterpret_cast<uint8_t *>(this), *optr = reinterpret_cast<uint8_t *>(std::addressof(o));
         std::memset(ptr, 0, sizeof(*this));

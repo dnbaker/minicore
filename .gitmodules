@@ -28,3 +28,6 @@
 [submodule "code/mio"]
 	path = code/mio
 	url = https://github.com/mandreyel/mio
+[submodule "code/sleef"]
+	path = code/sleef
+	url = https://github.com/shibatch/sleef

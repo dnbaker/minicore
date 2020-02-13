@@ -1,4 +1,7 @@
 #pragma once
+#if defined(__has_include) && __has_include("sleef.h")
+#  include "sleef.h"
+#endif
 #include "blaze/Math.h"
 #include <cstdlib>
 #include <vector>

@@ -127,7 +127,7 @@ BLAZE_ALWAYS_INLINE const SIMDdouble neginf2zero( const SIMDf64<T>& a ) noexcept
    const auto v = _mm256_set1_pd(-std::numeric_limits<double>::infinity());
    const auto z = _mm256_set1_pd(0.);
    auto value = (~a).eval().value;
-   return _mm256_blendv_pd(value, z, _mm256_cmpeq_pd(value, v));
+   return _mm256_blendv_pd(value, z, _mm256_cmp_pd(value, v, _CMP_EQ_OQ));
 }
 #elif BLAZE_SSE_MODE
 {

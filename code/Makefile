@@ -1,16 +1,25 @@
 INCLUDE_PATHS=. include include/fgc blaze libosmium/include protozero/include pdqsort
+LIBPATHS+=
 
 ifdef BOOST_DIR
 INCLUDE_PATHS += $(BOOST_DIR)
 endif
 
+
+ifdef SLEEF_DIR
+INCLUDE_PATHS+= $(SLEEF_DIR)/include
+LIBPATHS+= $(SLEEF_DIR)/lib
+LDFLAGS+= -lsleef
+endif
+
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
+LIBS=$(patsubst %,-L%,$(LIBPATHS))
 CXX?=g++
 STD?=c++17
-WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -pedantic -Wunused-variable -Wno-attributes
+WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -pedantic -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers
 OPT?=O3
 LDFLAGS+=-lz
-CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LDFLAGS)
+CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LIBS) $(LDFLAGS)
       
 
 EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
