@@ -283,7 +283,7 @@ double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::Dense
 }
 
 template<typename VT, typename VT2, bool SO, typename OFT, typename OBufType>
-double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
+inline double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
                        const blaze::DenseVector<VT, SO> &rhs,
                        const blaze::DenseVector<VT2, SO> &lhlog,
                        const blaze::DenseVector<VT2, SO> &rhlog,
@@ -301,7 +301,7 @@ double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
 
 
 template<typename FT, typename VT2, bool SO, typename OFT, bool filter_nans=true>
-double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs,
+inline double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs,
                        // Original vectors
                        const blaze::DenseVector<VT2, SO> &lhl, const blaze::DenseVector<VT2, SO> &rhl,
                        // cached logs
@@ -331,10 +331,9 @@ double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::Dense
 }
 
 template<typename FT, bool SO, typename LT, typename OFT>
-double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs,
+inline double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs,
                        // Original vectors
                        const LT &lhl, const LT &rhl,
-                       //const blaze::SparseVector<FT, SO> &lhl, const blaze::SparseVector<FT, SO> &rhl,
                        // cached logs
                        OFT lhc, OFT rhc) {
 #if VERBOSE_AF
@@ -356,9 +355,16 @@ double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::Spar
 #endif
     return retsq;
 }
+template<typename FT, bool SO, typename OFT>
+inline double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs,
+                       // cached logs
+                       OFT lhc, OFT rhc) {
+    auto lhlog = evaluate(blaze::log(lhs)), rhlog = evaluate(blaze::log(rhs));
+    return multinomial_jsd(lhs, rhs, lhlog, rhlog, lhc, rhc);
+}
 
 template<typename FT, bool SO>
-double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs) {
+inline double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs) {
     auto lhl = blaze::log(lhs);
     auto rhl = blaze::log(rhs);
     return multinomial_jsd(lhs, rhs, lhl, rhl, multinomial_cumulant(lhs), multinomial_cumulant(rhs));
@@ -478,12 +484,15 @@ public:
     {
         prep(c, use_mj_kl);
     }
+    /*
+     * Returns JSD
+     */
     double operator()(size_t lhind, size_t rhind) const {
         return jsd(lhind, rhind);
     }
     /*
      * Sets distance matrix, under Jensen-Shannon metric (by default with use_jsm)
-     * or Jensen-Shannon distance (
+     * or Jensen-Shannon distance.
      */
     template<typename MatType>
     void set_distance_matrix(MatType &m, bool use_jsm=true) const {
@@ -518,17 +527,19 @@ public:
 #if VERBOSE_AF
         std::fprintf(stderr, "Banerjee\n");
 #endif
+        double ret;
         if(logdata_) {
-            return bnj::multinomial_jsd(row(data_, lhind),
+            ret =  bnj::multinomial_jsd(row(data_, lhind),
                                         row(data_, rhind),
                                         row(*logdata_, lhind),
                                         row(*logdata_, rhind));
         } else {
-            return bnj::multinomial_jsd(row(data_, lhind),
+            ret =  bnj::multinomial_jsd(row(data_, lhind),
                                         row(data_, rhind),
-                                        map(map(row(data_, lhind), blz::Log2()), NegInf2Zero()),
-                                        map(map(row(data_, rhind), blz::Log2()), NegInf2Zero()));
+                                        map(map(row(data_, lhind), blz::Log()), NegInf2Zero()),
+                                        map(map(row(data_, rhind), blz::Log()), NegInf2Zero()));
         }
+        return ret;
     }
     double jsd_mj(size_t lhind, size_t rhind) const {
         assert(cached_cumulants_.get());
@@ -536,20 +547,22 @@ public:
         assert(rhind < cached_cumulants_->size());
         const auto lhv = cached_cumulants_->operator[](lhind),
                    rhv = cached_cumulants_->operator[](rhind);
+        double ret;
         if(logdata_) {
             assert(logdata_->rows() == data_.rows());
-            return mj::multinomial_jsd(row(data_, lhind),
-                                       row(data_, rhind),
-                                       row(*logdata_, lhind),
-                                       row(*logdata_, rhind),
-                                       lhv,
-                                       rhv);
+            ret = mj::multinomial_jsd(row(data_, lhind),
+                                      row(data_, rhind),
+                                      row(*logdata_, lhind),
+                                      row(*logdata_, rhind),
+                                      lhv,
+                                      rhv);
         } else {
-            return mj::multinomial_jsd(row(data_, lhind),
-                                       row(data_, rhind),
-                                       lhv,
-                                       rhv);
+            ret = mj::multinomial_jsd(row(data_, lhind),
+                                      row(data_, rhind),
+                                      lhv,
+                                      rhv);
         }
+        return ret;
     }
     double jsd(size_t lhind, size_t rhind) const {
         assert(lhind < data_.rows());
@@ -564,13 +577,12 @@ private:
     void prep(const Container *c=nullptr, bool use_mj_kl=true) {
         switch(prior_) {
             case NONE:
-            assert(min(data_) > 0.);
             break;
             case DIRICHLET:
                 CONST_IF(!IsSparseMatrix_v<MatrixType>) {
                     data_ += (1. / data_.columns());
                 } else {
-                    throw std::invalid_argument("Can't use gamma beta prior for sparse matrix");
+                    throw std::invalid_argument("Can't use Dirichlet prior for sparse matrix");
                 }
                 break;
             case GAMMA_BETA:
@@ -590,7 +602,7 @@ private:
             row(data_, i) /= blaze::l2Norm(row(data_, i));
         logdata_.reset(new MatrixType(data_.rows(), data_.columns()));
         *logdata_ = blaze::map(blaze::log(data_), NegInf2Zero());
-        //std::cout << row(*logdata_, 0);
+        VERBOSE_ONLY(std::cout << *logdata_;)
         if(use_mj_kl) {
             std::fprintf(stderr, "Making cached cumulants\n");
             cached_cumulants_.reset(new blz::DV<FT>(data_.rows()));

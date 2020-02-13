@@ -5,14 +5,15 @@ using namespace fgc;
 using namespace blz;
 
 int main() {
+    unsigned nrows = 50, ncol = 200;
     const char *fn = "./zomg.dat";
     {
-        DiskMat<double> dm(200, 1000, fn);
+        DiskMat<double> dm(nrows, ncol, fn);
         dm.delete_file_ = true;
         assert(::access(fn, F_OK) != -1);
     }
     assert(::access(fn, F_OK) == -1);
-    DiskMat<double> dm(200, 1000, fn);
+    DiskMat<double> dm(nrows, ncol, fn);
     dm.delete_file_ = true;
     ~dm = 0;
     assert(dm(1, 4) == 0.);
@@ -29,7 +30,7 @@ int main() {
     r0 *= r0;
     r1 /= l2Norm(r1);
     r0 /= l2Norm(r0);
-    for(size_t i = 0; i < 200u; ++i)
+    for(size_t i = 0; i < nrows; ++i)
         row(dm, i) /= l2Norm(row(dm, i));
     blaze::DynamicMatrix<double> cpy(~dm);
     blaze::DynamicMatrix<double> cpy2(~dm);
@@ -67,6 +68,7 @@ int main() {
     }
     blaze::DynamicVector<double> dc3 = c3, dpo = po, dc3po = c3po;
     std::fprintf(stderr, "multinomial jsd from applicator: %f\n", jsd(0, 1));
+    std::fprintf(stderr, "sparse jsd from sparse applicator: %f\n", sparse_jsd(0, 1));
     auto cdpo_jsd = distance::multinomial_jsd(c3, po);
     auto c32  = distance::multinomial_jsd(c3, c3po);
     auto distmat = jsd.make_distance_matrix();
