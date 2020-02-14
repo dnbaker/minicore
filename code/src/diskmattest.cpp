@@ -1,5 +1,6 @@
 #include "fgc/distance.h"
 #include "fgc/diskmat.h"
+#include "fgc/jsd.h"
 
 using namespace fgc;
 using namespace blz;
@@ -44,8 +45,8 @@ int main() {
     {
         blaze::DynamicMatrix<double> tmp; std::swap(tmp, cpy2);
     }
-    MultinomialJSDApplicator<decltype(cpy)> jsd(cpy);
-    MultinomialJSDApplicator<decltype(sparse_cpy)> sparse_jsd(sparse_cpy);
+    jsd::MultinomialJSDApplicator<decltype(cpy)> jsd(cpy);
+    jsd::MultinomialJSDApplicator<decltype(sparse_cpy)> sparse_jsd(sparse_cpy);
     blaze::CompressedVector<double> c1(r0.size()), c0(r0.size());
     c1.reserve(r1.size() - 2);
     c0.reserve(r0.size() - 1);
