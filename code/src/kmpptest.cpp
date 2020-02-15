@@ -69,11 +69,16 @@ int main(int argc, char *argv[]) {
     auto centers = kmeanspp(ptr, ptr + n, gen, npoints);
     auto stop = t();
     std::fprintf(stderr, "Time for kmeans++: %gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "cost for kmeans++: %g\n", std::accumulate(std::get<2>(centers).begin(), std::get<2>(centers).end(), 0.));
+
     // centers contains [centers, assignments, distances]
     start = t();
     auto kmc2_centers = kmc2(ptr, ptr + n, gen, npoints, 200);
     stop = t();
     std::fprintf(stderr, "Time for kmc^2: %gs\n", double((stop - start).count()) / 1e9);
+    auto kmccosts = get_oracle_costs([&](size_t i, size_t j) {
+        return blz::sqrL2Dist(ptr[i], ptr[j]);
+    }, n, kmc2_centers);
     // then, a coreset can be constructed
     start = t();
     auto kc = kcenter_greedy_2approx(ptr, ptr + n, gen, npoints);

@@ -236,63 +236,29 @@ std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    size_t np = end - first;
-    return kmeanspp(dm, rng, np, k);
-#if 0
-    std::vector<IT> centers;
-    std::vector<FT> distances(np, 0.), cdf(np);
-    double sumd2 = 0.;
-    {
-        auto fc = rng() % np;
-        centers.push_back(fc);
-#ifdef _OPENMP
-        OMP_PRAGMA("omp parallel for reduction(+:sumd2)")
-#else
-        SK_UNROLL_8
-#endif
-        for(size_t i = 0; i < np; ++i) {
-            if(unlikely(i == fc)) continue;
-            double dist = dm(fc, i);
-            distances[i] = dist;
-            sumd2 += dist;
+    return kmeanspp(dm, rng, end - first, k);
+}
+
+template<typename Oracle, typename Sol, typename FT=float, typename IT=uint32_t>
+std::pair<blz::DV<IT>, blz::DV<FT>> get_oracle_costs(const Oracle &oracle, size_t np, const Sol &sol)
+{
+    blz::DV<IT> assignments(np);
+    blz::DV<FT> costs(np, std::numeric_limits<FT>::max());
+    OMP_PFOR
+    for(size_t i = 0; i < np; ++i) {
+        auto it = sol.begin();
+        FT mincost = oracle(*it, i);
+        IT minind = 0, cind = 0;
+        while(++it != sol.end()) {
+            if(FT newcost = oracle(*it, i); newcost < mincost)
+                mincost = newcost, minind = cind;
+            ++cind;
         }
-        assert(distances[fc] == 0.);
-        inclusive_scan(distances.begin(), distances.end(), cdf.begin());
+        costs[i] = mincost;
+        assignments[i] = minind;
     }
-#if VERBOSE_AF
-    std::fprintf(stderr, "first loop sum: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), double(0)));
-#endif
-    std::vector<IT> assignments(np);
-    std::uniform_real_distribution<double> urd;
-    while(centers.size() < k) {
-        // At this point, the cdf has been prepared, and we are ready to sample.
-        // add new element
-        auto newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
-        const auto current_center_id = centers.size();
-        centers.push_back(newc);
-        sumd2 -= distances[newc];
-        distances[newc] = 0.;
-        double sum = sumd2;
-        OMP_PRAGMA("omp parallel for reduction(+:sum)")
-        for(IT i = 0; i < np; ++i) {
-            if(unlikely(i == newc)) continue;
-            auto &ldist = distances[i];
-            double dist = dm(newc, i);
-            if(dist < ldist) { // Only write if it changed
-                assignments[i] = current_center_id;
-                auto diff = dist - ldist;
-                sum += diff;
-                ldist = dist;
-            }
-        }
-        sumd2 = sum;
-#if VERBOSE_AF
-        std::fprintf(stderr, "sumd2: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), double(0)));
-#endif
-        inclusive_scan(distances.begin(), distances.end(), cdf.begin());
-    }
-    return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
-#endif
+    std::fprintf(stderr, "Centers have total cost %g\n", blz::sum(costs));
+    return std::make_pair(assignments, costs);
 }
 
 /*

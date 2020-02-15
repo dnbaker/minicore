@@ -95,9 +95,14 @@ int main(int argc, char *argv[]) {
     timer.restart("k-means");
     auto kmppdat = fgc::jsd::make_kmeanspp(full_jsd, k);
     timer.report();
+    std::fprintf(stderr, "finished kmpp. Now getting cost\n");
+    std::fprintf(stderr, "kmpp solution cost: %g\n", blz::vsum(std::get<2>(kmppdat)));
     timer.restart("kmc");
     auto kmcdat = fgc::jsd::make_kmc2(full_jsd, k);
     timer.report();
+    std::fprintf(stderr, "finished kmc2\n");
     timer.reset();
+    auto kmc2cost = fgc::coresets::get_oracle_costs(full_jsd, full_jsd.size(), kmcdat);
+    std::fprintf(stderr, "kmc2 solution cost: %g\n", blz::sum(kmc2cost.second));
     std::fprintf(stderr, "\n\nNumber of cells: %zu\n", nonemptyrows.size());
 }

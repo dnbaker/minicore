@@ -118,10 +118,12 @@ public:
                                         map(blz::log(row(lhind)), NegInf2Zero()),
                                         map(blz::log(row(rhind)), NegInf2Zero()));
         }
+#ifndef NDEBUG
         static constexpr typename MatrixType::ElementType threshold
             = std::is_same_v<typename MatrixType::ElementType, double>
                                 ? 0.: -1e-5;
         assert(ret >= threshold || !std::fprintf(stderr, "ret: %g\n", ret));
+#endif
         return std::max(ret, 0.);
     }
     auto weighted_row(size_t ind) const {
