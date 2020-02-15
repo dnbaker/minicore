@@ -118,7 +118,10 @@ public:
                                         map(blz::log(row(lhind)), NegInf2Zero()),
                                         map(blz::log(row(rhind)), NegInf2Zero()));
         }
-        assert(ret >= -1e-5 || !std::fprintf(stderr, "ret: %g\n", ret));
+        static constexpr typename MatrixType::ElementType threshold
+            = std::is_same_v<typename MatrixType::ElementType, double>
+                                ? 0.: -1e-5;
+        assert(ret >= threshold || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
     }
     auto weighted_row(size_t ind) const {
@@ -139,7 +142,7 @@ public:
                 blz::map(blz::log(0.5 * (row(lhind) + row(rhind))),
                          NegInf2Zero())
             );
-        assert(ret >= -1e-5 * (row_sums_->operator[](lhind) + row_sums_->operator[](rhind)) || !std::fprintf(stderr, "ret: %g\n", ret));
+        assert(ret >= -1e-4 * (row_sums_->operator[](lhind) + row_sums_->operator[](rhind)) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
     }
     double jsm(size_t lhind, size_t rhind) const {
