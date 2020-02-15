@@ -5,6 +5,7 @@
 #include <mutex>
 #include <numeric>
 #include "matrix_coreset.h"
+#include "timer.h"
 
 namespace fgc {
 using blz::rowiterator;
@@ -244,6 +245,7 @@ std::pair<blz::DV<IT>, blz::DV<FT>> get_oracle_costs(const Oracle &oracle, size_
 {
     blz::DV<IT> assignments(np);
     blz::DV<FT> costs(np, std::numeric_limits<FT>::max());
+    util::Timer t("get oracle costs");
     OMP_PFOR
     for(size_t i = 0; i < np; ++i) {
         auto it = sol.begin();
@@ -284,8 +286,6 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
     };
 
     while(centers.size() < k) {
-        // At this point, the cdf has been prepared, and we are ready to sample.
-        // add new element
         auto x = rng() % np;
         auto xdist = mindist(x);
         auto baseseed = rng();

@@ -5,12 +5,13 @@
 int main(int argc, char *argv[]) {
     if(std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0 || std::strcmp(x, "--help") == 0;})
        != argv + argc) {
-        std::fprintf(stderr, "Usage: %s <max rows[1000]> <mincount[50]>\n", *argv);
+        std::fprintf(stderr, "Usage: %s <max rows[1000]> <mincount[50]> <k[5]> <m[5000]>\n", *argv);
         std::exit(1);
     }
     unsigned maxnrows = argc == 1 ? 1000: std::atoi(argv[1]);
     unsigned mincount = argc <= 2 ? 50: std::atoi(argv[2]);
     unsigned k        = argc <= 3 ? 50: std::atoi(argv[3]);
+    unsigned m        = argc <= 4 ? 5000: std::atoi(argv[4]);
     std::ofstream ofs("output.txt");
     auto sparsemat = fgc::csc2sparse("", true);
     std::vector<unsigned> nonemptyrows;
@@ -96,9 +97,9 @@ int main(int argc, char *argv[]) {
     auto kmppdat = fgc::jsd::make_kmeanspp(full_jsd, k);
     timer.report();
     std::fprintf(stderr, "finished kmpp. Now getting cost\n");
-    std::fprintf(stderr, "kmpp solution cost: %g\n", blz::vsum(std::get<2>(kmppdat)));
+    std::fprintf(stderr, "kmpp solution cost: %g\n", blz::sum(std::get<2>(kmppdat)));
     timer.restart("kmc");
-    auto kmcdat = fgc::jsd::make_kmc2(full_jsd, k);
+    auto kmcdat = fgc::jsd::make_kmc2(full_jsd, k, m);
     timer.report();
     std::fprintf(stderr, "finished kmc2\n");
     timer.reset();

@@ -35,8 +35,8 @@ template<typename FT=float>
 blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool skip_empty=false) {
     blz::SM<FT, blaze::rowMajor> ret(mat.n_, mat.nf_);
     ret.reserve(mat.nnz_);
-    size_t used_rows = 0;
-    for(unsigned i = 0; i < mat.n_; ++i) {
+    size_t used_rows = 0, i;
+    for(i = 0; i < mat.n_; ++i) {
         auto col = mat.column(i);
         if(skip_empty && 0u == col.nnz()) continue;
         for(auto s = col.start_; s < col.stop_; ++s) {
@@ -44,6 +44,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool skip_empt
         }
         ret.finalize(used_rows++);
     }
+    if(used_rows != i) std::fprintf(stderr, "Only used %zu/%zu rows, skipping empty rows\n", used_rows, i);
     return ret;
 }
 

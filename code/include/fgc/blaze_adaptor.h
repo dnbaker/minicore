@@ -257,8 +257,11 @@ void _assert_all_nonzero_(const MatType &x, const char *funcname, const char *fi
     }
 }
 
+template<typename Item>
+INLINE decltype(auto) sum(const Item &vec) {return blaze::sum(vec);}
+
 template<typename FT, typename Alloc>
-INLINE auto vsum(const std::vector<FT, Alloc> &vec) {
+INLINE auto sum(const std::vector<FT, Alloc> &vec) {
     return blaze::sum(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
 }
 using namespace blaze;
