@@ -142,7 +142,7 @@ public:
                 blz::map(blz::log(0.5 * (row(lhind) + row(rhind))),
                          NegInf2Zero())
             );
-        assert(ret >= -1e-4 * (row_sums_->operator[](lhind) + row_sums_->operator[](rhind)) || !std::fprintf(stderr, "ret: %g\n", ret));
+        assert(ret >= -1e-3 * (row_sums_->operator[](lhind) + row_sums_->operator[](rhind)) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
     }
     double jsm(size_t lhind, size_t rhind) const {
