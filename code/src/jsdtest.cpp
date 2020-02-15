@@ -38,8 +38,9 @@ int main(int argc, char *argv[]) {
     std::cout << jsd_bnj << '\n' << min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
     jsd.set_distance_matrix(jsd_bnj, false);
     std::cout << jsd_bnj << '\n' << min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
-    cout.flush();
+    std::cout.flush();
     auto full_jsd = fgc::jsd::make_jsd_applicator(sparsemat);
+    auto kmc2er = fgc::make_kmc2(full_jsd, 10);
     double max = -std::numeric_limits<double>::max();
     double min = -max;
     double jmax = -std::numeric_limits<double>::max();
@@ -79,12 +80,12 @@ int main(int argc, char *argv[]) {
     jsd2.set_distance_matrix(jsd_bnj);
     timer.report();
     std::cout << jsd_bnj << '\n';
-    cout.flush();
+    std::cout.flush();
     timer.restart("1ksparsellr");
     jsd2.set_llr_matrix(jsd_bnj);
     timer.report();
     std::cout << jsd_bnj << '\n';
-    cout.flush();
+    std::cout.flush();
     timer.reset();
     std::fprintf(stderr, "\n\nNumber of cells: %zu\n", nonemptyrows.size());
 }

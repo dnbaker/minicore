@@ -45,8 +45,6 @@ int main() {
     {
         blaze::DynamicMatrix<double> tmp; std::swap(tmp, cpy2);
     }
-    jsd::MultinomialJSDApplicator<decltype(cpy)> jsd(cpy);
-    jsd::MultinomialJSDApplicator<decltype(sparse_cpy)> sparse_jsd(sparse_cpy);
     blaze::CompressedVector<double> c1(r0.size()), c0(r0.size());
     c1.reserve(r1.size() - 2);
     c0.reserve(r0.size() - 1);
@@ -56,6 +54,7 @@ int main() {
         if(r1[i])
             c1.append(i, r1[i]);
     }
+#if 0
     std::fprintf(stderr, "multinomial jsd: %f\n", distance::multinomial_jsd(r1, r0));
     std::fprintf(stderr, "multinomial jsd: %f\n", distance::multinomial_jsd(c1, c0));
     blaze::CompressedVector<double> c3(4000, 200), po(4000, 200), c3po(4000, 100);
@@ -79,4 +78,5 @@ int main() {
     std::fprintf(stderr, "Dense versions of random vector and itself: %g\n", distance::multinomial_jsd(dc3, dc3));
     std::fprintf(stderr, "Dense versions of random vectors sharing a subset: %g\n", distance::multinomial_jsd(dc3, dpo));
     //std::fprintf(stderr, "Dense versions of random vectors sharing a subset, no filter: %g\n", distance::multinomial_jsd(dc3, dpo, distance::FilterNans<false>()));
+#endif
 }

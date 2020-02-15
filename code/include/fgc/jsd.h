@@ -36,7 +36,7 @@ public:
     using ConstThis = const MultinomialJSDApplicator<MatrixType>;
 
     const Prior prior_;
-    const MatrixType &data() {return data_;}
+    const MatrixType &data() const {return data_;}
     size_t size() const {return data_.rows();}
     template<typename PriorContainer=blaze::DynamicVector<FT, blaze::rowVector>>
     MultinomialJSDApplicator(MatrixType &ref,
@@ -210,7 +210,6 @@ struct IndexDistMetric<Iter, MatrixLookup> {
         //return iter_[i][j];
     }
 };
-#endif
 
 template<typename MatrixType>
 struct MJDistanceAdapter {
@@ -226,27 +225,29 @@ struct MJDistanceAdapter {
         return app_;
     }
 };
+#endif
 
 template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typename MatrixType::ElementType, blaze::rowVector>>
 auto make_jsd_applicator(MatrixType &data, Prior prior=NONE, const PriorContainer *pc=nullptr) {
     return MultinomialJSDApplicator<MatrixType>(data, prior, pc);
 }
 
+} // jsd
+
+
 template<typename MatrixType>
-auto make_kmc2(const MultinomialJSDApplicator<MatrixType> &app, unsigned k, size_t m=2000, uint64_t seed=13) {
+auto make_kmc2(const jsd::MultinomialJSDApplicator<MatrixType> &app, unsigned k, size_t m=2000, uint64_t seed=13) {
     wy::WyRand<uint64_t> gen(seed);
-    return coresets::kmc2(app.data(), gen, k, m, MJDistanceAdapter<MatrixType>(app).make_iter());
+    return coresets::kmc2(app.data(), gen, k, m, app);
 }
 
 #if 0
 template<typename MatrixType>
-auto make_kmeanspp(const MultinomialJSDApplicator &app, unsigned k, uint64_t seed=13) {
+auto make_kmeanspp(const MultinomialJSDApplicator<MatrixType> &app, unsigned k, uint64_t seed=13) {
     wy::WyRand<uint64_t> gen(seed);
     return coresets::kmeanspp(app.data(), gen, k, MJNorm(app));
 }
 #endif
-
-} // jsd
 
 
 } // fgc

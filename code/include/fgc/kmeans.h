@@ -10,7 +10,7 @@ namespace fgc {
 using blz::rowiterator;
 
 
-inline namespace metrics {
+
 struct MatrixLookup {};
 template<typename WFT>
 struct WeightedMatrixLookup {
@@ -76,9 +76,9 @@ struct IndexDistMetric {
      * Adapts random access iterator to use norms between dereferenced quantities.
      */
     const Iter iter_;
-    const Dist dist_;
+    const Dist &dist_;
 
-    IndexDistMetric(const Iter iter, Dist dist): iter_(iter), dist_(std::move(dist)) {}
+    IndexDistMetric(const Iter iter, const Dist &dist): iter_(iter), dist_(std::move(dist)) {}
 
     auto operator()(size_t i, size_t j) const {
         return dist_(iter_[i], iter_[j]);
@@ -114,19 +114,42 @@ struct IndexDistMetric<Iter, MatrixLookup> {
     }
 };
 
+
+
+#if 0
+template<typename MatrixType>
+struct IndexDistMetric<MatrixType, jsd::MultinomialJSDApplicator<MatrixType>> {
+    using ET = typename MatrixType::ElementType;
+    using App = typename jsd::MultinomialJSDApplicator<MatrixType>;
+    /* Specialization of above for MatrixLookup
+     *
+     *
+     */
+    const App &app_;
+    //TD<Operand> to2;
+
+    IndexDistMetric(const MatrixType &mat, const App &app): app_(app) {}
+
+    ET operator()(size_t i, size_t j, bool use_jsm=true) const {
+        assert(i < app_.size());
+        assert(j < app_.size());
+        return app_(i, j);
+    }
+};
+#endif
+
 template<typename Iter, typename Dist>
-auto make_index_dm(const Iter iter, const Dist dist) {
+auto make_index_dm(const Iter iter, const Dist &dist) {
     return IndexDistMetric<Iter, Dist>(iter, dist);
 }
 template<typename Mat, typename Dist>
-auto make_matrix_dm(const Mat &mat, const Dist dist) {
+auto make_matrix_dm(const Mat &mat, const Dist &dist) {
     return MatrixDistMetric<Mat, Dist>(mat, dist);
 }
 template<typename Mat>
 auto make_matrix_m(const Mat &mat) {
     return MatrixMetric<Mat>(mat);
 }
-} // inline namespace metrics
 
 namespace coresets {
 
@@ -216,21 +239,19 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
  * Available at https://www.aaai.org/ocs/index.php/AAAI/AAAI16/paper/view/12147/11759
  */
 
-template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
-         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
+template<typename Oracle,
+         typename IT=std::uint32_t, typename RNG>
 std::vector<IT>
-kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm=Norm()) {
+kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
+{
     if(m == 0) throw std::invalid_argument("m must be nonzero");
-    auto dm = make_index_dm(first, norm);
-    static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    size_t np = end - first;
     flat_hash_set<IT> centers{IT(rng() % np)};
     // Helper function for minimum distance
-    auto mindist = [&centers,&dm](auto newind) {
+    auto mindist = [&centers,&oracle](auto newind) {
         typename flat_hash_set<IT>::const_iterator it = centers.begin(), end = centers.end();
-        auto dist = dm(*it, newind);
+        auto dist = oracle(*it, newind);
         while(++it != end)
-            dist = std::min(dist, dm(*it, newind));
+            dist = std::min(dist, oracle(*it, newind));
         return dist;
     };
 
@@ -261,6 +282,16 @@ kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm
     }
     return std::vector<IT>(centers.begin(), centers.end());
 }
+template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
+std::vector<IT>
+kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm=Norm()) {
+    if(m == 0) throw std::invalid_argument("m must be nonzero");
+    auto dm = make_index_dm(first, norm);
+    static_assert(std::is_floating_point<FT>::value, "FT must be fp");
+    size_t np = end - first;
+    return kmc2(dm, rng, np, k, m);
+}
 
 
 template<typename MT, bool SO,
@@ -288,7 +319,7 @@ kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
      bool rowwise=true)
 {
     using FT = typename MT::ElementType;
-    std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
+    std::vector<IT> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(~mat);
         ret = kmc2(rowit.begin(), rowit.end(), rng, k, m, norm);
