@@ -48,7 +48,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool skip_empt
 }
 
 template<typename FT=float>
-blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix) {
+blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=false) {
     std::string indptrn  = prefix + "indptr.file";
     std::string indicesn = prefix + "indices.file";
     std::string datan    = prefix + "data.file";
@@ -64,14 +64,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix) {
     CSCMatrixView matview((const uint64_t *)indptr.data(), (const uint64_t *)indices.data(),
                           (const uint32_t *)data.data(), indices.size() / (sizeof(uint64_t) / sizeof(indices[0])),
                           nfeat, nsamples);
-    blz::SM<FT, blaze::rowMajor> ret = csc2sparse(matview);
-#if 0
-    auto itpair = rowiterator(ret);
-    for(auto x: shared::make_dumbrange(itpair.begin(), itpair.end())) {
-        std::fprintf(stderr, "row norm: %g\n", blz::l2Norm(x));
-    }
-#endif
-    return ret;
+    return csc2sparse(matview, skip_empty);
 }
 
 
