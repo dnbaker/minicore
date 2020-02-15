@@ -118,7 +118,8 @@ public:
                                         map(blz::log(row(lhind)), NegInf2Zero()),
                                         map(blz::log(row(rhind)), NegInf2Zero()));
         }
-        return ret;
+        assert(ret >= -1e-5 || !std::fprintf(stderr, "ret: %g\n", ret));
+        return std::max(ret, 0.);
     }
     auto weighted_row(size_t ind) const {
         return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_->operator[](ind);
@@ -126,7 +127,7 @@ public:
     auto row(size_t ind) const {return blz::row(data_, ind BLAZE_CHECK_DEBUG);}
     auto logrow(size_t ind) const {return blz::row(*logdata_, ind BLAZE_CHECK_DEBUG);}
     double llr(size_t lhind, size_t rhind) const {
-        return
+        double ret =
             // X_j^Tlog(p_j)
             blaze::dot(row(lhind), logrow(lhind)) * row_sums_->operator[](lhind)
             +
@@ -138,6 +139,8 @@ public:
                 blz::map(blz::log(0.5 * (row(lhind) + row(rhind))),
                          NegInf2Zero())
             );
+        assert(ret >= -1e-5 * (row_sums_->operator[](lhind) + row_sums_->operator[](rhind)) || !std::fprintf(stderr, "ret: %g\n", ret));
+        return std::max(ret, 0.);
     }
     double jsm(size_t lhind, size_t rhind) const {
         return std::sqrt(jsd(lhind, rhind));
@@ -189,65 +192,26 @@ struct BaseOperand {
     using type = decltype(*std::declval<MJD>());
 };
 
-#if 0
-template<typename Iter>
-struct IndexDistMetric<Iter, MatrixLookup> {
-    using Operand = typename BaseOperand<Iter>::type;
-    using ET = typename Operand::ElementType;
-    /* Specialization of above for MatrixLookup
-     *
-     *
-     */
-    using Dist = MatrixLookup;
-    const Operand &mat_;
-    const Dist dist_;
-    //TD<Operand> to2;
-
-    IndexDistMetric(const Iter iter, Dist dist): mat_((*iter).operand()), dist_(std::move(dist)) {}
-
-    ET operator()(size_t i, size_t j) const {
-        return mat_(i, j);
-        //return iter_[i][j];
-    }
-};
-
-template<typename MatrixType>
-struct MJDistanceAdapter {
-    const MultinomialJSDApplicator<MatrixType> &app_;
-    struct iterator {
-        const MJDistanceAdapter &m_;
-        iterator(const MJDistanceAdapter &m): m_(m) {}
-        const MultinomialJSDApplicator<MatrixType> &operator*() const {return m_;}
-    };
-    iterator make_iter() const {return iterator(*this);}
-    MJDistanceAdapter(const MultinomialJSDApplicator<MatrixType> &app): app_(app) {}
-    const auto &operand() const {
-        return app_;
-    }
-};
-#endif
-
 template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typename MatrixType::ElementType, blaze::rowVector>>
 auto make_jsd_applicator(MatrixType &data, Prior prior=NONE, const PriorContainer *pc=nullptr) {
     return MultinomialJSDApplicator<MatrixType>(data, prior, pc);
 }
 
-} // jsd
 
 
 template<typename MatrixType>
 auto make_kmc2(const jsd::MultinomialJSDApplicator<MatrixType> &app, unsigned k, size_t m=2000, uint64_t seed=13) {
     wy::WyRand<uint64_t> gen(seed);
-    return coresets::kmc2(app.data(), gen, k, m, app);
+    return coresets::kmc2(app, gen, app.size(), k, m);
 }
 
-#if 0
 template<typename MatrixType>
-auto make_kmeanspp(const MultinomialJSDApplicator<MatrixType> &app, unsigned k, uint64_t seed=13) {
+auto make_kmeanspp(const jsd::MultinomialJSDApplicator<MatrixType> &app, unsigned k, uint64_t seed=13) {
     wy::WyRand<uint64_t> gen(seed);
-    return coresets::kmeanspp(app.data(), gen, k, MJNorm(app));
+    return coresets::kmeanspp(app, gen, app.size(), k);
 }
-#endif
+
+} // jsd
 
 
 } // fgc

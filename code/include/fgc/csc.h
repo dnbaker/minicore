@@ -32,36 +32,18 @@ struct CSCMatrixView {
 };
 
 template<typename FT=float>
-blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat) {
+blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool skip_empty=false) {
     blz::SM<FT, blaze::rowMajor> ret(mat.n_, mat.nf_);
     ret.reserve(mat.nnz_);
+    size_t used_rows = 0;
     for(unsigned i = 0; i < mat.n_; ++i) {
         auto col = mat.column(i);
+        if(skip_empty && 0u == col.nnz()) continue;
         for(auto s = col.start_; s < col.stop_; ++s) {
-            ret.append(i, mat.indices_[s], mat.data_[s]);
+            ret.append(used_rows, mat.indices_[s], mat.data_[s]);
         }
-        ret.finalize(i);
-#if 0
-        if(normalized) {
-            auto r = row(ret, i);
-            auto rnorm = blaze::l2Norm(row(ret, i));
-            if(rnorm == 0.) continue;
-            r *= 1./ blaze::l2Norm(row(ret, i));
-            //std::fprintf(stderr, "new row norm: %g\n", blaze::l2Norm(r));
-            assert(blz::l2Norm(r) == 0. || std::abs(1. - blz::l2Norm(r)) < 1e-2);
-        }
-#endif
+        ret.finalize(used_rows++);
     }
-#if 0
-    if(normalized) {
-        for(auto r: shared::make_dumbrange(rowiterator(ret).begin(), rowiterator(ret).end())) {
-            std::fprintf(stderr, "final norm: %g\n", blaze::l2Norm(r));
-            auto dist = blaze::l2Norm(r);
-            if(dist)
-                r *= 1. / dist;
-        }
-    }
-#endif
     return ret;
 }
 

@@ -380,7 +380,6 @@ kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
      const Norm &norm=Norm(), 
      bool rowwise=true)
 {
-    using FT = typename MT::ElementType;
     std::vector<IT> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(~mat);
