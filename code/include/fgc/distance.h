@@ -168,7 +168,7 @@ struct SqrNormFunctor<L2Norm>: public sqrL2Norm {};
 
 template<typename FT, bool SO>
 double logsumexp(const blaze::DenseVector<FT, SO> &x) {
-    auto maxv = blaze::max(~x);
+    const auto maxv = blaze::max(~x);
     return maxv + std::log(blaze::sum(blaze::exp(~x - maxv)));
 }
 
@@ -253,135 +253,6 @@ struct FilterNans {
     static constexpr bool value = VT;
 };
 
-namespace mj {
-
-template<typename FT, bool SO, typename OFT, bool filter_nans=true>
-double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs, OFT lhc, OFT rhc, [[maybe_unused]] FilterNans<filter_nans> fn=FilterNans<filter_nans>()) {
-    //std::fprintf(stderr, "[%s] dense mj\n", __PRETTY_FUNCTION__);
-    DBG_ONLY(if(filter_nans) std::fprintf(stderr, "[%s] Filtering nans\n", __PRETTY_FUNCTION__);)
-    auto mean = (~lhs + ~rhs) * .5;
-    double retsq, lhv, rhv;
-    CONST_IF(filter_nans) {
-        NegInf2Zero ni;
-        auto logmean = blaze::map(blaze::log(mean), ni);
-        auto lhterm = blaze::map(blaze::log(~lhs), ni) - logmean;
-        auto rhterm = blaze::map(blaze::log(~rhs), ni) - logmean;
-        lhv = dot(lhterm, ~lhs);
-        rhv = dot(rhterm, ~rhs);
-    } else {
-        assert(blaze::min(~lhs) > 0.);
-        assert(blaze::min(~rhs) > 0.);
-        auto logmean = blaze::log(mean);
-        lhv = dot(blaze::log(~lhs) - logmean, ~lhs);
-        rhv = dot(blaze::log(~rhs) - logmean, ~rhs);
-    }
-    retsq = std::max(multinomial_cumulant(mean) + (lhv + rhv - lhc - rhc) * .5, 0.);
-#ifndef NDEBUG
-    std::fprintf(stderr, "cumulant: %g. lhv: %g. rhv: %g. lhc: %g. rhc: %g. retsq: %g\n", multinomial_cumulant(mean), lhv, rhv, lhc, rhc, retsq);
-#endif
-    return std::sqrt(retsq);
-}
-
-template<typename VT, typename VT2, bool SO, typename OFT, typename OBufType>
-inline double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
-                       const blaze::DenseVector<VT, SO> &rhs,
-                       const blaze::DenseVector<VT2, SO> &lhlog,
-                       const blaze::DenseVector<VT2, SO> &rhlog,
-                       OFT lhc, OFT rhc,
-                       OBufType &meanbuf,
-                       OBufType &logmeanbuf)
-{
-    assert(blaze::min(rhs) > 0. || !std::fprintf(stderr, "This version of the function requires 0s be removed\n"));
-    ~(*meanbuf) = (~lhs + ~rhs) * .5;
-    ~*logmeanbuf = blaze::map(blaze::log(~*meanbuf), blaze::NegInf2Zero());
-    return multinomial_cumulant(~*meanbuf) +
-        (0.5 * (dot(lhlog - ~*logmeanbuf, ~lhs) +
-          + dot(rhlog - ~*logmeanbuf, ~rhs) - lhc - rhc));
-}
-
-
-template<typename FT, typename VT2, bool SO, typename OFT, bool filter_nans=true>
-inline double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs, const blaze::DenseVector<FT, SO> &rhs,
-                       // Original vectors
-                       const blaze::DenseVector<VT2, SO> &lhl, const blaze::DenseVector<VT2, SO> &rhl,
-                       // cached logs
-                       OFT lhc, OFT rhc,
-                       [[maybe_unused]] FilterNans<filter_nans> fn=FilterNans<filter_nans>())
-{
-    //std::fprintf(stderr, "[%s] dense mj\n", __PRETTY_FUNCTION__);
-    DBG_ONLY(if(filter_nans) std::fprintf(stderr, "[%s] Filtering nans\n", __PRETTY_FUNCTION__);)
-    assert(std::find_if((~lhl).begin(), (~lhl).end(), [](auto x)
-                        {return std::isinf(x) || std::isnan(x);})
-           == (~lhl).end());
-    assert(std::find_if((~rhl).begin(), (~rhl).end(), [](auto x)
-                        {return std::isinf(x) || std::isnan(x);})
-           == (~rhl).end());
-    auto mean = (~lhs + ~rhs) * .5;
-    double lhv, rhv;
-    CONST_IF(filter_nans) {
-        auto logmean = blaze::map(blaze::log(mean), NegInf2Zero());
-        lhv = dot(lhl - logmean, ~lhs);
-        rhv = dot(rhl - logmean, ~rhs);
-    } else {
-        auto logmean = blaze::log(mean);
-        lhv = dot(lhl - logmean, ~lhs);
-        rhv = dot(rhl - logmean, ~rhs);
-    }
-    return std::sqrt(multinomial_cumulant(mean) + .5 * (lhv + rhv - lhc - rhc));
-}
-
-template<typename FT, bool SO, typename LT, typename OFT>
-inline double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs,
-                       // Original vectors
-                       const LT &lhl, const LT &rhl,
-                       // cached logs
-                       OFT lhc, OFT rhc) {
-#if VERBOSE_AF
-    std::fprintf(stderr, "[%s] sparse mj\n", __PRETTY_FUNCTION__);
-#endif
-    assert(std::find_if(lhl.begin(), lhl.end(), [](auto x)
-                        {return std::isinf(x.value()) || std::isnan(x.value());})
-           == lhl.end());
-    assert(std::find_if(rhl.begin(), rhl.end(), [](auto x)
-                        {return std::isinf(x.value()) || std::isnan(x.value());})
-           == rhl.end());
-    auto mean = (~lhs + ~rhs) * .5;
-    auto logmean = blaze::log(mean);
-    double lhv = dot(lhl - logmean, ~lhs);
-    double rhv = dot(rhl - logmean, ~rhs);
-    double retsq = std::max(multinomial_cumulant(mean) +  .5 * (lhv + rhv - lhc - rhc), 0.);
-#ifndef NDEBUG
-    std::fprintf(stderr, "cumulant: %g. lhv: %g. rhv: %g. lhc: %g. rhc: %g. retsq: %g\n", multinomial_cumulant(mean), lhv, rhv, lhc, rhc, retsq);
-#endif
-    return retsq;
-}
-template<typename FT, bool SO, typename OFT>
-inline double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs,
-                       // cached logs
-                       OFT lhc, OFT rhc) {
-    auto lhlog = evaluate(blaze::log(lhs)), rhlog = evaluate(blaze::log(rhs));
-    return multinomial_jsd(lhs, rhs, lhlog, rhlog, lhc, rhc);
-}
-
-template<typename FT, bool SO>
-inline double multinomial_jsd(const blaze::SparseVector<FT, SO> &lhs, const blaze::SparseVector<FT, SO> &rhs) {
-    auto lhl = blaze::log(lhs);
-    auto rhl = blaze::log(rhs);
-    return multinomial_jsd(lhs, rhs, lhl, rhl, multinomial_cumulant(lhs), multinomial_cumulant(rhs));
-}
-
-template<typename FT, bool SO, bool filter_nans=true>
-INLINE double multinomial_jsd(const blaze::DenseVector<FT, SO> &lhs,
-                              const blaze::DenseVector<FT, SO> &rhs,
-                              FilterNans<filter_nans> fn=FilterNans<filter_nans>())
-{
-    assert((~lhs).size() == (~rhs).size());
-    return multinomial_jsd(lhs, rhs, multinomial_cumulant(~lhs), multinomial_cumulant(~rhs), fn);
-}
-
-
-
-} // namespace mj 
 namespace bnj {
 
 template<typename VT, typename VT2, bool SO>
@@ -456,7 +327,6 @@ INLINE double      poisson_bregman(const blaze::DenseVector<FT, SO> &lhs,
     return blaze::dot(lhs, lhlog - rhlog) + blaze::sum(rhs - lhs);
 }
 } // namespace bnj
-using namespace mj;
 
 enum Prior {
     NONE,       // Do not modify values. Requires that there are no nonzero parameters

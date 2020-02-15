@@ -245,11 +245,35 @@ INLINE auto push_back(std::vector<VT, Allocator> &x, VT2 v) {
     return x.push_back(v);
 }
 template<typename MatType>
-static INLINE [[ noreturn ]] void _assert_all_nonzero_(const MatType &x, const char *funcname, const char *filename, int linenum) {
+static INLINE
+#ifndef __clang__
+[[ noreturn ]]
+#endif
+void _assert_all_nonzero_(const MatType &x, const char *funcname, const char *filename, int linenum) {
     const auto nnz = ::blaze::nonZeros(x);
     if(unlikely(nnz != 0)) {
         std::fprintf(stderr, "[%s:%s:%d] assert all_nonzero failed: %zu\n", funcname, filename, linenum, size_t(nnz));
         std::abort();
+    }
+}
+
+using namespace blaze;
+
+
+template<typename MT, bool SO>
+void normalize(Matrix<MT, SO> &mat, bool rowwise=IsRowMajorMatrix_v<MT>) {
+    if(rowwise) {
+        std::fprintf(stderr, "rowwise normalizing\n");
+        for(auto r: rowiterator(~mat)) {
+            auto n = l2Norm(r);
+            if(n) r /= l2Norm(r);
+        }
+    } else {
+        std::fprintf(stderr, "columnwise Normalizing\n");
+        for(auto r: columniterator(~mat)) {
+            auto n = l2Norm(r);
+            if(n) r /= l2Norm(r);
+        }
     }
 }
 
@@ -259,5 +283,4 @@ static INLINE [[ noreturn ]] void _assert_all_nonzero_(const MatType &x, const c
 #define assert_all_nonzero(x) do {::blz::_assert_all_nonzero_(x, __PRETTY_FUNCTION__, __FILE__, __LINE__);} while(0)
 #endif
 
-using namespace blaze;
 } // namespace blz

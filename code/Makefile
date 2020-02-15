@@ -19,7 +19,7 @@ STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -pedantic -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers
 OPT?=O3
 LDFLAGS+=-lz
-CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LIBS) $(LDFLAGS)
+CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LIBS) $(LDFLAGS) -flto
       
 
 EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))

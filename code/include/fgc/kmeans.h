@@ -263,18 +263,38 @@ kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm
 }
 
 
-template<typename FT, bool SO,
+template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 auto
-kmeanspp(const blaze::DynamicMatrix<FT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true) {
+kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true) {
+    using FT = typename MT::ElementType;
     std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
-    const auto &blzview = reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(mat);
     if(rowwise) {
-        auto rowit = blzview.rowiterator();
+        auto rowit = blz::rowiterator(~mat);
         ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm);
     } else { // columnwise
-        auto columnit = blzview.columniterator();
+        auto columnit = blz::columniterator(~mat);
         ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm);
+    }
+    return ret;
+}
+
+template<typename MT, bool SO,
+         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
+auto
+kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
+     size_t m=2000,
+     const Norm &norm=Norm(), 
+     bool rowwise=true)
+{
+    using FT = typename MT::ElementType;
+    std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
+    if(rowwise) {
+        auto rowit = blz::rowiterator(~mat);
+        ret = kmc2(rowit.begin(), rowit.end(), rng, k, m, norm);
+    } else { // columnwise
+        auto columnit = blz::columniterator(~mat);
+        ret = kmc2(columnit.begin(), columnit.end(), rng, k, m, norm);
     }
     return ret;
 }

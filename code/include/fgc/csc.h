@@ -32,7 +32,7 @@ struct CSCMatrixView {
 };
 
 template<typename FT=float>
-blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool normalized=true) {
+blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat) {
     blz::SM<FT, blaze::rowMajor> ret(mat.n_, mat.nf_);
     ret.reserve(mat.nnz_);
     for(unsigned i = 0; i < mat.n_; ++i) {
@@ -41,16 +41,32 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool normalize
             ret.append(i, mat.indices_[s], mat.data_[s]);
         }
         ret.finalize(i);
+#if 0
         if(normalized) {
             auto r = row(ret, i);
+            auto rnorm = blaze::l2Norm(row(ret, i));
+            if(rnorm == 0.) continue;
             r *= 1./ blaze::l2Norm(row(ret, i));
+            //std::fprintf(stderr, "new row norm: %g\n", blaze::l2Norm(r));
+            assert(blz::l2Norm(r) == 0. || std::abs(1. - blz::l2Norm(r)) < 1e-2);
+        }
+#endif
+    }
+#if 0
+    if(normalized) {
+        for(auto r: shared::make_dumbrange(rowiterator(ret).begin(), rowiterator(ret).end())) {
+            std::fprintf(stderr, "final norm: %g\n", blaze::l2Norm(r));
+            auto dist = blaze::l2Norm(r);
+            if(dist)
+                r *= 1. / dist;
         }
     }
+#endif
     return ret;
 }
 
 template<typename FT=float>
-blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool normalized=true) {
+blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix) {
     std::string indptrn  = prefix + "indptr.file";
     std::string indicesn = prefix + "indices.file";
     std::string datan    = prefix + "data.file";
@@ -66,7 +82,13 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool normalized=true
     CSCMatrixView matview((const uint64_t *)indptr.data(), (const uint64_t *)indices.data(),
                           (const uint32_t *)data.data(), indices.size() / (sizeof(uint64_t) / sizeof(indices[0])),
                           nfeat, nsamples);
-    blz::SM<FT, blaze::rowMajor> ret = csc2sparse(matview, normalized);
+    blz::SM<FT, blaze::rowMajor> ret = csc2sparse(matview);
+#if 0
+    auto itpair = rowiterator(ret);
+    for(auto x: shared::make_dumbrange(itpair.begin(), itpair.end())) {
+        std::fprintf(stderr, "row norm: %g\n", blz::l2Norm(x));
+    }
+#endif
     return ret;
 }
 
