@@ -81,31 +81,6 @@ public:
         prep(prior, c);
     }
     /*
-     * Returns divergence/measure
-     */
-    INLINE double operator()(size_t i, size_t j) const {
-        return this->operator()(i, j, measure_);
-    }
-    INLINE double operator()(size_t i, size_t j, ProbDivType measure) const {
-        double ret;
-        switch(measure) {
-            case L1: ret = l1Norm(row(i) - row(j)); break;
-            case L2: ret = l2Norm(row(i) - row(j)); break;
-            case SQRL2: ret = blaze::sqrNorm(row(i) - row(j)); break;
-            case JSD: ret = jsd(i, j); break;
-            case JSM: ret = jsm(i, j); break;
-            case MKL: ret = mkl(i, j); break;
-            case POISSON: ret = pkl(i, j); break;
-            case HELLINGER: ret = hellinger(i, j); break;
-            case BHATTACHARYA_METRIC: ret = bhattacharya_metric(i, j); break;
-            case BHATTACHARYA_DISTANCE: ret = bhattacharya_distance(i, j); break;
-            case LLR: return llr(i, j); break;
-            default: __builtin_unreachable();
-        }
-        return ret;
-    }
-
-    /*
      * Sets distance matrix, under measure_ (if not provided)
      * or measure (if provided as an argument).
      */
@@ -148,6 +123,52 @@ public:
         set_distance_matrix(ret, measure, symmetrize);
         return ret;
     }
+    // Accessors
+    auto weighted_row(size_t ind) const {
+        return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_->operator[](ind);
+    }
+    auto row(size_t ind) const {return blz::row(data_, ind BLAZE_CHECK_DEBUG);}
+    auto logrow(size_t ind) const {return blz::row(*logdata_, ind BLAZE_CHECK_DEBUG);}
+    auto sqrtrow(size_t ind) const {return blz::row(*sqrdata_, ind BLAZE_CHECK_DEBUG);}
+
+
+    /*
+     * Distances
+     */
+    INLINE double operator()(size_t i, size_t j) const {
+        return this->operator()(i, j, measure_);
+    }
+    INLINE double operator()(size_t i, size_t j, ProbDivType measure) const {
+        double ret;
+        switch(measure) {
+            case L1: ret = l1Norm(row(i) - row(j)); break;
+            case L2: ret = l2Norm(row(i) - row(j)); break;
+            case SQRL2: ret = blaze::sqrNorm(row(i) - row(j)); break;
+            case JSD: ret = jsd(i, j); break;
+            case JSM: ret = jsm(i, j); break;
+            case MKL: ret = mkl(i, j); break;
+            case POISSON: ret = pkl(i, j); break;
+            case HELLINGER: ret = hellinger(i, j); break;
+            case BHATTACHARYA_METRIC: ret = bhattacharya_metric(i, j); break;
+            case BHATTACHARYA_DISTANCE: ret = bhattacharya_distance(i, j); break;
+            case LLR: return llr(i, j); break;
+            default: __builtin_unreachable();
+        }
+        return ret;
+    }
+    template<typename MatType>
+    void operator()(MatType &mat, ProbDivType measure, bool symmetrize=false) {
+        set_distance_matrix(mat, measure, symmetrize);
+    }
+    template<typename MatType>
+    void operator()(MatType &mat, bool symmetrize=false) {
+        set_distance_matrix(mat, symmetrize);
+    }
+    template<typename MatType>
+    auto operator()() {
+        return make_distance_matrix(measure_);
+    }
+
     double hellinger(size_t i, size_t j) const {
         return sqrdata_ ? blaze::sqrNorm(sqrtrow(i) - sqrtrow(j))
                         : blaze::sqrNorm(blz::sqrt(row(i)) - blz::sqrt(row(j)));
@@ -161,10 +182,7 @@ public:
             ret =  bnj::multinomial_jsd(ri,
                                         rj, logrow(i), logrow(j));
         } else {
-            ret =  bnj::multinomial_jsd(ri,
-                                        rj,
-                                        map(blz::log(ri), NegInf2Zero()),
-                                        map(blz::log(rj), NegInf2Zero()));
+            throw std::runtime_error("logdata required");
         }
 #ifndef NDEBUG
         static constexpr typename MatrixType::ElementType threshold
@@ -174,36 +192,60 @@ public:
 #endif
         return std::max(ret, 0.);
     }
-    auto weighted_row(size_t ind) const {
-        return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_->operator[](ind);
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    double jsd(size_t i, const OT &o) const {
+        auto rhlog = blz::log(o);
+        auto mnlog = evaluate(log(0.5 * (row(i) + o)));
+        return 0.5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, rhlog - mnlog));
     }
-    auto row(size_t ind) const {return blz::row(data_, ind BLAZE_CHECK_DEBUG);}
-    auto logrow(size_t ind) const {return blz::row(*logdata_, ind BLAZE_CHECK_DEBUG);}
-    auto sqrtrow(size_t ind) const {return blz::row(*sqrdata_, ind BLAZE_CHECK_DEBUG);}
     double mkl(size_t i, size_t j) const {
         // Multinomial KL
         return blz::dot(row(i), logrow(i) - logrow(j));
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    double mkl(size_t i, const OT &o) const {
+        // Multinomial KL
+        return blz::dot(row(i), logrow(i) - blz::log(o));
     }
     double pkl(size_t i, size_t j) const {
         // Poission KL
         return blz::dot(row(i), logrow(i) - logrow(j)) + blz::sum(row(j) - row(i));
     }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    double pkl(size_t i, const OT &o) const {
+        // Poission KL
+        return blz::dot(row(i), logrow(i) - blz::log(o)) + blz::sum(row(i) - o);
+    }
     double psd(size_t i, size_t j) const {
         // Poission JSD
-        auto logmn = evaluate(log(.5 * (row(i) + row(j))));
-        return .5 * (blz::dot(row(i), logrow(i) - logmn) + blz::dot(row(j), logrow(j) - logmn));
+        auto mnlog = evaluate(log(.5 * (row(i) + row(j))));
+        return .5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(row(j), logrow(j) - mnlog));
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    double psd(size_t i, const OT &o) const {
+        // Poission JSD
+        auto mnlog = evaluate(log(.5 * (row(i) + o)));
+        return .5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, blz::log(o) - mnlog));
     }
     double bhattacharya_sim(size_t i, size_t j) const {
         return sqrdata_ ? blz::dot(sqrtrow(i), sqrtrow(j))
                         : blz::sum(blz::sqrt(row(i) * row(j)));
     }
-    double bhattacharya_distance(size_t i, size_t j) const {
-        return -std::log(bhattacharya_sim(i, j));
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    double bhattacharya_sim(size_t i, const OT &o) const {
+        return sqrdata_ ? blz::dot(sqrtrow(i), blz::sqrt(o))
+                        : blz::sum(blz::sqrt(row(i) * o));
     }
-    double bhattacharya_metric(size_t i, size_t j) const {
-        return std::sqrt(1 - bhattacharya_sim(i, j));
+    template<typename...Args>
+    double bhattacharya_distance(Args &&...args) const {
+        return -std::log(bhattacharya_sim(std::forward<Args>(args)...));
     }
-    double psm(size_t i, size_t j) const {return std::sqrt(psd(i, j));}
+    template<typename...Args>
+    double bhattacharya_metric(Args &&...args) const {
+        return std::sqrt(1 - bhattacharya_sim(std::forward<Args>(args)...));
+    }
+    template<typename...Args>
+    double psm(Args &&...args) const {return std::sqrt(std::forward<Args>(args)...);}
     double llr(size_t i, size_t j) const {
         double ret =
             // X_j^Tlog(p_j)
@@ -220,8 +262,14 @@ public:
         assert(ret >= -1e-3 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
     }
-    double jsm(size_t i, size_t j) const {
-        return std::sqrt(jsd(i, j));
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    double llr(size_t i, const OT &o) const {
+        throw std::runtime_error("llr is not implemented for this.");
+        return 0.;
+    }
+    template<typename...Args>
+    double jsm(Args &&...args) const {
+        return std::sqrt(jsd(std::forward<Args>(args)...));
     }
 private:
     template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>
@@ -315,6 +363,57 @@ auto make_kmeanspp(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_
     wy::WyRand<uint64_t> gen(seed);
     return coresets::kmeanspp(app, gen, app.size(), k);
 }
+
+#if 0
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double>
+double bregman_lloyd_iteration(std::vector<IT> &assignments, blz::DV<WFT> &counts,
+                              CMatrixType &centers, const Oracle &oracle,
+                              const WFT *weights=nullptr)
+{
+    static_assert(std::is_floating_point_v<WFT>, "WTF must be floating point for weighted kmeans");
+    // make sure this is only rowwise/rowMajor
+    assert(counts.size() == centers.rows());
+    assert(centers.columns() == data.columns());
+    // 1. Gets means of assignments
+    centers = static_cast<typename CMatrixType::ElementType_t>(0.);
+    const size_t nc = centers.columns(), nr = data.rows();
+    auto getw = [weights](size_t ind) {
+        return weights ? weights[ind]: WFT(1.);
+    };
+    // TODO: parallelize (one thread per center, maybe?)
+    for(size_t i = 0; i < nr; ++i) {
+        assert(assignments[i] < centers.size());
+        auto asn = assignments[i];
+        auto dr = row(data, i BLAZE_CHECK_DEBUG);
+        auto cr = row(centers, asn BLAZE_CHECK_DEBUG);
+        const auto w = getw(i);
+        cr += (dr * w);
+        counts[asn] += w;
+    }
+    for(size_t i = 0; i < centers.rows(); ++i) {
+        assert(counts[i]);
+        row(centers, i BLAZE_CHECK_DEBUG) /= counts[i];
+    }
+    // 2. Assign centers
+    double total_loss = 0.;
+    OMP_PRAGMA("omp parallel for reduction(+:total_loss)")
+    for(size_t i = 0; i < nr; ++i) {
+        auto dr = row(data, i BLAZE_CHECK_DEBUG);
+        auto dist = std::numeric_limits<double>::max();
+        double newdist;
+        unsigned label = -1;
+        for(size_t j = 0; j < centers.rows(); ++j) {
+            if((newdist = sqrL2Dist(dr, row(centers, i BLAZE_CHECK_DEBUG))) < dist) {
+                dist = newdist;
+                label = j;
+            }
+        }
+        assignments[i] = label;
+        total_loss += getw(i) * dist;
+    }
+    return total_loss;
+}
+#endif
 
 } // jsd
 
