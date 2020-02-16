@@ -1,17 +1,16 @@
 #include "fgc/jsd.h"
 #include "fgc/csc.h"
 #include "fgc/timer.h"
+using namespace fgc;
 
 int main(int argc, char *argv[]) {
     if(std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0 || std::strcmp(x, "--help") == 0;})
        != argv + argc) {
-        std::fprintf(stderr, "Usage: %s <max rows[1000]> <mincount[50]> <k[5]> <m[5000]>\n", *argv);
+        std::fprintf(stderr, "Usage: %s <max rows[1000]> <mincount[50]>\n", *argv);
         std::exit(1);
     }
     unsigned maxnrows = argc == 1 ? 1000: std::atoi(argv[1]);
     unsigned mincount = argc <= 2 ? 50: std::atoi(argv[2]);
-    unsigned k        = argc <= 3 ? 50: std::atoi(argv[3]);
-    unsigned m        = argc <= 4 ? 5000: std::atoi(argv[4]);
     std::ofstream ofs("output.txt");
     auto sparsemat = fgc::csc2sparse("", true);
     std::vector<unsigned> nonemptyrows;
@@ -32,19 +31,19 @@ int main(int argc, char *argv[]) {
     std::cout << rws << '\n';
     std::fprintf(stderr, "First 25 columns: %zu.\n", rws.size());
 #endif
-    auto jsd = fgc::jsd::make_jsd_applicator(first25);
+    auto jsd = fgc::distance::make_jsm_applicator(first25);
     auto jsddistmat = jsd.make_distance_matrix();
     dm::DistanceMatrix<float> utdm(first25.rows());
     jsd.set_distance_matrix(utdm);
     std::cout << utdm << '\n';
     blz::DynamicMatrix<float> jsd_bnj(first25.rows(), first25.rows(), 0.);
-    jsd.set_distance_matrix(jsd_bnj, true);
+    jsd.set_distance_matrix(jsd_bnj, distance::JSM);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
-    jsd.set_distance_matrix(jsd_bnj, false);
+    jsd.set_distance_matrix(jsd_bnj, distance::JSD);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
     std::fprintf(stderr, "bnj minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs.flush();
-    auto full_jsd = fgc::jsd::make_jsd_applicator(sparsemat);
+    auto full_jsd = fgc::distance::make_jsm_applicator(sparsemat);
     double max = -std::numeric_limits<double>::max();
     double min = -max;
     double jmax = -std::numeric_limits<double>::max();
@@ -80,30 +79,20 @@ int main(int argc, char *argv[]) {
     first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
     jsd_bnj.resize(nonemptyrows.size(), nonemptyrows.size(), false);
     jsd_bnj = 0.;
-    auto jsd2 = fgc::jsd::make_jsd_applicator(first25);
+    auto jsd2 = fgc::distance::make_probdiv_applicator(first25);
     fgc::util::Timer timer("1ksparsejsd");
-    jsd2.set_distance_matrix(jsd_bnj);
+    jsd2.set_distance_matrix(jsd_bnj, fgc::distance::JSD);
     std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     timer.report();
     ofs << jsd_bnj << '\n';
     ofs.flush();
+    std::fprintf(stderr, "Starting llr\n");
     timer.restart("1ksparsellr");
-    jsd2.set_llr_matrix(jsd_bnj);
+    jsd2.set_distance_matrix(jsd_bnj, fgc::distance::LLR);
     std::fprintf(stderr, "llr after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     timer.report();
+    timer.reset();
     ofs << jsd_bnj << '\n';
     ofs.flush();
-    timer.restart("k-means");
-    auto kmppdat = fgc::jsd::make_kmeanspp(full_jsd, k);
-    timer.report();
-    std::fprintf(stderr, "finished kmpp. Now getting cost\n");
-    std::fprintf(stderr, "kmpp solution cost: %g\n", blz::sum(std::get<2>(kmppdat)));
-    timer.restart("kmc");
-    auto kmcdat = fgc::jsd::make_kmc2(full_jsd, k, m);
-    timer.report();
-    std::fprintf(stderr, "finished kmc2\n");
-    timer.reset();
-    auto kmc2cost = fgc::coresets::get_oracle_costs(full_jsd, full_jsd.size(), kmcdat);
-    std::fprintf(stderr, "kmc2 solution cost: %g\n", blz::sum(kmc2cost.second));
     std::fprintf(stderr, "\n\nNumber of cells: %zu\n", nonemptyrows.size());
 }

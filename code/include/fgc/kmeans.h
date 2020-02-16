@@ -117,28 +117,6 @@ struct IndexDistMetric<Iter, MatrixLookup> {
 
 
 
-#if 0
-template<typename MatrixType>
-struct IndexDistMetric<MatrixType, jsd::MultinomialJSDApplicator<MatrixType>> {
-    using ET = typename MatrixType::ElementType;
-    using App = typename jsd::MultinomialJSDApplicator<MatrixType>;
-    /* Specialization of above for MatrixLookup
-     *
-     *
-     */
-    const App &app_;
-    //TD<Operand> to2;
-
-    IndexDistMetric(const MatrixType &mat, const App &app): app_(app) {}
-
-    ET operator()(size_t i, size_t j, bool use_jsm=true) const {
-        assert(i < app_.size());
-        assert(j < app_.size());
-        return app_(i, j);
-    }
-};
-#endif
-
 template<typename Iter, typename Dist>
 auto make_index_dm(const Iter iter, const Dist &dist) {
     return IndexDistMetric<Iter, Dist>(iter, dist);

@@ -264,6 +264,19 @@ template<typename FT, typename Alloc>
 INLINE auto sum(const std::vector<FT, Alloc> &vec) {
     return blaze::sum(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
 }
+template<typename Type>
+void fill_symmetric_upper_triangular(const Type &) {
+    std::fprintf(stderr, "[%s] Warning: trying to fill_symmetric_upper_triangular on an unsupported type. Doing nothing.\n", __PRETTY_FUNCTION__);
+}
+
+template<typename MT, bool SO>
+void fill_symmetric_upper_triangular(blaze::DenseMatrix<MT, SO> &mat) {
+    diagonal(~mat) = 0.;
+    const size_t nr = (~mat).rows();
+    for(size_t i = 0; i < nr - 1; ++i) {
+        submatrix(~mat, i + 1, i, nr - i - 1, 1) = trans(submatrix(~mat, i, i + 1, 1, nr - i - 1));
+    }
+}
 using namespace blaze;
 
 
