@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
     for(unsigned i = 0; i < std::get<0>(centers).size(); ++i) {
         row(centermatrix, i) = row(mat, std::get<0>(centers)[i]);
     }
-    double tolerance = 1e-7;
+    double tolerance = 1e-4;
     lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, 10000);
 #if 0
     lloyd_loop(
