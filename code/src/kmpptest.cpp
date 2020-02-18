@@ -21,9 +21,9 @@ template<typename Mat, typename RNG>
 void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {
     auto matrowit = blz::rowiterator(mat);
     auto start = t();
-    double gamma = 100. / mat.rows();
+    //double gamma = 100. / mat.rows();
     auto cs = outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), rng, npoints, eps,
-                /*mu=*/1, 1.5, gamma);
+                /*mu=*/0.5);
     auto maxv = *std::max_element(cs.indices_.begin(), cs.indices_.end());
     std::fprintf(stderr, "max index: %u\n", unsigned(maxv));
     auto stop = t();
@@ -52,21 +52,21 @@ int main(int argc, char *argv[]) {
     size_t npoints = argc <= 2 ? 500: std::atoi(argv[2]);
     size_t nd = argc <= 3 ? 40: std::atoi(argv[3]);
     double eps = argc <= 4 ? 0.5: std::atof(argv[3]);
-    auto ptr = static_cast<std::vector<FLOAT_TYPE> *>(std::malloc(n * sizeof(std::vector<FLOAT_TYPE>)));
+    std::vector<std::vector<FLOAT_TYPE>> tmpvecs(n);
+    auto ptr = tmpvecs.data();
     //std::unique_ptr<std::vector<FLOAT_TYPE>[]> stuff(n);
     wy::WyRand<uint32_t, 2> gen;
     OMP_PRAGMA("omp parallel for")
     for(auto i = 0u; i < n; ++i) {
-        new (ptr + i) std::vector<FLOAT_TYPE>(40);
-        //stuff[i] = std::vector<FLOAT_TYPE>(400);
-        for(auto &e: ptr[i]) e = FLOAT_TYPE(std::rand()) / RAND_MAX;
+        tmpvecs[i].resize(nd);
+        for(auto &e: tmpvecs[i]) e = FLOAT_TYPE(std::rand()) / RAND_MAX;
     }
     std::fprintf(stderr, "generated\n");
     blaze::DynamicMatrix<FLOAT_TYPE> mat(n, nd);
     OMP_PRAGMA("omp parallel for")
     for(auto i = 0u; i < n; ++i) {
         auto r = row(mat, i);
-        std::memcpy(&r[0], &ptr[i][0], sizeof(FLOAT_TYPE) * nd);
+        std::memcpy(&r[0], &(tmpvecs[i][0]), sizeof(FLOAT_TYPE) * nd);
     }
     auto start = t();
     auto centers = kmeanspp(ptr, ptr + n, gen, npoints);
@@ -91,14 +91,12 @@ int main(int argc, char *argv[]) {
     auto centers2 = kmeanspp(mat, gen, npoints, blz::L1Norm());
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ on L1 norm on matrix: %gs\n", double((stop - start).count()) / 1e9);
-    test_kccs(mat, gen, npoints, eps);
+    //test_kccs(mat, gen, npoints, eps);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
     start = t();
     auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, npoints * 2);
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ matrix coreset: %gs\n", double((stop - start).count()) / 1e9);
-    std::destroy_n(ptr, n);
-    std::free(ptr);
     blaze::DynamicMatrix<FLOAT_TYPE> sqmat(20, 20);
     randomize(sqmat);
     sqmat = map(sqmat, [](auto x) {return x * x + 1e-15;});
@@ -109,7 +107,7 @@ int main(int argc, char *argv[]) {
     }
     auto kmpp_asn = std::move(std::get<1>(centers));
     std::vector<FLOAT_TYPE> counts(npoints);
-    blz::DynamicMatrix<FLOAT_TYPE> centermatrix(std::get<0>(centers).size(), ptr->size());
+    blz::DynamicMatrix<FLOAT_TYPE> centermatrix(std::get<0>(centers).size(), nd);
     for(unsigned i = 0; i < std::get<0>(centers).size(); ++i) {
         row(centermatrix, i) = row(mat, std::get<0>(centers)[i]);
     }

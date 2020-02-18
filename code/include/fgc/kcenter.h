@@ -32,6 +32,7 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
     {
         auto fc = rng() % maxdest;
         centers[0] = fc;
+        distances[fc] = 0.;
         OMP_ELSE(OMP_PFOR, SK_UNROLL_8)
         for(size_t i = 0; i < maxdest; ++i) {
             if(unlikely(i == fc)) continue;
@@ -40,7 +41,7 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
         assert(distances[fc] == 0.);
     }
 
-    for(size_t ci = 0; ci < k; ++ci) {
+    for(size_t ci = 1; ci < k; ++ci) {
         auto it = std::max_element(distances.begin(), distances.end());
         VERBOSE_ONLY(std::fprintf(stderr, "maxelement is %zd from start\n", std::distance(distances.begin(), it));)
         uint64_t newc = it - distances.begin();
@@ -87,10 +88,10 @@ struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
 
 
 template<typename IT>
-struct bicritera_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<double, IT>>, double> {
+struct bicriteria_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<double, IT>>, double> {
     using super = std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<double, IT>>, double>;
     template<typename...Args>
-    bicritera_result_t(Args &&...args): super(std::forward<Args>(args)...) {}
+    bicriteria_result_t(Args &&...args): super(std::forward<Args>(args)...) {}
     auto &centers() {return std::get<0>(*this);}
     auto &assignments() {return std::get<1>(*this);}
     // alias
@@ -110,11 +111,12 @@ struct bicritera_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<std
 
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
-bicritera_result_t<IT>
+bicriteria_result_t<IT>
 kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                    double gamma=0.001, size_t t = 100, double eta=0.01,
                    const Norm &norm=Norm())
 {
+    throw std::runtime_error("This needs some specific debugging");
     std::fprintf(stderr, "Note: the value k (%zu) is not used in this function or the algorithm\n", k);
     auto dm = make_index_dm(first, norm);
     // Step 1: constants
@@ -145,6 +147,8 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     detail::fpq<IT> pq;
     pq.reserve(farthestchunksize + 1);
     const auto fv = ret[0];
+    labels[fv] = fv;
+    distances[fv] = 0.;
     // Fill the priority queue from the first set
     OMP_PFOR
     for(size_t i = 0; i < np; ++i) {
@@ -202,57 +206,16 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
 #if 0
         ret.insert(ret.end(), rsp, rsp + rsi);
 #else
-        for(auto it = rsp, e = rsp + rsi; it < e; ret.pushBack(*it++));
+        for(auto it = rsp, e = rsp + rsi; it < e;++it) {
+            distances[*it] = 0.;
+            labels[*it] = *it;
+            ret.pushBack(*it);
+        }
 #endif
 
         // compare each point against all of the new points
         pq.getc().clear(); // empty priority queue
         // Fill priority queue
-#define PARTITIONED_COMPUTATION 0
-#if defined(_OPENMP) && defined(PARTITIONED_COMPUTATION) && PARTITIONED_COMPUTATION
-        // This can be partitioned/parallelized and merged
-        // Something like
-        unsigned nt;
-        OMP_PRAGMA("omp parallel")
-        {
-            OMP_PRAGMA("omp single")
-            nt = omp_get_num_threads();
-        }
-        std::vector<detail::fpq<IT>> queues(nt);
-        //std::fprintf(stderr, "queues created %zu\n", queues.size());
-        OMP_PFOR
-        for(size_t i = 0; i < np; ++i) {
-            auto tid = omp_get_thread_num();
-            auto &local_pq = queues.at(tid);
-            double dist = distances[i];
-            if(dist == 0.) continue;
-            double newdist;
-            IT label = labels[i];
-            for(size_t j = 0; j < rsi; ++j) {
-                if((newdist = dm(i, rsp[j])) < dist)
-                    dist = newdist, label = rsp[j];
-            }
-            distances[i] = dist;
-            labels[i] = label;
-            if(local_pq.empty() || dist > local_pq.top().first) {
-                const auto p = std::make_pair(dist, i);
-                local_pq.push(p);
-                if(local_pq.size() > farthestchunksize)
-                // TODO: avoid filling it all the way by checking size but it's probably not worth it
-                    local_pq.pop();
-            }
-            //std::fprintf(stderr, "finishing iteration %zu/%zu\n", i, np);
-        }
-        // Merge local priority_queues
-        for(const auto &local_pq: queues) {
-            for(const auto v: local_pq.getc()) {
-                if(pq.empty() || v.first > pq.top().first) {
-                    pq.push(v);
-                    if(pq.size() > farthestchunksize) pq.pop();
-                }
-            }
-        }
-#else
         OMP_PFOR
         for(size_t i = 0; i < np; ++i) {
             double dist = distances[i];
@@ -279,13 +242,14 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                 }
             }
         }
-#endif
     }
     const double minmaxdist = pq.top().first;
-    bicritera_result_t<IT> bicret;
+    bicriteria_result_t<IT> bicret;
     bicret.centers() = std::move(ret);
+    assert(flat_hash_set<IT>(ret.begin(), ret.end()).size() == ret.size());
     bicret.labels() = std::move(labels);
     bicret.outliers() = std::move(pq.getc());
+    std::fprintf(stderr, "outliers size: %zu\n", bicret.outliers().size());
     std::get<3>(bicret) = minmaxdist;
     return bicret;
     // center ids, label assignments for all points besides outliers, outliers, and the distance of the closest excluded point
@@ -366,6 +330,10 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double
     auto &centers = bic.centers();
     auto &labels = bic.labels();
     auto &outliers = bic.outliers();
+#ifndef NDEBUG
+    for(const auto c: centers)
+        assert(c < np);
+#endif
     //std::vector<size_t> counts(centers.size());
     coresets::flat_hash_map<IT, uint32_t> counts;
     counts.reserve(centers.size());
@@ -381,14 +349,21 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double
     while(i < np)
          ++counts[labels[i++]];
     coresets::IndexCoreset<IT, FT> ret(centers.size() + outliers.size());
+    std::fprintf(stderr, "ret size: %zu. centers size: %zu. counts size %zu. outliers size: %zu\n", ret.size(), centers.size(), counts.size(), outliers.size());
     for(i = 0; i < outliers.size(); ++i) {
+        assert(outliers[i].second < np);
         ret.indices_[i] = outliers[i].second;
         ret.weights_[i] = 1.;
     }
     for(const auto &pair: counts) {
+        assert(pair.first < np);
         ret.weights_[i] = pair.second;
         ret.indices_[i] = pair.first;
         ++i;
+    }
+    assert(i == ret.size());
+    for(size_t i = 0; i < ret.indices_.size(); ++i) {
+        assert(ret.indices_[i] < np);
     }
     return ret;
 }
