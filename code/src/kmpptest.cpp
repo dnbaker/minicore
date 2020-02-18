@@ -21,9 +21,11 @@ template<typename Mat, typename RNG>
 void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {
     auto matrowit = blz::rowiterator(mat);
     auto start = t();
-    //double gamma = 100. / mat.rows();
+    double gamma = 100. / mat.rows();
+    if(gamma >= 0.5)
+        gamma = 0.05;
     auto cs = outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), rng, npoints, eps,
-                /*mu=*/0.5);
+                /*mu=*/0.5, 1.5, gamma);
     auto maxv = *std::max_element(cs.indices_.begin(), cs.indices_.end());
     std::fprintf(stderr, "max index: %u\n", unsigned(maxv));
     auto stop = t();
@@ -48,7 +50,7 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "%d threads used\n", nt);
 #endif
     std::srand(0);
-    size_t n = argc == 1 ? 1000000: std::atoi(argv[1]);
+    size_t n = argc == 1 ? 250000: std::atoi(argv[1]);
     size_t npoints = argc <= 2 ? 500: std::atoi(argv[2]);
     size_t nd = argc <= 3 ? 40: std::atoi(argv[3]);
     double eps = argc <= 4 ? 0.5: std::atof(argv[3]);
@@ -91,7 +93,7 @@ int main(int argc, char *argv[]) {
     auto centers2 = kmeanspp(mat, gen, npoints, blz::L1Norm());
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ on L1 norm on matrix: %gs\n", double((stop - start).count()) / 1e9);
-    //test_kccs(mat, gen, npoints, eps);
+    test_kccs(mat, gen, npoints, eps);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
     start = t();
     auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, npoints * 2);

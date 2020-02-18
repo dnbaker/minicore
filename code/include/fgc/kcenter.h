@@ -116,7 +116,6 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
                    double gamma=0.001, size_t t = 100, double eta=0.01,
                    const Norm &norm=Norm())
 {
-    throw std::runtime_error("This needs some specific debugging");
     std::fprintf(stderr, "Note: the value k (%zu) is not used in this function or the algorithm\n", k);
     auto dm = make_index_dm(first, norm);
     // Step 1: constants
@@ -245,8 +244,8 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
     }
     const double minmaxdist = pq.top().first;
     bicriteria_result_t<IT> bicret;
-    bicret.centers() = std::move(ret);
     assert(flat_hash_set<IT>(ret.begin(), ret.end()).size() == ret.size());
+    bicret.centers() = std::move(ret);
     bicret.labels() = std::move(labels);
     bicret.outliers() = std::move(pq.getc());
     std::fprintf(stderr, "outliers size: %zu\n", bicret.outliers().size());
@@ -333,21 +332,15 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double
 #ifndef NDEBUG
     for(const auto c: centers)
         assert(c < np);
+    for(const auto label: labels)
+        assert(labels[label] == label);
 #endif
     //std::vector<size_t> counts(centers.size());
     coresets::flat_hash_map<IT, uint32_t> counts;
     counts.reserve(centers.size());
     size_t i = 0;
-    for(const auto outlier: outliers) {
-        // TODO: consider using a reduction method + index reassignment for more parallelized summation
-        SK_UNROLL_8
-        while(i < outlier.second) {
-             ++counts[labels[i++]];
-        }
-        ++i; // skip the outliers
-    }
-    while(i < np)
-         ++counts[labels[i++]];
+    SK_UNROLL_8
+    do ++counts[labels[i++]]; while(i < np);
     coresets::IndexCoreset<IT, FT> ret(centers.size() + outliers.size());
     std::fprintf(stderr, "ret size: %zu. centers size: %zu. counts size %zu. outliers size: %zu\n", ret.size(), centers.size(), counts.size(), outliers.size());
     for(i = 0; i < outliers.size(); ++i) {
