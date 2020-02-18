@@ -192,11 +192,15 @@ public:
 #endif
         return std::max(ret, 0.);
     }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
+    double jsd(size_t i, const OT &o, const OT2 &olog) const {
+        auto mnlog = evaluate(log(0.5 * (row(i) + o)));
+        return 0.5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
+    }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double jsd(size_t i, const OT &o) const {
-        auto rhlog = blz::log(o);
-        auto mnlog = evaluate(log(0.5 * (row(i) + o)));
-        return 0.5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, rhlog - mnlog));
+        auto olog = evaluate(blaze::neginf2zero(blz::log(o)));
+        return jsd(i, o, olog);
     }
     double mkl(size_t i, size_t j) const {
         // Multinomial KL
@@ -205,36 +209,53 @@ public:
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double mkl(size_t i, const OT &o) const {
         // Multinomial KL
-        return blz::dot(row(i), logrow(i) - blz::log(o));
+        return blz::dot(row(i), logrow(i) - blaze::neginf2zero(blz::log(o)));
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
+    double mkl(size_t i, const OT &, const OT2 &olog) const {
+        // Multinomial KL
+        return blz::dot(row(i), logrow(i) - olog);
     }
     double pkl(size_t i, size_t j) const {
         // Poission KL
         return blz::dot(row(i), logrow(i) - logrow(j)) + blz::sum(row(j) - row(i));
     }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
+    double pkl(size_t i, const OT &o, const OT2 &olog) const {
+        // Poission KL
+        return blz::dot(row(i), logrow(i) - olog) + blz::sum(row(i) - o);
+    }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double pkl(size_t i, const OT &o) const {
-        // Poission KL
-        return blz::dot(row(i), logrow(i) - blz::log(o)) + blz::sum(row(i) - o);
+        return pkl(i, o, neginf2zero(blz::log(o)));
     }
     double psd(size_t i, size_t j) const {
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + row(j))));
         return .5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(row(j), logrow(j) - mnlog));
     }
-    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    double psd(size_t i, const OT &o) const {
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
+    double psd(size_t i, const OT &o, const OT2 &olog) const {
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + o)));
-        return .5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, blz::log(o) - mnlog));
+        return .5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    double psd(size_t i, const OT &o) const {
+        return psd(i, o, neginf2zero(blz::log(o)));
     }
     double bhattacharya_sim(size_t i, size_t j) const {
         return sqrdata_ ? blz::dot(sqrtrow(i), sqrtrow(j))
                         : blz::sum(blz::sqrt(row(i) * row(j)));
     }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
+    double bhattacharya_sim(size_t i, const OT &o, const OT2 &osqrt) const {
+        return sqrdata_ ? blz::dot(sqrtrow(i), osqrt)
+                        : blz::sum(blz::sqrt(row(i) * o));
+    }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double bhattacharya_sim(size_t i, const OT &o) const {
-        return sqrdata_ ? blz::dot(sqrtrow(i), blz::sqrt(o))
-                        : blz::sum(blz::sqrt(row(i) * o));
+        return bhattacharya_sim(i, o, blz::sqrt(o));
     }
     template<typename...Args>
     double bhattacharya_distance(Args &&...args) const {
@@ -256,14 +277,18 @@ public:
             -
             // (X_k + X_j)^Tlog(p_jk)
             blaze::dot(weighted_row(i) + weighted_row(j),
-                blz::map(blz::log(0.5 * (row(i) + row(j))),
-                         NegInf2Zero())
+                neginf2zero(blz::log(0.5 * (row(i) + row(j))))
             );
         assert(ret >= -1e-3 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    double llr(size_t i, const OT &o) const {
+    double llr(size_t, const OT &) const {
+        throw std::runtime_error("llr is not implemented for this.");
+        return 0.;
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
+    double llr(size_t, const OT &, const OT2 &) const {
         throw std::runtime_error("llr is not implemented for this.");
         return 0.;
     }
@@ -309,7 +334,7 @@ private:
             row(i) /= blaze::sum(row(i)); // Ensure that they sum to 1.
         if(detail::needs_logs(measure_)) {
             logdata_.reset(new MatrixType(data_.rows(), data_.columns()));
-            *logdata_ = blaze::map(blaze::log(data_), NegInf2Zero());
+            *logdata_ = neginf2zero(log(data_));
         } else if(detail::needs_sqrt(measure_)) {
             sqrdata_.reset(new MatrixType(blz::sqrt(data_)));
         }

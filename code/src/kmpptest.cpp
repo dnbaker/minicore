@@ -12,6 +12,8 @@
 #ifndef FLOAT_TYPE
 #define FLOAT_TYPE float
 #endif
+
+
 using namespace fgc;
 using namespace fgc::coresets;
 
@@ -19,8 +21,9 @@ template<typename Mat, typename RNG>
 void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {
     auto matrowit = blz::rowiterator(mat);
     auto start = t();
+    double gamma = 100. / mat.rows();
     auto cs = outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), rng, npoints, eps,
-                /*mu=*/1);
+                /*mu=*/1, 1.5, gamma);
     auto maxv = *std::max_element(cs.indices_.begin(), cs.indices_.end());
     std::fprintf(stderr, "max index: %u\n", unsigned(maxv));
     auto stop = t();
@@ -104,4 +107,20 @@ int main(int argc, char *argv[]) {
         auto greedy_metric = kcenter_greedy_2approx(rowiterator(sqmat).begin(), rowiterator(sqmat).end(),
                                                     gen, /*k=*/3, MatrixLookup{});
     }
+    auto kmpp_asn = std::move(std::get<1>(centers));
+    std::vector<FLOAT_TYPE> counts(npoints);
+    blz::DynamicMatrix<FLOAT_TYPE> centermatrix(std::get<0>(centers).size(), ptr->size());
+    for(unsigned i = 0; i < std::get<0>(centers).size(); ++i) {
+        row(centermatrix, i) = row(mat, std::get<0>(centers)[i]);
+    }
+    double tolerance = 1e-7;
+    lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, 10000);
+#if 0
+    lloyd_loop(
+void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
+                CMatrixType &centers, MatrixType &data,
+                double tolerance=0., size_t maxiter=-1,
+                const Functor &func=Functor(),
+                const WFT *weights=nullptr)
+#endif
 }

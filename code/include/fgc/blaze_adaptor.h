@@ -117,7 +117,7 @@ struct ConstColumnViewer: public ColumnViewer<const MatType> {
 #define ADD_FUNCS\
     DOFUNC(rows)\
     DOFUNC(spacing)\
-    DOFUNC(size)\
+    /*DOFUNC(size)*/\
     DOFUNC(capacity)\
     DOFUNC(isNan)\
     DOFUNC(isSquare)\

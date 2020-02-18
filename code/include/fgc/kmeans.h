@@ -13,11 +13,6 @@ using blz::rowiterator;
 
 
 struct MatrixLookup {};
-template<typename WFT>
-struct WeightedMatrixLookup {
-    const WFT *w_;
-    WeightedMatrixLookup(const WFT *ptr=nullptr): w_(ptr) {}
-};
 
 template<typename Mat>
 struct MatrixMetric {
@@ -30,27 +25,7 @@ struct MatrixMetric {
     const Mat &mat_;
     MatrixMetric(const Mat &mat): mat_(mat) {}
     auto operator()(size_t i, size_t j) const {
-#if VERBOSE_AF
-        std::fprintf(stderr, "Row %zu and column %zu have value %f\n", i, j, double(mat_(i, j)));
-#endif
         return mat_(i, j);
-    }
-};
-
-template<typename Mat, typename WFT>
-struct WeightedMatrixMetric: MatrixMetric<Mat> {
-    /*
-     * Weighted version of super-class
-     * By convention, use row index = facility, column index = point
-     * For this reason, we index weights under index j
-     */
-    using super = MatrixMetric<Mat>;
-    const WFT *weights_;
-
-    WeightedMatrixMetric(const Mat &mat, const WFT *weights=nullptr): weights_(weights) {}
-    INLINE auto mul(size_t ind) const {return weights_ ? weights_[ind]: static_cast<WFT>(1.);}
-    auto operator()(size_t i, size_t j) const {
-        return super::operator()(i, j) * mul(j);
     }
 };
 
@@ -184,6 +159,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k) {
         // add new element
         auto newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
         const auto current_center_id = centers.size();
+        assignments[newc] = centers.size();
         centers.push_back(newc);
         sumd2 -= distances[newc];
         distances[newc] = 0.;
@@ -192,7 +168,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k) {
         for(IT i = 0; i < np; ++i) {
             if(unlikely(i == newc)) continue;
             auto &ldist = distances[i];
-            double dist = oracle(newc, i);
+            auto dist = oracle(newc, i);
             if(dist < ldist) { // Only write if it changed
                 assignments[i] = current_center_id;
                 auto diff = dist - ldist;
@@ -215,7 +191,7 @@ std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    return kmeanspp(dm, rng, end - first, k);
+    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k);
 }
 
 template<typename Oracle, typename Sol, typename FT=float, typename IT=uint32_t>
@@ -227,10 +203,10 @@ std::pair<blz::DV<IT>, blz::DV<FT>> get_oracle_costs(const Oracle &oracle, size_
     OMP_PFOR
     for(size_t i = 0; i < np; ++i) {
         auto it = sol.begin();
-        FT mincost = oracle(*it, i);
+        auto mincost = oracle(*it, i);
         IT minind = 0, cind = 0;
         while(++it != sol.end()) {
-            if(FT newcost = oracle(*it, i); newcost < mincost)
+            if(auto newcost = oracle(*it, i); newcost < mincost)
                 mincost = newcost, minind = cind;
             ++cind;
         }
@@ -321,7 +297,7 @@ template<typename MT, bool SO,
 auto
 kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
      size_t m=2000,
-     const Norm &norm=Norm(), 
+     const Norm &norm=Norm(),
      bool rowwise=true)
 {
     std::vector<IT> ret;
@@ -335,45 +311,64 @@ kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
     return ret;
 }
 
-template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double>
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double, typename Functor=blz::sqrL2Norm>
 double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
-                     CMatrixType &centers, MatrixType &data,
-                     const WFT *weights=nullptr)
+                       CMatrixType &centers, MatrixType &data,
+                       const Functor &func=Functor(),
+                       const WFT *weights=nullptr)
 {
     static_assert(std::is_floating_point_v<WFT>, "WTF must be floating point for weighted kmeans");
     // make sure this is only rowwise/rowMajor
-    assert(counts.size() == centers.rows());
+    assert(counts.size() == centers.rows() || !std::fprintf(stderr, "counts size: %zu. centers rows: %zu\n", counts.size(), centers.rows()));
     assert(centers.columns() == data.columns());
     // 1. Gets means of assignments
-    centers = static_cast<typename CMatrixType::ElementType_t>(0.);
-    const size_t nc = centers.columns(), nr = data.rows();
+    const size_t nr = data.rows();
     auto getw = [weights](size_t ind) {
         return weights ? weights[ind]: WFT(1.);
     };
-    // TODO: parallelize (one thread per center, maybe?)
+#if 0
+    std::unique_ptr<std::mutex[]> mutexes = std::make_unique<std::mutex[]>(centers.rows());
+#endif
+    centers = static_cast<typename CMatrixType::ElementType>(0.);
+    std::memset(counts.data(), 0, counts.size() * sizeof(counts[0]));
+    assert(blz::sum(centers) == 0.);
+    //OMP_PRAGMA("omp parallel for schedule(dynamic)")
     for(size_t i = 0; i < nr; ++i) {
-        assert(assignments[i] < centers.size());
+        assert(assignments[i] < centers.rows());
         auto asn = assignments[i];
         auto dr = row(data, i BLAZE_CHECK_DEBUG);
         auto cr = row(centers, asn BLAZE_CHECK_DEBUG);
         const auto w = getw(i);
-        cr += (dr * w);
+        {
+#if 0
+            OMP_ONLY(std::lock_guard<std::mutex> lg(mutexes[asn]);)
+#endif
+            //std::fprintf(stderr, "got lock\n");
+            if(w == 1.) {
+                cr += dr;
+            } else {
+                cr += dr * w;
+            }
+        }
+        OMP_ATOMIC
         counts[asn] += w;
     }
     for(size_t i = 0; i < centers.rows(); ++i) {
+        VERBOSE_ONLY(std::fprintf(stderr, "center %zu has count %g\n", i, counts[i]);)
         assert(counts[i]);
-        row(centers, i BLAZE_CHECK_DEBUG) /= counts[i];
+        row(centers, i BLAZE_CHECK_DEBUG) *= (1. / counts[i]);
     }
     // 2. Assign centers
     double total_loss = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:total_loss)")
     for(size_t i = 0; i < nr; ++i) {
         auto dr = row(data, i BLAZE_CHECK_DEBUG);
-        auto dist = std::numeric_limits<double>::max();
+        auto dist = func(dr, row(centers, 0 BLAZE_CHECK_DEBUG));
+        unsigned label = 0;
         double newdist;
-        unsigned label = -1;
-        for(size_t j = 0; j < centers.rows(); ++j) {
-            if((newdist = sqrL2Dist(dr, row(centers, i BLAZE_CHECK_DEBUG))) < dist) {
+        for(unsigned j = 1;j < centers.rows();++j) {
+            if((newdist = func(dr, row(centers, j BLAZE_CHECK_DEBUG))) < dist) {
+                //std::fprintf(stderr, "newdist: %g. olddist: %g. Replacing label %u with %u\n", newdist, dist, label, j);
                 dist = newdist;
                 label = j;
             }
@@ -381,28 +376,27 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         assignments[i] = label;
         total_loss += getw(i) * dist;
     }
+    std::fprintf(stderr, "total loss: %g\n", total_loss);
     return total_loss;
 }
 
-template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double>
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double,
+         typename Functor=blz::sqrL2Norm>
 void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
-                     CMatrixType &centers, MatrixType &data,
-                     double tolerance=0., size_t maxiter=-1,
-                     const WFT *weights=nullptr)
+                CMatrixType &centers, MatrixType &data,
+                double tolerance=0., size_t maxiter=-1,
+                const Functor &func=Functor(),
+                const WFT *weights=nullptr)
 {
     if(tolerance < 0.) throw 1;
     size_t iternum = 0;
     double oldloss = std::numeric_limits<double>::max(), newloss;
     for(;;) {
-        newloss = lloyd_iteration(assignments, counts, centers, data, weights);
-        if(iternum++ == maxiter || std::abs(oldloss - newloss) < tolerance)
-            break;
-        std::fprintf(stderr, "new loss at %zu: %g. old loss: %g\n", iternum, newloss, oldloss);
-        oldloss = newloss;
-    }
-    for(;;) {
-        double newloss = lloyd_iteration(assignments, counts, centers, data, weights);
-        if(std::abs(oldloss - newloss) / oldloss < tolerance || iternum++ == maxiter) return;
+        std::fprintf(stderr, "Beginning lloyd iteration\n");
+        newloss = lloyd_iteration(assignments, counts, centers, data, func, weights);
+        if(iternum++ == maxiter || std::abs(oldloss - newloss) / std::min(oldloss, newloss) < tolerance)
+            return;
+        std::fprintf(stderr, "new loss at %zu: %0.20g. old loss: %0.20g\n", iternum, newloss, oldloss);
         oldloss = newloss;
     }
 }

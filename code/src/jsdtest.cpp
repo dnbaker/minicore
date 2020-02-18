@@ -21,11 +21,6 @@ int main(int argc, char *argv[]) {
         ++i;
     }
     blz::SM<float> first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
-    for(size_t i = 0; i < first25.rows(); ++i) {
-        row(first25, i) /= blz::l2Norm(row(first25, i));
-        std::cout << "row " << i << " has norm " << blz::l2Norm(row(first25, i)) << '\n';
-    }
-    std::fprintf(stderr, "First 25 rows: %zu. columns: %zu\n", first25.rows(), first25.columns());
 #if 0
     auto rws = blz::sum<blz::rowwise>(first25);
     std::cout << rws << '\n';
@@ -84,14 +79,23 @@ int main(int argc, char *argv[]) {
     jsd2.set_distance_matrix(jsd_bnj, fgc::distance::JSD);
     std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     timer.report();
+    ofs << "JS Divergence: \n";
+    ofs << jsd_bnj << '\n';
+    ofs.flush();
+    std::fprintf(stderr, "Starting jsm\n");
+    timer.restart("1ksparsejsm");
+    jsd2.set_distance_matrix(jsd_bnj, fgc::distance::JSM);
+    timer.report();
+    timer.reset();
+    ofs << "JS Metric: \n";
     ofs << jsd_bnj << '\n';
     ofs.flush();
     std::fprintf(stderr, "Starting llr\n");
     timer.restart("1ksparsellr");
     jsd2.set_distance_matrix(jsd_bnj, fgc::distance::LLR);
-    std::fprintf(stderr, "llr after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     timer.report();
     timer.reset();
+    ofs << "Hicks-Dyjack LLR \n";
     ofs << jsd_bnj << '\n';
     ofs.flush();
     std::fprintf(stderr, "\n\nNumber of cells: %zu\n", nonemptyrows.size());

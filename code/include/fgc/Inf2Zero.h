@@ -224,6 +224,42 @@ struct YieldsSymmetric<NegInf2Zero,MT>
 /*! \endcond */
 //*************************************************************************************************
 
+template< typename VT  // Type of the dense vector
+        , bool TF >    // Transpose flag
+inline decltype(auto) neginf2zero( const DenseVector<VT,TF>& dv )
+{
+   BLAZE_FUNCTION_TRACE;
+
+   return map( ~dv, NegInf2Zero() );
+}
+
+template< typename VT  // Type of the sparse vector
+        , bool TF >    // Transpose flag
+inline decltype(auto) neginf2zero( const SparseVector<VT,TF>& sv )
+{
+   BLAZE_FUNCTION_TRACE;
+
+   return map( ~sv, NegInf2Zero() );
+}
+
+template< typename MT  // Type of the sparse matrix
+        , bool TF >    // Transpose flag
+inline decltype(auto) neginf2zero( const SparseMatrix<MT,TF>& sm )
+{
+   BLAZE_FUNCTION_TRACE;
+
+   return map( ~sm, NegInf2Zero() );
+}
+
+template< typename MT  // Type of the sparse matrix
+        , bool TF >    // Transpose flag
+inline decltype(auto) neginf2zero( const DenseMatrix<MT,TF>& dm )
+{
+   BLAZE_FUNCTION_TRACE;
+
+   return map( ~dm, NegInf2Zero() );
+}
+
 
 } // namespace blaze
 

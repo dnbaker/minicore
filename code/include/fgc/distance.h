@@ -266,7 +266,7 @@ INLINE double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
     assert_all_nonzero(rhs);
 #endif
     auto mn = (~lhs + ~rhs) * 0.5;
-    auto mnlog = blaze::evaluate(blaze::map(blaze::log(~mn), NegInf2Zero()));
+    auto mnlog = blaze::evaluate(blaze::neginf2zero(blaze::log(~mn)));
     double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
     double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
     return 0.5 * (lhc + rhc);
@@ -287,9 +287,9 @@ template<typename VT, bool SO>
 INLINE double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
                               const blaze::DenseVector<VT, SO> &rhs)
 {
-    auto lhlog = blaze::evaluate(map(blaze::log(lhs), NegInf2Zero()));
-    auto rhlog = blaze::evaluate(map(blaze::log(rhs), NegInf2Zero()));
-    auto mnlog = blaze::evaluate(map(blaze::log((~lhs + ~rhs) * 0.5), NegInf2Zero()));
+    auto lhlog = blaze::evaluate(neginf2zero(log(lhs)));
+    auto rhlog = blaze::evaluate(neginf2zero(log(rhs)));
+    auto mnlog = blaze::evaluate(neginf2zero(log((lhs + rhs) * 0.5)));
     double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
     double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
     return 0.5 * (lhc + rhc);
