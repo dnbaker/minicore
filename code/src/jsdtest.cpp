@@ -39,9 +39,9 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "bnj minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs.flush();
     auto full_jsd = fgc::distance::make_jsm_applicator(sparsemat);
-    double max = -std::numeric_limits<double>::max(), jmax = max;
-    double min = -max, jmin = min;
     wy::WyRand<uint32_t> rng(10);
+    double max = full_jsd.llr(rng() % full_jsd.size(), rng() % full_jsd.size()), min = max;
+    double jmax = full_jsd.jsd(rng() % full_jsd.size(), rng() % full_jsd.size()), jmin = jmax;
     for(size_t niter = 1000000; niter--;) {
         auto lhs = rng() % full_jsd.size(), rhs = rng() % full_jsd.size();
         if(nonZeros(row(sparsemat, lhs)) == 0 || nonZeros(row(sparsemat, rhs)))
