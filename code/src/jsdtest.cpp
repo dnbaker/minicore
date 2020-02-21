@@ -57,6 +57,7 @@ int main(int argc, char *argv[]) {
         jmin = std::min(jmin, bnj);
     }
     std::fprintf(stderr, "llr max: %g. min: %g\n", max, min);
+    std::fprintf(stderr, "jsd max: %g. min: %g\n", jmax, jmin);
     i = 25;
     while(nonemptyrows.size() < maxnrows && i < sparsemat.rows()) {
         const auto nzc = blz::nonZeros(row(sparsemat, i));
