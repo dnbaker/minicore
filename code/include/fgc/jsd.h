@@ -94,10 +94,17 @@ public:
         assert(nr == m.columns());
         assert(nr == data_.rows());
         for(size_t i = 0; i < nr; ++i) {
-            OMP_PFOR
-            for(size_t j = i + 1; j < nr; ++j) {
-                auto v = this->operator()(i, j, measure);
-                m(i, j) = v;
+            CONST_IF((blaze::IsDenseMatrix_v<MatType>)) {
+                for(size_t j = i + 1; j < nr; ++j) {
+                    auto v = this->operator()(i, j, measure);
+                    m(i, j) = v;
+                }
+            } else {
+                OMP_PFOR
+                for(size_t j = i + 1; j < nr; ++j) {
+                    auto v = this->operator()(i, j, measure);
+                    m(i, j) = v;
+                }
             }
         }
         if(measure == JSM) {

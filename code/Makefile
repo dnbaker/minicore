@@ -37,7 +37,7 @@ ALL: pgall pgfall \
 ifneq (,$(findstring clang++,$(CXX)))
     OMP_STR:=-lomp
 else
-    OMP_STR:=-fopenmp
+    OMP_STR:=-fopenmp#-simd
 endif
 
 ifdef TBBDIR

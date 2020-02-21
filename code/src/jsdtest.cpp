@@ -39,10 +39,8 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "bnj minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs.flush();
     auto full_jsd = fgc::distance::make_jsm_applicator(sparsemat);
-    double max = -std::numeric_limits<double>::max();
-    double min = -max;
-    double jmax = -std::numeric_limits<double>::max();
-    double jmin = -max;
+    double max = -std::numeric_limits<double>::max(), jmax = max;
+    double min = -max, jmin = min;
     wy::WyRand<uint32_t> rng(10);
     for(size_t niter = 1000000; niter--;) {
         auto lhs = rng() % full_jsd.size(), rhs = rng() % full_jsd.size();
@@ -72,13 +70,19 @@ int main(int argc, char *argv[]) {
     }
     std::fprintf(stderr, "Gathered %zu rows\n", nonemptyrows.size());
     first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
+    blaze::DynamicMatrix<float> first25_dense(first25);
     jsd_bnj.resize(nonemptyrows.size(), nonemptyrows.size(), false);
     jsd_bnj = 0.;
     auto jsd2 = fgc::distance::make_probdiv_applicator(first25);
+    auto jsd3 = fgc::distance::make_probdiv_applicator(first25_dense);
     fgc::util::Timer timer("1ksparsejsd");
     jsd2.set_distance_matrix(jsd_bnj, fgc::distance::JSD);
-    std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     timer.report();
+    std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
+    timer.restart("1kdensejsd");
+    jsd3.set_distance_matrix(jsd_bnj, fgc::distance::JSD);
+    timer.report();
+    std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs << "JS Divergence: \n";
     ofs << jsd_bnj << '\n';
     ofs.flush();
