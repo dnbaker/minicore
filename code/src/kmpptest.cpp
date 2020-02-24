@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
 #endif
     std::srand(0);
     size_t n = argc == 1 ? 250000: std::atoi(argv[1]);
-    size_t npoints = argc <= 2 ? 500: std::atoi(argv[2]);
+    size_t npoints = argc <= 2 ? 50: std::atoi(argv[2]);
     size_t nd = argc <= 3 ? 40: std::atoi(argv[3]);
     double eps = argc <= 4 ? 0.5: std::atof(argv[3]);
     std::vector<std::vector<FLOAT_TYPE>> tmpvecs(n);
@@ -117,7 +117,7 @@ int main(int argc, char *argv[]) {
     decltype(kmpp_asn) copy_asn(kmpp_asn);
     decltype(centermatrix) copy_mat(centermatrix);
     lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, 10000);
-    lloyd_loop(copy_asn, counts, copy_mat, kmppmcs.mat_, tolerance, 100, blz::sqrL2Norm(), kmppmcs.weights_.data());
+    lloyd_loop(copy_asn, counts, copy_mat, kmppmcs.mat_, 1e-20, 10000, blz::sqrL2Norm(), kmppmcs.weights_.data());
     double cost = 0.;
     for(size_t i = 0; i < mat.rows(); ++i) {
         auto mr = row(mat, i);

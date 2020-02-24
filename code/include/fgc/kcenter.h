@@ -136,6 +136,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         if(std::find(ret.begin(), ret.end(), newv) == ret.end())
             push_back(ret, newv);
     }
+    assert(flat_hash_set<IT>(ret.begin(), ret.end()).size() == ret.size());
     if(samplechunksize > 100) {
         std::fprintf(stderr, "Warning: with samplechunksize %zu, it may end up taking a decent amount of time. Consider swapping this in for a hash set.", samplechunksize);
     }
@@ -188,7 +189,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         do {
             IT index = div.mod(rng());
             // (Without replacement)
-            if(std::find(rsp, rsp + rsi, index) == rsp + rsi)
+            if(std::find(rsp, rsp + rsi, index))
                 rsp[rsi++] = index;
         } while(rsi < samplechunksize);
         // random_samples now contains indexes *into pq*
@@ -206,6 +207,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
         ret.insert(ret.end(), rsp, rsp + rsi);
 #else
         for(auto it = rsp, e = rsp + rsi; it < e;++it) {
+            if(std::find(ret.begin(), ret.end(), *it) != ret.end()) continue;
             distances[*it] = 0.;
             labels[*it] = *it;
             ret.pushBack(*it);

@@ -353,10 +353,23 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         OMP_ATOMIC
         counts[asn] += w;
     }
+    std::unique_ptr<typename MatrixType::ElementType[]> costs;
     for(size_t i = 0; i < centers.rows(); ++i) {
         VERBOSE_ONLY(std::fprintf(stderr, "center %zu has count %g\n", i, counts[i]);)
-        assert(counts[i]);
-        row(centers, i BLAZE_CHECK_DEBUG) *= (1. / counts[i]);
+        if(counts[i]) {
+            row(centers, i BLAZE_CHECK_DEBUG) *= (1. / counts[i]);
+        } else {
+            if(!costs) {
+                costs.reset(new typename MatrixType::ElementType[nr]);
+                for(size_t j = 0; j < nr; ++j)
+                    costs[j] = func(row(centers, assignments[j]), row(data, j));
+            }
+            inclusive_scan(costs.get(), costs.get() + nr, costs.get());
+            std::srand(std::time(nullptr));
+            size_t item = std::lower_bound(costs.get(), costs.get() + nr, costs[nr - 1] * double(std::rand()) / RAND_MAX) - costs.get();
+            std::fprintf(stderr, "Reassigning center %zu to row %zu because it has lost all support\n", i, item);
+            row(centers, i BLAZE_CHECK_DEBUG) = row(data, item);
+        }
     }
     // 2. Assign centers
     double total_loss = 0.;
@@ -393,13 +406,13 @@ void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
     size_t iternum = 0;
     double oldloss = std::numeric_limits<double>::max(), newloss;
     for(;;) {
-        std::fprintf(stderr, "Beginning lloyd iteration\n");
         newloss = lloyd_iteration(assignments, counts, centers, data, func, weights);
         if(iternum++ == maxiter || std::abs(oldloss - newloss) / std::min(oldloss, newloss) < tolerance)
-            return;
+            break;
         std::fprintf(stderr, "new loss at %zu: %0.20g. old loss: %0.20g\n", iternum, newloss, oldloss);
         oldloss = newloss;
     }
+    std::fprintf(stderr, "Completed with final loss of %0.20g after %zu rounds\n", newloss, iternum);
 }
 
 
