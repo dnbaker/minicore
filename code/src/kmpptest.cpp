@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
     test_kccs(mat, gen, npoints, eps);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
     start = t();
-    auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, npoints * 5);
+    auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, npoints * 50);
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ matrix coreset: %gs\n", double((stop - start).count()) / 1e9);
     blaze::DynamicMatrix<FLOAT_TYPE> sqmat(20, 20);
