@@ -3,6 +3,7 @@
 #include "fgc/distance.h"
 #include "distmat/distmat.h"
 #include "fgc/kmeans.h"
+#include "fgc/coreset.h"
 
 namespace fgc {
 
@@ -394,6 +395,16 @@ template<typename MatrixType>
 auto make_kmeanspp(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_t seed=13) {
     wy::WyRand<uint64_t> gen(seed);
     return coresets::kmeanspp(app, gen, app.size(), k);
+}
+
+template<typename MatrixType, typename WFT=typename MatrixType::ElementType, typename IT=uint32_t>
+auto make_d2_coreset_sampler(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr) {
+    wy::WyRand<uint64_t> gen(seed);
+    auto [asn, centers, costs] = coresets::kmeanspp(app, gen, app.size(), k);
+    coresets::CoresetSampler<typename MatrixType::ElementType, IT> cs;
+    cs.make_sampler(app.size(), centers.size(), costs.data(), asn.data(), weights,
+                    /*seed=*/gen());
+    return cs;
 }
 
 #if 0

@@ -41,4 +41,5 @@ int main(int argc, char *argv[]) {
     auto kmc2cost = fgc::coresets::get_oracle_costs(full_jsd, full_jsd.size(), kmcdat);
     std::fprintf(stderr, "kmc2 solution cost: %g\n", blz::sum(kmc2cost.second));
     std::fprintf(stderr, "\n\nNumber of cells: %zu\n", nonemptyrows.size());
+    //auto coreset_sampler = fgc::distance::make_d2_coreset_sampler(full_jsd, k, 13);
 }

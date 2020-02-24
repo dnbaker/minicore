@@ -1,5 +1,6 @@
 #include "kmeans.h"
 #include "kcenter.h"
+#include "jsd.h"
 #include <new>
 #include <chrono>
 #include <thread>
@@ -127,6 +128,10 @@ int main(int argc, char *argv[]) {
         cost += rc;
     }
     std::fprintf(stderr, "Cost of coreset solution: %g\n", cost);
+    for(auto r: rowiterator(mat)) {
+        mat = abs(mat);
+        mat /= blz::sum(mat);
+    }
 #if 0
     lloyd_loop(
 void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,

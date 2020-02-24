@@ -428,14 +428,15 @@ void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
 
 
 
+
 template<typename Iter,
          typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>,
-         typename FT=ContainedTypeFromIterator<Iter>>
+         typename FT=ContainedTypeFromIterator<Iter>, typename Distance=sqrL2Norm>
 auto kmeans_coreset(Iter start, Iter end,
                     size_t k, RNG &rng,
                     size_t cs_size,
-                    const FT *weights=nullptr) {
-    auto [centers, assignments, sqdists] = kmeanspp(start, end, rng, k, sqrL2Norm());
+                    const FT *weights=nullptr, const Distance &dist=Distance()) {
+    auto [centers, assignments, sqdists] = kmeanspp(start, end, rng, k, dist);
     using sq_t = typename decltype(sqdists)::value_type;
     coresets::CoresetSampler<sq_t, IT> cs;
     size_t np = end - start;
@@ -449,6 +450,17 @@ auto kmeans_coreset(Iter start, Iter end,
     std::fprintf(stderr, "max sampled idx: %u\n", *std::max_element(ics.indices_.begin(), ics.indices_.end()));
 #endif
     return ics;
+}
+
+template<typename FT, bool SO,
+         typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>>
+auto kmeans_index_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RNG &rng, size_t cs_size,
+                           const FT *weights=nullptr, bool rowwise=true)
+{
+    if(!rowwise) throw std::runtime_error("Not implemented");
+    const auto &blzview = reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(mat);
+    return kmeans_coreset(blzview.rowiterator().begin(), blzview.rowiterator().end(),
+                          k, rng, cs_size, weights);
 }
 template<typename FT, bool SO,
          typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>>
