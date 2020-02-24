@@ -377,6 +377,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         total_loss += getw(i) * dist;
     }
     std::fprintf(stderr, "total loss: %g\n", total_loss);
+    if(std::isnan(total_loss)) total_loss = std::numeric_limits<decltype(total_loss)>::infinity();
     return total_loss;
 }
 
