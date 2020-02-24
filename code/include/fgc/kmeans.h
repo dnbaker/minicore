@@ -126,17 +126,16 @@ using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])
  */
 
 template<typename Oracle, typename FT=float,
-         typename IT=std::uint32_t, typename RNG>
+         typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k) {
+kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr) {
     std::vector<IT> centers;
     std::vector<FT> distances(np, 0.), cdf(np);
-    double sumd2 = 0.;
     {
         auto fc = rng() % np;
         centers.push_back(fc);
 #ifdef _OPENMP
-        OMP_PRAGMA("omp parallel for reduction(+:sumd2)")
+        OMP_PFOR
 #else
         SK_UNROLL_8
 #endif
@@ -144,14 +143,13 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k) {
             if(unlikely(i == fc)) continue;
             double dist = oracle(fc, i);
             distances[i] = dist;
-            sumd2 += dist;
         }
         assert(distances[fc] == 0.);
-        inclusive_scan(distances.begin(), distances.end(), cdf.begin());
+        if(weights) inclusive_scan(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
+            return x + y * weights[&y - ds];
+        });
+        else inclusive_scan(distances.begin(), distances.end(), cdf.begin());
     }
-#if VERBOSE_AF
-    std::fprintf(stderr, "first loop sum: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), double(0)));
-#endif
     std::vector<IT> assignments(np);
     std::uniform_real_distribution<double> urd;
     while(centers.size() < k) {
@@ -161,37 +159,32 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k) {
         const auto current_center_id = centers.size();
         assignments[newc] = centers.size();
         centers.push_back(newc);
-        sumd2 -= distances[newc];
         distances[newc] = 0.;
-        double sum = sumd2;
-        OMP_PRAGMA("omp parallel for reduction(+:sum)")
+        OMP_PFOR
         for(IT i = 0; i < np; ++i) {
             if(unlikely(i == newc)) continue;
             auto &ldist = distances[i];
             auto dist = oracle(newc, i);
             if(dist < ldist) { // Only write if it changed
                 assignments[i] = current_center_id;
-                auto diff = dist - ldist;
-                sum += diff;
                 ldist = dist;
             }
         }
-        sumd2 = sum;
-#if VERBOSE_AF
-        std::fprintf(stderr, "sumd2: %f. manual: %f\n", sumd2, std::accumulate(distances.begin(), distances.end(), double(0)));
-#endif
-        inclusive_scan(distances.begin(), distances.end(), cdf.begin());
+        if(weights) inclusive_scan(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
+            return x + y * weights[&y - ds];
+        });
+        else inclusive_scan(distances.begin(), distances.end(), cdf.begin());
     }
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
 }
 
 template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
-         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
+         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm()) {
+kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr) {
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k);
+    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights);
 }
 
 template<typename Oracle, typename Sol, typename FT=float, typename IT=uint32_t>
@@ -277,17 +270,17 @@ kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm
 
 
 template<typename MT, bool SO,
-         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
+         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
 auto
-kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true) {
+kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr) {
     using FT = typename MT::ElementType;
     std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(~mat);
-        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm);
+        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights);
     } else { // columnwise
         auto columnit = blz::columniterator(~mat);
-        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm);
+        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights);
     }
     return ret;
 }
@@ -362,6 +355,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         if(counts[i]) {
             row(centers, i BLAZE_CHECK_DEBUG) *= (1. / counts[i]);
         } else {
+            throw 1;
             if(!costs) {
                 costs.reset(new typename MatrixType::ElementType[nr]);
                 for(size_t j = 0; j < nr; ++j)
@@ -374,7 +368,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
             size_t item = std::lower_bound(costs.get(), costs.get() + nr, costs[nr - 1] * double(std::rand()) / RAND_MAX) - costs.get();
             costs[item] = 0.;
             assignments[item] = i;
-            //std::fprintf(stderr, "Reassigning center %zu to row %zu because it has lost all support\n", i, item);
+            std::fprintf(stderr, "Reassigning center %zu to row %zu because it has lost all support\n", i, item);
             row(centers, i BLAZE_CHECK_DEBUG) = row(data, item);
             centers_reassigned = true;
         }
@@ -418,12 +412,15 @@ void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
     double oldloss = std::numeric_limits<double>::max(), newloss;
     for(;;) {
         newloss = lloyd_iteration(assignments, counts, centers, data, func, weights);
-        if(iternum++ == maxiter || std::abs(oldloss - newloss) / std::min(oldloss, newloss) < tolerance)
+        double change_in_cost = std::abs(oldloss - newloss) / std::min(oldloss, newloss);
+        if(iternum++ == maxiter || change_in_cost <= tolerance) {
+            std::fprintf(stderr, "Change in cost from %g to %g is %g\n", oldloss, newloss, change_in_cost);
             break;
-        std::fprintf(stderr, "new loss at %zu: %0.20g. old loss: %0.20g\n", iternum, newloss, oldloss);
+        }
+        std::fprintf(stderr, "new loss at %zu: %0.30g. old loss: %0.30g\n", iternum, newloss, oldloss);
         oldloss = newloss;
     }
-    std::fprintf(stderr, "Completed with final loss of %0.20g after %zu rounds\n", newloss, iternum);
+    std::fprintf(stderr, "Completed with final loss of %0.30g after %zu rounds\n", newloss, iternum);
 }
 
 

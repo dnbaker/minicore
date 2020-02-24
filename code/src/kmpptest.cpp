@@ -115,29 +115,18 @@ int main(int argc, char *argv[]) {
         row(centermatrix, i) = row(mat, std::get<0>(centers)[i]);
     }
     double tolerance = 1e-4;
-    decltype(kmpp_asn) copy_asn(kmpp_asn);
     decltype(centermatrix) copy_mat(centermatrix);
     lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, 10000);
-    lloyd_loop(copy_asn, counts, copy_mat, kmppmcs.mat_, 1e-20, 10000, blz::sqrL2Norm(), kmppmcs.weights_.data());
+    auto [wcenteridx, wasn, wcosts] = kmeanspp(kmppmcs.mat_, gen, npoints, blz::sqrL2Norm(), true, kmppmcs.weights_.data());
+    blaze::DynamicMatrix<FLOAT_TYPE> weight_kmppcenters = rows(kmppmcs.mat_, wcenteridx.data(), wcenteridx.size());
+    lloyd_loop(wasn, counts, weight_kmppcenters, kmppmcs.mat_, 0., 10000, blz::sqrL2Norm(), kmppmcs.weights_.data());
     double cost = 0.;
     for(size_t i = 0; i < mat.rows(); ++i) {
         auto mr = row(mat, i);
-        double rc = blz::sqrL2Dist(mr, row(copy_mat, 0));
-        for(unsigned j = 1; j < copy_mat.rows(); ++j)
-            rc = std::min(rc, blz::sqrL2Dist(mr, row(copy_mat, j)));
+        double rc = blz::sqrL2Dist(mr, row(weight_kmppcenters, 0));
+        for(unsigned j = 1; j < weight_kmppcenters.rows(); ++j)
+            rc = std::min(rc, blz::sqrL2Dist(mr, row(weight_kmppcenters, j)));
         cost += rc;
     }
     std::fprintf(stderr, "Cost of coreset solution: %g\n", cost);
-    for(auto r: rowiterator(mat)) {
-        mat = abs(mat);
-        mat /= blz::sum(mat);
-    }
-#if 0
-    lloyd_loop(
-void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
-                CMatrixType &centers, MatrixType &data,
-                double tolerance=0., size_t maxiter=-1,
-                const Functor &func=Functor(),
-                const WFT *weights=nullptr)
-#endif
 }
