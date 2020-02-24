@@ -332,6 +332,10 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     centers = static_cast<typename CMatrixType::ElementType>(0.);
     std::memset(counts.data(), 0, counts.size() * sizeof(counts[0]));
     assert(blz::sum(centers) == 0.);
+    bool centers_reassigned;
+    std::unique_ptr<typename MatrixType::ElementType[]> costs;
+    get_assignment_counts:
+    centers_reassigned = false;
     //OMP_PRAGMA("omp parallel for schedule(dynamic)")
     for(size_t i = 0; i < nr; ++i) {
         assert(assignments[i] < centers.rows());
@@ -353,7 +357,6 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         OMP_ATOMIC
         counts[asn] += w;
     }
-    std::unique_ptr<typename MatrixType::ElementType[]> costs;
     for(size_t i = 0; i < centers.rows(); ++i) {
         VERBOSE_ONLY(std::fprintf(stderr, "center %zu has count %g\n", i, counts[i]);)
         if(counts[i]) {
@@ -362,14 +365,22 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
             if(!costs) {
                 costs.reset(new typename MatrixType::ElementType[nr]);
                 for(size_t j = 0; j < nr; ++j)
-                    costs[j] = func(row(centers, assignments[j]), row(data, j));
+                    costs[j] = func(row(centers, assignments[j]), row(data, j)) * getw(j);
             }
             inclusive_scan(costs.get(), costs.get() + nr, costs.get());
+            for(unsigned i = 0; i < nr; ++i) std::fprintf(stderr, "%u:%g\t", i, costs[i]);
+            std::fputc('\n', stderr);
             std::srand(std::time(nullptr));
             size_t item = std::lower_bound(costs.get(), costs.get() + nr, costs[nr - 1] * double(std::rand()) / RAND_MAX) - costs.get();
-            std::fprintf(stderr, "Reassigning center %zu to row %zu because it has lost all support\n", i, item);
+            costs[item] = 0.;
+            assignments[item] = i;
+            //std::fprintf(stderr, "Reassigning center %zu to row %zu because it has lost all support\n", i, item);
             row(centers, i BLAZE_CHECK_DEBUG) = row(data, item);
+            centers_reassigned = true;
         }
+    }
+    if(centers_reassigned) {
+        goto get_assignment_counts;
     }
     // 2. Assign centers
     double total_loss = 0.;
