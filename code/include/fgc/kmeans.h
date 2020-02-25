@@ -129,7 +129,6 @@ template<typename Oracle, typename FT=float,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr) {
-    std::fprintf(stderr, "np: %zu. k: %zu\n", np, k);
     std::vector<IT> centers;
     std::vector<FT> distances(np, 0.), cdf(np);
     {
@@ -143,7 +142,6 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         for(size_t i = 0; i < np; ++i) {
             if(unlikely(i == fc)) continue;
             double dist = oracle(fc, i);
-            std::fprintf(stderr, "Oracle gives %zu/%" PRIu64 " a distance of %g\n", i, fc, dist);
             distances[i] = dist;
         }
         assert(distances[fc] == 0.);
@@ -160,7 +158,6 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         IT newc;
         do {
             newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
-            if(newc == np) std::fprintf(stderr, "WTFFFFFFFFFFF\n");
         } while(newc >= np);
         const auto current_center_id = centers.size();
         assignments[newc] = centers.size();
