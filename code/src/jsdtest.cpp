@@ -48,24 +48,6 @@ first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
     std::fprintf(stderr, "min/max jsd: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs.flush();
-#if 0
-    for(size_t niter = 1000000; niter--;) {
-        auto lhs = rng() % full_jsd.size(), rhs = rng() % full_jsd.size();
-        if(nonZeros(row(sparsemat, lhs)) == 0 || nonZeros(row(sparsemat, rhs)))
-            continue;
-        auto bnj = full_jsd.jsd(lhs, rhs);
-        auto llr = full_jsd.llr(lhs, rhs);
-        assert(llr >= 0.);
-        assert(bnj >= 0.);
-        //std::fprintf(stdout, "%g\t%g\t%g\n", llr, bnj, std::abs(llr - bnj));
-        max = std::max(max, llr);
-        min = std::min(min, llr);
-        jmax = std::max(jmax, bnj);
-        jmin = std::min(jmin, bnj);
-    }
-    std::fprintf(stderr, "llr max: %g. min: %g\n", max, min);
-    std::fprintf(stderr, "jsd max: %g. min: %g\n", jmax, jmin);
-#endif
     i = 25;
     while(nonemptyrows.size() < maxnrows && i < sparsemat.rows()) {
         const auto nzc = blz::nonZeros(row(sparsemat, i));
@@ -87,17 +69,12 @@ first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
     jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::JSD);
     timer.report();
     std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
-    //timer.restart("1kdensejsd");
-    //jsd3.set_distance_matrix(jsd_bnj, fgc::jsd::JSD);
-    //timer.report();
-    //std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs << "JS Divergence: \n";
     ofs << jsd_bnj << '\n';
     ofs.flush();
     std::fprintf(stderr, "Starting jsm\n");
     timer.restart("1ksparsejsm");
     jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::JSM);
-    std::fprintf(stderr, "large dataset jsm: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     timer.report();
     timer.reset();
     ofs << "JS Metric: \n";

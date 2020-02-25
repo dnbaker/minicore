@@ -5,7 +5,6 @@
 #define FT double
 
 #define NOTDENSE 1
-
 int main(int argc, char *argv[]) {
     if(std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0 || std::strcmp(x, "--help") == 0;})
        != argv + argc) {
@@ -57,6 +56,7 @@ int main(int argc, char *argv[]) {
         return std::sqrt(fgc::jsd::multinomial_jsd(x, y));
     };
     std::fprintf(stderr, "About to start ll\n");
+#if 0
     fgc::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 0., 50, oracle);
     std::fprintf(stderr, "About to make probdiv appl\n");
     filtered_sparsemat = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
@@ -65,4 +65,13 @@ int main(int argc, char *argv[]) {
     centers = rows(filtered_sparsemat, centeridx.data(), centeridx.size());
     fgc::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 250, [](const auto &x, const auto &y) {return fgc::jsd::multinomial_jsd(x, y);});
     auto coreset_sampler = fgc::jsd::make_d2_coreset_sampler(full_jsm, k, 13);
+#else
+    fgc::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 50, oracle);
+    std::fprintf(stderr, "About to make probdiv appl\n");
+    auto full_jsd = fgc::jsd::make_probdiv_applicator(filtered_sparsemat, fgc::jsd::MKL);
+    std::tie(centeridx, asn, costs) = fgc::jsd::make_kmeanspp(full_jsd, k);
+    centers = rows(filtered_sparsemat, centeridx.data(), centeridx.size());
+    fgc::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 250, [](const auto &x, const auto &y) {return fgc::jsd::multinomial_jsd(x, y);});
+    //auto coreset_sampler = fgc::jsd::make_d2_coreset_sampler(full_jsm, k, 13);
+#endif
 }

@@ -395,7 +395,7 @@ auto p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<V
     const size_t deltasz = 2 * sz - 1;
     blz::DynamicVector<typename VT::ElementType, SO> deltas(deltasz);
     std::adjacent_difference(all.begin(), all.end(), deltas.begin());
-    assert(std::is_sorted(xptr, yptr,  [xdat=xr.data()](uint32_t p, uint32_t q) {return xdat[p] < xdat[q];}));
+    assert(std::is_sorted(xptr, yptr,  [xdat=xr](uint32_t p, uint32_t q) {return xdat[p] < xdat[q];}));
     auto fill_cdf = [&](auto datptr, const auto &datvec) -> blz::DynamicVector<typename VT::ElementType>
     {
         // Faster to do one linear scan than n binary searches
@@ -415,6 +415,7 @@ auto p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<V
 		return std::sqrt(dot(blz::pow(cdfx - cdfy, 2), deltas));
 	return std::pow(dot(blz::pow(blz::abs(cdfx - cdfy), p), deltas), 1. / p);
 }
+
 template<typename VT, bool SO, typename VT2>
 auto p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y, double p=1.) {
     auto &xr = ~x;

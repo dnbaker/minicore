@@ -182,7 +182,6 @@ public:
             case LLR: ret = llr(i, j); break;
             default: __builtin_unreachable();
         }
-        //std::fprintf(stderr, "Performing calculation with %s: [%zu/%zu] - %g\n", detail::prob2str(measure), i, j, ret);
         return ret;
     }
     template<typename MatType>
@@ -331,10 +330,11 @@ private:
         row_sums_.reset(new VecT(data_.rows()));
         auto rowsumit = row_sums_->begin();
         for(auto r: blz::rowiterator(data_)) {
-            CONST_IF(blz::IsDenseMatrix_v<MatrixType>)
-            if(prior == NONE) {
+            CONST_IF(blz::IsDenseMatrix_v<MatrixType>) {
+                if(prior == NONE) {
                 r += 1e-50;
                 assert(blz::min(r) > 0.);
+                }
             }
             const auto countsum = blz::sum(r);
             r /= countsum;
@@ -439,10 +439,9 @@ template<typename MatrixType, typename WFT=typename MatrixType::ElementType, typ
 auto make_d2_coreset_sampler(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr) {
     wy::WyRand<uint64_t> gen(seed);
     auto [centers, asn, costs] = coresets::kmeanspp(app, gen, app.size(), k);
-    std::fprintf(stderr, "Made center set:");
-    for(const auto c: centers) std::fprintf(stderr, "%u,", c);
-    std::fputc('\n', stderr);
-    std::fprintf(stderr, "costs size: %zu. centers size: %zu\n", costs.size(), centers.size());
+    //for(const auto c: centers) std::fprintf(stderr, "%u,", c);
+    //std::fputc('\n', stderr);
+    //std::fprintf(stderr, "costs size: %zu. centers size: %zu\n", costs.size(), centers.size());
     coresets::CoresetSampler<typename MatrixType::ElementType, IT> cs;
     cs.make_sampler(app.size(), centers.size(), costs.data(), asn.data(), weights,
                     /*seed=*/gen());

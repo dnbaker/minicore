@@ -383,6 +383,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
             costs[item] = 0.;
             assignments[item] = i;
             //std::fprintf(stderr, "Reassigning center %zu to row %zu because it has lost all support\n", i, item);
+            std::fprintf(stderr, "Reassigning center %zu to row %zu because it has lost all support\n", i, item);
             row(centers, i BLAZE_CHECK_DEBUG) = row(data, item);
             centers_reassigned = true;
         }
