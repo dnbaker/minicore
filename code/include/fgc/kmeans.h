@@ -143,7 +143,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         for(size_t i = 0; i < np; ++i) {
             if(unlikely(i == fc)) continue;
             double dist = oracle(fc, i);
-            std::fprintf(stderr, "Oracle gives %zu/%zu a distance of %g\n", i, fc, dist);
+            std::fprintf(stderr, "Oracle gives %zu/%" PRIu64 " a distance of %g\n", i, fc, dist);
             distances[i] = dist;
         }
         assert(distances[fc] == 0.);

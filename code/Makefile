@@ -55,7 +55,7 @@ print_tests:
 	@echo "Tests: " $(TESTS)
 
 %dbg: src/%.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@ # -fsanitize=address
 
 graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)

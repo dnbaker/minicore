@@ -385,37 +385,28 @@ auto p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2
 	auto xptr = ptr.get(), yptr = ptr.get() + xr.size();
 	std::iota(xptr, yptr, 0u);
 	std::iota(yptr, yptr + sz, 0u);
-	pdqsort(xptr, xptr + sz, [xdat=xr.data()](uint32_t p, uint32_t q) {return xdat[p] < xdat[q];});
+	pdqsort(xptr, yptr, [xdat=xr.data()](uint32_t p, uint32_t q) {return xdat[p] < xdat[q];});
 	pdqsort(yptr, yptr + sz, [ydat=yr.data()](uint32_t p, uint32_t q) {return ydat[p] < ydat[q];});
 	auto xconv = [xdat=xr.data()](auto x) {return xdat[x];};
 	auto yconv = [ydat=yr.data()](auto y) {return ydat[y];};
     blz::DynamicVector<typename VT::ElementType, SO> all(2 * sz);
-	std::merge(boost::make_transform_iterator(xptr, xconv), boost::make_transform_iterator(xptr + sz, xconv),
+	std::merge(boost::make_transform_iterator(xptr, xconv), boost::make_transform_iterator(yptr, xconv),
 	           boost::make_transform_iterator(yptr, yconv), boost::make_transform_iterator(yptr + sz, yconv), all.begin());
     const size_t deltasz = 2 * sz - 1;
     blz::DynamicVector<typename VT::ElementType, SO> deltas(deltasz);
     std::adjacent_difference(all.begin(), all.end(), deltas.begin());
-    blz::DynamicVector<typename VT::ElementType> cdfx(deltasz), cdfy(deltasz);
-    size_t xoffset = 0;
-    for(size_t i = 0; i < cdfx.size(); ++i) {
-        while(xoffset < sz && xptr[xoffset] > all[i])
-            ++xoffset;
-        if(xoffset == sz) {
-            std::fill_n(cdfx.data() + i, deltasz - i, sz);
-            break;
-        }
-        cdfx[i] = xoffset;
-    }
-    xoffset = 0;
-    for(size_t i = 0; i < cdfy.size(); ++i) {
-        while(xoffset < sz && yptr[xoffset] > all[i])
-            ++xoffset;
-        if(xoffset == sz) {
-            std::fill_n(cdfy.data() + i, deltasz - i, sz);
-            break;
-        }
-        cdfy[i] = xoffset;
-    }
+    assert(std::is_sorted(xptr, yptr,  [xdat=xr.data()](uint32_t p, uint32_t q) {return xdat[p] < xdat[q];}));
+    auto fill_cdf = [&](auto datptr, const auto &datvec) -> blz::DynamicVector<typename VT::ElementType>
+    {
+        // Faster to do one linear scan than n binary searches
+        blz::DynamicVector<typename VT::ElementType> ret(deltasz);
+        for(size_t offset = 0, i = 0; i < ret.size(); ret[i++] = offset)
+            while(datvec[datptr[offset]] < all[i] && offset < sz)
+                ++offset;
+        return ret;
+    };
+    auto cdfx = fill_cdf(xptr, xr);
+    auto cdfy = fill_cdf(yptr, yr);
 	if(p == 1.)
 		return dot(blz::abs(cdfx - cdfy), deltas) / sz;
     cdfx *= 1. / sz;
