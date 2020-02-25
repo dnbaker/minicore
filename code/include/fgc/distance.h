@@ -50,11 +50,11 @@ inline double l2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &r
 
 template<typename FT, typename FT2, bool SO>
 inline double sqrL2Dist(const blz::Vector<FT, SO> &v1, const blz::Vector<FT2, SO> &v2) {
-    return l2Dist(~v1, ~v2);
+    return sqrDist(~v1, ~v2);
 }
 template<typename FT, blaze::AlignmentFlag AF, blaze::PaddingFlag PF, bool SO, blaze::AlignmentFlag OAF, blaze::PaddingFlag OPF, bool OSO>
 inline double sqrL2Dist(const blz::CustomVector<FT, AF, PF, SO> &v1, const blz::CustomVector<FT, OAF, OPF, OSO> &v2) {
-    return l2Dist(v1, v2);
+    return sqrDist(v1, v2);
 }
 
 template<typename FT, typename A, typename OA>

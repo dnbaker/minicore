@@ -11,7 +11,7 @@
 #define t std::chrono::high_resolution_clock::now
 
 #ifndef FLOAT_TYPE
-#define FLOAT_TYPE float
+#define FLOAT_TYPE double
 #endif
 
 
@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
     test_kccs(mat, gen, npoints, eps);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
     start = t();
-    auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, npoints * 50);
+    auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, npoints * 100);
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ matrix coreset: %gs\n", double((stop - start).count()) / 1e9);
     blaze::DynamicMatrix<FLOAT_TYPE> sqmat(20, 20);
@@ -116,10 +116,10 @@ int main(int argc, char *argv[]) {
     }
     double tolerance = 1e-4;
     decltype(centermatrix) copy_mat(centermatrix);
-    lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, 10000);
+    lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, 100);
     auto [wcenteridx, wasn, wcosts] = kmeanspp(kmppmcs.mat_, gen, npoints, blz::sqrL2Norm(), true, kmppmcs.weights_.data());
     blaze::DynamicMatrix<FLOAT_TYPE> weight_kmppcenters = rows(kmppmcs.mat_, wcenteridx.data(), wcenteridx.size());
-    lloyd_loop(wasn, counts, weight_kmppcenters, kmppmcs.mat_, 0., 10000, blz::sqrL2Norm(), kmppmcs.weights_.data());
+    lloyd_loop(wasn, counts, weight_kmppcenters, kmppmcs.mat_, 0., 1000, blz::sqrL2Norm(), kmppmcs.weights_.data());
     double cost = 0.;
     for(size_t i = 0; i < mat.rows(); ++i) {
         auto mr = row(mat, i);
