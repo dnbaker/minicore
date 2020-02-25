@@ -1,6 +1,7 @@
 #ifndef FGC_DISTANCE_AND_MEANING_H__
 #define FGC_DISTANCE_AND_MEANING_H__
 #include "blaze_adaptor.h"
+#include "boost/iterator/transform_iterator.hpp"
 #include <vector>
 #include <iostream>
 
@@ -289,7 +290,18 @@ INLINE double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
 {
     auto lhlog = blaze::evaluate(neginf2zero(log(lhs)));
     auto rhlog = blaze::evaluate(neginf2zero(log(rhs)));
-    auto mnlog = blaze::evaluate(neginf2zero(log((lhs + rhs) * 0.5)));
+    auto mnlog = blaze::evaluate(neginf2zero(log((~lhs + ~rhs) * 0.5)));
+    double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
+    double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    return 0.5 * (lhc + rhc);
+}
+template<typename VT, typename VT2, bool SO>
+INLINE double multinomial_jsd(const blaze::Vector<VT, SO> &lhs,
+                              const blaze::Vector<VT2, SO> &rhs)
+{
+    auto lhlog = blaze::evaluate(neginf2zero(log(~lhs)));
+    auto rhlog = blaze::evaluate(neginf2zero(log(~rhs)));
+    auto mnlog = blaze::evaluate(neginf2zero(log((~lhs + ~rhs) * 0.5)));
     double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
     double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
     return 0.5 * (lhc + rhc);
@@ -327,6 +339,7 @@ INLINE double      poisson_bregman(const blaze::DenseVector<FT, SO> &lhs,
     return blaze::dot(lhs, lhlog - rhlog) + blaze::sum(rhs - lhs);
 }
 } // namespace bnj
+using namespace bnj;
 
 enum Prior {
     NONE,       // Do not modify values. Requires that there are no nonzero parameters
@@ -362,6 +375,56 @@ INLINE decltype(auto) multinomial_jsm(Args &&...args) {
     using std::sqrt;
     return sqrt(multinomial_jsd(std::forward<Args>(args)...));
 }
+
+template<typename VT, bool SO, typename VT2>
+auto p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y, double p=1.) {
+    auto &xr = ~x;
+    auto &yr = ~y;
+	const size_t sz = xr.size();
+	std::unique_ptr<uint32_t[]> ptr(new uint32_t[sz * 2]);
+	auto xptr = ptr.get(), yptr = ptr.get() + xr.size();
+	std::iota(xptr, yptr, 0u);
+	std::iota(yptr, yptr + sz, 0u);
+	pdqsort(xptr, xptr + sz, [xdat=xr.data()](uint32_t p, uint32_t q) {return xdat[p] < xdat[q];});
+	pdqsort(yptr, yptr + sz, [ydat=yr.data()](uint32_t p, uint32_t q) {return ydat[p] < ydat[q];});
+	auto xconv = [xdat=xr.data()](auto x) {return xdat[x];};
+	auto yconv = [ydat=yr.data()](auto y) {return ydat[y];};
+    blz::DynamicVector<typename VT::ElementType, SO> all(2 * sz);
+	std::merge(boost::make_transform_iterator(xptr, xconv), boost::make_transform_iterator(xptr + sz, xconv),
+	           boost::make_transform_iterator(yptr, yconv), boost::make_transform_iterator(yptr + sz, yconv), all.begin());
+    const size_t deltasz = 2 * sz - 1;
+    blz::DynamicVector<typename VT::ElementType, SO> deltas(deltasz);
+    std::adjacent_difference(all.begin(), all.end(), deltas.begin());
+    blz::DynamicVector<typename VT::ElementType> cdfx(deltasz), cdfy(deltasz);
+    size_t xoffset = 0;
+    for(size_t i = 0; i < cdfx.size(); ++i) {
+        while(xoffset < sz && xptr[xoffset] > all[i])
+            ++xoffset;
+        if(xoffset == sz) {
+            std::fill_n(cdfx.data() + i, deltasz - i, sz);
+            break;
+        }
+        cdfx[i] = xoffset;
+    }
+    xoffset = 0;
+    for(size_t i = 0; i < cdfy.size(); ++i) {
+        while(xoffset < sz && yptr[xoffset] > all[i])
+            ++xoffset;
+        if(xoffset == sz) {
+            std::fill_n(cdfy.data() + i, deltasz - i, sz);
+            break;
+        }
+        cdfy[i] = xoffset;
+    }
+	if(p == 1.)
+		return dot(blz::abs(cdfx - cdfy), deltas) / sz;
+    cdfx *= 1. / sz;
+    cdfy *= 1. / sz;
+    if(p == 2)
+		return std::sqrt(dot(blz::pow(cdfx - cdfy, 2), deltas));
+	return std::pow(dot(blz::pow(blz::abs(cdfx - cdfy), p), deltas), 1. / p);
+}
+
 } // distance
 
 } // namespace blz

@@ -110,7 +110,7 @@ namespace coresets {
 
 
 using std::partial_sum;
-using blz::sqrL2Norm;
+using blz::distance::sqrL2Norm;
 
 template<typename C>
 using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
@@ -129,6 +129,7 @@ template<typename Oracle, typename FT=float,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr) {
+    std::fprintf(stderr, "np: %zu. k: %zu\n", np, k);
     std::vector<IT> centers;
     std::vector<FT> distances(np, 0.), cdf(np);
     {
@@ -142,6 +143,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         for(size_t i = 0; i < np; ++i) {
             if(unlikely(i == fc)) continue;
             double dist = oracle(fc, i);
+            std::fprintf(stderr, "Oracle gives %zu/%zu a distance of %g\n", i, fc, dist);
             distances[i] = dist;
         }
         assert(distances[fc] == 0.);
@@ -155,7 +157,11 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     while(centers.size() < k) {
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
-        auto newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
+        IT newc;
+        do {
+            newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
+            if(newc == np) std::fprintf(stderr, "WTFFFFFFFFFFF\n");
+        } while(newc >= np);
         const auto current_center_id = centers.size();
         assignments[newc] = centers.size();
         centers.push_back(newc);
@@ -319,9 +325,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     auto getw = [weights](size_t ind) {
         return weights ? weights[ind]: WFT(1.);
     };
-#if 0
-    std::unique_ptr<std::mutex[]> mutexes = std::make_unique<std::mutex[]>(centers.rows());
-#endif
+    OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes = std::make_unique<std::mutex[]>(centers.rows());)
     centers = static_cast<typename CMatrixType::ElementType>(0.);
     std::memset(counts.data(), 0, counts.size() * sizeof(counts[0]));
     assert(blz::sum(centers) == 0.);
@@ -329,7 +333,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     std::unique_ptr<typename MatrixType::ElementType[]> costs;
     get_assignment_counts:
     centers_reassigned = false;
-    //OMP_PRAGMA("omp parallel for schedule(dynamic)")
+    OMP_PRAGMA("omp parallel for schedule(dynamic)")
     for(size_t i = 0; i < nr; ++i) {
         assert(assignments[i] < centers.rows());
         auto asn = assignments[i];
@@ -337,9 +341,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         auto cr = row(centers, asn BLAZE_CHECK_DEBUG);
         const auto w = getw(i);
         {
-#if 0
             OMP_ONLY(std::lock_guard<std::mutex> lg(mutexes[asn]);)
-#endif
             //std::fprintf(stderr, "got lock\n");
             if(w == 1.) {
                 cr += dr;
@@ -355,7 +357,6 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         if(counts[i]) {
             row(centers, i BLAZE_CHECK_DEBUG) *= (1. / counts[i]);
         } else {
-            throw 1;
             if(!costs) {
                 costs.reset(new typename MatrixType::ElementType[nr]);
                 for(size_t j = 0; j < nr; ++j)
@@ -411,6 +412,7 @@ void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
     size_t iternum = 0;
     double oldloss = std::numeric_limits<double>::max(), newloss;
     for(;;) {
+        std::fprintf(stderr, "Starting iter %zu\n", iternum);
         newloss = lloyd_iteration(assignments, counts, centers, data, func, weights);
         double change_in_cost = std::abs(oldloss - newloss) / std::min(oldloss, newloss);
         if(iternum++ == maxiter || change_in_cost <= tolerance) {

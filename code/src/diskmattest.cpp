@@ -54,6 +54,9 @@ int main() {
         if(r1[i])
             c1.append(i, r1[i]);
     }
+    if(0) {
+        auto wd = distance::p_wasserstein(row(~dm, 0), row(~dm, 1), 1.);
+    }
 #if 0
     std::fprintf(stderr, "multinomial jsd: %f\n", distance::multinomial_jsd(r1, r0));
     std::fprintf(stderr, "multinomial jsd: %f\n", distance::multinomial_jsd(c1, c0));

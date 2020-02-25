@@ -19,7 +19,8 @@ STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -pedantic -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers
 OPT?=O3
 LDFLAGS+=-lz
-CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LIBS) $(LDFLAGS) -flto
+CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LIBS) $(LDFLAGS) \
+    -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 # -flto
 
 
 EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
@@ -54,7 +55,7 @@ print_tests:
 	@echo "Tests: " $(TESTS)
 
 %dbg: src/%.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ # -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@ -fsanitize=address
 
 graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
