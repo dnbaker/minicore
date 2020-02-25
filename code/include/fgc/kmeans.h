@@ -356,6 +356,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         } else {
             if(!costs) {
                 costs.reset(new typename MatrixType::ElementType[nr]);
+                OMP_PFOR
                 for(size_t j = 0; j < nr; ++j)
                     costs[j] = func(row(centers, assignments[j]), row(data, j)) * getw(j);
             }
@@ -388,6 +389,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
                 dist = newdist;
                 label = j;
             }
+            if(dist < 0.) std::fprintf(stderr, "%zu/%g is < 0\n", i, dist);
         }
         assignments[i] = label;
         total_loss += getw(i) * dist;

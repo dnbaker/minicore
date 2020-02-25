@@ -29,7 +29,11 @@ int main(int argc, char *argv[]) {
         //std::fprintf(stderr, "sparsemat rows: %zu. current i: %zu\n", sparsemat.rows(), i);
     }
     std::fprintf(stderr, "Gathered %zu rows\n", nonemptyrows.size());
+#if 1
+    blaze::DynamicMatrix<typename decltype(sparsemat)::ElementType> filtered_sparsemat = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
+#else
     decltype(sparsemat) filtered_sparsemat = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
+#endif
     auto full_jsm = fgc::jsd::make_jsm_applicator(filtered_sparsemat);
     fgc::util::Timer timer("k-means");
     auto kmppdat = fgc::jsd::make_kmeanspp(full_jsm, k);

@@ -21,14 +21,18 @@ enum ProbDivType {
     JSD = 5, // Multinomial Jensen-Shannon Divergence
     MKL = 6, // Multinomial KL Divergence
     POISSON = 7, // Poisson KL
-    PSD = JSD, // Poisson JSD, but algebraically equivalent
-    PSM = JSM,
     HELLINGER = 8,
     BHATTACHARYA_METRIC = 9,
     BHATTACHARYA_DISTANCE = 10,
+    TOTAL_VARIATION_DISTANCE = 11,
     LLR = 12,
-    REVERSE_MKL,
-    REVERSE_POISSON,
+    EMD=13,
+    REVERSE_MKL=14,
+    REVERSE_POISSON=15,
+    TVD = TOTAL_VARIATION_DISTANCE,
+    WASSERSTEIN=EMD,
+    PSD = JSD, // Poisson JSD, but algebraically equivalent
+    PSM = JSM,
 };
 
 namespace detail {
@@ -42,19 +46,21 @@ static INLINE bool  needs_sqrt(ProbDivType d) {
 
 const char *prob2str(ProbDivType d) {
     switch(d) {
-        case L1: return "L1";
-        case L2: return "L2";
-        case SQRL2: return "SQRL2";
-        case JSD: return "JSD/PSD";
-        case JSM: return "JSM/PSM";
-        case MKL: return "MKL";
-        case REVERSE_MKL: return "REVERSE_MKL";
-        case POISSON: return "POISSON";
-        case REVERSE_POISSON: return "REVERSE_POISSON";
-        case HELLINGER: return "HELLINGER";
-        case LLR: return "LLR";
         case BHATTACHARYA_DISTANCE: return "BHATTACHARYA_DISTANCE";
         case BHATTACHARYA_METRIC: return "BHATTACHARYA_METRIC";
+        case EMD: return "EMD";
+        case HELLINGER: return "HELLINGER";
+        case JSD: return "JSD/PSD";
+        case JSM: return "JSM/PSM";
+        case L1: return "L1";
+        case L2: return "L2";
+        case LLR: return "LLR";
+        case MKL: return "MKL";
+        case POISSON: return "POISSON";
+        case REVERSE_MKL: return "REVERSE_MKL";
+        case REVERSE_POISSON: return "REVERSE_POISSON";
+        case SQRL2: return "SQRL2";
+        case TOTAL_VARIATION_DISTANCE: return "TOTAL_VARIATION_DISTANCE";
         default: return "INVALID TYPE";
     }
 }
@@ -159,6 +165,7 @@ public:
         }
         double ret;
         switch(measure) {
+            case TOTAL_VARIATION_DISTANCE: ret = discrete_total_variation_distance(row(i), row(j)); break;
             case L1:    ret = l1Norm(row(i) - row(j)); break;
             case L2:    ret = l2Norm(row(i) - row(j)); break;
             case SQRL2: ret = blaze::sqrNorm(row(i) - row(j)); break;
@@ -166,6 +173,7 @@ public:
             case JSM:   ret = jsm(i, j); break;
             case REVERSE_MKL: std::swap(i, j); [[fallthrough]];
             case MKL:   ret = mkl(i, j); break;
+            case EMD:   ret = p_wasserstein(row(i), row(j)); break;
             case REVERSE_POISSON: std::swap(i, j); [[fallthrough]];
             case POISSON: ret = pkl(i, j); break;
             case HELLINGER: ret = hellinger(i, j); break;
