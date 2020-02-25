@@ -41,6 +41,16 @@ enum SensitivityMethod: int {
     BTW=BOUNDED_TREE_WIDTH
 };
 
+const char *sm2str(SensitivityMethod sm) {
+    switch(sm) {
+        case BFL: return "BFL";
+        case VX: return "VX";
+        case LFKF: return "LFKF";
+        case FL: return "FL";
+    }
+    return "UNKNOWN";
+}
+
 template<typename IT, typename FT>
 struct IndexCoreset {
     static_assert(std::is_integral<IT>::value, "IT must be integral");
