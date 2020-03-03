@@ -125,7 +125,7 @@ using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])
  * The Banerjee paper has a table of relevant information.
  */
 
-template<typename Oracle, typename FT=float,
+template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr) {
@@ -307,6 +307,8 @@ kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
     return ret;
 }
 
+#define DUMBAVE 1
+
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double, typename Functor=blz::sqrL2Norm>
 double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
                        CMatrixType &centers, MatrixType &data,
@@ -340,11 +342,19 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         {
             OMP_ONLY(std::lock_guard<std::mutex> lg(mutexes[asn]);)
             //std::fprintf(stderr, "got lock\n");
+#ifndef DUMBAVE
+            if(counts[asn] == 0.) {
+                cr = dr;
+            } else {
+                cr = (cr + (dr - cr) * w / counts[asn]);
+            }
+#else
             if(w == 1.) {
                 cr += dr;
             } else {
                 cr += dr * w;
             }
+#endif
         }
         OMP_ATOMIC
         counts[asn] += w;
@@ -352,20 +362,27 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     for(size_t i = 0; i < centers.rows(); ++i) {
         VERBOSE_ONLY(std::fprintf(stderr, "center %zu has count %g\n", i, counts[i]);)
         if(counts[i]) {
+#ifdef DUMBAVE
             row(centers, i BLAZE_CHECK_DEBUG) *= (1. / counts[i]);
+#endif
         } else {
             if(!costs) {
                 costs.reset(new typename MatrixType::ElementType[nr]);
-                for(size_t j = 0; j < nr; ++j)
-                    costs[j] = func(row(centers, assignments[j]), row(data, j)) * getw(j);
+                OMP_PFOR
+                for(size_t j = 0; j < nr; ++j) {
+                    if(j == i) costs[j] = 0.;
+                    else costs[j] = func(row(centers, assignments[j]), row(data, j)) * getw(j);
+                    //std::fprintf(stderr, "costs[%zu] = %g\n", j, costs[j]);
+                }
             }
             inclusive_scan(costs.get(), costs.get() + nr, costs.get());
-            for(unsigned i = 0; i < nr; ++i) std::fprintf(stderr, "%u:%g\t", i, costs[i]);
-            std::fputc('\n', stderr);
+            //for(unsigned i = 0; i < nr; ++i) std::fprintf(stderr, "%u:%g\t", i, costs[i]);
+            //std::fputc('\n', stderr);
             std::srand(std::time(nullptr));
             size_t item = std::lower_bound(costs.get(), costs.get() + nr, costs[nr - 1] * double(std::rand()) / RAND_MAX) - costs.get();
             costs[item] = 0.;
             assignments[item] = i;
+            //std::fprintf(stderr, "Reassigning center %zu to row %zu because it has lost all support\n", i, item);
             std::fprintf(stderr, "Reassigning center %zu to row %zu because it has lost all support\n", i, item);
             row(centers, i BLAZE_CHECK_DEBUG) = row(data, item);
             centers_reassigned = true;
@@ -388,6 +405,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
                 dist = newdist;
                 label = j;
             }
+            if(dist < 0.) std::fprintf(stderr, "%zu/%g is < 0\n", i, dist);
         }
         assignments[i] = label;
         total_loss += getw(i) * dist;

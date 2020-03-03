@@ -54,8 +54,12 @@ tests: $(TESTS)
 print_tests:
 	@echo "Tests: " $(TESTS)
 
+ifdef USESAN
+CXXFLAGS += -fsanitize=address
+endif
+
 %dbg: src/%.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ # -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@
 
 graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)

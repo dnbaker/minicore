@@ -3,6 +3,10 @@
 #include "fgc/timer.h"
 using namespace fgc;
 
+#ifndef FLOAT_TYPE
+#define FLOAT_TYPE double
+#endif
+
 int main(int argc, char *argv[]) {
     if(std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0 || std::strcmp(x, "--help") == 0;})
        != argv + argc) {
@@ -12,7 +16,7 @@ int main(int argc, char *argv[]) {
     unsigned maxnrows = argc == 1 ? 1000: std::atoi(argv[1]);
     unsigned mincount = argc <= 2 ? 50: std::atoi(argv[2]);
     std::ofstream ofs("output.txt");
-    auto sparsemat = fgc::csc2sparse("", true);
+    auto sparsemat = fgc::csc2sparse<FLOAT_TYPE>("", true);
     std::vector<unsigned> nonemptyrows;
     size_t i = 0;
     while(nonemptyrows.size() < 25) {
@@ -20,7 +24,12 @@ int main(int argc, char *argv[]) {
             nonemptyrows.push_back(i);
         ++i;
     }
-    blz::SM<float> first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
+#if 0
+    blz::DM<FLOAT_TYPE>
+#else
+    blz::SM<FLOAT_TYPE>
+#endif
+first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
 #if 0
     auto rws = blz::sum<blz::rowwise>(first25);
     std::cout << rws << '\n';
@@ -28,36 +37,17 @@ int main(int argc, char *argv[]) {
 #endif
     auto jsd = fgc::jsd::make_jsm_applicator(first25);
     auto jsddistmat = jsd.make_distance_matrix();
-    dm::DistanceMatrix<float> utdm(first25.rows());
+    dm::DistanceMatrix<FLOAT_TYPE> utdm(first25.rows());
     jsd.set_distance_matrix(utdm);
     std::cout << utdm << '\n';
-    blz::DynamicMatrix<float> jsd_bnj(first25.rows(), first25.rows(), 0.);
+    blz::DynamicMatrix<FLOAT_TYPE> jsd_bnj(first25.rows(), first25.rows(), 0.);
     jsd.set_distance_matrix(jsd_bnj, jsd::JSM);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
+    std::fprintf(stderr, "min/max jsm: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     jsd.set_distance_matrix(jsd_bnj, jsd::JSD);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
-    std::fprintf(stderr, "bnj minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
+    std::fprintf(stderr, "min/max jsd: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs.flush();
-    auto full_jsd = fgc::jsd::make_jsm_applicator(sparsemat);
-    wy::WyRand<uint32_t> rng(10);
-    double max = full_jsd.llr(rng() % full_jsd.size(), rng() % full_jsd.size()), min = max;
-    double jmax = full_jsd.jsd(rng() % full_jsd.size(), rng() % full_jsd.size()), jmin = jmax;
-    for(size_t niter = 1000000; niter--;) {
-        auto lhs = rng() % full_jsd.size(), rhs = rng() % full_jsd.size();
-        if(nonZeros(row(sparsemat, lhs)) == 0 || nonZeros(row(sparsemat, rhs)))
-            continue;
-        auto bnj = full_jsd.jsd(lhs, rhs);
-        auto llr = full_jsd.llr(lhs, rhs);
-        assert(llr >= 0.);
-        assert(bnj >= 0.);
-        //std::fprintf(stdout, "%g\t%g\t%g\n", llr, bnj, std::abs(llr - bnj));
-        max = std::max(max, llr);
-        min = std::min(min, llr);
-        jmax = std::max(jmax, bnj);
-        jmin = std::min(jmin, bnj);
-    }
-    std::fprintf(stderr, "llr max: %g. min: %g\n", max, min);
-    std::fprintf(stderr, "jsd max: %g. min: %g\n", jmax, jmin);
     i = 25;
     while(nonemptyrows.size() < maxnrows && i < sparsemat.rows()) {
         const auto nzc = blz::nonZeros(row(sparsemat, i));
@@ -71,17 +61,12 @@ int main(int argc, char *argv[]) {
     }
     std::fprintf(stderr, "Gathered %zu rows\n", nonemptyrows.size());
     first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
-    blaze::DynamicMatrix<float> first25_dense(first25);
+
     jsd_bnj.resize(nonemptyrows.size(), nonemptyrows.size(), false);
     jsd_bnj = 0.;
     auto jsd2 = fgc::jsd::make_probdiv_applicator(first25);
-    auto jsd3 = fgc::jsd::make_probdiv_applicator(first25_dense);
     fgc::util::Timer timer("1ksparsejsd");
     jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::JSD);
-    timer.report();
-    std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
-    timer.restart("1kdensejsd");
-    jsd3.set_distance_matrix(jsd_bnj, fgc::jsd::JSD);
     timer.report();
     std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs << "JS Divergence: \n";
