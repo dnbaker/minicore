@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-import matplotlib
-import sys
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -92,8 +90,8 @@ plt.style.use('tableau-colorblind10')
 
 rect_label = [r'$T_{X \times V}$', r'$T_{cs}$', r'$T_{D \times V}$', r'$T_{D\times D}$']
 labels = np.array(list(map(str, coreset_sizes)))
-construction_times = np.array([total_cs_construction_time for label in labels])
-full_times = np.array([total_full_time for label in labels])
+construction_times = np.array([total_cs_construction_time] * len(labels))
+full_times = np.array([total_full_time] * len(labels))
 Y = 'Runtime (ms)'
 selection = np.array([3,5,7,9,11], dtype=np.uint32).astype(int)
 if __name__ == "__main__":

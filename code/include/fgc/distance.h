@@ -465,6 +465,13 @@ auto discrete_total_variation_distance(const blz::Vector<VT, SO> &lhs, const blz
     return 0.5 * blz::l1Norm(~lhs - ~rhs);
 }
 
+#if 0
+template<typename VT, typename VT2, bool SO>
+auto witten_poisson_dissimilarity(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs, ) {
+
+}
+#endif
+
 } // distance
 
 } // namespace blz
