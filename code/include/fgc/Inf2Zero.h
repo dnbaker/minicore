@@ -240,7 +240,7 @@ inline decltype(auto) neginf2zero( const SparseVector<VT,TF>& sv )
 {
    BLAZE_FUNCTION_TRACE;
 
-   return map( ~sv, NegInf2Zero() );
+   return ~sv;
 }
 
 template< typename MT  // Type of the sparse matrix
@@ -249,7 +249,7 @@ inline decltype(auto) neginf2zero( const SparseMatrix<MT,TF>& sm )
 {
    BLAZE_FUNCTION_TRACE;
 
-   return map( ~sm, NegInf2Zero() );
+   return ~sm;
 }
 
 template< typename MT  // Type of the sparse matrix

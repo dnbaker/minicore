@@ -20,7 +20,6 @@ WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -pedantic -Wunused-variable -Wn
 OPT?=O3
 LDFLAGS+=-lz
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LIBS) $(LDFLAGS) \
-    -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 # -flto
 
 
 EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
@@ -69,6 +68,12 @@ dmlrun: src/dmlsearch.cpp $(wildcard include/fgc/*.h)
 
 %: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+
+jsdkmeanstest: src/jsdkmeanstest.cpp $(wildcard include/fgc/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+
+jsdkmeanstestdbg: src/jsdkmeanstest.cpp $(wildcard include/fgc/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp

@@ -1,4 +1,5 @@
 from setuptools import setup, Extension, find_packages
+from os import environ
 from setuptools.command.build_ext import build_ext
 import subprocess
 import sys
@@ -26,6 +27,10 @@ extra_compile_args = ['-march=native',
                       '-Wno-char-subscripts', '-Wno-unused-function',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                       '-lz', '-fopenmp', '-lgomp']
+
+if 'BOOST_DIR' in environ:
+    extra_compile_args.append("-I%s" % environ['BOOST_DIR'])
+
 
 include_dirs=[
     # Path to pybind11 headers

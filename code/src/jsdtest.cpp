@@ -24,19 +24,9 @@ int main(int argc, char *argv[]) {
             nonemptyrows.push_back(i);
         ++i;
     }
-#if 0
-    blz::DM<FLOAT_TYPE>
-#else
-    blz::SM<FLOAT_TYPE>
-#endif
-first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
-#if 0
-    auto rws = blz::sum<blz::rowwise>(first25);
-    std::cout << rws << '\n';
-    std::fprintf(stderr, "First 25 columns: %zu.\n", rws.size());
-#endif
+    blz::SM<FLOAT_TYPE> first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
     auto jsd = fgc::jsd::make_jsm_applicator(first25);
-    auto jsddistmat = jsd.make_distance_matrix();
+    //auto jsddistmat = jsd.make_distance_matrix();
     dm::DistanceMatrix<FLOAT_TYPE> utdm(first25.rows());
     jsd.set_distance_matrix(utdm);
     std::cout << utdm << '\n';
@@ -61,14 +51,25 @@ first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
     }
     std::fprintf(stderr, "Gathered %zu rows\n", nonemptyrows.size());
     first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
+    std::fprintf(stderr, "Assigned to sparse matrix\n");
 
     jsd_bnj.resize(nonemptyrows.size(), nonemptyrows.size(), false);
     jsd_bnj = 0.;
+    std::fprintf(stderr, "Assigned return matrix to 0.\n");
     auto jsd2 = fgc::jsd::make_probdiv_applicator(first25);
     fgc::util::Timer timer("1ksparsejsd");
     jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::JSD);
     timer.report();
     std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
+    timer.restart("1ksparseL2");
+    jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::L2);
+    timer.report();
+#if 0
+    timer.restart("1ldensejsd");
+    blz::DM<FLOAT_TYPE> densefirst25 = first25;
+    fgc::make_probdiv_applicator(densefirst25).set_distance_matrix(jsd_bnj);
+    timer.report();
+#endif
     ofs << "JS Divergence: \n";
     ofs << jsd_bnj << '\n';
     ofs.flush();

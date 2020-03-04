@@ -1,6 +1,7 @@
 #ifndef CSC_H__
 #define CSC_H__
 #include "fgc/shared.h"
+#include "fgc/timer.h"
 #include "fgc/blaze_adaptor.h"
 #include "mio/single_include/mio/mio.hpp"
 namespace fgc {
@@ -38,6 +39,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool skip_empt
     size_t used_rows = 0, i;
     for(i = 0; i < mat.n_; ++i) {
         auto col = mat.column(i);
+        if(mat.n_ > 1000000 && i % 10000 == 0) std::fprintf(stderr, "%zu/%u\r\n", i, mat.n_);
         if(skip_empty && 0u == col.nnz()) continue;
         for(auto s = col.start_; s < col.stop_; ++s) {
             ret.append(used_rows, mat.indices_[s], mat.data_[s]);
@@ -50,6 +52,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool skip_empt
 
 template<typename FT=float>
 blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=false) {
+    util::Timer t("csc2sparse load time");
     std::string indptrn  = prefix + "indptr.file";
     std::string indicesn = prefix + "indices.file";
     std::string datan    = prefix + "data.file";
@@ -65,6 +68,15 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
     CSCMatrixView matview((const uint64_t *)indptr.data(), (const uint64_t *)indices.data(),
                           (const uint32_t *)data.data(), indices.size() / (sizeof(uint64_t) / sizeof(indices[0])),
                           nfeat, nsamples);
+#ifndef MADV_REMOVE
+#  define MADV_FLAGS (MADV_DONTNEED | MADV_FREE)
+#else
+#  define MADV_FLAGS (MADV_DONTNEED | MADV_REMOVE)
+#endif
+    ::madvise((void *)indptr.data(), indptr.size(), MADV_FLAGS);
+    ::madvise((void *)indices.data(), indices.size(), MADV_FLAGS);
+    ::madvise((void *)data.data(), data.size(), MADV_FLAGS);
+#undef MADV_FLAGS
     return csc2sparse(matview, skip_empty);
 }
 

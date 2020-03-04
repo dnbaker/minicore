@@ -378,24 +378,22 @@ INLINE decltype(auto) multinomial_jsm(Args &&...args) {
 
 template<typename VT, bool SO, typename VT2>
 auto p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {
-    auto &xr = ~x;
-    auto &yr = ~y;
-	const size_t sz = xr.size();
+	const size_t sz = (~y).size();
 	std::unique_ptr<uint32_t[]> ptr(new uint32_t[sz * 2]);
-	auto xptr = ptr.get(), yptr = ptr.get() + xr.size();
+	auto xptr = ptr.get(), yptr = ptr.get() + (~x).size();
 	std::iota(xptr, yptr, 0u);
 	std::iota(yptr, yptr + sz, 0u);
-	pdqsort(xptr, yptr, [xdat=xr](uint32_t p, uint32_t q) {return xdat[p] < xdat[q];});
-	pdqsort(yptr, yptr + sz, [ydat=yr](uint32_t p, uint32_t q) {return ydat[p] < ydat[q];});
-	auto xconv = [xdat=xr](auto x) {return xdat[x];};
-	auto yconv = [ydat=yr](auto y) {return ydat[y];};
+	pdqsort(xptr, yptr, [&](uint32_t p, uint32_t q) {return (~x)[p] < (~x)[q];});
+	pdqsort(yptr, yptr + sz, [&](uint32_t p, uint32_t q) {return (~y)[p] < (~y)[q];});
+	auto xconv = [&](auto xi) {return (~x)[xi];};
+	auto yconv = [&](auto yi) {return (~y)[yi];};
     blz::DynamicVector<typename VT::ElementType, SO> all(2 * sz);
 	std::merge(boost::make_transform_iterator(xptr, xconv), boost::make_transform_iterator(yptr, xconv),
 	           boost::make_transform_iterator(yptr, yconv), boost::make_transform_iterator(yptr + sz, yconv), all.begin());
     const size_t deltasz = 2 * sz - 1;
     blz::DynamicVector<typename VT::ElementType, SO> deltas(deltasz);
     std::adjacent_difference(all.begin(), all.end(), deltas.begin());
-    assert(std::is_sorted(xptr, yptr,  [xdat=xr](uint32_t p, uint32_t q) {return xdat[p] < xdat[q];}));
+    assert(std::is_sorted(xptr, yptr,  [&](uint32_t p, uint32_t q) {return (~x)[p] < (~x)[q];}));
     auto fill_cdf = [&](auto datptr, const auto &datvec) -> blz::DynamicVector<typename VT::ElementType>
     {
         // Faster to do one linear scan than n binary searches
@@ -405,8 +403,8 @@ auto p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<V
                 ++offset;
         return ret;
     };
-    auto cdfx = fill_cdf(xptr, xr);
-    auto cdfy = fill_cdf(yptr, yr);
+    auto cdfx = fill_cdf(xptr, (~x));
+    auto cdfy = fill_cdf(yptr, (~y));
 	if(p == 1.)
 		return dot(blz::abs(cdfx - cdfy), deltas) / sz;
     cdfx *= 1. / sz;

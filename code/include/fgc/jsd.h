@@ -75,6 +75,7 @@ class ProbDivApplicator {
     std::unique_ptr<VecT> row_sums_;
     std::unique_ptr<MatrixType> logdata_;
     std::unique_ptr<MatrixType> sqrdata_;
+    std::unique_ptr<VecT> llr_cache_, jsdcache_;
 public:
     using FT = typename MatrixType::ElementType;
     using MT = MatrixType;
@@ -106,16 +107,19 @@ public:
         const size_t nr = m.rows();
         assert(nr == m.columns());
         assert(nr == data_.rows());
+        ProbDivType actual_measure = measure == JSM ? JSD: measure;
         for(size_t i = 0; i < nr; ++i) {
-            CONST_IF((blaze::IsDenseMatrix_v<MatType>)) {
+            CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
+                std::fprintf(stderr, "Executing serially, %zu/%zu\n", i, nr);
                 for(size_t j = i + 1; j < nr; ++j) {
-                    auto v = this->operator()(i, j, measure);
+                    auto v = this->operator()(i, j, actual_measure);
                     m(i, j) = v;
                 }
             } else {
+                std::fprintf(stderr, "Executing in parallel, %zu/%zu\n", i, nr);
                 OMP_PFOR
                 for(size_t j = i + 1; j < nr; ++j) {
-                    auto v = this->operator()(i, j, measure);
+                    auto v = this->operator()(i, j, actual_measure);
                     m(i, j) = v;
                 }
             }
@@ -206,12 +210,9 @@ public:
         assert(j < data_.rows());
         double ret;
         auto ri = row(i), rj = row(j);
-        if(likely(logdata_)) {
-            ret =  bnj::multinomial_jsd(ri,
-                                        rj, logrow(i), logrow(j));
-        } else {
-            throw std::runtime_error("logdata required");
-        }
+        //constexpr FT logp5 = -0.693147180559945; // std::log(0.5)
+        auto s = ri + rj;
+        ret = jsdcache_->operator[](i) + jsdcache_->operator[](j) - blz::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
 #ifndef NDEBUG
         static constexpr typename MatrixType::ElementType threshold
             = std::is_same_v<typename MatrixType::ElementType, double>
@@ -232,12 +233,12 @@ public:
     }
     double mkl(size_t i, size_t j) const {
         // Multinomial KL
-        return blz::dot(row(i), logrow(i) - logrow(j));
+        return (*jsdcache_)[i] - blz::dot(row(i), logrow(j));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double mkl(size_t i, const OT &o) const {
         // Multinomial KL
-        return blz::dot(row(i), logrow(i) - blaze::neginf2zero(blz::log(o)));
+        return (*jsdcache_)[i] - blz::dot(row(i), blaze::neginf2zero(blz::log(o)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     double mkl(size_t i, const OT &, const OT2 &olog) const {
@@ -296,15 +297,15 @@ public:
     template<typename...Args>
     double psm(Args &&...args) const {return std::sqrt(std::forward<Args>(args)...);}
     double llr(size_t i, size_t j) const {
-        double ret =
+            //blaze::dot(row(i), logrow(i)) * row_sums_->operator[](i)
+            //+
+            //blaze::dot(row(j), logrow(j)) * row_sums_->operator[](j)
             // X_j^Tlog(p_j)
-            blaze::dot(row(i), logrow(i)) * row_sums_->operator[](i)
-            +
             // X_k^Tlog(p_k)
-            blaze::dot(row(j), logrow(j)) * row_sums_->operator[](j)
-            -
             // (X_k + X_j)^Tlog(p_jk)
-            blaze::dot(weighted_row(i) + weighted_row(j),
+        double ret = (*llr_cache_)[i] + (*llr_cache_)[j]
+            -
+            blz::dot(weighted_row(i) + weighted_row(j),
                 neginf2zero(blz::log(0.5 * (row(i) + row(j))))
             );
         assert(ret >= -1e-3 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
@@ -340,7 +341,6 @@ private:
             r /= countsum;
             *rowsumit++ = countsum;
         }
-        //blz::normalize(data_);
         switch(prior) {
             case NONE:
             break;
@@ -371,6 +371,13 @@ private:
             logdata_.reset(new MatrixType(neginf2zero(log(data_))));
         } else if(detail::needs_sqrt(measure_)) {
             sqrdata_.reset(new MatrixType(blz::sqrt(data_)));
+        }
+        llr_cache_.reset(new VecT(data_.rows()));
+        jsdcache_.reset(new VecT(data_.rows()));
+        for(size_t i = 0; i < llr_cache_->size(); ++i) {
+            double cv = blaze::dot(row(i), logrow(i));
+            llr_cache_->operator[](i) = cv * row_sums_->operator[](i);
+            jsdcache_->operator[](i)  = cv;
         }
         VERBOSE_ONLY(std::cout << *logdata_;)
     }
@@ -436,7 +443,7 @@ auto make_kmeanspp(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_
 }
 
 template<typename MatrixType, typename WFT=typename MatrixType::ElementType, typename IT=uint32_t>
-auto make_d2_coreset_sampler(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr) {
+auto make_d2_coreset_sampler(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, coresets::SensitivityMethod sens=cs::LBK) {
     wy::WyRand<uint64_t> gen(seed);
     auto [centers, asn, costs] = coresets::kmeanspp(app, gen, app.size(), k);
     //for(const auto c: centers) std::fprintf(stderr, "%u,", c);
@@ -444,11 +451,18 @@ auto make_d2_coreset_sampler(const ProbDivApplicator<MatrixType> &app, unsigned 
     //std::fprintf(stderr, "costs size: %zu. centers size: %zu\n", costs.size(), centers.size());
     coresets::CoresetSampler<typename MatrixType::ElementType, IT> cs;
     cs.make_sampler(app.size(), centers.size(), costs.data(), asn.data(), weights,
-                    /*seed=*/gen());
+                    /*seed=*/gen(), sens);
     return cs;
 }
 
 } // jsd
+using jsd::ProbDivApplicator;
+using jsd::make_d2_coreset_sampler;
+using jsd::make_kmc2;
+using jsd::make_kmeanspp;
+using jsd::make_jsm_applicator;
+using jsd::make_probdiv_applicator;
+
 
 
 } // fgc

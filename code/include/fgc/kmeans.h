@@ -332,6 +332,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     std::unique_ptr<typename MatrixType::ElementType[]> costs;
     get_assignment_counts:
     centers_reassigned = false;
+    
     OMP_PRAGMA("omp parallel for schedule(dynamic)")
     for(size_t i = 0; i < nr; ++i) {
         assert(assignments[i] < centers.rows());
@@ -341,24 +342,15 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         const auto w = getw(i);
         {
             OMP_ONLY(std::lock_guard<std::mutex> lg(mutexes[asn]);)
-            //std::fprintf(stderr, "got lock\n");
-#ifndef DUMBAVE
-            if(counts[asn] == 0.) {
-                cr = dr;
-            } else {
-                cr = (cr + (dr - cr) * w / counts[asn]);
-            }
-#else
             if(w == 1.) {
-                cr += dr;
-            } else {
-                cr += dr * w;
+                blz::serial(cr.operator+=(dr));
             }
-#endif
+            else blz::serial(cr.operator+=(dr * w));
         }
         OMP_ATOMIC
         counts[asn] += w;
     }
+    std::fprintf(stderr, "Assigned cluster centers\n");
     for(size_t i = 0; i < centers.rows(); ++i) {
         VERBOSE_ONLY(std::fprintf(stderr, "center %zu has count %g\n", i, counts[i]);)
         if(counts[i]) {
@@ -388,24 +380,24 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
             centers_reassigned = true;
         }
     }
-    if(centers_reassigned) {
+    if(centers_reassigned)
         goto get_assignment_counts;
-    }
+    std::fprintf(stderr, "Assigning to centers\n");
     // 2. Assign centers
     double total_loss = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:total_loss)")
     for(size_t i = 0; i < nr; ++i) {
         auto dr = row(data, i BLAZE_CHECK_DEBUG);
-        auto dist = func(dr, row(centers, 0 BLAZE_CHECK_DEBUG));
+        auto lhr = row(centers, 0 BLAZE_CHECK_DEBUG);
+        auto dist = blz::serial(func(dr, lhr));
         unsigned label = 0;
         double newdist;
-        for(unsigned j = 1;j < centers.rows();++j) {
-            if((newdist = func(dr, row(centers, j BLAZE_CHECK_DEBUG))) < dist) {
+        for(unsigned j = 1;j < centers.rows(); ++j) {
+            if((newdist = blz::serial(func(dr, row(centers, j BLAZE_CHECK_DEBUG)))) < dist) {
                 //std::fprintf(stderr, "newdist: %g. olddist: %g. Replacing label %u with %u\n", newdist, dist, label, j);
                 dist = newdist;
                 label = j;
             }
-            if(dist < 0.) std::fprintf(stderr, "%zu/%g is < 0\n", i, dist);
         }
         assignments[i] = label;
         total_loss += getw(i) * dist;
