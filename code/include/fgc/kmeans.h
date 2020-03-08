@@ -6,6 +6,7 @@
 #include <numeric>
 #include "matrix_coreset.h"
 #include "timer.h"
+#include "div.h"
 
 namespace fgc {
 using blz::rowiterator;
@@ -405,6 +406,48 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     std::fprintf(stderr, "total loss: %g\n", total_loss);
     if(std::isnan(total_loss)) total_loss = std::numeric_limits<decltype(total_loss)>::infinity();
     return total_loss;
+}
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double, typename Functor=blz::sqrL2Norm, typename RNG>
+void minibatch_lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
+                                 CMatrixType &centers, MatrixType &data, unsigned batchsize,
+                                 RNG &rng,
+                                 const Functor &func=Functor(),
+                                 const WFT *weights=nullptr)
+{
+    if(batchsize < assignments.size()) batchsize = assignments.size();
+    const size_t np = assignments.size();
+    blz::SmallArray<IT, 16> selection;
+    selection.reserve(batchsize);
+    schism::Schismatic<IT> div(np);
+    double weight_sum = 0, dbs = batchsize;
+    for(;;) {
+        auto ind = div.mod(rng());
+        if(std::find(selection.begin(), selection.end(), ind) == selection.end()) {
+            selection.pushBack(ind);
+            if((weight_sum += (weights ? weights[ind]: WFT(1))) >= dbs)
+                break;
+        }
+    }
+    shared::sort(selection.begin(), selection.end());
+    std::unique_ptr<IT[]> asn(new IT[np]());
+    OMP_PFOR
+    for(size_t i = 0; i < batchsize; ++i) {
+        auto ind = selection[i];
+        auto dr = row(data, ind);
+        auto lhr = row(centers, 0 BLAZE_CHECK_DEBUG);
+        double dist = blz::serial(func(dr, lhr)), newdist;
+        IT label = 0;
+        for(unsigned j = 1; j < centers.size(); ++j)
+            if((newdist = blz::serial(func(dr, row(centers, j BLAZE_CHECK_DEBUG)))) < dist)
+                dist = newdist, label = j;
+        const auto weight = weights ? weights[ind]: WFT(1);
+        OMP_ATOMIC
+        counts[label] += weight;
+        OMP_BARRIER
+        double eta = 1. / counts[label] * weight;
+        auto crow = row(centers, label);
+        crow = blz::serial((1. - eta) * crow + eta * dr);
+    }
 }
 
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double,
