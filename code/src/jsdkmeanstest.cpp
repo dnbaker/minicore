@@ -65,8 +65,21 @@ int main(int argc, char *argv[]) {
     centers = rows(filtered_sparsemat, centeridx.data(), centeridx.size());
     fgc::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 250, [](const auto &x, const auto &y) {return fgc::jsd::multinomial_jsd(x, y);});
     auto coreset_sampler = fgc::jsd::make_d2_coreset_sampler(full_jsm, k, 13);
+double mb_lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
+                     CMatrixType &centers, MatrixType &data,
+                     unsigned batch_size,
+                     size_t maxiter=10000,
+                     const Functor &func=Functor(),
+                     uint64_t seed=137,
+                     const WFT *weights=nullptr)
+{
 #else
     fgc::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 50, oracle);
+    auto cpyasn = asn;
+    auto cpycounts = counts;
+    auto cpycenters = centers;
+    std::mt19937_64 mt(1337);
+    fgc::coresets::mb_lloyd_loop(cpyasn, cpycounts, cpycenters, filtered_sparsemat, 500, 50, oracle, mt());
     std::fprintf(stderr, "About to make probdiv appl\n");
     auto full_jsd = fgc::jsd::make_probdiv_applicator(filtered_sparsemat, fgc::jsd::MKL);
     std::tie(centeridx, asn, costs) = fgc::jsd::make_kmeanspp(full_jsd, k);

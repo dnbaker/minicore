@@ -226,7 +226,8 @@ std::vector<IT>
 kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
 {
     if(m == 0) throw std::invalid_argument("m must be nonzero");
-    flat_hash_set<IT> centers{IT(rng() % np)};
+    schism::Schismatic<IT> div(np);
+    flat_hash_set<IT> centers{div.mod(rng())};
     // Helper function for minimum distance
     auto mindist = [&centers,&oracle](auto newind) {
         typename flat_hash_set<IT>::const_iterator it = centers.begin(), end = centers.end();
@@ -237,26 +238,35 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
     };
 
     while(centers.size() < k) {
-        auto x = rng() % np;
+        auto x = div.mod(rng());
+        double xdist = oracle(*centers.begin(), x);
+        OMP_PRAGMA("omp parallel for reduction(min:x)")
+        for(unsigned i = 1; i < centers.size(); ++i) {
+            auto it = centers.begin();
+            std::advance(it, i);
+            xdist = std::min(xdist, oracle(*it, x));
+        }
         auto xdist = mindist(x);
+        auto xdi = 1. / xdist;
         auto baseseed = rng();
+        const double max64inv = 1. / std::numeric_limits<uint64_t>::max();
         OMP_PFOR
         for(unsigned j = 1; j < m; ++j) {
             uint64_t local_seed = baseseed + j;
             wy::wyhash64_stateless(&local_seed);
-            auto y = local_seed % np;
+            auto y = div.mod(local_seed);
             auto ydist = mindist(y);
-            auto rat = ydist / xdist;
             wy::wyhash64_stateless(&local_seed);
-            auto urd_val = double(local_seed) / std::numeric_limits<uint64_t>::max();
-            if(rat > urd_val) {
+            const auto urd_val = local_seed * max64inv;
+            if(ydist * xdi > urd_val) {
                 OMP_CRITICAL
                 {
-                    if(rat > urd_val)
-                        x = y, xdist = ydist;
+                    if(ydist * xdi > urd_val)
+                        x = y, xdist = ydist, xdi = 1. / xdist;
                 }
             }
         }
+        std::fprintf(stderr, "[kmc2]: %zu/%zu\n", centers.size(), size_t(k));
         centers.insert(x);
     }
     return std::vector<IT>(centers.begin(), centers.end());
@@ -360,18 +370,18 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
 #endif
         } else {
             if(!costs) {
+                std::srand(std::time(nullptr));
                 costs.reset(new typename MatrixType::ElementType[nr]);
                 OMP_PFOR
                 for(size_t j = 0; j < nr; ++j) {
-                    if(j == i) costs[j] = 0.;
-                    else costs[j] = func(row(centers, assignments[j]), row(data, j)) * getw(j);
+                    //if(j == i) costs[j] = 0.; else
+                    costs[j] = func(row(centers, assignments[j]), row(data, j)) * getw(j);
                     //std::fprintf(stderr, "costs[%zu] = %g\n", j, costs[j]);
                 }
             }
             inclusive_scan(costs.get(), costs.get() + nr, costs.get());
             //for(unsigned i = 0; i < nr; ++i) std::fprintf(stderr, "%u:%g\t", i, costs[i]);
             //std::fputc('\n', stderr);
-            std::srand(std::time(nullptr));
             size_t item = std::lower_bound(costs.get(), costs.get() + nr, costs[nr - 1] * double(std::rand()) / RAND_MAX) - costs.get();
             costs[item] = 0.;
             assignments[item] = i;
@@ -407,48 +417,6 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     if(std::isnan(total_loss)) total_loss = std::numeric_limits<decltype(total_loss)>::infinity();
     return total_loss;
 }
-template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double, typename Functor=blz::sqrL2Norm, typename RNG>
-void minibatch_lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
-                                 CMatrixType &centers, MatrixType &data, unsigned batchsize,
-                                 RNG &rng,
-                                 const Functor &func=Functor(),
-                                 const WFT *weights=nullptr)
-{
-    if(batchsize < assignments.size()) batchsize = assignments.size();
-    const size_t np = assignments.size();
-    blz::SmallArray<IT, 16> selection;
-    selection.reserve(batchsize);
-    schism::Schismatic<IT> div(np);
-    double weight_sum = 0, dbs = batchsize;
-    for(;;) {
-        auto ind = div.mod(rng());
-        if(std::find(selection.begin(), selection.end(), ind) == selection.end()) {
-            selection.pushBack(ind);
-            if((weight_sum += (weights ? weights[ind]: WFT(1))) >= dbs)
-                break;
-        }
-    }
-    shared::sort(selection.begin(), selection.end());
-    std::unique_ptr<IT[]> asn(new IT[np]());
-    OMP_PFOR
-    for(size_t i = 0; i < batchsize; ++i) {
-        auto ind = selection[i];
-        auto dr = row(data, ind);
-        auto lhr = row(centers, 0 BLAZE_CHECK_DEBUG);
-        double dist = blz::serial(func(dr, lhr)), newdist;
-        IT label = 0;
-        for(unsigned j = 1; j < centers.size(); ++j)
-            if((newdist = blz::serial(func(dr, row(centers, j BLAZE_CHECK_DEBUG)))) < dist)
-                dist = newdist, label = j;
-        const auto weight = weights ? weights[ind]: WFT(1);
-        OMP_ATOMIC
-        counts[label] += weight;
-        OMP_BARRIER
-        double eta = 1. / counts[label] * weight;
-        auto crow = row(centers, label);
-        crow = blz::serial((1. - eta) * crow + eta * dr);
-    }
-}
 
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double,
          typename Functor=blz::sqrL2Norm>
@@ -475,6 +443,96 @@ void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
     std::fprintf(stderr, "Completed with final loss of %0.30g after %zu rounds\n", newloss, iternum);
 }
 
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double, typename Functor=blz::sqrL2Norm, typename RNG, typename SelContainer>
+void minibatch_lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
+                               CMatrixType &centers, MatrixType &data, unsigned batchsize,
+                               RNG &rng,
+                               SelContainer &selection,
+                               const Functor &func=Functor(),
+                               const WFT *weights=nullptr)
+{
+    if(batchsize < assignments.size()) batchsize = assignments.size();
+    const size_t np = assignments.size();
+    selection.clear();
+    selection.reserve(batchsize);
+    schism::Schismatic<IT> div(np);
+    double weight_sum = 0, dbs = batchsize;
+    for(;;) {
+        auto ind = div.mod(rng());
+        if(std::find(selection.begin(), selection.end(), ind) == selection.end()) {
+            blz::push_back(selection, ind);
+            if((weight_sum += (weights ? weights[ind]: WFT(1))) >= dbs)
+                break;
+        }
+    }
+    shared::sort(selection.begin(), selection.end());
+    std::unique_ptr<IT[]> asn(new IT[np]());
+    OMP_PRAGMA("omp parallel")
+    {
+        std::unique_ptr<IT[]> labels(new IT[batchsize]);
+        OMP_PRAGMA("omp for")
+        for(size_t i = 0; i < batchsize; ++i) {
+            const auto ind = selection[i];
+            const auto dr = row(data, ind);
+            const auto lhr = row(centers, 0 BLAZE_CHECK_DEBUG);
+            double dist = blz::serial(func(dr, lhr)), newdist;
+            IT label = 0;
+            for(unsigned j = 1; j < centers.rows(); ++j)
+                if((newdist = blz::serial(func(dr, row(centers, j BLAZE_CHECK_DEBUG)))) < dist)
+                    dist = newdist, label = j;
+            labels[i] = label;
+            OMP_ATOMIC
+            counts[label] += weights ? weights[ind]: WFT(1);
+        }
+        OMP_PRAGMA("omp for")
+        for(size_t i = 0; i < batchsize; ++i) {
+            const auto label = labels[i];
+            const auto ind = selection[i];
+            const auto dr = row(data, ind);
+            const double eta = (weights ? weights[ind]: WFT(1)) / counts[label];
+            auto crow = row(centers, label BLAZE_CHECK_DEBUG);
+            crow = blz::serial((1. - eta) * crow + eta * dr);
+        }
+    }
+}
+
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double,
+         typename Functor=blz::sqrL2Norm>
+double mb_lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
+                     CMatrixType &centers, MatrixType &data,
+                     unsigned batch_size,
+                     size_t maxiter=10000,
+                     const Functor &func=Functor(),
+                     uint64_t seed=137,
+                     const WFT *weights=nullptr)
+{
+    std::vector<IT> selection;
+    selection.reserve(batch_size);
+    wy::WyRand<IT, 4> rng(seed);
+    size_t iternum = 0;
+    while(iternum++ < maxiter) {
+        std::fprintf(stderr, "Starting minibatch iter %zu\n", iternum);
+        minibatch_lloyd_iteration(assignments, counts, centers, data, batch_size, rng, selection, func, weights);
+    }
+    double loss = 0.;
+    std::memset(counts.data(), 0, sizeof(counts[0]) * counts.size());
+    // TODO: Consider moving the centers as well at this step.
+    OMP_PRAGMA("omp parallel for reduction(+:loss)")
+    for(size_t i = 0; i < assignments.size(); ++i) {
+        auto dr = row(data, i BLAZE_CHECK_DEBUG);
+        double closs = func(dr, row(centers, 0 BLAZE_CHECK_DEBUG)), newloss;
+        IT label = 0;
+        for(unsigned j = 1; j < centers.rows(); ++j)
+            if((newloss = func(dr, row(centers, j BLAZE_CHECK_DEBUG))) < closs)
+                closs = newloss, label = j;
+        OMP_ATOMIC
+        ++counts[label];
+        assignments[i] = label;
+        loss += closs;
+    }
+    std::fprintf(stderr, "Completed with final loss of %0.30g after %zu rounds\n", loss, iternum);
+    return loss;
+}
 
 
 

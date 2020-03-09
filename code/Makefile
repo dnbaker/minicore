@@ -19,6 +19,7 @@ STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -pedantic -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers
 OPT?=O3
 LDFLAGS+=-lz
+EXTRA?=
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LIBS) $(LDFLAGS) \
 
 
@@ -56,6 +57,7 @@ print_tests:
 ifdef USESAN
 CXXFLAGS += -fsanitize=address
 endif
+CXXFLAGS += $(EXTRA)
 
 %dbg: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@
@@ -70,7 +72,7 @@ dmlrun: src/dmlsearch.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
 
 jsdkmeanstest: src/jsdkmeanstest.cpp $(wildcard include/fgc/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
 
 jsdkmeanstestdbg: src/jsdkmeanstest.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
