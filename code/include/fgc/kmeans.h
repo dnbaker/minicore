@@ -246,7 +246,6 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
             std::advance(it, i);
             xdist = std::min(xdist, oracle(*it, x));
         }
-        auto xdist = mindist(x);
         auto xdi = 1. / xdist;
         auto baseseed = rng();
         const double max64inv = 1. / std::numeric_limits<uint64_t>::max();
