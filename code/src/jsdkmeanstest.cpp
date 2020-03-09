@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
     std::vector<float> counts(centeridx.size());
     blaze::DynamicMatrix<typename decltype(filtered_sparsemat)::ElementType> centers(rows(filtered_sparsemat, centeridx.data(), centeridx.size()));
     auto oracle = [](const auto &x, const auto &y) {
-        return std::sqrt(fgc::jsd::multinomial_jsd(x, y));
+        return fgc::jsd::multinomial_jsd(x, y);
     };
     std::fprintf(stderr, "About to start ll\n");
 #if 0

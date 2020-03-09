@@ -227,33 +227,31 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
 {
     if(m == 0) throw std::invalid_argument("m must be nonzero");
     schism::Schismatic<IT> div(np);
-    flat_hash_set<IT> centers{div.mod(rng())};
+    flat_hash_set<IT> centers{div.mod(IT(rng()))};
+    if(*centers.begin() > np) throw std::runtime_error("ZOMGSDFD");
     // Helper function for minimum distance
     auto mindist = [&centers,&oracle](auto newind) {
         typename flat_hash_set<IT>::const_iterator it = centers.begin(), end = centers.end();
+        assert(centers.size());
         auto dist = oracle(*it, newind);
-        while(++it != end)
+        while(++it != end) {
             dist = std::min(dist, oracle(*it, newind));
+        }
         return dist;
     };
 
     while(centers.size() < k) {
-        auto x = div.mod(rng());
-        double xdist = oracle(*centers.begin(), x);
-        OMP_PRAGMA("omp parallel for reduction(min:x)")
-        for(unsigned i = 1; i < centers.size(); ++i) {
-            auto it = centers.begin();
-            std::advance(it, i);
-            xdist = std::min(xdist, oracle(*it, x));
-        }
+        auto x = div.mod(IT(rng()));
+        double xdist = mindist(x);
         auto xdi = 1. / xdist;
-        auto baseseed = rng();
+        auto baseseed = IT(rng());
         const double max64inv = 1. / std::numeric_limits<uint64_t>::max();
         OMP_PFOR
         for(unsigned j = 1; j < m; ++j) {
             uint64_t local_seed = baseseed + j;
             wy::wyhash64_stateless(&local_seed);
             auto y = div.mod(local_seed);
+            assert(uint32_t(local_seed) % np == y || !std::fprintf(stderr, "seed: %zu. np: %zu. mod: %u. found: %u\n", size_t(local_seed), np, unsigned(local_seed % np), y));
             auto ydist = mindist(y);
             wy::wyhash64_stateless(&local_seed);
             const auto urd_val = local_seed * max64inv;
