@@ -224,7 +224,7 @@ public:
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     double jsd(size_t i, const OT &o, const OT2 &olog) const {
         auto mnlog = evaluate(log(0.5 * (row(i) + o)));
-        return 0.5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
+        return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double jsd(size_t i, const OT &o) const {
@@ -261,13 +261,13 @@ public:
     double psd(size_t i, size_t j) const {
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + row(j))));
-        return .5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(row(j), logrow(j) - mnlog));
+        return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(row(j), logrow(j) - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     double psd(size_t i, const OT &o, const OT2 &olog) const {
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + o)));
-        return .5 * (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
+        return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double psd(size_t i, const OT &o) const {

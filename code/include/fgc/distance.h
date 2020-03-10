@@ -270,7 +270,7 @@ INLINE double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
     auto mnlog = blaze::evaluate(blaze::neginf2zero(blaze::log(~mn)));
     double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
     double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
-    return 0.5 * (lhc + rhc);
+    return (lhc + rhc);
 }
 
 template<typename VT, typename VT2, bool SO>
@@ -282,7 +282,7 @@ INLINE double multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
     auto mnlog = blaze::evaluate(blaze::log((~lhs + ~rhs) * 0.5));
     double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
     double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
-    return 0.5 * (lhc + rhc);
+    return (lhc + rhc);
 }
 template<typename VT, bool SO>
 INLINE double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
@@ -293,7 +293,7 @@ INLINE double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
     auto mnlog = blaze::evaluate(neginf2zero(log((~lhs + ~rhs) * 0.5)));
     double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
     double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
-    return 0.5 * (lhc + rhc);
+    return (lhc + rhc);
 }
 template<typename VT, typename VT2, bool SO>
 INLINE double multinomial_jsd(const blaze::Vector<VT, SO> &lhs,
@@ -304,7 +304,7 @@ INLINE double multinomial_jsd(const blaze::Vector<VT, SO> &lhs,
     auto mnlog = blaze::evaluate(neginf2zero(log((~lhs + ~rhs) * 0.5)));
     double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
     double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
-    return 0.5 * (lhc + rhc);
+    return (lhc + rhc);
 }
 template<typename VT, bool SO>
 INLINE double multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
@@ -314,7 +314,7 @@ INLINE double multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
     auto mnlog = blaze::evaluate(blaze::log((~lhs + ~rhs) * 0.5));
     double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
     double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
-    return 0.5 * (lhc + rhc);
+    return (lhc + rhc);
 }
 
 template<typename FT, bool SO>
@@ -375,6 +375,30 @@ INLINE decltype(auto) multinomial_jsm(Args &&...args) {
     using std::sqrt;
     return sqrt(multinomial_jsd(std::forward<Args>(args)...));
 }
+
+template<typename VT, typename VT2, bool SO>
+inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &rhs) {
+    // Approximate jsd function for use in LSH tables.
+    return std::sqrt(blz::sum(blz::pow(~lhs - ~rhs, 2) / (~lhs + ~rhs)) * 0.5);
+}
+
+template<typename Proj>
+struct S2JSMHasher {
+    Proj proj_;
+    const double b_;      // b - 0.5
+    const double wsqinv_; // \frac{1}{W^2}
+    // TODO: Use as random projections for DCI/PDCI
+    S2JSMHasher(Proj proj, double b, double w, uint64_t seed=0): proj_(proj), b_(b - 0.5), wsqinv_(1./(w*w)) {
+        seed += (std::numeric_limits<uint64_t>::max() * b) - std::numeric_limits<uint64_t>::max() * w;
+        std::mt19937_64 mt(seed);
+        std::normal_distribution<double> gen;
+        for(auto &v: proj_) v = std::abs(gen(mt));
+    }
+    template<typename T>
+    uint32_t operator()(const T &o) {
+        return uint32_t(std::sqrt(wsqinv_ * blz::dot(o, proj_) + .25) + b_);
+    }
+};
 
 template<typename VT, bool SO, typename VT2>
 auto p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {
