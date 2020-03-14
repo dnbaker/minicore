@@ -46,7 +46,7 @@ CXXFLAGS += -DUSE_TBB -L$(TBBDIR)/lib -I$(TBBDIR)/include -ltbb
 endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
-      jsdtestdbg jsdkmeanstestdbg
+      jsdtestdbg jsdkmeanstestdbg jsdhashdbg
 
 clust: kzclustexpdbg kzclustexp kzclustexpf
 

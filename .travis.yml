@@ -29,6 +29,7 @@ script:
   - ./tbasdbg
   - ./diskmattestdbg
   - ./dmlsearchdbg
+  - ./jsdhashdbg
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:
