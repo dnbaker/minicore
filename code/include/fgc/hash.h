@@ -97,7 +97,6 @@ struct LSHTable {
 
 private:
     INLINE void insert(unsigned i, KT key, IT id) {
-        std::fprintf(stderr, "Inserted key %u for id %u into subtable %u\n", key, id, i);
         auto &table = tables_[i];
         auto it = table.find(key);
         if(it == table.end()) it = table.emplace(key, std::vector<IT>{id}).first;

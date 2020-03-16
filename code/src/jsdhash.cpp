@@ -5,13 +5,12 @@ using namespace fgc;
 int main() {
     unsigned dim = 20, nhashes = 4, nsamp = 10;
     std::mt19937_64 mt(dim  * nhashes);
-    std::uniform_real_distribution<float> gen;
+    std::normal_distribution<float> gen;
     blz::DM<float> dm = blz::generate(nsamp, dim, [&](auto, auto) {return std::abs(gen(mt));});
     assert(dm.rows() == nsamp);
     assert(dm.columns() == dim);
     std::cout << dm << '\n';
     for(auto r: rowiterator(dm)) r /= blz::sum(r);
-    std::uniform_real_distribution<float> gen;
     for(double r = 0.025; r <= 0.025; r *= 10) {
         std::cout << "R: " << r << '\n';
         JSDLSHasher<float> jsdhasher(dim, nhashes, r);
@@ -47,6 +46,5 @@ int main() {
         }
         std::cout << '\n';
 #endif
-        }
     }
 }
