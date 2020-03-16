@@ -4,6 +4,9 @@
 #include "distmat/distmat.h"
 #include "fgc/kmeans.h"
 #include "fgc/coreset.h"
+#include <boost/math/special_functions/digamma.hpp>
+#include <boost/math/special_functions/polygamma.hpp>
+
 
 namespace fgc {
 

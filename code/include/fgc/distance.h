@@ -471,15 +471,20 @@ auto p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2
     auto cdfy = fill_cdf(yptr, yr);
 	if(p == 1.)
 		return dot(blz::abs(cdfx - cdfy), deltas) / sz;
-    cdfx *= 1. / sz;
-    cdfy *= 1. / sz;
+    const auto szinv = 1. / sz;
+    cdfx *= szinv; cdfy *= szinv;
     if(p == 2)
 		return std::sqrt(dot(blz::pow(cdfx - cdfy, 2), deltas));
 	return std::pow(dot(blz::pow(blz::abs(cdfx - cdfy), p), deltas), 1. / p);
 }
+
 template<typename VT, bool SO, typename VT2>
-auto wasserstein_p2(const blz::Vector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y) {
+auto wasserstein_p2(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y) {
     return p_wasserstein(x, y, 2.);
+}
+template<typename VT, bool SO, typename VT2>
+auto wasserstein_p2(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, !SO> &y) {
+    return p_wasserstein(x, trans(y), 2.);
 }
 
 template<typename VT, typename VT2, bool SO>
