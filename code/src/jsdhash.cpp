@@ -3,7 +3,7 @@
 using namespace fgc;
 
 int main() {
-    unsigned dim = 20, nhashes = 4, nsamp = 10;
+    unsigned dim = 200, k = 4, l = 5, nsamp = 10, nhashes = k * l;
     std::mt19937_64 mt(dim  * nhashes);
     std::normal_distribution<float> gen;
     blz::DM<float> dm = blz::generate(nsamp, dim, [&](auto, auto) {return std::abs(gen(mt));});
@@ -11,11 +11,12 @@ int main() {
     assert(dm.columns() == dim);
     std::cout << dm << '\n';
     for(auto r: rowiterator(dm)) r /= blz::sum(r);
-    for(double r = 0.025; r <= 0.025; r *= 10) {
+    hash::LSHasherSettings settings{dim, k, l};
+    for(double r = 0.0025; r <= 0.1; r *= 10) {
         std::cout << "R: " << r << '\n';
-        JSDLSHasher<float> jsdhasher(dim, nhashes, r);
-        S2JSDLSHasher<float> s2hasher(dim, nhashes, r);
-        LSHTable<S2JSDLSHasher<float>> s2table(dim, nhashes, r);
+        JSDLSHasher<float> jsdhasher(settings, r);
+        S2JSDLSHasher<float> s2hasher(settings, r);
+        LSHTable<S2JSDLSHasher<float>> s2table(settings, r);
         std::fprintf(stderr, "made entries\n");
         auto hashedmat = s2table.hash(dm);
         std::fprintf(stderr, "hashed s2\n");
@@ -27,9 +28,6 @@ int main() {
         for(unsigned i = 0; i < q.size(); ++i) {
             for(const auto &pair: q[i]) {
                 std::fprintf(stderr, "query item %u matched reference id %u a total of %u times\n", i, pair.first, pair.second);
-#ifndef NDEBUG
-                if(pair.first == i) assert(pair.second == nhashes);
-#endif
             }
         }
 #if 0

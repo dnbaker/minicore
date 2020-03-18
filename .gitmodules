@@ -34,3 +34,6 @@
 [submodule "code/distmat"]
 	path = code/distmat
 	url = https://github.com/dnbaker/distmat
+[submodule "code/xxHash"]
+	path = code/xxHash
+	url = https://github.com/Cyan4973/xxHash
