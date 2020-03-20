@@ -17,21 +17,27 @@ using namespace blz::distance;
 
 
 enum ProbDivType {
-    L1  = 0,
-    L2  = 1,
-    SQRL2  = 2,
-    JSM = 4, // Multinomial Jensen-Shannon Metric
-    JSD = 5, // Multinomial Jensen-Shannon Divergence
-    MKL = 6, // Multinomial KL Divergence
-    POISSON = 7, // Poisson KL
-    HELLINGER = 8,
-    BHATTACHARYA_METRIC = 9,
-    BHATTACHARYA_DISTANCE = 10,
-    TOTAL_VARIATION_DISTANCE = 11,
-    LLR = 12,
-    EMD=13,
-    REVERSE_MKL=14,
-    REVERSE_POISSON=15,
+    L1,
+    L2,
+    SQRL2,
+    JSM, // Multinomial Jensen-Shannon Metric
+    JSD, // Multinomial Jensen-Shannon Divergence
+    MKL, // Multinomial KL Divergence
+    POISSON, // Poisson KL
+    HELLINGER,
+    BHATTACHARYA_METRIC,
+    BHATTACHARYA_DISTANCE,
+    TOTAL_VARIATION_DISTANCE,
+    LLR,
+    EMD,
+    REVERSE_MKL,
+    REVERSE_POISSON,
+    WLLR, // Weighted Log-likelihood Ratio
+    UWLLR, /* Unweighted Log-likelihood Ratio.
+            * Specifically, this is the D_{JSD}^{\lambda}(x, y),
+            * where \lambda = \frac{N_p}{N_p + N_q}
+            *
+            */
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
     PSD = JSD, // Poisson JSD, but algebraically equivalent
@@ -40,7 +46,12 @@ enum ProbDivType {
 
 namespace detail {
 static INLINE bool  needs_logs(ProbDivType d)  {
-    return d == JSM || d == JSD || d == MKL || d == POISSON || d == LLR || d == REVERSE_MKL || d == REVERSE_POISSON;
+    switch(d) {
+        case JSM: case JSD: case MKL: case POISSON: case LLR:
+        case REVERSE_MKL: case REVERSE_POISSON: case WLLR: case UWLLR: return true;
+        default: break;
+    }
+    return false;
 }
 
 static INLINE bool  needs_sqrt(ProbDivType d) {
@@ -187,6 +198,8 @@ public:
             case BHATTACHARYA_METRIC: ret = bhattacharya_metric(i, j); break;
             case BHATTACHARYA_DISTANCE: ret = bhattacharya_distance(i, j); break;
             case LLR: ret = llr(i, j); break;
+            case WLLR: ret = wllr(i, j); break;
+            case UWLLR: ret = uwllr(i, j); break;
             default: __builtin_unreachable();
         }
         return ret;
@@ -313,6 +326,29 @@ public:
             );
         assert(ret >= -1e-3 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
+    }
+    double wllr(size_t i, size_t j) const {
+            //blaze::dot(row(i), logrow(i)) * row_sums_->operator[](i)
+            //+
+            //blaze::dot(row(j), logrow(j)) * row_sums_->operator[](j)
+            // X_j^Tlog(p_j)
+            // X_k^Tlog(p_k)
+            // (X_k + X_j)^Tlog(p_jk)
+        const auto lhn = (*llr_cache_)[i], rhn = (*llr_cache_)[j];
+        double lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+        double ret = lhn + rhn
+            -
+            blz::dot(weighted_row(i) + weighted_row(j),
+                neginf2zero(blz::log(lambda * row(i) + (m1l * row(j))))
+            );
+        assert(ret >= -1e-2 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
+        return std::max(ret, 0.);
+    }
+    double uwllr(size_t i, size_t j) const {
+        const auto lhn = (*llr_cache_)[i], rhn = (*llr_cache_)[j];
+        double lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+        throw std::runtime_error("NotImplemented: " + std::to_string(m1l));
+        return lambda;
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double llr(size_t, const OT &) const {
