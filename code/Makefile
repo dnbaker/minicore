@@ -17,7 +17,9 @@ DEFINES+= -DCBLASFILE='${CBLASFILE}'
 endif
 
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
-LIBS=$(patsubst %,-L%,$(LIBPATHS))
+COMMA=,
+LIBS=$(foreach D, $(LIBPATHS), -L$D -Wl$(COMMA)-rpath$(COMMA)$D -Wl$(COMMA)-rpath-link$(COMMA)$D)
+#LIBS=$(patsubst %,-L%,$(LIBPATHS))
 CXX?=g++
 STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers
