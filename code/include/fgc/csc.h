@@ -4,6 +4,8 @@
 #include "fgc/timer.h"
 #include "fgc/blaze_adaptor.h"
 #include "mio/single_include/mio/mio.hpp"
+#include <fstream>
+
 namespace fgc {
 
 struct CSCMatrixView {
@@ -80,7 +82,36 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
     return csc2sparse(matview, skip_empty);
 }
 
-
+template<typename FT=float, bool SO=blaze::rowMajor>
+blz::SM<FT, SO> mtx2parse(std::string prefix)
+{
+    std::string line;
+    std::ifstream ifs(prefix);
+    do std::getline(ifs, line); while(line.front() == '%');
+    char *s;
+    size_t columns = std::strtoull(line.data(), &s, 10),
+             nr  = std::strtoull(s, &s, 10),
+             lines = std::strtoull(s, nullptr, 10);
+    size_t lastline = 0;
+    blz::SM<FT, SO> ret(nr, columns);
+    ret.reserve(lines);
+    while(lines--)
+    {
+        if(!std::getline(ifs, line)) throw std::runtime_error("Error in reading file: unexpected number of lines");
+        size_t row, col, cnt;
+        col = std::strtoull(line.data(), &s, 10) - 1;
+        row = std::strtoull(s, &s, 10) - 1;
+        cnt = std::strtoull(s, &s, 10);
+        if(unlikely(lastline > row)) throw std::runtime_error("Unsorted file.");
+        while(lastline < row) ret.finalize(lastline++);
+        ret.append(row, col, cnt);
+    }
+    while(lastline < ret.rows())
+        ret.finalize(lastline++);
+    if(std::getline(ifs, line)) throw std::runtime_error("Error reading file: too many lines");
+    return ret;
 }
+
+} // namespace fgc
 
 #endif /* CSC_H__ */
