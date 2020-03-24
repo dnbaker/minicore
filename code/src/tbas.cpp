@@ -1,3 +1,5 @@
+#undef BLAZE_RANDOM_NUMBER_GENERATOR
+#define BLAZE_RANDOM_NUMBER_GENERATOR std::mt19937_64
 #include "blaze/Math.h"
 #include <functional>
 #include <numeric>
