@@ -1,11 +1,11 @@
 #ifndef CARATHEODORY_CORESET_H__
 #define CARATHEODORY_CORESET_H__
 #include "blaze_adaptor.h"
-#ifdef __SSE2__
-#include "x86intrin.h"
+
 #if 0
 
 
+/*
 def linregcoreset(P, u, b=None, c_size=None, dtype='float64'):
     """
     This function computes a coreset for linear regression.
@@ -165,9 +165,6 @@ def main():
             time_coreset,
             time_real))
 
-#endif
-
-#if 0
 def Caratheodory(P, u, dtype='float64'):
     """
     Implementation of the Caratheodory Theorem(1907)
@@ -203,7 +200,6 @@ def Caratheodory(P, u, dtype='float64'):
         w[u_non_zero] = tmp_w
         w[u_non_zero][np.argmin(w[u_non_zero] )] = 0
         u = w
-#endif
 
 template<typename FT, bool SO=blaze::rowMajor, typename WFT>
 auto caratheodory(const blaze::DynamicMatrix<FT, SO> &mat, const WFT *weights=nullptr) {
@@ -237,7 +233,6 @@ auto caratheodory(const blaze::DynamicMatrix<FT, SO> &mat, const WFT *weights=nu
     return wv; // Ultimately, do this as a sparse vector, returning indices and weights
 }
 
-#if 0
 def Fast_Caratheodory(P,u,coreset_size, dtype = 'float64'):
     """
     Our fast and accurate implementation of Caratheodory's Theorem
@@ -309,6 +304,7 @@ def Fast_Caratheodory(P,u,coreset_size, dtype = 'float64'):
     new_idx_array = new_idx_array[(new_idx_array < n)].reshape(-1).astype(int)
     new_u[new_idx_array] = subset_u
     return u_sum * new_u
+*/
 
 #endif
 #endif /* CARATHEODORY_CORESET_H__ */

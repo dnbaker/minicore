@@ -60,7 +60,7 @@ LINKS += -ltbb
 endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
-      jsdtestdbg jsdkmeanstestdbg jsdhashdbg
+      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg
 
 clust: kzclustexpdbg kzclustexp kzclustexpf
 
