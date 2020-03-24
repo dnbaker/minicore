@@ -5,6 +5,12 @@ ifdef BOOST_DIR
 INCLUDE_PATHS += $(BOOST_DIR)
 endif
 
+ifdef HDFPATH
+INCLUDE_PATHS+= $(HDFPATH)/include
+LIBPATHS+= $(HDFPATH)/lib
+LINKS+=-lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
+endif
+
 
 ifdef SLEEF_DIR
 INCLUDE_PATHS+= $(SLEEF_DIR)/include
@@ -17,9 +23,7 @@ DEFINES+= -DCBLASFILE='${CBLASFILE}'
 endif
 
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
-COMMA=,
-LIBS=$(foreach D, $(LIBPATHS), -L$D -Wl$(COMMA)-rpath$(COMMA)$D -Wl$(COMMA)-rpath-link$(COMMA)$D)
-#LIBS=$(patsubst %,-L%,$(LIBPATHS))
+LIBS=$(patsubst %,-L%,$(LIBPATHS))
 CXX?=g++
 STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers
@@ -49,7 +53,10 @@ else
 endif
 
 ifdef TBBDIR
-CXXFLAGS += -DUSE_TBB -L$(TBBDIR)/lib -I$(TBBDIR)/include -ltbb
+INCLUDE_PATHS+= $(TBBDIR)/include
+LIBPATHS+= $(TBBDIR)/lib
+CXXFLAGS += -DUSE_TBB
+LINKS += -ltbb
 endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
@@ -92,7 +99,6 @@ jsdkmeanstestdbg: src/jsdkmeanstest.cpp $(wildcard include/fgc/*.h)
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
 hdf2dm: src/hdf2dm.cpp $(wildcard include/fgc/*.h)
-	ls $(HDFPATH)/lib && \
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(HDFLAGS)
 
 mpi%: src/%.cpp $(wildcard include/fgc/*.h)
