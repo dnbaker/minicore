@@ -13,7 +13,6 @@
 #include "fgc/geo.h"
 #include "fgc/gmm.h"
 #include "fgc/graph.h"
-#include "fgc/gzstream.h"
 #include "fgc/hash.h"
 #include "fgc/jsd.h"
 #include "fgc/jv.h"
