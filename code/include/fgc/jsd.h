@@ -124,13 +124,13 @@ public:
         ProbDivType actual_measure = measure == JSM ? JSD: measure;
         for(size_t i = 0; i < nr; ++i) {
             CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
-                std::fprintf(stderr, "Executing serially, %zu/%zu\n", i, nr);
+                if(i % 100 == 0) std::fprintf(stderr, "Executing serially, %zu/%zu\n", i, nr);
                 for(size_t j = i + 1; j < nr; ++j) {
                     auto v = this->operator()(i, j, actual_measure);
                     m(i, j) = v;
                 }
             } else {
-                std::fprintf(stderr, "Executing in parallel, %zu/%zu\n", i, nr);
+                if(i % 100 == 0) std::fprintf(stderr, "Executing in parallel, %zu/%zu\n", i, nr);
                 OMP_PFOR
                 for(size_t j = i + 1; j < nr; ++j) {
                     auto v = this->operator()(i, j, actual_measure);

@@ -2,6 +2,7 @@
 #if defined(__has_include) && __has_include("sleef.h")
 #  include "sleef.h"
 #endif
+#include "aesctr/wy.h"
 #include "blaze/Math.h"
 #include <cstdlib>
 #include <vector>
