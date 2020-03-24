@@ -15,8 +15,12 @@ int main(int argc, char *argv[]) {
     }
     unsigned maxnrows = argc == 1 ? 1000: std::atoi(argv[1]);
     unsigned mincount = argc <= 2 ? 50: std::atoi(argv[2]);
+    std::string input;
+    if(argc > 2)
+        input = argv[3];
     std::ofstream ofs("output.txt");
-    auto sparsemat = fgc::csc2sparse<FLOAT_TYPE>("", true);
+    auto sparsemat = input.size() ? fgc::mtx2sparse<FLOAT_TYPE>(input)
+                                  : fgc::csc2sparse<FLOAT_TYPE>("", true);
     std::vector<unsigned> nonemptyrows;
     size_t i = 0;
     while(nonemptyrows.size() < 25) {
@@ -63,6 +67,10 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     timer.restart("1ksparseL2");
     jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::L2);
+    timer.report();
+    std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
+    timer.restart("1ksparsewllr");
+    jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::WLLR);
     timer.report();
 #if 0
     timer.restart("1ldensejsd");

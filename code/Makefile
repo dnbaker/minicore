@@ -9,7 +9,7 @@ endif
 ifdef SLEEF_DIR
 INCLUDE_PATHS+= $(SLEEF_DIR)/include
 LIBPATHS+= $(SLEEF_DIR)/lib
-LDFLAGS+= -lsleef
+LINKS+= -lsleef
 endif
 
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
@@ -18,9 +18,9 @@ CXX?=g++
 STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers
 OPT?=O3
-LDFLAGS+=-lz
+LDFLAGS+=$(LIBS) -lz $(LINKS)
 EXTRA?=
-CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(LIBS) $(LDFLAGS) \
+CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE)
 
 
 EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
@@ -59,8 +59,13 @@ CXXFLAGS += -fsanitize=address
 endif
 CXXFLAGS += $(EXTRA)
 
+CXXFLAGS += $(LDFLAGS)
+
 %dbg: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@
+
+printlibs:
+	echo $(LIBPATHS)
 
 graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)

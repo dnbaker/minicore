@@ -12,9 +12,9 @@ int main(int argc, char *argv[]) {
         out = argv[optind + 1];
     blaze::Archive<std::ofstream> ret(out);
     if(use_float) {
-        ret << fgc::mtx2parse<float>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
+        ret << fgc::mtx2sparse<float>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
     } else {
-        ret << fgc::mtx2parse<double>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
+        ret << fgc::mtx2sparse<double>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
     }
     return 0;
 }

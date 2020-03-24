@@ -385,9 +385,10 @@ inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &
 
 template<typename VT, bool SO, typename VT2>
 auto p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {
-	const size_t sz = (~y).size();
+    auto &xref = ~x;
+	const size_t sz = xref.size();
 	std::unique_ptr<uint32_t[]> ptr(new uint32_t[sz * 2]);
-	auto xptr = ptr.get(), yptr = ptr.get() + (~x).size();
+	auto xptr = ptr.get(), yptr = ptr.get() + sz;
 	std::iota(xptr, yptr, 0u);
 	std::iota(yptr, yptr + sz, 0u);
 	pdqsort(xptr, yptr, [&](uint32_t p, uint32_t q) {return (~x)[p] < (~x)[q];});

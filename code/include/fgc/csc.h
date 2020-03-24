@@ -83,7 +83,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
 }
 
 template<typename FT=float, bool SO=blaze::rowMajor>
-blz::SM<FT, SO> mtx2parse(std::string prefix)
+blz::SM<FT, SO> mtx2sparse(std::string prefix)
 {
     std::string line;
     std::ifstream ifs(prefix);

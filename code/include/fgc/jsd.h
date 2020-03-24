@@ -335,20 +335,26 @@ public:
             // X_k^Tlog(p_k)
             // (X_k + X_j)^Tlog(p_jk)
         const auto lhn = (*llr_cache_)[i], rhn = (*llr_cache_)[j];
-        double lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
-        double ret = lhn + rhn
+        const double lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+        double ret = lambda * lhn + m1l * rhn
             -
-            blz::dot(weighted_row(i) + weighted_row(j),
-                neginf2zero(blz::log(lambda * row(i) + (m1l * row(j))))
+            blz::dot(lambda * weighted_row(i) + m1l * weighted_row(j),
+                neginf2zero(blz::log(lambda * row(i) + m1l * row(j)))
             );
         assert(ret >= -1e-2 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
     }
     double uwllr(size_t i, size_t j) const {
         const auto lhn = (*llr_cache_)[i], rhn = (*llr_cache_)[j];
-        double lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
-        throw std::runtime_error("NotImplemented: " + std::to_string(m1l));
-        return lambda;
+        const double lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+        return
+          std::max(
+            lambda * (*jsdcache_)[i] +
+                  m1l * (*jsdcache_)[j] -
+               blz::dot(lambda * row(i) + m1l * row(j),
+                        neginf2zero(blz::log(
+                            lambda * row(i) + m1l * row(j)))),
+          0.);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double llr(size_t, const OT &) const {
