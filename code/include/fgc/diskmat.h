@@ -4,8 +4,9 @@
 #include <memory>
 #include "mio/single_include/mio/mio.hpp"
 #include <cstring>
-#include "blaze/Math.h"
 #include <system_error>
+#include "blaze_adaptor.h"
+
 namespace fgc {
 
 template<typename VT, bool SO=blaze::rowMajor, bool isPadded=blaze::padded, bool isAligned=blaze::aligned>

@@ -184,9 +184,9 @@ public:
         double ret;
         switch(measure) {
             case TOTAL_VARIATION_DISTANCE: ret = discrete_total_variation_distance(row(i), row(j)); break;
-            case L1:    ret = l1Norm(row(i) - row(j)); break;
-            case L2:    ret = l2Norm(row(i) - row(j)); break;
-            case SQRL2: ret = blaze::sqrNorm(row(i) - row(j)); break;
+            case L1:    ret = l1Norm(weighted_row(i) - weighted_row(j)); break;
+            case L2:    ret = l2Norm(weighted_row(i) - weighted_row(j)); break;
+            case SQRL2: ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j)); break;
             case JSD:   ret = jsd(i, j); break;
             case JSM:   ret = jsm(i, j); break;
             case REVERSE_MKL: std::swap(i, j); [[fallthrough]];

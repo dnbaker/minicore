@@ -1,33 +1,58 @@
 #include "fgc/jsd.h"
 #include "fgc/csc.h"
 #include "fgc/timer.h"
+#include <getopt.h>
+#include "blaze/util/Serialization.h"
 
 #define FT double
 
+void usage(char *s) {
+    std::fprintf(stderr, "Usage: %s <flags> <input=\"\"> <output>\n-r\tMax nrows [50000]\n-c\tmin count [50]\n-k\tk [50]\n-m\tkmc2 chain length [100]\n",
+                 s);
+    std::exit(1);
+}
+
 #define NOTDENSE 1
 int main(int argc, char *argv[]) {
-    if(std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0 || std::strcmp(x, "--help") == 0;})
-       != argv + argc) {
-        std::fprintf(stderr, "Usage: %s <max rows[1000]> <mincount[50]> <k[5]> <m[5000]>\n", *argv);
-        std::exit(1);
+    unsigned maxnrows = 50000, mincount = 50, k = 50, m = 100;
+    unsigned fmt = 0;
+    for(int c;(c = getopt(argc, argv, "r:c:k:m:bMh?")) >= 0;) {
+        switch(c) {
+            case 'r': maxnrows = std::atoi(optarg); break;
+            case 'c': mincount = std::atoi(optarg); break;
+            case 'k': k        = std::atoi(optarg); break;
+            case 'm': m        = std::atoi(optarg); break;
+            case 'b': fmt = 1; break;
+            case 'M': fmt = 2; break;
+            case 'h': case '?': default:
+                usage(argv[0]);
+        }
     }
-    unsigned maxnrows = argc == 1 ? 50000: std::atoi(argv[1]);
-    unsigned mincount = argc <= 2 ? 50: std::atoi(argv[2]);
-    unsigned k        = argc <= 3 ? 50: std::atoi(argv[3]);
-    unsigned m        = argc <= 4 ? 5000: std::atoi(argv[4]);
-    std::ofstream ofs("output.txt");
-    auto sparsemat = fgc::csc2sparse<FT>("", true);
+    std::string output = "/dev/stdout", input = "/dev/stdin";
+    if(argc > optind) {
+        input = argv[optind];
+        if(argc > optind + 1) {
+            output = argv[optind + 1];
+        }
+    } else usage(argv[0]);
+    std::ofstream ofs(output);
+    blz::DM<FT> sparsemat;
+    if(fmt == 0) {
+        sparsemat = fgc::csc2sparse<FT>(input, true);
+    } else if(fmt == 1) {
+        blaze::Archive<std::ifstream> arch(input);
+        arch >> sparsemat;
+    } else if(fmt == 2) {
+        sparsemat = fgc::mtx2sparse<FT>(input);
+    }
     std::vector<unsigned> nonemptyrows;
     size_t i = 0;
     while(nonemptyrows.size() < maxnrows && i < sparsemat.rows()) {
         const auto nzc = blz::nonZeros(row(sparsemat, i));
-        //std::fprintf(stderr, "nzc: %zu\n", nzc);
         if(nzc > mincount) {
-            //std::fprintf(stderr, "nzc: %zu vs min %u\n", nzc, mincount);
             nonemptyrows.push_back(i);
         }
         ++i;
-        //std::fprintf(stderr, "sparsemat rows: %zu. current i: %zu\n", sparsemat.rows(), i);
     }
     std::fprintf(stderr, "Gathered %zu rows\n", nonemptyrows.size());
 #ifndef NOTDENSE

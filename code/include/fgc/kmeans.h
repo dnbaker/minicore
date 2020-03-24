@@ -395,6 +395,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     double total_loss = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:total_loss)")
     for(size_t i = 0; i < nr; ++i) {
+        const auto tid = OMP_ELSE(omp_get_thread_num(), 1);
         auto dr = row(data, i BLAZE_CHECK_DEBUG);
         auto lhr = row(centers, 0 BLAZE_CHECK_DEBUG);
         auto dist = blz::serial(func(dr, lhr));
@@ -409,6 +410,9 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         }
         assignments[i] = label;
         total_loss += getw(i) * dist;
+#ifndef NDEBUG
+        if(i % 500u == 0) std::fprintf(stderr, "tid %d at i = %zu/%zu\n", tid, i, nr);
+#endif
     }
     std::fprintf(stderr, "total loss: %g\n", total_loss);
     if(std::isnan(total_loss)) total_loss = std::numeric_limits<decltype(total_loss)>::infinity();
