@@ -32,12 +32,12 @@ enum ProbDivType {
     EMD,
     REVERSE_MKL,
     REVERSE_POISSON,
-    WLLR, // Weighted Log-likelihood Ratio
     UWLLR, /* Unweighted Log-likelihood Ratio.
             * Specifically, this is the D_{JSD}^{\lambda}(x, y),
             * where \lambda = \frac{N_p}{N_p + N_q}
             *
             */
+    WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
     PSD = JSD, // Poisson JSD, but algebraically equivalent
@@ -48,7 +48,7 @@ namespace detail {
 static INLINE bool  needs_logs(ProbDivType d)  {
     switch(d) {
         case JSM: case JSD: case MKL: case POISSON: case LLR:
-        case REVERSE_MKL: case REVERSE_POISSON: case WLLR: case UWLLR: return true;
+        case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: return true;
         default: break;
     }
     return false;
@@ -69,6 +69,7 @@ const char *prob2str(ProbDivType d) {
         case L1: return "L1";
         case L2: return "L2";
         case LLR: return "LLR";
+        case UWLLR: return "UWLLR";
         case MKL: return "MKL";
         case POISSON: return "POISSON";
         case REVERSE_MKL: return "REVERSE_MKL";
@@ -82,7 +83,6 @@ const char *prob2str(ProbDivType d) {
 
 template<typename MatrixType>
 class ProbDivApplicator {
-
     //using opposite_type = typename base_type::OppositeType;
     MatrixType &data_;
     using VecT = blaze::DynamicVector<typename MatrixType::ElementType>;
@@ -90,6 +90,7 @@ class ProbDivApplicator {
     std::unique_ptr<MatrixType> logdata_;
     std::unique_ptr<MatrixType> sqrdata_;
     std::unique_ptr<VecT> llr_cache_, jsdcache_;
+    typename MatrixType::ElementType lambda_ = 0.5;
 public:
     using FT = typename MatrixType::ElementType;
     using MT = MatrixType;
@@ -198,7 +199,6 @@ public:
             case BHATTACHARYA_METRIC: ret = bhattacharya_metric(i, j); break;
             case BHATTACHARYA_DISTANCE: ret = bhattacharya_distance(i, j); break;
             case LLR: ret = llr(i, j); break;
-            case WLLR: ret = wllr(i, j); break;
             case UWLLR: ret = uwllr(i, j); break;
             default: __builtin_unreachable();
         }
@@ -312,22 +312,7 @@ public:
     }
     template<typename...Args>
     double psm(Args &&...args) const {return std::sqrt(std::forward<Args>(args)...);}
-    double llr(size_t i, size_t j) const {
-            //blaze::dot(row(i), logrow(i)) * row_sums_->operator[](i)
-            //+
-            //blaze::dot(row(j), logrow(j)) * row_sums_->operator[](j)
-            // X_j^Tlog(p_j)
-            // X_k^Tlog(p_k)
-            // (X_k + X_j)^Tlog(p_jk)
-        double ret = (*llr_cache_)[i] + (*llr_cache_)[j]
-            -
-            blz::dot(weighted_row(i) + weighted_row(j),
-                neginf2zero(blz::log(0.5 * (row(i) + row(j))))
-            );
-        assert(ret >= -1e-3 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
-        return std::max(ret, 0.);
-    }
-    double wllr(size_t i, size_t j) const {
+    auto llr(size_t i, size_t j) const {
             //blaze::dot(row(i), logrow(i)) * row_sums_->operator[](i)
             //+
             //blaze::dot(row(j), logrow(j)) * row_sums_->operator[](j)
@@ -335,10 +320,10 @@ public:
             // X_k^Tlog(p_k)
             // (X_k + X_j)^Tlog(p_jk)
         const auto lhn = (*llr_cache_)[i], rhn = (*llr_cache_)[j];
-        const double lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
-        double ret = lambda * lhn + m1l * rhn
+        const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+        auto ret = lambda * lhn + m1l * rhn
             -
-            blz::dot(lambda * weighted_row(i) + m1l * weighted_row(j),
+            blz::dot(weighted_row(i) + weighted_row(j),
                 neginf2zero(blz::log(lambda * row(i) + m1l * row(j)))
             );
         assert(ret >= -1e-2 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
@@ -369,6 +354,11 @@ public:
     template<typename...Args>
     double jsm(Args &&...args) const {
         return std::sqrt(jsd(std::forward<Args>(args)...));
+    }
+    void set_lambda(FT param) {
+        if(param < 0. || param > 1.)
+            throw std::invalid_argument(std::string("Param for lambda ") + std::to_string(param) + " is out of range.");
+        lambda_ = param;
     }
 private:
     template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>

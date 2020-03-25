@@ -262,10 +262,6 @@ INLINE double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
                               const blaze::DenseVector<VT2, SO> &lhlog,
                               const blaze::DenseVector<VT2, SO> &rhlog)
 {
-#if 0
-    assert_all_nonzero(lhs);
-    assert_all_nonzero(rhs);
-#endif
     auto mn = (~lhs + ~rhs) * 0.5;
     auto mnlog = blaze::evaluate(blaze::neginf2zero(blaze::log(~mn)));
     double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
