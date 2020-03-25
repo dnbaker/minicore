@@ -39,6 +39,43 @@ struct clipped_cauchy_distribution {
     void reset() {}
 };
 
+template<typename FT>
+struct cms_distribution {
+    // p-stable sampler for p [0,2]
+    // Needs testing.
+public:
+    const FT a_, b_;
+private:
+    FT t1_, t2_, t2i_, t1sp1_;
+    mutable std::uniform_real_distribution<FT> urd_;
+    mutable std::exponential_distribution<FT> expd_;
+public:
+    cms_distribution(double a=2., double b=0): a_(a), b_(b)
+    {
+        if(a < 0 || a > 2) throw std::out_of_range("a is out of range [0,2]");
+        t1_  = -b_ * std::tan(M_PI_2 * a_);
+        t2_  = a_ == 1. ? FT(M_PI_2) : std::atan(-t1_) / a_;
+        t2i_ = 1. / t2_;
+        t1sp1_ = std::pow(1. + t1_ * t1_, .5 / a_);
+    }
+    template<typename RNG>
+    FT operator()(RNG &rng) const {
+        auto U = (urd_(rng) - .5) * M_PI, W = expd_(rng);
+        FT s;
+        if(a_ == 1.) {
+            const auto bu = b_ * U;
+            s = t2i_ * ((M_PI_2 + bu) * std::tan(U) - b_ * std::log(M_PI_2 * W * std::cos(U) / (M_PI_2 + bu)));
+        } else {
+            const auto ainv = 1. / a_;
+            const auto at2u = a_ * (t2_ + U);
+            s = t1sp1_
+                * std::sin(at2u) / std::pow(std::cos(U), ainv)
+                * std::pow(std::cos(U - at2u) / W, (1. - a_) * ainv);
+        }
+        return s;
+    }
+};
+
 template<typename FT=double, bool SO=blz::rowMajor>
 class JSDLSHasher {
     // See https://papers.nips.cc/paper/9195-locality-sensitive-hashing-for-f-divergences-mutual-information-loss-and-beyond.pdf
@@ -172,6 +209,15 @@ public:
     using super = PStableLSHasher<std::cauchy_distribution, FT, SO, use_offsets>;
     template<typename...Args>
     L1LSHasher(LSHasherSettings settings, double w, uint64_t seed=0, Args &&...args): super(settings, w, seed, std::forward<Args>(args)...)
+    {
+    }
+};
+template<typename FT=double, bool SO=blz::rowMajor, bool use_offsets=true>
+class LpLSHasher: public PStableLSHasher<cms_distribution, FT, SO, use_offsets> {
+public:
+    using super = PStableLSHasher<cms_distribution, FT, SO, use_offsets>;
+    template<typename...Args>
+    LpLSHasher(LSHasherSettings settings, double p, double w, uint64_t seed=0): super(settings, w, seed, p)
     {
     }
 };

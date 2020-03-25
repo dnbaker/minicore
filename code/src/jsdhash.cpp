@@ -18,6 +18,7 @@ int main() {
         S2JSDLSHasher<float> s2hasher(settings, r);
         TVDLSHasher<float> tvhasher(settings, r);
         L2LSHasher<float> l2hasher(settings, r);
+        hash::LpLSHasher<float> lphasher(settings, 1.5, r);
         LSHTable<S2JSDLSHasher<float>> s2table(settings, r);
         std::fprintf(stderr, "made entries\n");
         auto hashedmat = s2table.hash(dm);
