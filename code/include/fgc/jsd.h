@@ -58,6 +58,16 @@ static INLINE bool  needs_sqrt(ProbDivType d) {
     return d == HELLINGER || d == BHATTACHARYA_METRIC || d == BHATTACHARYA_DISTANCE;
 }
 
+static INLINE bool is_symmetric(ProbDivType d) {
+    switch(d) {
+        case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYA_DISTANCE: case BHATTACHARYA_METRIC:
+        case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE:
+            return true;
+        default: ;
+    }
+    return false;
+}
+
 static INLINE const char *prob2str(ProbDivType d) {
     switch(d) {
         case BHATTACHARYA_DISTANCE: return "BHATTACHARYA_DISTANCE";
@@ -125,13 +135,11 @@ public:
         ProbDivType actual_measure = measure == JSM ? JSD: measure;
         for(size_t i = 0; i < nr; ++i) {
             CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
-                if(i % 100 == 0) std::fprintf(stderr, "Executing serially, %zu/%zu\n", i, nr);
                 for(size_t j = i + 1; j < nr; ++j) {
                     auto v = this->operator()(i, j, actual_measure);
                     m(i, j) = v;
                 }
             } else {
-                if(i % 100 == 0) std::fprintf(stderr, "Executing in parallel, %zu/%zu\n", i, nr);
                 OMP_PFOR
                 for(size_t j = i + 1; j < nr; ++j) {
                     auto v = this->operator()(i, j, actual_measure);
@@ -149,8 +157,30 @@ public:
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
             }
         }
-        if(symmetrize) {
-            fill_symmetric_upper_triangular(m);
+        if(detail::is_symmetric(measure)) {
+            if(symmetrize) {
+                fill_symmetric_upper_triangular(m);
+            }
+        } else {
+            CONST_IF(dm::is_distance_matrix_v<MatType>) {
+                std::fprintf(stderr, "Warning: using asymmetric measure with an upper triangular matrix. You are computing only half the values");
+            } else {
+                for(size_t i = 1; i < nr; ++i) {
+                    CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
+                        for(size_t j = 0; j < i; ++j) {
+                            auto v = this->operator()(i, j, measure);
+                            m(i, j) = v;
+                        }
+                    } else {
+                        OMP_PFOR
+                        for(size_t j = 0; j < i; ++j) {
+                            auto v = this->operator()(i, j, measure);
+                            m(i, j) = v;
+                        }
+                    }
+                    m(i, i) = 0.;
+                }
+            }
         }
     }
     blaze::DynamicMatrix<float> make_distance_matrix() const {

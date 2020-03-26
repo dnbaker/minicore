@@ -275,13 +275,17 @@ void fill_symmetric_upper_triangular(blaze::Matrix<MT, SO> &mat, std::true_type)
 }
 
 template<typename MT, bool SO>
-void fill_symmetric_upper_triangular(blaze::Matrix<MT, SO> &mat, std::false_type) {
+void fill_symmetric_upper_triangular(blaze::Matrix<MT, SO> &, std::false_type) {
     std::fprintf(stderr, "[%s] Warning: trying to fill_symmetric_upper_triangular on an unsupported type. Doing nothing.\n", __PRETTY_FUNCTION__);
 }
 
 template<typename MT, bool SO>
 void fill_symmetric_upper_triangular(blaze::Matrix<MT, SO> &mat) {
     fill_symmetric_upper_triangular(mat, std::integral_constant<bool, blaze::IsDenseMatrix_v<MT> >());
+}
+template<typename MT>
+void fill_symmetric_upper_triangular(MT &) {
+    std::fprintf(stderr, "[%s] Warning: trying to fill_symmetric_upper_triangular on an unsupported type. Doing nothing.\n", __PRETTY_FUNCTION__);
 }
 using namespace blaze;
 
