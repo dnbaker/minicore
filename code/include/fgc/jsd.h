@@ -154,7 +154,11 @@ public:
         }
     }
     blaze::DynamicMatrix<float> make_distance_matrix() const {
-        return make_distance_matrix(measure_);
+        blaze::DynamicMatrix<float> ret = make_distance_matrix(measure_);
+#if FGC_DBG_PRINT
+        std::cout << ret << '\n';
+#endif
+        return ret;
     }
     blaze::DynamicMatrix<float> make_distance_matrix(ProbDivType measure, bool symmetrize=false) const {
         std::fprintf(stderr, "About to make distance matrix of %zu/%zu with %s calculated\n", data_.rows(), data_.rows(), detail::prob2str(measure));
