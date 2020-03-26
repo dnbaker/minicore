@@ -58,7 +58,7 @@ static INLINE bool  needs_sqrt(ProbDivType d) {
     return d == HELLINGER || d == BHATTACHARYA_METRIC || d == BHATTACHARYA_DISTANCE;
 }
 
-const char *prob2str(ProbDivType d) {
+static INLINE const char *prob2str(ProbDivType d) {
     switch(d) {
         case BHATTACHARYA_DISTANCE: return "BHATTACHARYA_DISTANCE";
         case BHATTACHARYA_METRIC: return "BHATTACHARYA_METRIC";

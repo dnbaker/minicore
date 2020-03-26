@@ -102,7 +102,7 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(std::string fn) {
     std::fprintf(stderr, "num edges: %zu. num vertices: %zu\n", boost::num_edges(ret), boost::num_vertices(ret));
     return ret;
 }
-fgc::Graph<undirectedS> dimacs_official_parse(std::string input) {
+static fgc::Graph<undirectedS> dimacs_official_parse(std::string input) {
     fgc::Graph<undirectedS> g;
     std::ifstream ifs(input);
     std::string graphtype;
@@ -163,11 +163,11 @@ static fgc::Graph<undirectedS> dimacs_parse(std::string fn) {
     return g;
 }
 
-auto csv_parse(std::string fn) {
+static auto csv_parse(std::string fn) {
     return parse_nber<boost::undirectedS>(fn);
 }
 
-fgc::Graph<undirectedS> parse_by_fn(std::string input) {
+static fgc::Graph<undirectedS> parse_by_fn(std::string input) {
     fgc::Graph<undirectedS> g;
     if(input.find(".csv") != std::string::npos) {
         g = csv_parse(input);

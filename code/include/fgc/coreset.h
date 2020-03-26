@@ -43,7 +43,7 @@ enum SensitivityMethod: int {
     LBK=LUCIC_BACHEM_KRAUSE
 };
 
-const char *sm2str(SensitivityMethod sm) {
+static const char *sm2str(SensitivityMethod sm) {
     switch(sm) {
         case BFL:  return "BFL";
         case VX:   return "VX";

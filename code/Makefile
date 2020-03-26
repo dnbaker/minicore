@@ -8,7 +8,7 @@ endif
 ifdef HDFPATH
 INCLUDE_PATHS+= $(HDFPATH)/include
 LIBPATHS+= $(HDFPATH)/lib
-LINKS+=-lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
+LINKS+=#-lhdf5 # -lhdf5_hl # -lhdf5_hl_cpp -lhdf5_cpp
 endif
 
 
@@ -133,6 +133,10 @@ osm2dimacspg: src/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
+
+
+libsleef.a:
+	+cd sleef && mkdir -p __build && cd __build && cmake .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp libsleef.a libsleefdft.a ../..
 
 
 clean:

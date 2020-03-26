@@ -247,9 +247,6 @@ INLINE auto push_back(std::vector<VT, Allocator> &x, VT2 v) {
 }
 template<typename MatType>
 static INLINE
-#ifndef __clang__
-[[ noreturn ]]
-#endif
 void _assert_all_nonzero_(const MatType &x, const char *funcname, const char *filename, int linenum) {
     const auto nnz = ::blaze::nonZeros(x);
     if(unlikely(nnz != 0)) {
