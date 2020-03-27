@@ -6,6 +6,7 @@
 #include "fgc/coreset.h"
 #include <boost/math/special_functions/digamma.hpp>
 #include <boost/math/special_functions/polygamma.hpp>
+#include <set>
 
 
 namespace fgc {
@@ -114,7 +115,7 @@ static INLINE const char *prob2desc(ProbDivType d) {
     }
 }
 static void print_measures() {
-    std::vector<ProbDivType> measures {
+    std::set<ProbDivType> measures {
         L1,
         L2,
         SQRL2,
@@ -137,7 +138,6 @@ static void print_measures() {
         PSD,
         PSM
     };
-    std::sort(measures.begin(), measures.end());
     for(const auto measure: measures) {
         std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
     }
