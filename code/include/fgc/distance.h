@@ -347,7 +347,7 @@ enum Prior {
 
 
 template<typename LHVec, typename RHVec>
-double bhattacharya_measure(const LHVec &lhs, const RHVec &rhs) {
+double bhattacharyya_measure(const LHVec &lhs, const RHVec &rhs) {
     // Requires same storage.
     // TODO: generalize for different storage classes/transpose flags using DenseVector and SparseVector
     // base classes
@@ -355,11 +355,11 @@ double bhattacharya_measure(const LHVec &lhs, const RHVec &rhs) {
 }
 
 template<typename LHVec, typename RHVec>
-double bhattacharya_metric(const LHVec &lhs, const RHVec &rhs) {
+double bhattacharyya_metric(const LHVec &lhs, const RHVec &rhs) {
     // Comaniciu, D., Ramesh, V. & Meer, P. (2003). Kernel-based object tracking.IEEE Transactionson Pattern Analysis and Machine Intelligence,25(5), 564-577.
     // Proves that this extension is a valid metric
     // See http://www.cse.yorku.ca/~kosta/CompVis_Notes/bhattacharyya.pdf
-    return std::sqrt(1. - bhattacharya_measure(lhs, rhs));
+    return std::sqrt(1. - bhattacharyya_measure(lhs, rhs));
 }
 template<typename LHVec, typename RHVec>
 double matusita_distance(const LHVec &lhs, const RHVec &rhs) {

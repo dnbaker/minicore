@@ -25,8 +25,8 @@ enum ProbDivType {
     MKL, // Multinomial KL Divergence
     POISSON, // Poisson KL
     HELLINGER,
-    BHATTACHARYA_METRIC,
-    BHATTACHARYA_DISTANCE,
+    BHATTACHARYYA_METRIC,
+    BHATTACHARYYA_DISTANCE,
     TOTAL_VARIATION_DISTANCE,
     LLR,
     EMD,
@@ -37,6 +37,7 @@ enum ProbDivType {
             * where \lambda = \frac{N_p}{N_p + N_q}
             *
             */
+    OLLR,       // Old LLR, deprecated (included for compatibility/comparisons)
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
@@ -55,12 +56,12 @@ static INLINE bool  needs_logs(ProbDivType d)  {
 }
 
 static INLINE bool  needs_sqrt(ProbDivType d) {
-    return d == HELLINGER || d == BHATTACHARYA_METRIC || d == BHATTACHARYA_DISTANCE;
+    return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
 }
 
 static INLINE bool is_symmetric(ProbDivType d) {
     switch(d) {
-        case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYA_DISTANCE: case BHATTACHARYA_METRIC:
+        case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
         case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE:
             return true;
         default: ;
@@ -70,8 +71,8 @@ static INLINE bool is_symmetric(ProbDivType d) {
 
 static INLINE const char *prob2str(ProbDivType d) {
     switch(d) {
-        case BHATTACHARYA_DISTANCE: return "BHATTACHARYA_DISTANCE";
-        case BHATTACHARYA_METRIC: return "BHATTACHARYA_METRIC";
+        case BHATTACHARYYA_DISTANCE: return "BHATTACHARYYA_DISTANCE";
+        case BHATTACHARYYA_METRIC: return "BHATTACHARYYA_METRIC";
         case EMD: return "EMD";
         case HELLINGER: return "HELLINGER";
         case JSD: return "JSD/PSD";
@@ -79,6 +80,7 @@ static INLINE const char *prob2str(ProbDivType d) {
         case L1: return "L1";
         case L2: return "L2";
         case LLR: return "LLR";
+        case OLLR: return "OLLR";
         case UWLLR: return "UWLLR";
         case MKL: return "MKL";
         case POISSON: return "POISSON";
@@ -87,6 +89,57 @@ static INLINE const char *prob2str(ProbDivType d) {
         case SQRL2: return "SQRL2";
         case TOTAL_VARIATION_DISTANCE: return "TOTAL_VARIATION_DISTANCE";
         default: return "INVALID TYPE";
+    }
+}
+static INLINE const char *prob2desc(ProbDivType d) {
+    switch(d) {
+        case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";
+        case BHATTACHARYYA_METRIC: return "Bhattacharyya metric: sqrt(1 - BhattacharyyaSimilarity(x, y))";
+        case EMD: return "Earth Mover's Distance: Optimal Transport";
+        case HELLINGER: return "Hellinger Distance: sqrt(sum((sqrt(x) - sqrt(y))^2))/2";
+        case JSD: return "Jensen-Shannon Divergence for Poisson and Multinomial models, for which they are equivalent";
+        case JSM: return "Jensen-Shannon Metric, known as S2JSD and the Endres metric, for Poisson and Multinomial models, for which they are equivalent";
+        case L1: return "L1 distance";
+        case L2: return "L2 distance";
+        case LLR: return "Log-likelihood Ratio under the multinomial model";
+        case OLLR: return "Original log-likelihood ratio. This is likely not correct, but it is related to the Jensen-Shannon Divergence";
+        case UWLLR: return "Unweighted Log-likelihood Ratio. This is effectively the Generalized Jensen-Shannon Divergence with lambda parameter corresponding to the fractional contribution of counts in the first observation. This is symmetric, unlike the G_JSD, because the parameter comes from the counts.";
+        case MKL: return "Multinomial KL divergence";
+        case POISSON: return "Poisson KL Divergence";
+        case REVERSE_MKL: return "Reverse Multinomial KL divergence";
+        case REVERSE_POISSON: return "Reverse KL divergence";
+        case SQRL2: return "Squared L2 Norm";
+        case TOTAL_VARIATION_DISTANCE: return "Total Variation Distance: 1/2 sum_{i in D}(|x_i - y_i|)";
+        default: return "INVALID TYPE";
+    }
+}
+static void print_measures() {
+    std::vector<ProbDivType> measures {
+        L1,
+        L2,
+        SQRL2,
+        JSM,
+        JSD,
+        MKL,
+        POISSON,
+        HELLINGER,
+        BHATTACHARYYA_METRIC,
+        BHATTACHARYYA_DISTANCE,
+        TOTAL_VARIATION_DISTANCE,
+        LLR,
+        OLLR,
+        EMD,
+        REVERSE_MKL,
+        REVERSE_POISSON,
+        UWLLR,
+        TOTAL_VARIATION_DISTANCE,
+        WASSERSTEIN,
+        PSD,
+        PSM
+    };
+    std::sort(measures.begin(), measures.end());
+    for(const auto measure: measures) {
+        std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
     }
 }
 } // detail
@@ -99,7 +152,7 @@ class ProbDivApplicator {
     std::unique_ptr<VecT> row_sums_;
     std::unique_ptr<MatrixType> logdata_;
     std::unique_ptr<MatrixType> sqrdata_;
-    std::unique_ptr<VecT> llr_cache_, jsdcache_;
+    std::unique_ptr<VecT> jsd_cache_;
     typename MatrixType::ElementType lambda_ = 0.5;
 public:
     using FT = typename MatrixType::ElementType;
@@ -230,8 +283,8 @@ public:
             case REVERSE_POISSON: std::swap(i, j); [[fallthrough]];
             case POISSON: ret = pkl(i, j); break;
             case HELLINGER: ret = hellinger(i, j); break;
-            case BHATTACHARYA_METRIC: ret = bhattacharya_metric(i, j); break;
-            case BHATTACHARYA_DISTANCE: ret = bhattacharya_distance(i, j); break;
+            case BHATTACHARYYA_METRIC: ret = bhattacharyya_metric(i, j); break;
+            case BHATTACHARYYA_DISTANCE: ret = bhattacharyya_distance(i, j); break;
             case LLR: ret = llr(i, j); break;
             case UWLLR: ret = uwllr(i, j); break;
             default: __builtin_unreachable();
@@ -262,7 +315,7 @@ public:
         auto ri = row(i), rj = row(j);
         //constexpr FT logp5 = -0.693147180559945; // std::log(0.5)
         auto s = ri + rj;
-        ret = jsdcache_->operator[](i) + jsdcache_->operator[](j) - blz::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
+        ret = jsd_cache_->operator[](i) + jsd_cache_->operator[](j) - blz::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
 #ifndef NDEBUG
         static constexpr typename MatrixType::ElementType threshold
             = std::is_same_v<typename MatrixType::ElementType, double>
@@ -283,12 +336,12 @@ public:
     }
     double mkl(size_t i, size_t j) const {
         // Multinomial KL
-        return (*jsdcache_)[i] - blz::dot(row(i), logrow(j));
+        return get_jsdcache(i) - blz::dot(row(i), logrow(j));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double mkl(size_t i, const OT &o) const {
         // Multinomial KL
-        return (*jsdcache_)[i] - blz::dot(row(i), blaze::neginf2zero(blz::log(o)));
+        return get_jsdcache(i) - blz::dot(row(i), blaze::neginf2zero(blz::log(o)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     double mkl(size_t i, const OT &, const OT2 &olog) const {
@@ -323,26 +376,26 @@ public:
     double psd(size_t i, const OT &o) const {
         return psd(i, o, neginf2zero(blz::log(o)));
     }
-    double bhattacharya_sim(size_t i, size_t j) const {
+    double bhattacharyya_sim(size_t i, size_t j) const {
         return sqrdata_ ? blz::dot(sqrtrow(i), sqrtrow(j))
                         : blz::sum(blz::sqrt(row(i) * row(j)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
-    double bhattacharya_sim(size_t i, const OT &o, const OT2 &osqrt) const {
+    double bhattacharyya_sim(size_t i, const OT &o, const OT2 &osqrt) const {
         return sqrdata_ ? blz::dot(sqrtrow(i), osqrt)
                         : blz::sum(blz::sqrt(row(i) * o));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    double bhattacharya_sim(size_t i, const OT &o) const {
-        return bhattacharya_sim(i, o, blz::sqrt(o));
+    double bhattacharyya_sim(size_t i, const OT &o) const {
+        return bhattacharyya_sim(i, o, blz::sqrt(o));
     }
     template<typename...Args>
-    double bhattacharya_distance(Args &&...args) const {
-        return -std::log(bhattacharya_sim(std::forward<Args>(args)...));
+    double bhattacharyya_distance(Args &&...args) const {
+        return -std::log(bhattacharyya_sim(std::forward<Args>(args)...));
     }
     template<typename...Args>
-    double bhattacharya_metric(Args &&...args) const {
-        return std::sqrt(1 - bhattacharya_sim(std::forward<Args>(args)...));
+    double bhattacharyya_metric(Args &&...args) const {
+        return std::sqrt(1 - bhattacharyya_sim(std::forward<Args>(args)...));
     }
     template<typename...Args>
     double psm(Args &&...args) const {return std::sqrt(std::forward<Args>(args)...);}
@@ -353,9 +406,9 @@ public:
             // X_j^Tlog(p_j)
             // X_k^Tlog(p_k)
             // (X_k + X_j)^Tlog(p_jk)
-        const auto lhn = (*llr_cache_)[i], rhn = (*llr_cache_)[j];
+        const auto lhn = row_sums_->operator[](i), rhn = row_sums_->operator[](j);
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
-        auto ret = lambda * lhn + m1l * rhn
+        auto ret = lhn * get_jsdcache(i) + rhn * get_jsdcache(j)
             -
             blz::dot(weighted_row(i) + weighted_row(j),
                 neginf2zero(blz::log(lambda * row(i) + m1l * row(j)))
@@ -363,13 +416,18 @@ public:
         assert(ret >= -1e-2 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
     }
+    double ollr(size_t i, size_t j) const {
+        auto ret = get_jsdcache(i) * row_sums_->operator[](i) + get_jsdcache(j) * row_sums_->operator[](j)
+            - blz::dot(weighted_row(i) + weighted_row(j), neginf2zero(blz::log((row(i) + row(j)) * .5)));
+        return std::max(ret, 0.);
+    }
     double uwllr(size_t i, size_t j) const {
-        const auto lhn = (*llr_cache_)[i], rhn = (*llr_cache_)[j];
+        const auto lhn = row_sums_->operator[](i), rhn = row_sums_->operator[](j);
         const double lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
         return
           std::max(
-            lambda * (*jsdcache_)[i] +
-                  m1l * (*jsdcache_)[j] -
+            lambda * get_jsdcache(i) +
+                  m1l * get_jsdcache(j) -
                blz::dot(lambda * row(i) + m1l * row(j),
                         neginf2zero(blz::log(
                             lambda * row(i) + m1l * row(j)))),
@@ -441,14 +499,20 @@ private:
         } else if(detail::needs_sqrt(measure_)) {
             sqrdata_.reset(new MatrixType(blz::sqrt(data_)));
         }
-        llr_cache_.reset(new VecT(data_.rows()));
-        jsdcache_.reset(new VecT(data_.rows()));
-        for(size_t i = 0; i < llr_cache_->size(); ++i) {
+        jsd_cache_.reset(new VecT(data_.rows()));
+        for(size_t i = 0; i < jsd_cache_->size(); ++i) {
             double cv = blaze::dot(row(i), logrow(i));
-            llr_cache_->operator[](i) = cv * row_sums_->operator[](i);
-            jsdcache_->operator[](i)  = cv;
+            jsd_cache_->operator[](i)  = cv;
         }
         VERBOSE_ONLY(std::cout << *logdata_;)
+    }
+    FT get_jsdcache(size_t index) const {
+        assert(jsd_cache_ && jsd_cache_->size() > index);
+        return (*jsd_cache_)[index];
+    }
+    FT get_llrcache(size_t index) const {
+        assert(jsd_cache_ && jsd_cache_->size() > index);
+        return (*jsd_cache_)[index] * row_sums_->operator[](index);
     }
 }; // ProbDivApplicator
 
