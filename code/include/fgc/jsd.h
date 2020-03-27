@@ -48,7 +48,7 @@ enum ProbDivType {
 namespace detail {
 static INLINE bool  needs_logs(ProbDivType d)  {
     switch(d) {
-        case JSM: case JSD: case MKL: case POISSON: case LLR:
+        case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR:
         case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: return true;
         default: break;
     }
@@ -62,7 +62,7 @@ static INLINE bool  needs_sqrt(ProbDivType d) {
 static INLINE bool is_symmetric(ProbDivType d) {
     switch(d) {
         case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
-        case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE:
+        case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
             return true;
         default: ;
     }
