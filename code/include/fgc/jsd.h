@@ -226,8 +226,7 @@ public:
                 for(size_t i = 1; i < nr; ++i) {
                     CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
                         //std::fprintf(stderr, "Filling bottom half\n");
-                        for(size_t j = 0; j <= i; ++j) {
-                            //std::fprintf(stderr, "%zu\n%zu\n", i, j);
+                        for(size_t j = 0; j < i; ++j) {
                             auto v = this->operator()(i, j, measure);
                             m(i, j) = v;
                         }

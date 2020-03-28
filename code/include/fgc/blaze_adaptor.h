@@ -281,7 +281,7 @@ void fill_helper(dm::DistanceMatrix<FT> &) {
      std::fprintf(stderr, "[%s] Warning: trying to fill_symmetric_upper_triangular on an unsupported type. Doing nothing.\n", __PRETTY_FUNCTION__);
 }
 
-template<typename OT>
+template<typename OT, typename=std::enable_if_t<!dm::is_distance_matrix_v<OT> && !blaze::IsDenseMatrix_v<OT> && !blaze::IsSparseMatrix_v<OT>>>
 void fill_helper(OT &) {
 }
 
