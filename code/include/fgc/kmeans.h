@@ -575,7 +575,7 @@ auto kmeans_matrix_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng,
     auto ics = kmeans_index_coreset(mat, k, rng, cs_size, weights, rowwise);
 #ifndef NDEBUG
     for(auto idx: ics.indices_)
-        assert(idx < rowwise ? ~mat.rows(): ~mat.columns());
+        assert(idx < rowwise ? (~mat).rows(): (~mat).columns());
     std::fprintf(stderr, "Got kmeans coreset of size %zu\n", ics.size());
 #endif
     return index2matrix(ics, ~mat);
