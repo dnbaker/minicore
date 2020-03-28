@@ -100,6 +100,7 @@ int main(int argc, char *argv[]) {
     auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, npoints * 100);
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ matrix coreset: %gs\n", double((stop - start).count()) / 1e9);
+    omp_set_num_threads(1);
     blaze::DynamicMatrix<FLOAT_TYPE> sqmat(20, 20);
     randomize(sqmat);
     sqmat = map(sqmat, [](auto x) {return x * x + 1e-15;});

@@ -558,32 +558,27 @@ auto kmeans_coreset(Iter start, Iter end,
     return ics;
 }
 
-template<typename FT, bool SO,
+template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>>
-auto kmeans_index_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RNG &rng, size_t cs_size,
-                           const FT *weights=nullptr, bool rowwise=true)
+auto kmeans_index_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng, size_t cs_size,
+                           const blz::ElementType_t<MT> *weights=nullptr, bool rowwise=true)
 {
     if(!rowwise) throw std::runtime_error("Not implemented");
-    const auto &blzview = reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(mat);
-    return kmeans_coreset(blzview.rowiterator().begin(), blzview.rowiterator().end(),
+    return kmeans_coreset(blz::rowiterator(~mat).begin(), blz::rowiterator(~mat).end(),
                           k, rng, cs_size, weights);
 }
-template<typename FT, bool SO,
+template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>>
-auto kmeans_matrix_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RNG &rng, size_t cs_size,
-                           const FT *weights=nullptr, bool rowwise=true)
+auto kmeans_matrix_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng, size_t cs_size,
+                           const blz::ElementType_t<MT> *weights=nullptr, bool rowwise=true)
 {
-    if(!rowwise) throw std::runtime_error("Not implemented");
-    const auto &blzview = reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(mat);
-    auto ics = kmeans_coreset(blzview.rowiterator().begin(), blzview.rowiterator().end(),
-                              k, rng, cs_size, weights);
+    auto ics = kmeans_index_coreset(mat, k, rng, cs_size, weights, rowwise);
 #ifndef NDEBUG
     for(auto idx: ics.indices_)
         assert(idx < rowwise ? mat.rows(): mat.columns());
     std::fprintf(stderr, "Got kmeans coreset of size %zu\n", ics.size());
 #endif
-    coresets::MatrixCoreset<blaze::DynamicMatrix<FT, SO>, FT> csmat = index2matrix(ics, mat);
-    return csmat;
+    return index2matrix(ics, ~mat);
 }
 
 // TODO: 1. get run kmeans clustering on MatrixCoreset
