@@ -6,7 +6,9 @@ extern "C" {
 #endif
 #include "aesctr/wy.h"
 #include "blaze/Math.h"
+#include <distmat/distmat.h>
 #include <cstdlib>
+#include <iostream>
 #include <vector>
 #include "./shared.h"
 #include "./Inf2Zero.h"
@@ -266,7 +268,7 @@ INLINE auto sum(const std::vector<FT, Alloc> &vec) {
 }
 
 template<typename MT, bool SO>
-void fill_symmetric_upper_triangular(blaze::Matrix<MT, SO> &mat, std::true_type) {
+void fill_helper(blaze::Matrix<MT, SO> &mat) {
     diagonal(~mat) = 0.;
     const size_t nr = (~mat).rows();
     for(size_t i = 0; i < nr - 1; ++i) {
@@ -274,18 +276,18 @@ void fill_symmetric_upper_triangular(blaze::Matrix<MT, SO> &mat, std::true_type)
     }
 }
 
-template<typename MT, bool SO>
-void fill_symmetric_upper_triangular(blaze::Matrix<MT, SO> &, std::false_type) {
-    std::fprintf(stderr, "[%s] Warning: trying to fill_symmetric_upper_triangular on an unsupported type. Doing nothing.\n", __PRETTY_FUNCTION__);
+template<typename FT >
+void fill_helper(dm::DistanceMatrix<FT> &) {
+     std::fprintf(stderr, "[%s] Warning: trying to fill_symmetric_upper_triangular on an unsupported type. Doing nothing.\n", __PRETTY_FUNCTION__);
 }
 
-template<typename MT, bool SO>
-void fill_symmetric_upper_triangular(blaze::Matrix<MT, SO> &mat) {
-    fill_symmetric_upper_triangular(mat, std::integral_constant<bool, blaze::IsDenseMatrix_v<MT> >());
+template<typename OT>
+void fill_helper(OT &) {
 }
+
 template<typename MT>
-void fill_symmetric_upper_triangular(MT &) {
-    std::fprintf(stderr, "[%s] Warning: trying to fill_symmetric_upper_triangular on an unsupported type. Doing nothing.\n", __PRETTY_FUNCTION__);
+void fill_symmetric_upper_triangular(MT &mat) {
+    fill_helper(mat);
 }
 using namespace blaze;
 
@@ -294,13 +296,11 @@ using namespace blaze;
 template<typename MT, bool SO>
 void normalize(Matrix<MT, SO> &mat, bool rowwise=IsRowMajorMatrix_v<MT>) {
     if(rowwise) {
-        std::fprintf(stderr, "rowwise normalizing\n");
         for(auto r: rowiterator(~mat)) {
             auto n = l2Norm(r);
             if(n) r /= l2Norm(r);
         }
     } else {
-        std::fprintf(stderr, "columnwise Normalizing\n");
         for(auto r: columniterator(~mat)) {
             auto n = l2Norm(r);
             if(n) r /= l2Norm(r);

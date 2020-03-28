@@ -35,10 +35,10 @@ int main(int argc, char *argv[]) {
     jsd.set_distance_matrix(utdm);
     std::cout << utdm << '\n';
     blz::DynamicMatrix<FLOAT_TYPE> jsd_bnj(first25.rows(), first25.rows(), 0.);
-    jsd.set_distance_matrix(jsd_bnj, jsd::JSM);
+    jsd.set_distance_matrix(jsd_bnj, jsd::JSM, true);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
     std::fprintf(stderr, "min/max jsm: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
-    jsd.set_distance_matrix(jsd_bnj, jsd::JSD);
+    jsd.set_distance_matrix(jsd_bnj, jsd::JSD, true);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
     std::fprintf(stderr, "min/max jsd: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs.flush();
@@ -61,6 +61,7 @@ int main(int argc, char *argv[]) {
     jsd_bnj = 0.;
     std::fprintf(stderr, "Assigned return matrix to 0.\n");
     auto jsd2 = fgc::jsd::make_probdiv_applicator(first25);
+    auto jsd3 = fgc::jsd::make_probdiv_applicator(first25, fgc::jsd::L1);
     fgc::util::Timer timer("1ksparsejsd");
     jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::JSD);
     timer.report();
@@ -70,8 +71,17 @@ int main(int argc, char *argv[]) {
     timer.report();
     std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     timer.restart("1ksparsewllr");
-    jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::WLLR);
+    jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::WLLR, true);
     timer.report();
+    timer.restart("1ksparsekl");
+    jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::MKL, true);
+    timer.report();
+    std::cout << "Multinomial KL\n" << '\n';
+    std::cout << jsd_bnj << '\n';
+    timer.restart("1ksparseL1");
+    jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::L1, true);
+    timer.report();
+    std::cout << "L1: " << jsd_bnj << '\n';
 #if 0
     timer.restart("1ldensejsd");
     blz::DM<FLOAT_TYPE> densefirst25 = first25;
@@ -83,7 +93,7 @@ int main(int argc, char *argv[]) {
     ofs.flush();
     std::fprintf(stderr, "Starting jsm\n");
     timer.restart("1ksparsejsm");
-    jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::JSM);
+    jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::L1);
     timer.report();
     timer.reset();
     ofs << "JS Metric: \n";

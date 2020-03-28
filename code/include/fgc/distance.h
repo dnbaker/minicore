@@ -1,6 +1,9 @@
 #ifndef FGC_DISTANCE_AND_MEANING_H__
 #define FGC_DISTANCE_AND_MEANING_H__
 #include "blaze_adaptor.h"
+#ifndef BOOST_NO_AUTO_PTR
+#define BOOST_NO_AUTO_PTR 1
+#endif
 #include "boost/iterator/transform_iterator.hpp"
 #include <vector>
 #include <iostream>

@@ -56,6 +56,7 @@ static INLINE bool  needs_logs(ProbDivType d)  {
     return false;
 }
 
+
 static INLINE bool  needs_sqrt(ProbDivType d) {
     return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
 }
@@ -69,6 +70,8 @@ static INLINE bool is_symmetric(ProbDivType d) {
     }
     return false;
 }
+
+
 
 static INLINE const char *prob2str(ProbDivType d) {
     switch(d) {
@@ -211,6 +214,7 @@ public:
             }
         }
         if(detail::is_symmetric(measure)) {
+            //std::fprintf(stderr, "Symmetric measure %s/%s\n", detail::prob2str(measure), detail::prob2desc(measure));
             if(symmetrize) {
                 fill_symmetric_upper_triangular(m);
             }
@@ -218,9 +222,12 @@ public:
             CONST_IF(dm::is_distance_matrix_v<MatType>) {
                 std::fprintf(stderr, "Warning: using asymmetric measure with an upper triangular matrix. You are computing only half the values");
             } else {
+                //std::fprintf(stderr, "Asymmetric measure %s/%s\n", detail::prob2str(measure), detail::prob2desc(measure));
                 for(size_t i = 1; i < nr; ++i) {
                     CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
-                        for(size_t j = 0; j < i; ++j) {
+                        //std::fprintf(stderr, "Filling bottom half\n");
+                        for(size_t j = 0; j <= i; ++j) {
+                            //std::fprintf(stderr, "%zu\n%zu\n", i, j);
                             auto v = this->operator()(i, j, measure);
                             m(i, j) = v;
                         }
@@ -238,19 +245,17 @@ public:
     }
     blaze::DynamicMatrix<float> make_distance_matrix() const {
         blaze::DynamicMatrix<float> ret = make_distance_matrix(measure_);
-#if FGC_DBG_PRINT
-        std::cout << ret << '\n';
-#endif
         return ret;
     }
     blaze::DynamicMatrix<float> make_distance_matrix(ProbDivType measure, bool symmetrize=false) const {
-        std::fprintf(stderr, "About to make distance matrix of %zu/%zu with %s calculated\n", data_.rows(), data_.rows(), detail::prob2str(measure));
         blaze::DynamicMatrix<float> ret(data_.rows(), data_.rows());
         set_distance_matrix(ret, measure, symmetrize);
         return ret;
     }
     // Accessors
-    auto weighted_row(size_t ind) const {
+    decltype(auto) weighted_row(size_t ind) const {
+        if(!row_sums_) throw std::runtime_error("no row sums\n");
+        else if (ind > row_sums_->size()) throw std::runtime_error("ZGMZOFMOZF");
         return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_->operator[](ind);
     }
     auto row(size_t ind) const {return blz::row(data_, ind BLAZE_CHECK_DEBUG);}
@@ -266,7 +271,7 @@ public:
     }
     INLINE double operator()(size_t i, size_t j, ProbDivType measure) const {
         if(unlikely(i >= data_.rows() || j >= data_.rows())) {
-            std::cout << (std::string("Invalid rows selection: ") + std::to_string(i) + ", " + std::to_string(j) + '\n');
+            std::cerr << (std::string("Invalid rows selection: ") + std::to_string(i) + ", " + std::to_string(j) + '\n');
             std::exit(1);
         }
         double ret;
@@ -350,12 +355,12 @@ public:
     }
     double pkl(size_t i, size_t j) const {
         // Poission KL
-        return blz::dot(row(i), logrow(i) - logrow(j)) + blz::sum(row(j) - row(i));
+        return get_jsdcache(i) - blz::dot(row(i), logrow(j)) + blz::sum(row(j) - row(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     double pkl(size_t i, const OT &o, const OT2 &olog) const {
         // Poission KL
-        return blz::dot(row(i), logrow(i) - olog) + blz::sum(row(i) - o);
+        return get_jsdcache(i) - blz::dot(row(i), olog) + blz::sum(row(i) - o);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double pkl(size_t i, const OT &o) const {
@@ -455,13 +460,14 @@ public:
 private:
     template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>
     void prep(Prior prior, const Container *c=nullptr) {
+        //std::fprintf(stderr, "[%s] Starting prep\n", __PRETTY_FUNCTION__);
         row_sums_.reset(new VecT(data_.rows()));
         auto rowsumit = row_sums_->begin();
         for(auto r: blz::rowiterator(data_)) {
             CONST_IF(blz::IsDenseMatrix_v<MatrixType>) {
                 if(prior == NONE) {
-                r += 1e-50;
-                assert(blz::min(r) > 0.);
+                    r += 1e-50;
+                    assert(blz::min(r) > 0.);
                 }
             }
             const auto countsum = blz::sum(r);
@@ -491,20 +497,25 @@ private:
                 for(auto rw: blz::rowiterator(data_))
                     rw += *c;
         }
-        for(size_t i = 0; i < data_.rows(); ++i)
-            row(i) /= blaze::sum(row(i)); // Ensure that they sum to 1.
+        if(!row_sums_) throw std::runtime_error("Row sums not set");
+        if(row_sums_->size() != data_.rows()) {
+            char buf[256];
+            std::sprintf(buf, "Wrong size: %zu, expected %zu\n", row_sums_->size(), data_.rows());
+            throw std::runtime_error(buf);
+        }
 
         if(detail::needs_logs(measure_)) {
             logdata_.reset(new MatrixType(neginf2zero(log(data_))));
         } else if(detail::needs_sqrt(measure_)) {
             sqrdata_.reset(new MatrixType(blz::sqrt(data_)));
         }
-        jsd_cache_.reset(new VecT(data_.rows()));
-        for(size_t i = 0; i < jsd_cache_->size(); ++i) {
-            double cv = blaze::dot(row(i), logrow(i));
-            jsd_cache_->operator[](i)  = cv;
+        if(logdata_) {
+            jsd_cache_.reset(new VecT(data_.rows()));
+            auto &jc = *jsd_cache_;
+            for(size_t i = 0; i < jc.size(); ++i) {
+                jc[i] = dot(row(i), logrow(i));
+            }
         }
-        VERBOSE_ONLY(std::cout << *logdata_;)
     }
     FT get_jsdcache(size_t index) const {
         assert(jsd_cache_ && jsd_cache_->size() > index);
@@ -554,13 +565,17 @@ struct BaseOperand {
 
 template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typename MatrixType::ElementType, blaze::rowVector>>
 auto make_probdiv_applicator(MatrixType &data, ProbDivType type=JSM, Prior prior=NONE, const PriorContainer *pc=nullptr) {
+#if VERBOSE_AF
+    std::fprintf(stderr, "[%s:%s:%d] Making probdiv applicator with %d/%s as measure, %d/%s as prior, and %s for prior container.\n",
+                 __PRETTY_FUNCTION__, __FILE__, __LINE__, int(type), detail::prob2str(type), int(prior), prior == NONE ? "No prior": prior == DIRICHLET ? "Dirichlet" : prior == GAMMA_BETA ? "Gamma/Beta": "Feature-specific prior",
+                pc == nullptr ? "No prior container": (std::string("Container of size ") + std::to_string(pc->size())).data());
+#endif
     return ProbDivApplicator<MatrixType>(data, type, prior, pc);
 }
 template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typename MatrixType::ElementType, blaze::rowVector>>
 auto make_jsm_applicator(MatrixType &data, Prior prior=NONE, const PriorContainer *pc=nullptr) {
-    return ProbDivApplicator<MatrixType>(data, JSM, prior, pc);
+    return make_probdiv_applicator(data, JSM, prior, pc);
 }
-
 
 
 template<typename MatrixType>
