@@ -52,31 +52,31 @@ struct BoundingBoxData {
         return (pt.lat() <= lathi && pt.lat() >= latlo)
             && (pt.lon() <= lonhi && pt.lon() >= lonlo);
     }
-};
-static inline BoundingBoxData parse_bbdata(const char *s) {
-    /*
-     * lon,lat,lon,lat
-     * %f,%f,%f,%f[,%f][,%f]
-     */
-    std::fprintf(stderr, "parsing %s\n", s);
-    double llon, llat, ulon, ulat, highprob = 0.99, loprob=0.01;
-    llon = std::strtod(s, const_cast<char **>(&s));
-    llat = std::strtod(++s, const_cast<char **>(&s));
-    ulon = std::strtod(++s, const_cast<char **>(&s));
-    ulat = std::strtod(++s, const_cast<char **>(&s));
-
-    if(*s == ',') {
-        highprob = std::strtod(++s, const_cast<char **>(&s));
+    static BoundingBoxData parse_bbdata(const char *s) {
+        /*
+         * lon,lat,lon,lat
+         * %f,%f,%f,%f[,%f][,%f]
+         */
+        std::fprintf(stderr, "parsing %s\n", s);
+        double llon, llat, ulon, ulat, highprob = 0.99, loprob=0.01;
+        llon = std::strtod(s, const_cast<char **>(&s));
+        llat = std::strtod(++s, const_cast<char **>(&s));
+        ulon = std::strtod(++s, const_cast<char **>(&s));
+        ulat = std::strtod(++s, const_cast<char **>(&s));
+    
         if(*s == ',') {
-            loprob = std::strtod(++s, const_cast<char **>(&s));
+            highprob = std::strtod(++s, const_cast<char **>(&s));
+            if(*s == ',') {
+                loprob = std::strtod(++s, const_cast<char **>(&s));
+            }
         }
+        assert(loprob < highprob);
+        BoundingBoxData ret{llat, ulat, llon, ulon, highprob, loprob};
+        ret.print(stderr);
+        std::fputc('\n', stderr);
+        return ret;
     }
-    assert(loprob < highprob);
-    BoundingBoxData ret{llat, ulat, llon, ulon, highprob, loprob};
-    ret.print(stderr);
-    std::fputc('\n', stderr);
-    return ret;
-}
+};
 
 } // namespace fgc
 

@@ -247,6 +247,14 @@ struct NaiveJVSolver {
     }
 };
 
+#if 0
+struct Correct {
+    Correct = 1;
+};
+TODO Adapt method from https://raw.githubusercontent.com/nathan-cordner/facility-location/master/fl-cpp/facility_location.C
+
+#endif
+
 } // namespace fgc
 
 #endif

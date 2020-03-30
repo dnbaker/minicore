@@ -300,11 +300,6 @@ get_costs(Graph &x, const Container &container) {
     for(size_t i = 0; i < container.size(); ++i)
         pid2ind[index[*it++]] = i;
 
-#if 0
-    for(const auto c: container)
-        std::fprintf(stderr, "c: %zu\n", size_t(c));
-#endif
-
     // This could be slow, but whatever.
     for(size_t i = 0; i < nv; ++i) {
         auto parent = p[i], newparent = p[index[parent]];
@@ -313,14 +308,8 @@ get_costs(Graph &x, const Container &container) {
             newparent = p[index[parent]];
         }
         assert(index[parent] == parent);
-        //std::fprintf(stderr, "parent: %u\n", parent);
         auto it = pid2ind.find(index[parent]);
-#if! NDEBUG
-        if(it == pid2ind.end()) {
-            //std::fprintf(stderr, "i: %zu. parent: %zu\n", i, p[i]);
-            assert(pid2ind.find(i) != pid2ind.end());
-        }
-#endif
+        assert(it != pid2ind.end() || pid2ind.find(i) != pid2ind.end());
         assignments[i] = it == pid2ind.end() ? pid2ind.at(i): it->second;
     }
     assignments.pop_back();
@@ -330,41 +319,6 @@ get_costs(Graph &x, const Container &container) {
     std::fprintf(stderr, "Total cost of solution: %g\n", blaze::sum(costs));
     return std::make_pair(std::move(costs), assignments);
 }
-#if 0
-template<typename Graph, template<typename...> class BBoxTemplate=std::vector, typename...BBoxArgs>
-auto
-thorup_sample_iterative(Graph &x, unsigned k, uint64_t seed,
-    unsigned nrounds,
-    const BBoxTemplate<typename boost::graph_traits<Graph>::vertex_descriptor, BBoxArgs...> *bbox_vertices_ptr=nullptr,
-    double npermult=21., double nroundmult=3.)
-{
-    static constexpr double eps = 0.5;
-    wy::WyRand<uint64_t, 2> rng(seed);
-    const size_t n = bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x);
-    const double logn = std::ceil(std::log2(n));
-    const size_t samples_per_round = std::ceil(npermult * logn * k / eps);
-    std::vector<uint32_t> weights(n, 1);
-    std::unique_ptr<std::vector<size_t>> allbbox;
-    if(bbox_vertices_ptr == nullptr) {
-        allbbox.reset(new std::vector<size_t>(n));
-        std::iota(allbbox->begin(), allbbox->end(), size_t(0));
-        bbox_vertices_ptr = allbbox.get();
-    }
-    auto first_sample = thorup_d(x, rng, samples_per_round, nroundmult * logn, bbox_vertices_ptr, weights.data());
-    weights.resize(first_sample.first.size()); // Pop off weights for removed items
-    assert(std::accumulate(weights.begin(), weights.end(), 0u) == n);
-    for(unsigned i = 1; i < nrounds; ++i) {
-        std::fprintf(stderr, "Original Thorup sample at round %u: %zu/%zu\n", i, first_sample.first.size(), n);
-        auto next_sample = thorup_d(x, rng, samples_per_round, nroundmult * logn, &first_sample.first, weights.data());
-        std::swap(first_sample, next_sample);
-        weights.resize(first_sample.first.size());
-        assert(std::accumulate(weights.begin(), weights.end(), 0u) == n);
-    }
-    std::fprintf(stderr, "Original Thorup sample after all rounds: %zu/%zu\n", first_sample.first.size(), n);
-    auto [_, assignments] = get_costs(x, first_sample.first);
-    return std::make_pair(std::move(first_sample.first), std::move(assignments));
-}
-#endif
 
 template<typename Graph, template<typename...> class BBoxTemplate=std::vector, typename WeightType=uint32_t, typename...BBoxArgs>
 auto
@@ -498,6 +452,13 @@ thorup_sample_mincost_with_weights(Graph &x, unsigned k, uint64_t seed,
 
 } // thorup
 
-using namespace thorup;
+using thorup::thorup_sample_mincost_with_weights;
+using thorup::thorup_sample_mincost;
+using thorup::sample_from_graph;
+using thorup::thorup_sample;
+using thorup::histogram_assignments;
+using thorup::thorup_d;
+using thorup::get_costs;
+
 
 } // namespace fgc

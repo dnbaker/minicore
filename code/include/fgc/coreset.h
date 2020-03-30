@@ -89,9 +89,6 @@ struct IndexCoreset {
         weights_.resize(newsz);
         DBG_ONLY(std::fprintf(stderr, "Shrinking to fit\n");)
         if(shrink_to_fit) indices_.shrinkToFit(), weights_.shrinkToFit();
-#if 0
-        std::fprintf(stderr, "compacted\n");
-#endif
     }
     std::vector<std::pair<IT, FT>> to_pairs() const {
         std::vector<std::pair<IT, FT>> ret(size());
@@ -105,6 +102,7 @@ struct IndexCoreset {
             std::fprintf(stderr, "%zu: [%u/%g]\n", i, indices_[i], weights_[i]);
         }
     }
+    void resize(size_t newsz) {indices_.resize(newsz); weights_.resize(newsz);}
     IndexCoreset(size_t n): indices_(n), weights_(n) {}
 };
 
@@ -160,12 +158,16 @@ template<typename FT=float, typename IT=std::uint32_t>
 struct CoresetSampler {
     using Sampler = alias::AliasSampler<FT, wy::WyRand<IT, 2>, IT>;
     using CoresetType = IndexCoreset<IT, FT>;
-    std::unique_ptr<Sampler> sampler_;
-    std::unique_ptr<FT []>     probs_;
+    std::unique_ptr<Sampler>     sampler_;
+    std::unique_ptr<FT []>         probs_;
     std::unique_ptr<blz::DV<FT>> weights_;
-    size_t                        np_;
-    size_t                         k_;
-    uint64_t                    seed_ = 137;
+    std::unique_ptr<blz::DV<IT>> fl_bicriteria_points_; // Used only by FL
+    std::unique_ptr<IT []>        fl_asn_;
+    size_t                            np_;
+    size_t                             k_;
+    size_t                             b_;
+    uint64_t                  seed_ = 137;
+    SensitivityMethod sens_        =  BFL;
 
 
     bool ready() const {return sampler_.get();}
@@ -319,9 +321,12 @@ struct CoresetSampler {
                       uint64_t seed=137,
                       SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG,
                       unsigned k = 0,
+                      const IT *centerids = nullptr, // Necessary for FL sampling, otherwise useless
                       double alpha_est=0.)
     {
+        sens_ = sens;
         np_ = np;
+        b_ = ncenters;
         if(!k) k = ncenters;
         k_ = k;
         if(weights) {
@@ -335,7 +340,7 @@ struct CoresetSampler {
         } else if(sens == BFL) {
             make_sampler_bfl(ncenters, costs, assignments, seed);
         } else if(sens == FL) {
-            make_sampler_fl(ncenters, costs, assignments, seed);
+            make_sampler_fl(ncenters, costs, assignments, seed, centerids);
         } else if(sens == LBK) {
             make_sampler_lbk(ncenters, costs, assignments, seed);
         } else throw std::runtime_error("Invalid SensitivityMethod");
@@ -383,24 +388,33 @@ struct CoresetSampler {
     }
     template<typename CFT>
     void make_sampler_fl(size_t,
-                         const CFT *costs, const IT *,
-                         uint64_t seed=137)
+                         const CFT *costs, const IT *asn,
+                         uint64_t seed=137, const IT *bicriteria_centers=nullptr)
     {
         // See https://arxiv.org/pdf/1106.1379.pdf, figures 2,3,4
-        throw std::runtime_error("I'm not certain this is correct. Do not use this until I am.");
-
+        fl_asn_.reset(new IT[np_]);
+        blaze::CustomVector<IT, blaze::unaligned, blaze::unpadded>(fl_asn_.get(), np_) =
+            blaze::CustomVector<const IT, blaze::unaligned, blaze::unpadded>(asn, np_);
+        if(bicriteria_centers) {
+            if(!fl_bicriteria_points_) fl_bicriteria_points_.reset(new blz::DV<IT>(b_));
+            else fl_bicriteria_points_->resize(b_);
+            *fl_bicriteria_points_ = blaze::CustomVector<const IT, blaze::unaligned, blaze::unpadded>(bicriteria_centers, b_);
+        }
         auto cv = blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded>(const_cast<CFT *>(costs), np_);
-        double total_cost =
+        auto total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                      : blaze::sum(cv);
         probs_.reset(new FT[np_]);
-        double total_probs = 0.;
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
         double total_cost_inv = 1. / (total_cost);
-        OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
-        for(size_t i = 0; i < np_; ++i) {
-            probs_[i] = getweight(i) * (costs[i]) * total_cost_inv;
-            total_probs += probs_[i];
+        if(weights_) {
+            OMP_PFOR
+            for(size_t i = 0; i < np_; ++i) {
+                probs_[i] = getweight(i) * (costs[i]) * total_cost_inv;
+            }
+        } else {
+            blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded> probv(const_cast<CFT *>(probs_.get()), np_);
+            probv = blz::ceil(CFT(np_) * total_cost_inv * cv) + 1.;
         }
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
@@ -487,17 +501,29 @@ struct CoresetSampler {
     auto getweight(size_t ind) const {
         return weights_ ? weights_->operator[](ind): static_cast<FT>(1.);
     }
-    IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0) {
+    IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0, double eps=0.1) {
         if(unlikely(!sampler_.get())) throw std::runtime_error("Sampler not constructed");
         if(seed) sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
-        //const double nsamplinv = 1. / n;
         const double dn = n;
         for(size_t i = 0; i < n; ++i) {
             const auto ind = sampler_->sample();
             assert(ind < np_);
             ret.indices_[i] = ind;
             ret.weights_[i] = getweight(ind) / (dn * probs_[ind]);
+        }
+        if(sens_ == FL && fl_bicriteria_points_) {
+            assert(fl_bicriteria_points_->size() == b_);
+            std::unique_ptr<FT[]> wsums(new FT[b_]());
+            auto &bicp = *fl_bicriteria_points_;
+            for(size_t i = 0; i < n; ++i)
+                wsums[fl_asn_[i]] += ret.weights_[i];
+            const double wmul = (1. + 10. * eps) * b_;
+            ret.resize(n + b_);
+            for(size_t i = n; i < ret.size(); ++i) {
+                ret.indices_[i] = bicp[i - n];
+                ret.weights_[i] = std::max(wmul - wsums[i - n], 0.);
+            }
         }
         return ret;
     }
