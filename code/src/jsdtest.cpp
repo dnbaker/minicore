@@ -79,9 +79,9 @@ int main(int argc, char *argv[]) {
     std::cout << "Multinomial KL\n" << '\n';
     //std::cout << jsd_bnj << '\n';
     timer.restart("1ksparseL1");
-    jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::L1, true);
+    jsd2.set_distance_matrix(jsd_bnj, fgc::jsd::EMD, true);
     timer.report();
-    //std::cout << "L1: " << jsd_bnj << '\n';
+    std::cout << "EMD: " << jsd_bnj << '\n';
 #if 0
     timer.restart("1ldensejsd");
     blz::DM<FLOAT_TYPE> densefirst25 = first25;

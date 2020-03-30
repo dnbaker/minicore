@@ -31,6 +31,7 @@ enum ProbDivType {
     TOTAL_VARIATION_DISTANCE,
     LLR,
     EMD,
+    WEMD, // Weighted Earth-mover's distance
     REVERSE_MKL,
     REVERSE_POISSON,
     UWLLR, /* Unweighted Log-likelihood Ratio.
@@ -284,6 +285,7 @@ public:
             case REVERSE_MKL: std::swap(i, j); [[fallthrough]];
             case MKL:   ret = mkl(i, j); break;
             case EMD:   ret = p_wasserstein(row(i), row(j)); break;
+            case WEMD:   ret = p_wasserstein(weighted_row(i), weighted_row(j)); break;
             case REVERSE_POISSON: std::swap(i, j); [[fallthrough]];
             case POISSON: ret = pkl(i, j); break;
             case HELLINGER: ret = hellinger(i, j); break;
