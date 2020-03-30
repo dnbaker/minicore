@@ -254,8 +254,7 @@ public:
     }
     // Accessors
     decltype(auto) weighted_row(size_t ind) const {
-        if(!row_sums_) throw std::runtime_error("no row sums\n");
-        else if (ind > row_sums_->size()) throw std::runtime_error("ZGMZOFMOZF");
+        if(unlikely(!row_sums_)) throw std::runtime_error("no row sums\n");
         return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_->operator[](ind);
     }
     auto row(size_t ind) const {return blz::row(data_, ind BLAZE_CHECK_DEBUG);}
@@ -293,6 +292,7 @@ public:
             case BHATTACHARYYA_DISTANCE: ret = bhattacharyya_distance(i, j); break;
             case LLR: ret = llr(i, j); break;
             case UWLLR: ret = uwllr(i, j); break;
+            case OLLR: ret = ollr(i, j); break;
             default: __builtin_unreachable();
         }
         return ret;

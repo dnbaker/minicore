@@ -108,26 +108,6 @@ struct IndexCoreset {
     IndexCoreset(size_t n): indices_(n), weights_(n) {}
 };
 
-#if 0
-#ifdef __AVX512F__
-#define USE_VECTORS
-#define VECTOR_WIDTH 64u
-template<typename FT>
-struct VT;
-template<> VT<float>{using type = __m512;}
-template<> VT<double>{using type = __m512d;}
-#elif defined(__AVX2__)
-template<typename FT>
-struct VT;
-template<> VT<float>{using type = __m512;}
-template<> VT<double>{using type = __m512d;}
-#define VECTOR_WIDTH 32u
-#elif defined(__SSE2__)
-#define VECTOR_WIDTH 16u
-#endif
-#endif
-
-
 
 template<typename FT=float, typename IT=std::uint32_t>
 struct UniformSampler {
@@ -166,6 +146,7 @@ struct MapCoreset {
             it->second += w;
     }
 };
+
 template<typename IT, typename FT, template<typename...> class MapType=flat_hash_map, typename...Extra>
 auto map2index(const MapCoreset<IT, FT, MapType, Extra...> &map) {
     IndexCoreset<IT, FT> ret(map.size());
