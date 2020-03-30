@@ -43,7 +43,7 @@ enum SensitivityMethod: int {
     LBK=LUCIC_BACHEM_KRAUSE
 };
 
-const char *sm2str(SensitivityMethod sm) {
+static const char *sm2str(SensitivityMethod sm) {
     switch(sm) {
         case BFL:  return "BFL";
         case VX:   return "VX";
@@ -349,11 +349,9 @@ struct CoresetSampler {
         } else weights_.release();
         if(sens == LUCIC_FAULKNER_KRAUSE_FELDMAN) {
             make_gmm_sampler(ncenters, costs, assignments, seed, alpha_est);
-        }
-        else if(sens == VARADARAJAN_XIAO) {
+        } else if(sens == VARADARAJAN_XIAO) {
             make_sampler_vx(ncenters, costs, assignments, seed);
-        }
-        else if(sens == BFL) {
+        } else if(sens == BFL) {
             make_sampler_bfl(ncenters, costs, assignments, seed);
         } else if(sens == FL) {
             make_sampler_fl(ncenters, costs, assignments, seed);
@@ -366,11 +364,12 @@ struct CoresetSampler {
         }
 #endif
     }
+    template<typename CFT>
     void make_sampler_vx(size_t ncenters,
-                         const FT *costs, const IT *assignments,
+                         const CFT *costs, const IT *assignments,
                          uint64_t seed=137)
     {
-        auto cv = blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(costs), np_);
+        auto cv = blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded>(const_cast<CFT *>(costs), np_);
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                      : blaze::sum(cv);
@@ -401,14 +400,15 @@ struct CoresetSampler {
         sensitivies *= 1. / total_sensitivity;
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
+    template<typename CFT>
     void make_sampler_fl(size_t,
-                         const FT *costs, const IT *,
+                         const CFT *costs, const IT *,
                          uint64_t seed=137)
     {
         // See https://arxiv.org/pdf/1106.1379.pdf, figures 2,3,4
         throw std::runtime_error("I'm not certain this is correct. Do not use this until I am.");
 
-        auto cv = blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(costs), np_);
+        auto cv = blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded>(const_cast<CFT *>(costs), np_);
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                      : blaze::sum(cv);
@@ -423,8 +423,9 @@ struct CoresetSampler {
         }
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
+    template<typename CFT>
     void make_sampler_lbk(size_t ncenters,
-                          const FT *costs, const IT *assignments,
+                          const CFT *costs, const IT *assignments,
                           uint64_t seed=137)
     {
         const double alpha = 16 * std::log(k_) + 32., alpha2 = 2. * alpha;
@@ -463,14 +464,15 @@ struct CoresetSampler {
         }
         sampler_.reset(new Sampler(sens.data(), sens.data() + np_, seed));
     }
+    template<typename CFT>
     void make_sampler_bfl(size_t ncenters,
-                          const FT *costs, const IT *assignments,
+                          const CFT *costs, const IT *assignments,
                           uint64_t seed=137)
     {
         // This is for a bicriteria approximation
         // Use make_sampler_vx for a constant approximation for arbitrary metric spaces,
         // and make_sampler_lbk for bicriteria approximations for \mu-similar divergences.
-        auto cv = blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(costs), np_);
+        auto cv = blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded>(const_cast<CFT *>(costs), np_);
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                     : blaze::sum(cv);

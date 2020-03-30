@@ -1,6 +1,10 @@
 #ifndef FGC_DISTANCE_AND_MEANING_H__
 #define FGC_DISTANCE_AND_MEANING_H__
 #include "blaze_adaptor.h"
+#ifndef BOOST_NO_AUTO_PTR
+#define BOOST_NO_AUTO_PTR 1
+#endif
+#include "network_simplex/network_simplex_simple.h"
 #include "boost/iterator/transform_iterator.hpp"
 #include <vector>
 #include <iostream>
@@ -262,10 +266,6 @@ INLINE double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
                               const blaze::DenseVector<VT2, SO> &lhlog,
                               const blaze::DenseVector<VT2, SO> &rhlog)
 {
-#if 0
-    assert_all_nonzero(lhs);
-    assert_all_nonzero(rhs);
-#endif
     auto mn = (~lhs + ~rhs) * 0.5;
     auto mnlog = blaze::evaluate(blaze::neginf2zero(blaze::log(~mn)));
     double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
@@ -351,7 +351,7 @@ enum Prior {
 
 
 template<typename LHVec, typename RHVec>
-double bhattacharya_measure(const LHVec &lhs, const RHVec &rhs) {
+double bhattacharyya_measure(const LHVec &lhs, const RHVec &rhs) {
     // Requires same storage.
     // TODO: generalize for different storage classes/transpose flags using DenseVector and SparseVector
     // base classes
@@ -359,11 +359,11 @@ double bhattacharya_measure(const LHVec &lhs, const RHVec &rhs) {
 }
 
 template<typename LHVec, typename RHVec>
-double bhattacharya_metric(const LHVec &lhs, const RHVec &rhs) {
+double bhattacharyya_metric(const LHVec &lhs, const RHVec &rhs) {
     // Comaniciu, D., Ramesh, V. & Meer, P. (2003). Kernel-based object tracking.IEEE Transactionson Pattern Analysis and Machine Intelligence,25(5), 564-577.
     // Proves that this extension is a valid metric
     // See http://www.cse.yorku.ca/~kosta/CompVis_Notes/bhattacharyya.pdf
-    return std::sqrt(1. - bhattacharya_measure(lhs, rhs));
+    return std::sqrt(1. - bhattacharyya_measure(lhs, rhs));
 }
 template<typename LHVec, typename RHVec>
 double matusita_distance(const LHVec &lhs, const RHVec &rhs) {
@@ -384,90 +384,237 @@ inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &
 
 
 template<typename VT, bool SO, typename VT2>
-auto p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {
-	const size_t sz = (~y).size();
-	std::unique_ptr<uint32_t[]> ptr(new uint32_t[sz * 2]);
-	auto xptr = ptr.get(), yptr = ptr.get() + (~x).size();
-	std::iota(xptr, yptr, 0u);
-	std::iota(yptr, yptr + sz, 0u);
-	pdqsort(xptr, yptr, [&](uint32_t p, uint32_t q) {return (~x)[p] < (~x)[q];});
-	pdqsort(yptr, yptr + sz, [&](uint32_t p, uint32_t q) {return (~y)[p] < (~y)[q];});
-	auto xconv = [&](auto xi) {return (~x)[xi];};
-	auto yconv = [&](auto yi) {return (~y)[yi];};
-    blz::DynamicVector<typename VT::ElementType, SO> all(2 * sz);
-	std::merge(boost::make_transform_iterator(xptr, xconv), boost::make_transform_iterator(yptr, xconv),
-	           boost::make_transform_iterator(yptr, yconv), boost::make_transform_iterator(yptr + sz, yconv), all.begin());
-    const size_t deltasz = 2 * sz - 1;
-    blz::DynamicVector<typename VT::ElementType, SO> deltas(deltasz);
-    std::adjacent_difference(all.begin(), all.end(), deltas.begin());
-    assert(std::is_sorted(xptr, yptr,  [&](uint32_t p, uint32_t q) {return (~x)[p] < (~x)[q];}));
-    auto fill_cdf = [&](auto datptr, const auto &datvec) -> blz::DynamicVector<typename VT::ElementType>
-    {
-        // Faster to do one linear scan than n binary searches
-        blz::DynamicVector<typename VT::ElementType> ret(deltasz);
-        for(size_t offset = 0, i = 0; i < ret.size(); ret[i++] = offset)
-            while(datvec[datptr[offset]] < all[i] && offset < sz)
-                ++offset;
+CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
+network_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y, double p=1., size_t maxiter=10000)
+{
+#ifndef _OPENMP
+    throw std::runtime_error("Not available without OpenMP");
+    return 0.;
+#else
+    auto &xref = ~x;
+    auto &yref = ~y;
+    const size_t sz = xref.size();
+    size_t nl = nonZeros(xref), nr = nonZeros(~y);
+    using FT = CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>;
+
+    using namespace lemon;
+	typedef lemon::FullBipartiteDigraph Digraph;
+	DIGRAPH_TYPEDEFS(FullBipartiteDigraph);
+    Digraph di(nl, nr);
+    NetworkSimplexSimple<Digraph, FT, FT, unsigned> net(di, true, nl + nr, nl * nr);
+    DV<FT> weights(nl + nr);
+    DV<unsigned> indices(nl + nr);
+    size_t i = 0;
+    for(size_t ii = 0; ii < sz; ++ii) {
+        if(xref[ii] > 0)
+            weights[i] = xref[ii], indices[i] = xref[ii], ++i;
+    }
+    for(size_t ii = 0; ii < sz; ++ii) {
+        if(yref[ii] > 0)
+            weights[i] = -yref[ii], indices[i] = yref[ii], ++i;
+    }
+    auto func = [p](auto x, auto y) {
+        auto ret = x - y;
+        if(p == 1) ret = std::abs(ret);
+        else if(p == 2.) ret = ret * ret;
+        else ret = std::pow(ret, p);
         return ret;
     };
-    auto cdfx = fill_cdf(xptr, (~x));
-    auto cdfy = fill_cdf(yptr, (~y));
-	if(p == 1.)
-		return dot(blz::abs(cdfx - cdfy), deltas) / sz;
-    cdfx *= 1. / sz;
-    cdfy *= 1. / sz;
-    if(p == 2)
-		return std::sqrt(dot(blz::pow(cdfx - cdfy, 2), deltas));
-	return std::pow(dot(blz::pow(blz::abs(cdfx - cdfy), p), deltas), 1. / p);
+    net.supplyMap(weights.data(), nl, weights.data() + nl, nr);
+    {
+        const auto jptr = &weights[nl];
+        for(unsigned i = 0; i < nl; ++i) {
+            auto arcid = i * nl;
+            for(unsigned j = 0; j < nl; ++j) {
+                net.setCost(di.arcFromId(arcid++, func(weights[i], jptr[j])));
+            }
+        }
+    }
+    int rc = net.run();
+    if(rc != (int)net.OPTIMAL) {
+        std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+    }
+    
+    FT ret(0);
+    OMP_PRAGMA("omp parallel for reduction(+:ret)")
+    for(size_t i = 0; i < nl; ++i) {
+        for(size_t j = 0; j < nr; ++j)
+           ret += net.flow(i * nr + j) * func(weights[i], weights[sz + j]);
+    }
+    return ret;
+#endif
 }
 
 template<typename VT, bool SO, typename VT2>
-auto p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y, double p=1.) {
+CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
+network_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1., size_t maxiter=100)
+{
+#ifndef _OPENMP
+    throw std::runtime_error("Not available without OpenMP");
+    return 0.;
+#else
+    auto &xref = ~x;
+    const size_t sz = xref.size();
+    size_t nl = nonZeros(xref), nr = nonZeros(~y);
+    using FT = CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>;
+
+    using namespace lemon;
+	typedef lemon::FullBipartiteDigraph Digraph;
+	DIGRAPH_TYPEDEFS(FullBipartiteDigraph);
+    Digraph di(nl, nr);
+    NetworkSimplexSimple<Digraph, FT, FT, unsigned> net(di, true, nl + nr, nl * nr, maxiter);
+    DV<FT> weights(nl + nr);
+    DV<unsigned> indices(nl + nr);
+    size_t i = 0;
+    for(const auto &pair: xref)
+        weights[i] = pair.value(), indices[i] = pair.index(), ++i;
+    for(const auto &pair: ~y)
+        weights[i] = -pair.value(), indices[i] = pair.index(), ++i; // negative weight
+    auto func = [p](auto x, auto y) {
+        auto ret = x - y;
+        if(p == 1) ret = std::abs(ret);
+        else if(p == 2.) ret = ret * ret;
+        else ret = std::pow(ret, p);
+        return ret;
+    };
+    net.supplyMap(weights.data(), nl, weights.data() + nl, nr);
+    {
+        const auto jptr = &weights[nl];
+        for(unsigned i = 0; i < nl; ++i) {
+            auto arcid = i * nl;
+            for(unsigned j = 0; j < nl; ++j) {
+                net.setCost(di.arcFromId(arcid++), func(weights[i], jptr[j]));
+            }
+        }
+    }
+    int rc = net.run();
+    if(rc != (int)net.OPTIMAL) {
+        std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+    }
+    FT ret(0);
+    OMP_PRAGMA("omp parallel for reduction(+:ret)")
+    for(size_t i = 0; i < nl; ++i) {
+        for(size_t j = 0; j < nr; ++j)
+           ret += net.flow(i * nr + j) * func(weights[i], weights[sz + j]);
+    }
+    return ret;
+#endif
+}
+
+template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
+CT scipy_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {
     auto &xr = ~x;
     auto &yr = ~y;
-	const size_t sz = xr.size();
-	std::unique_ptr<uint32_t[]> ptr(new uint32_t[sz * 2]);
-	auto xptr = ptr.get(), yptr = ptr.get() + xr.size();
-	std::iota(xptr, yptr, 0u);
-	std::iota(yptr, yptr + sz, 0u);
-	pdqsort(xptr, yptr, [xdat=xr.data()](uint32_t p, uint32_t q) {return xdat[p] < xdat[q];});
-	pdqsort(yptr, yptr + sz, [ydat=yr.data()](uint32_t p, uint32_t q) {return ydat[p] < ydat[q];});
-	auto xconv = [xdat=xr.data()](auto x) {return xdat[x];};
-	auto yconv = [ydat=yr.data()](auto y) {return ydat[y];};
+    const size_t sz = xr.size();
+    std::unique_ptr<uint32_t[]> ptr(new uint32_t[sz * 2]);
+    auto xptr = ptr.get(), yptr = ptr.get() + sz;
+    std::iota(xptr, yptr, 0u);
+    std::iota(yptr, yptr + sz, 0u);
+    pdqsort(xptr, yptr, [&](uint32_t p, uint32_t q) {return xr[p] < xr[q];});
+    pdqsort(yptr, yptr + sz, [&](uint32_t p, uint32_t q) {return yr[p] < yr[q];});
+    auto xconv = [&](auto x) {return xr[x];};
+    auto yconv = [&](auto y) {return yr[y];};
     blz::DynamicVector<typename VT::ElementType, SO> all(2 * sz);
-	std::merge(boost::make_transform_iterator(xptr, xconv), boost::make_transform_iterator(yptr, xconv),
-	           boost::make_transform_iterator(yptr, yconv), boost::make_transform_iterator(yptr + sz, yconv), all.begin());
+    std::merge(boost::make_transform_iterator(xptr, xconv), boost::make_transform_iterator(yptr, xconv),
+               boost::make_transform_iterator(yptr, yconv), boost::make_transform_iterator(yptr + sz, yconv), all.begin());
     const size_t deltasz = 2 * sz - 1;
     blz::DynamicVector<typename VT::ElementType, SO> deltas(deltasz);
     std::adjacent_difference(all.begin(), all.end(), deltas.begin());
-    assert(std::is_sorted(xptr, yptr,  [xdat=xr.data()](uint32_t p, uint32_t q) {return xdat[p] < xdat[q];}));
     auto fill_cdf = [&](auto datptr, const auto &datvec) -> blz::DynamicVector<typename VT::ElementType>
     {
         // Faster to do one linear scan than n binary searches
         blz::DynamicVector<typename VT::ElementType> ret(deltasz);
-        for(size_t offset = 0, i = 0; i < ret.size(); ret[i++] = offset)
-            while(datvec[datptr[offset]] < all[i] && offset < sz)
+        for(size_t offset = 0, i = 0; i < ret.size(); ret[i++] = offset) {
+            assert(i < all.size());
+            while(offset < sz && datvec[datptr[offset]] < all[i]) {
+                assert(&datptr[offset] < xptr + (2 * sz));
                 ++offset;
+            }
+        }
         return ret;
     };
     auto cdfx = fill_cdf(xptr, xr);
     auto cdfy = fill_cdf(yptr, yr);
-	if(p == 1.)
-		return dot(blz::abs(cdfx - cdfy), deltas) / sz;
-    const auto szinv = 1. / sz;
-    cdfx *= szinv; cdfy *= szinv;
-    if(p == 2)
-		return std::sqrt(dot(blz::pow(cdfx - cdfy, 2), deltas));
-	return std::pow(dot(blz::pow(blz::abs(cdfx - cdfy), p), deltas), 1. / p);
+    CommonType_t<ElementType_t<VT>, ElementType_t<VT2>> ret;
+    if(p == 1.)
+        ret = dot(blz::abs(cdfx - cdfy), deltas) / sz;
+    else {
+       const auto szinv = 1. / sz;
+       cdfx *= szinv; cdfy *= szinv;
+       if(p == 2)
+           ret = std::sqrt(dot(blz::pow(cdfx - cdfy, 2), deltas));
+       else
+           ret = std::pow(dot(blz::pow(blz::abs(cdfx - cdfy), p), deltas), 1. / p);
+    }
+    return ret;
+}
+
+template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
+CT scipy_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y, double p=1.) {
+    auto &xr = ~x;
+    auto &yr = ~y;
+    const size_t sz = xr.size();
+    std::unique_ptr<uint32_t[]> ptr(new uint32_t[sz * 2]);
+    auto xptr = ptr.get(), yptr = ptr.get() + sz;
+    std::iota(xptr, yptr, 0u);
+    std::iota(yptr, yptr + sz, 0u);
+    pdqsort(xptr, yptr, [&](uint32_t p, uint32_t q) {return xr[p] < xr[q];});
+    pdqsort(yptr, yptr + sz, [&](uint32_t p, uint32_t q) {return yr[p] < yr[q];});
+    auto xconv = [&](auto x) {return xr[x];};
+    auto yconv = [&](auto y) {return yr[y];};
+    blz::DynamicVector<typename VT::ElementType, SO> all(2 * sz);
+    std::merge(boost::make_transform_iterator(xptr, xconv), boost::make_transform_iterator(yptr, xconv),
+               boost::make_transform_iterator(yptr, yconv), boost::make_transform_iterator(yptr + sz, yconv), all.begin());
+    const size_t deltasz = 2 * sz - 1;
+    blz::DynamicVector<typename VT::ElementType, SO> deltas(deltasz);
+    std::adjacent_difference(all.begin(), all.end(), deltas.begin());
+    assert(std::is_sorted(xptr, yptr,  [&](uint32_t p, uint32_t q) {return xr[p] < xr[q];}));
+    auto fill_cdf = [&](auto datptr, const auto &datvec) -> blz::DynamicVector<typename VT::ElementType>
+    {
+        // Faster to do one linear scan than n binary searches
+        blz::DynamicVector<typename VT::ElementType> ret(deltasz);
+        for(size_t offset = 0, i = 0; i < ret.size(); ret[i++] = offset) {
+            assert(i < all.size());
+            while(offset < sz && datvec[datptr[offset]] < all[i]) {
+                assert(&datptr[offset] < xptr + (2 * sz));
+                ++offset;
+            }
+        }
+        return ret;
+    };
+    auto cdfx = fill_cdf(xptr, xr);
+    auto cdfy = fill_cdf(yptr, yr);
+    CommonType_t<ElementType_t<VT>, ElementType_t<VT2>> ret;
+    if(p == 1.)
+        ret = dot(blz::abs(cdfx - cdfy), deltas) / sz;
+    else {
+       const auto szinv = 1. / sz;
+       cdfx *= szinv; cdfy *= szinv;
+       if(p == 2)
+           ret = std::sqrt(dot(blz::pow(cdfx - cdfy, 2), deltas));
+       else
+           ret = std::pow(dot(blz::pow(blz::abs(cdfx - cdfy), p), deltas), 1. / p);
+    }
+    return ret;
+}
+
+template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
+CT p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y, double p=1.) {
+    return scipy_p_wasserstein(x, y, p);
+}
+
+template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
+CT p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {
+    return scipy_p_wasserstein(x, y, p);
 }
 
 template<typename VT, bool SO, typename VT2>
 auto wasserstein_p2(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y) {
-    return p_wasserstein(x, y, 2.);
+    return p_wasserstein(~x, ~y, 2.);
 }
 template<typename VT, bool SO, typename VT2>
 auto wasserstein_p2(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, !SO> &y) {
-    return p_wasserstein(x, trans(y), 2.);
+    return p_wasserstein(~x, trans(~y), 2.);
 }
 
 template<typename VT, typename VT2, bool SO>

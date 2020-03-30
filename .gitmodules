@@ -37,3 +37,6 @@
 [submodule "code/xxHash"]
 	path = code/xxHash
 	url = https://github.com/Cyan4973/xxHash
+[submodule "code/network_simplex"]
+	path = code/network_simplex
+	url = https://github.com/nbonneel/network_simplex

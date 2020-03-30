@@ -52,11 +52,9 @@ namespace blaze {
 //  32-BIT FLOATING POINT SIMD TYPES
 //
 //=================================================================================================
-static constexpr double ZERO = 0.;
-
 template<typename T, typename=typename std::enable_if<std::is_floating_point<T>::value>::type>
 BLAZE_ALWAYS_INLINE T neginf2zero(T x) {
-    return x == -std::numeric_limits<T>::infinity() ? ZERO : x;
+    return x == -std::numeric_limits<T>::infinity() ? T(0) : x;
 }
 
 //*************************************************************************************************
@@ -73,21 +71,21 @@ BLAZE_ALWAYS_INLINE const SIMDfloat neginf2zero( const SIMDf32<T>& a ) noexcept
 #if ( BLAZE_AVX512F_MODE  || BLAZE_MIC_MODE )
 {
    const auto v = _mm512_set1_ps(-std::numeric_limits<float>::infinity());
-   const auto z = _mm512_set1_ps(ZERO);
+   const auto z = _mm512_set1_ps(float(0.));
    auto value = (~a).eval().value;
    return _mm512_mask_blend_ps(_mm512_cmpeq_ps_mask(value, v), value, z);
 }
 #elif BLAZE_AVX_MODE
 {
    const auto v = _mm256_set1_ps(-std::numeric_limits<float>::infinity());
-   const auto z = _mm256_set1_ps(ZERO);
+   const auto z = _mm256_set1_ps(float(0.));
    auto value = (~a).eval().value;
    return _mm256_blendv_ps(value, z, _mm256_cmp_ps(value, v, _CMP_EQ_OQ));
 }
 #elif BLAZE_SSE_MODE
 {
    const auto v = _mm_set1_ps(-std::numeric_limits<float>::infinity());
-   const auto z = _mm_set1_ps(ZERO);
+   const auto z = _mm_set1_ps(float(0.));
    auto value = (~a).eval().value;
    return _mm_blendv_ps(value, z, _mm_cmpeq_ps(value, v));
 }
@@ -119,23 +117,23 @@ BLAZE_ALWAYS_INLINE const SIMDdouble neginf2zero( const SIMDf64<T>& a ) noexcept
 #if ( BLAZE_AVX512F_MODE  || BLAZE_MIC_MODE )
 {
    const auto v = _mm512_set1_pd(-std::numeric_limits<double>::infinity());
-   const auto z = _mm512_set1_pd(ZERO);
+   const auto z = _mm512_set1_pd(0.);
    auto value = (~a).eval().value;
    return _mm512_mask_blend_pd(_mm512_cmpeq_pd_mask(value, v), value, z);
 }
 #elif BLAZE_AVX_MODE
 {
    const auto v = _mm256_set1_pd(-std::numeric_limits<double>::infinity());
-   const auto z = _mm256_set1_pd(ZERO);
+   const auto z = _mm256_set1_pd(0.);
    auto value = (~a).eval().value;
    return _mm256_blendv_pd(value, z, _mm256_cmp_pd(value, v, _CMP_EQ_OQ));
 }
 #elif BLAZE_SSE_MODE
 {
-   const auto v = _mm_set1_ps(-std::numeric_limits<double>::infinity());
-   const auto z = _mm_set1_ps(ZERO);
+   const auto v = _mm_set1_pd(-std::numeric_limits<double>::infinity());
+   const auto z = _mm_set1_pd(0.);
    auto value = (~a).eval().value;
-   return _mm_blendv_ps(value, z, _mm_cmpeq_ps(value, v));
+   return _mm_blendv_pd(value, z, _mm_cmpeq_pd(value, v));
 }
 #else
 = delete;

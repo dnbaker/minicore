@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
     if(auto env = std::getenv("OMP_NUM_THREADS"); env) {
         nt = std::atoi(env);
     }
-    omp_set_num_threads(nt);
+    OMP_ONLY(omp_set_num_threads(nt);)
     std::fprintf(stderr, "%d threads used\n", nt);
 #endif
     std::srand(0);
@@ -100,6 +100,7 @@ int main(int argc, char *argv[]) {
     auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, npoints * 100);
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ matrix coreset: %gs\n", double((stop - start).count()) / 1e9);
+    OMP_ONLY(omp_set_num_threads(1);)
     blaze::DynamicMatrix<FLOAT_TYPE> sqmat(20, 20);
     randomize(sqmat);
     sqmat = map(sqmat, [](auto x) {return x * x + 1e-15;});

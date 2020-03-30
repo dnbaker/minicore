@@ -6,6 +6,7 @@
 #include "fgc/coreset.h"
 #include <boost/math/special_functions/digamma.hpp>
 #include <boost/math/special_functions/polygamma.hpp>
+#include <set>
 
 
 namespace fgc {
@@ -17,21 +18,29 @@ using namespace blz::distance;
 
 
 enum ProbDivType {
-    L1  = 0,
-    L2  = 1,
-    SQRL2  = 2,
-    JSM = 4, // Multinomial Jensen-Shannon Metric
-    JSD = 5, // Multinomial Jensen-Shannon Divergence
-    MKL = 6, // Multinomial KL Divergence
-    POISSON = 7, // Poisson KL
-    HELLINGER = 8,
-    BHATTACHARYA_METRIC = 9,
-    BHATTACHARYA_DISTANCE = 10,
-    TOTAL_VARIATION_DISTANCE = 11,
-    LLR = 12,
-    EMD=13,
-    REVERSE_MKL=14,
-    REVERSE_POISSON=15,
+    L1,
+    L2,
+    SQRL2,
+    JSM, // Multinomial Jensen-Shannon Metric
+    JSD, // Multinomial Jensen-Shannon Divergence
+    MKL, // Multinomial KL Divergence
+    POISSON, // Poisson KL
+    HELLINGER,
+    BHATTACHARYYA_METRIC,
+    BHATTACHARYYA_DISTANCE,
+    TOTAL_VARIATION_DISTANCE,
+    LLR,
+    EMD,
+    WEMD, // Weighted Earth-mover's distance
+    REVERSE_MKL,
+    REVERSE_POISSON,
+    UWLLR, /* Unweighted Log-likelihood Ratio.
+            * Specifically, this is the D_{JSD}^{\lambda}(x, y),
+            * where \lambda = \frac{N_p}{N_p + N_q}
+            *
+            */
+    OLLR,       // Old LLR, deprecated (included for compatibility/comparisons)
+    WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
     PSD = JSD, // Poisson JSD, but algebraically equivalent
@@ -40,17 +49,35 @@ enum ProbDivType {
 
 namespace detail {
 static INLINE bool  needs_logs(ProbDivType d)  {
-    return d == JSM || d == JSD || d == MKL || d == POISSON || d == LLR || d == REVERSE_MKL || d == REVERSE_POISSON;
+    switch(d) {
+        case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR:
+        case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: return true;
+        default: break;
+    }
+    return false;
 }
+
 
 static INLINE bool  needs_sqrt(ProbDivType d) {
-    return d == HELLINGER || d == BHATTACHARYA_METRIC || d == BHATTACHARYA_DISTANCE;
+    return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
 }
 
-const char *prob2str(ProbDivType d) {
+static INLINE bool is_symmetric(ProbDivType d) {
     switch(d) {
-        case BHATTACHARYA_DISTANCE: return "BHATTACHARYA_DISTANCE";
-        case BHATTACHARYA_METRIC: return "BHATTACHARYA_METRIC";
+        case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
+        case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
+            return true;
+        default: ;
+    }
+    return false;
+}
+
+
+
+static INLINE const char *prob2str(ProbDivType d) {
+    switch(d) {
+        case BHATTACHARYYA_DISTANCE: return "BHATTACHARYYA_DISTANCE";
+        case BHATTACHARYYA_METRIC: return "BHATTACHARYYA_METRIC";
         case EMD: return "EMD";
         case HELLINGER: return "HELLINGER";
         case JSD: return "JSD/PSD";
@@ -58,6 +85,8 @@ const char *prob2str(ProbDivType d) {
         case L1: return "L1";
         case L2: return "L2";
         case LLR: return "LLR";
+        case OLLR: return "OLLR";
+        case UWLLR: return "UWLLR";
         case MKL: return "MKL";
         case POISSON: return "POISSON";
         case REVERSE_MKL: return "REVERSE_MKL";
@@ -67,18 +96,68 @@ const char *prob2str(ProbDivType d) {
         default: return "INVALID TYPE";
     }
 }
+static INLINE const char *prob2desc(ProbDivType d) {
+    switch(d) {
+        case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";
+        case BHATTACHARYYA_METRIC: return "Bhattacharyya metric: sqrt(1 - BhattacharyyaSimilarity(x, y))";
+        case EMD: return "Earth Mover's Distance: Optimal Transport";
+        case HELLINGER: return "Hellinger Distance: sqrt(sum((sqrt(x) - sqrt(y))^2))/2";
+        case JSD: return "Jensen-Shannon Divergence for Poisson and Multinomial models, for which they are equivalent";
+        case JSM: return "Jensen-Shannon Metric, known as S2JSD and the Endres metric, for Poisson and Multinomial models, for which they are equivalent";
+        case L1: return "L1 distance";
+        case L2: return "L2 distance";
+        case LLR: return "Log-likelihood Ratio under the multinomial model";
+        case OLLR: return "Original log-likelihood ratio. This is likely not correct, but it is related to the Jensen-Shannon Divergence";
+        case UWLLR: return "Unweighted Log-likelihood Ratio. This is effectively the Generalized Jensen-Shannon Divergence with lambda parameter corresponding to the fractional contribution of counts in the first observation. This is symmetric, unlike the G_JSD, because the parameter comes from the counts.";
+        case MKL: return "Multinomial KL divergence";
+        case POISSON: return "Poisson KL Divergence";
+        case REVERSE_MKL: return "Reverse Multinomial KL divergence";
+        case REVERSE_POISSON: return "Reverse KL divergence";
+        case SQRL2: return "Squared L2 Norm";
+        case TOTAL_VARIATION_DISTANCE: return "Total Variation Distance: 1/2 sum_{i in D}(|x_i - y_i|)";
+        default: return "INVALID TYPE";
+    }
+}
+static void print_measures() {
+    std::set<ProbDivType> measures {
+        L1,
+        L2,
+        SQRL2,
+        JSM,
+        JSD,
+        MKL,
+        POISSON,
+        HELLINGER,
+        BHATTACHARYYA_METRIC,
+        BHATTACHARYYA_DISTANCE,
+        TOTAL_VARIATION_DISTANCE,
+        LLR,
+        OLLR,
+        EMD,
+        REVERSE_MKL,
+        REVERSE_POISSON,
+        UWLLR,
+        TOTAL_VARIATION_DISTANCE,
+        WASSERSTEIN,
+        PSD,
+        PSM
+    };
+    for(const auto measure: measures) {
+        std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
+    }
+}
 } // detail
 
 template<typename MatrixType>
 class ProbDivApplicator {
-
     //using opposite_type = typename base_type::OppositeType;
     MatrixType &data_;
     using VecT = blaze::DynamicVector<typename MatrixType::ElementType>;
     std::unique_ptr<VecT> row_sums_;
     std::unique_ptr<MatrixType> logdata_;
     std::unique_ptr<MatrixType> sqrdata_;
-    std::unique_ptr<VecT> llr_cache_, jsdcache_;
+    std::unique_ptr<VecT> jsd_cache_;
+    typename MatrixType::ElementType lambda_ = 0.5;
 public:
     using FT = typename MatrixType::ElementType;
     using MT = MatrixType;
@@ -113,13 +192,11 @@ public:
         ProbDivType actual_measure = measure == JSM ? JSD: measure;
         for(size_t i = 0; i < nr; ++i) {
             CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
-                std::fprintf(stderr, "Executing serially, %zu/%zu\n", i, nr);
                 for(size_t j = i + 1; j < nr; ++j) {
                     auto v = this->operator()(i, j, actual_measure);
                     m(i, j) = v;
                 }
             } else {
-                std::fprintf(stderr, "Executing in parallel, %zu/%zu\n", i, nr);
                 OMP_PFOR
                 for(size_t j = i + 1; j < nr; ++j) {
                     auto v = this->operator()(i, j, actual_measure);
@@ -137,21 +214,48 @@ public:
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
             }
         }
-        if(symmetrize) {
-            fill_symmetric_upper_triangular(m);
+        if(detail::is_symmetric(measure)) {
+            //std::fprintf(stderr, "Symmetric measure %s/%s\n", detail::prob2str(measure), detail::prob2desc(measure));
+            if(symmetrize) {
+                fill_symmetric_upper_triangular(m);
+            }
+        } else {
+            CONST_IF(dm::is_distance_matrix_v<MatType>) {
+                std::fprintf(stderr, "Warning: using asymmetric measure with an upper triangular matrix. You are computing only half the values");
+            } else {
+                //std::fprintf(stderr, "Asymmetric measure %s/%s\n", detail::prob2str(measure), detail::prob2desc(measure));
+                for(size_t i = 1; i < nr; ++i) {
+                    CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
+                        //std::fprintf(stderr, "Filling bottom half\n");
+                        for(size_t j = 0; j < i; ++j) {
+                            auto v = this->operator()(i, j, measure);
+                            m(i, j) = v;
+                        }
+                    } else {
+                        OMP_PFOR
+                        for(size_t j = 0; j < i; ++j) {
+                            auto v = this->operator()(i, j, measure);
+                            m(i, j) = v;
+                        }
+                    }
+                    m(i, i) = 0.;
+                }
+            }
         }
     }
     blaze::DynamicMatrix<float> make_distance_matrix() const {
-        return make_distance_matrix(measure_);
+        blaze::DynamicMatrix<float> ret = make_distance_matrix(measure_);
+        return ret;
     }
     blaze::DynamicMatrix<float> make_distance_matrix(ProbDivType measure, bool symmetrize=false) const {
-        std::fprintf(stderr, "About to make distance matrix of %zu/%zu with %s calculated\n", data_.rows(), data_.rows(), detail::prob2str(measure));
         blaze::DynamicMatrix<float> ret(data_.rows(), data_.rows());
         set_distance_matrix(ret, measure, symmetrize);
         return ret;
     }
     // Accessors
-    auto weighted_row(size_t ind) const {
+    decltype(auto) weighted_row(size_t ind) const {
+        if(!row_sums_) throw std::runtime_error("no row sums\n");
+        else if (ind > row_sums_->size()) throw std::runtime_error("ZGMZOFMOZF");
         return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_->operator[](ind);
     }
     auto row(size_t ind) const {return blz::row(data_, ind BLAZE_CHECK_DEBUG);}
@@ -167,26 +271,28 @@ public:
     }
     INLINE double operator()(size_t i, size_t j, ProbDivType measure) const {
         if(unlikely(i >= data_.rows() || j >= data_.rows())) {
-            std::cout << (std::string("Invalid rows selection: ") + std::to_string(i) + ", " + std::to_string(j) + '\n');
+            std::cerr << (std::string("Invalid rows selection: ") + std::to_string(i) + ", " + std::to_string(j) + '\n');
             std::exit(1);
         }
         double ret;
         switch(measure) {
             case TOTAL_VARIATION_DISTANCE: ret = discrete_total_variation_distance(row(i), row(j)); break;
-            case L1:    ret = l1Norm(row(i) - row(j)); break;
-            case L2:    ret = l2Norm(row(i) - row(j)); break;
-            case SQRL2: ret = blaze::sqrNorm(row(i) - row(j)); break;
+            case L1:    ret = l1Norm(weighted_row(i) - weighted_row(j)); break;
+            case L2:    ret = l2Norm(weighted_row(i) - weighted_row(j)); break;
+            case SQRL2: ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j)); break;
             case JSD:   ret = jsd(i, j); break;
             case JSM:   ret = jsm(i, j); break;
             case REVERSE_MKL: std::swap(i, j); [[fallthrough]];
             case MKL:   ret = mkl(i, j); break;
             case EMD:   ret = p_wasserstein(row(i), row(j)); break;
+            case WEMD:   ret = p_wasserstein(weighted_row(i), weighted_row(j)); break;
             case REVERSE_POISSON: std::swap(i, j); [[fallthrough]];
             case POISSON: ret = pkl(i, j); break;
             case HELLINGER: ret = hellinger(i, j); break;
-            case BHATTACHARYA_METRIC: ret = bhattacharya_metric(i, j); break;
-            case BHATTACHARYA_DISTANCE: ret = bhattacharya_distance(i, j); break;
+            case BHATTACHARYYA_METRIC: ret = bhattacharyya_metric(i, j); break;
+            case BHATTACHARYYA_DISTANCE: ret = bhattacharyya_distance(i, j); break;
             case LLR: ret = llr(i, j); break;
+            case UWLLR: ret = uwllr(i, j); break;
             default: __builtin_unreachable();
         }
         return ret;
@@ -215,7 +321,7 @@ public:
         auto ri = row(i), rj = row(j);
         //constexpr FT logp5 = -0.693147180559945; // std::log(0.5)
         auto s = ri + rj;
-        ret = jsdcache_->operator[](i) + jsdcache_->operator[](j) - blz::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
+        ret = jsd_cache_->operator[](i) + jsd_cache_->operator[](j) - blz::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
 #ifndef NDEBUG
         static constexpr typename MatrixType::ElementType threshold
             = std::is_same_v<typename MatrixType::ElementType, double>
@@ -236,12 +342,12 @@ public:
     }
     double mkl(size_t i, size_t j) const {
         // Multinomial KL
-        return (*jsdcache_)[i] - blz::dot(row(i), logrow(j));
+        return get_jsdcache(i) - blz::dot(row(i), logrow(j));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double mkl(size_t i, const OT &o) const {
         // Multinomial KL
-        return (*jsdcache_)[i] - blz::dot(row(i), blaze::neginf2zero(blz::log(o)));
+        return get_jsdcache(i) - blz::dot(row(i), blaze::neginf2zero(blz::log(o)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     double mkl(size_t i, const OT &, const OT2 &olog) const {
@@ -250,12 +356,12 @@ public:
     }
     double pkl(size_t i, size_t j) const {
         // Poission KL
-        return blz::dot(row(i), logrow(i) - logrow(j)) + blz::sum(row(j) - row(i));
+        return get_jsdcache(i) - blz::dot(row(i), logrow(j)) + blz::sum(row(j) - row(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     double pkl(size_t i, const OT &o, const OT2 &olog) const {
         // Poission KL
-        return blz::dot(row(i), logrow(i) - olog) + blz::sum(row(i) - o);
+        return get_jsdcache(i) - blz::dot(row(i), olog) + blz::sum(row(i) - o);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double pkl(size_t i, const OT &o) const {
@@ -276,43 +382,62 @@ public:
     double psd(size_t i, const OT &o) const {
         return psd(i, o, neginf2zero(blz::log(o)));
     }
-    double bhattacharya_sim(size_t i, size_t j) const {
+    double bhattacharyya_sim(size_t i, size_t j) const {
         return sqrdata_ ? blz::dot(sqrtrow(i), sqrtrow(j))
                         : blz::sum(blz::sqrt(row(i) * row(j)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
-    double bhattacharya_sim(size_t i, const OT &o, const OT2 &osqrt) const {
+    double bhattacharyya_sim(size_t i, const OT &o, const OT2 &osqrt) const {
         return sqrdata_ ? blz::dot(sqrtrow(i), osqrt)
                         : blz::sum(blz::sqrt(row(i) * o));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    double bhattacharya_sim(size_t i, const OT &o) const {
-        return bhattacharya_sim(i, o, blz::sqrt(o));
+    double bhattacharyya_sim(size_t i, const OT &o) const {
+        return bhattacharyya_sim(i, o, blz::sqrt(o));
     }
     template<typename...Args>
-    double bhattacharya_distance(Args &&...args) const {
-        return -std::log(bhattacharya_sim(std::forward<Args>(args)...));
+    double bhattacharyya_distance(Args &&...args) const {
+        return -std::log(bhattacharyya_sim(std::forward<Args>(args)...));
     }
     template<typename...Args>
-    double bhattacharya_metric(Args &&...args) const {
-        return std::sqrt(1 - bhattacharya_sim(std::forward<Args>(args)...));
+    double bhattacharyya_metric(Args &&...args) const {
+        return std::sqrt(1 - bhattacharyya_sim(std::forward<Args>(args)...));
     }
     template<typename...Args>
     double psm(Args &&...args) const {return std::sqrt(std::forward<Args>(args)...);}
-    double llr(size_t i, size_t j) const {
+    auto llr(size_t i, size_t j) const {
             //blaze::dot(row(i), logrow(i)) * row_sums_->operator[](i)
             //+
             //blaze::dot(row(j), logrow(j)) * row_sums_->operator[](j)
             // X_j^Tlog(p_j)
             // X_k^Tlog(p_k)
             // (X_k + X_j)^Tlog(p_jk)
-        double ret = (*llr_cache_)[i] + (*llr_cache_)[j]
+        const auto lhn = row_sums_->operator[](i), rhn = row_sums_->operator[](j);
+        const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+        auto ret = lhn * get_jsdcache(i) + rhn * get_jsdcache(j)
             -
             blz::dot(weighted_row(i) + weighted_row(j),
-                neginf2zero(blz::log(0.5 * (row(i) + row(j))))
+                neginf2zero(blz::log(lambda * row(i) + m1l * row(j)))
             );
-        assert(ret >= -1e-3 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
+        assert(ret >= -1e-2 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
+    }
+    double ollr(size_t i, size_t j) const {
+        auto ret = get_jsdcache(i) * row_sums_->operator[](i) + get_jsdcache(j) * row_sums_->operator[](j)
+            - blz::dot(weighted_row(i) + weighted_row(j), neginf2zero(blz::log((row(i) + row(j)) * .5)));
+        return std::max(ret, 0.);
+    }
+    double uwllr(size_t i, size_t j) const {
+        const auto lhn = row_sums_->operator[](i), rhn = row_sums_->operator[](j);
+        const double lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+        return
+          std::max(
+            lambda * get_jsdcache(i) +
+                  m1l * get_jsdcache(j) -
+               blz::dot(lambda * row(i) + m1l * row(j),
+                        neginf2zero(blz::log(
+                            lambda * row(i) + m1l * row(j)))),
+          0.);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     double llr(size_t, const OT &) const {
@@ -328,16 +453,22 @@ public:
     double jsm(Args &&...args) const {
         return std::sqrt(jsd(std::forward<Args>(args)...));
     }
+    void set_lambda(FT param) {
+        if(param < 0. || param > 1.)
+            throw std::invalid_argument(std::string("Param for lambda ") + std::to_string(param) + " is out of range.");
+        lambda_ = param;
+    }
 private:
     template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>
     void prep(Prior prior, const Container *c=nullptr) {
+        //std::fprintf(stderr, "[%s] Starting prep\n", __PRETTY_FUNCTION__);
         row_sums_.reset(new VecT(data_.rows()));
         auto rowsumit = row_sums_->begin();
         for(auto r: blz::rowiterator(data_)) {
             CONST_IF(blz::IsDenseMatrix_v<MatrixType>) {
                 if(prior == NONE) {
-                r += 1e-50;
-                assert(blz::min(r) > 0.);
+                    r += 1e-50;
+                    assert(blz::min(r) > 0.);
                 }
             }
             const auto countsum = blz::sum(r);
@@ -367,22 +498,33 @@ private:
                 for(auto rw: blz::rowiterator(data_))
                     rw += *c;
         }
-        for(size_t i = 0; i < data_.rows(); ++i)
-            row(i) /= blaze::sum(row(i)); // Ensure that they sum to 1.
+        if(!row_sums_) throw std::runtime_error("Row sums not set");
+        if(row_sums_->size() != data_.rows()) {
+            char buf[256];
+            std::sprintf(buf, "Wrong size: %zu, expected %zu\n", row_sums_->size(), data_.rows());
+            throw std::runtime_error(buf);
+        }
 
         if(detail::needs_logs(measure_)) {
             logdata_.reset(new MatrixType(neginf2zero(log(data_))));
         } else if(detail::needs_sqrt(measure_)) {
             sqrdata_.reset(new MatrixType(blz::sqrt(data_)));
         }
-        llr_cache_.reset(new VecT(data_.rows()));
-        jsdcache_.reset(new VecT(data_.rows()));
-        for(size_t i = 0; i < llr_cache_->size(); ++i) {
-            double cv = blaze::dot(row(i), logrow(i));
-            llr_cache_->operator[](i) = cv * row_sums_->operator[](i);
-            jsdcache_->operator[](i)  = cv;
+        if(logdata_) {
+            jsd_cache_.reset(new VecT(data_.rows()));
+            auto &jc = *jsd_cache_;
+            for(size_t i = 0; i < jc.size(); ++i) {
+                jc[i] = dot(row(i), logrow(i));
+            }
         }
-        VERBOSE_ONLY(std::cout << *logdata_;)
+    }
+    FT get_jsdcache(size_t index) const {
+        assert(jsd_cache_ && jsd_cache_->size() > index);
+        return (*jsd_cache_)[index];
+    }
+    FT get_llrcache(size_t index) const {
+        assert(jsd_cache_ && jsd_cache_->size() > index);
+        return (*jsd_cache_)[index] * row_sums_->operator[](index);
     }
 }; // ProbDivApplicator
 
@@ -424,13 +566,17 @@ struct BaseOperand {
 
 template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typename MatrixType::ElementType, blaze::rowVector>>
 auto make_probdiv_applicator(MatrixType &data, ProbDivType type=JSM, Prior prior=NONE, const PriorContainer *pc=nullptr) {
+#if VERBOSE_AF
+    std::fprintf(stderr, "[%s:%s:%d] Making probdiv applicator with %d/%s as measure, %d/%s as prior, and %s for prior container.\n",
+                 __PRETTY_FUNCTION__, __FILE__, __LINE__, int(type), detail::prob2str(type), int(prior), prior == NONE ? "No prior": prior == DIRICHLET ? "Dirichlet" : prior == GAMMA_BETA ? "Gamma/Beta": "Feature-specific prior",
+                pc == nullptr ? "No prior container": (std::string("Container of size ") + std::to_string(pc->size())).data());
+#endif
     return ProbDivApplicator<MatrixType>(data, type, prior, pc);
 }
 template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typename MatrixType::ElementType, blaze::rowVector>>
 auto make_jsm_applicator(MatrixType &data, Prior prior=NONE, const PriorContainer *pc=nullptr) {
-    return ProbDivApplicator<MatrixType>(data, JSM, prior, pc);
+    return make_probdiv_applicator(data, JSM, prior, pc);
 }
-
 
 
 template<typename MatrixType>

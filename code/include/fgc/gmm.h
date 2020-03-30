@@ -13,11 +13,11 @@ struct GMM {
     blz::DynamicMatrix<FT, SO> pi_;
     blz::DynamicMatrix<FT, SO> pm_; // precision matrix
     std::vector<FT>    cached_det_;
-    static constexpr double PI = 3.14159265358979323846;
+    static constexpr double m_pi = 3.14159265358979323846;
 
     template<typename T>
     double logprob(const T &x, unsigned compnum) {
-        auto ldiv = -0.5 * std::log(std::pow(2. * PI, this->dim()) * get_det(compnum));
+        auto ldiv = -0.5 * std::log(std::pow(2. * m_pi, this->dim()) * get_det(compnum));
         auto diff = x - submu(compnum);
         auto lnum = -0.5 * dot(diff, subprec(compnum) * trans(diff));
         return ldiv + lnum;

@@ -395,6 +395,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     double total_loss = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:total_loss)")
     for(size_t i = 0; i < nr; ++i) {
+        DBG_ONLY(const auto tid = OMP_ELSE(omp_get_thread_num(), 1);)
         auto dr = row(data, i BLAZE_CHECK_DEBUG);
         auto lhr = row(centers, 0 BLAZE_CHECK_DEBUG);
         auto dist = blz::serial(func(dr, lhr));
@@ -409,6 +410,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         }
         assignments[i] = label;
         total_loss += getw(i) * dist;
+        DBG_ONLY(if(i % 500u == 0) std::fprintf(stderr, "tid %d at i = %zu/%zu\n", tid, i, nr);)
     }
     std::fprintf(stderr, "total loss: %g\n", total_loss);
     if(std::isnan(total_loss)) total_loss = std::numeric_limits<decltype(total_loss)>::infinity();
@@ -556,32 +558,27 @@ auto kmeans_coreset(Iter start, Iter end,
     return ics;
 }
 
-template<typename FT, bool SO,
+template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>>
-auto kmeans_index_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RNG &rng, size_t cs_size,
-                           const FT *weights=nullptr, bool rowwise=true)
+auto kmeans_index_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng, size_t cs_size,
+                           const blz::ElementType_t<MT> *weights=nullptr, bool rowwise=true)
 {
     if(!rowwise) throw std::runtime_error("Not implemented");
-    const auto &blzview = reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(mat);
-    return kmeans_coreset(blzview.rowiterator().begin(), blzview.rowiterator().end(),
+    return kmeans_coreset(blz::rowiterator(~mat).begin(), blz::rowiterator(~mat).end(),
                           k, rng, cs_size, weights);
 }
-template<typename FT, bool SO,
+template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>>
-auto kmeans_matrix_coreset(const blaze::DynamicMatrix<FT, SO> &mat, size_t k, RNG &rng, size_t cs_size,
-                           const FT *weights=nullptr, bool rowwise=true)
+auto kmeans_matrix_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng, size_t cs_size,
+                           const blz::ElementType_t<MT> *weights=nullptr, bool rowwise=true)
 {
-    if(!rowwise) throw std::runtime_error("Not implemented");
-    const auto &blzview = reinterpret_cast<const blz::DynamicMatrix<FT, SO> &>(mat);
-    auto ics = kmeans_coreset(blzview.rowiterator().begin(), blzview.rowiterator().end(),
-                              k, rng, cs_size, weights);
+    auto ics = kmeans_index_coreset(mat, k, rng, cs_size, weights, rowwise);
 #ifndef NDEBUG
     for(auto idx: ics.indices_)
-        assert(idx < rowwise ? mat.rows(): mat.columns());
+        assert(idx < rowwise ? (~mat).rows(): (~mat).columns());
     std::fprintf(stderr, "Got kmeans coreset of size %zu\n", ics.size());
 #endif
-    coresets::MatrixCoreset<blaze::DynamicMatrix<FT, SO>, FT> csmat = index2matrix(ics, mat);
-    return csmat;
+    return index2matrix(ics, ~mat);
 }
 
 // TODO: 1. get run kmeans clustering on MatrixCoreset

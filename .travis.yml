@@ -30,6 +30,7 @@ script:
   - ./diskmattestdbg
   - ./dmlsearchdbg
   - ./jsdhashdbg
+  - ./fgcinctestdbg
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:

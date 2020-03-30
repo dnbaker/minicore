@@ -4,27 +4,29 @@
 #include "distmat/distmat.h"
 #include "fgc/kmeans.h"
 #include "fgc/coreset.h"
+#include "fgc/Inf2Zero.h"
 
 namespace fgc {
 
 namespace pd {
+using namespace blz;
 
 template<typename Matrix>
 class PoissonDissimilarityApplicator {
     using ET = typename Matrix::ElementType;
+    using MatrixType = std::decay_t<decltype(~std::declval<Matrix>())>;
     Matrix mat_;
-    blz::DV<ET> row_sums_;
     blz::DV<ET, blz::rowVector> column_sums_;
     blz::DV<ET, blz::columnVector> row_sums_;
     blz::DV<ET>                    contribs_;
     ET total_sum_;
 public:
     template<typename Container=const blz::DV<ET>>
-    PoissonDissimilarityApplicator(Matrix &mat, const Container *c=nullptr): mat_(mat) {
+    PoissonDissimilarityApplicator(Matrix &mat, const Container *c=nullptr, Prior prior=NONE): mat_(mat) {
         auto rowsumit = row_sums_.begin();
         for(auto r: blz::rowiterator(mat_)) {
             CONST_IF(blz::IsDenseMatrix_v<MatrixType>) {
-                if(prior == NONE) {
+                if(prior == Prior::NONE) {
                     r += 1e-50;
                     assert(blz::min(r) > 0.);
                 }
@@ -68,6 +70,12 @@ public:
                           + row_sums_[i] * blz::dot(r, neginf2zero(blz::log(r)));
         }
         //auto make_n_ij = [&](size_t i, size_t j) {return column_sums_[j] * row_sums_[i] / total_sum_;};
+    }
+    auto row(size_t i) {
+        return row(i, mat_ BLAZE_CHECK_DEBUG);
+    }
+    auto row(size_t i) const {
+        return row(i, mat_ BLAZE_CHECK_DEBUG);
     }
     double llr(size_t i, size_t j) const {
         return contribs_[i] + contribs_[j];
