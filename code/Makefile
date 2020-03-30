@@ -8,7 +8,7 @@ endif
 ifdef HDFPATH
 INCLUDE_PATHS+= $(HDFPATH)/include
 LIBPATHS+= $(HDFPATH)/lib
-LINKS+=#-lhdf5 # -lhdf5_hl # -lhdf5_hl_cpp -lhdf5_cpp
+LINKS+=-lhdf5  -lhdf5_hl  -lhdf5_hl_cpp -lhdf5_cpp
 endif
 
 

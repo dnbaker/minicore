@@ -40,17 +40,19 @@ enum ProbDivType {
             *
             */
     OLLR,       // Old LLR, deprecated (included for compatibility/comparisons)
+    ITAKURA_SAITO, // \sum_{i=1}^D[\frac{a_i}{b_i} - \log{\frac{a_i}{b_i}} - 1]
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
     PSD = JSD, // Poisson JSD, but algebraically equivalent
     PSM = JSM,
+    IS=ITAKURA_SAITO
 };
 
 namespace detail {
 static INLINE bool  needs_logs(ProbDivType d)  {
     switch(d) {
-        case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR:
+        case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: return true;
         default: break;
     }
@@ -87,6 +89,7 @@ static INLINE const char *prob2str(ProbDivType d) {
         case LLR: return "LLR";
         case OLLR: return "OLLR";
         case UWLLR: return "UWLLR";
+        case ITAKURA_SAITO: return "ITAKURA_SAITO";
         case MKL: return "MKL";
         case POISSON: return "POISSON";
         case REVERSE_MKL: return "REVERSE_MKL";
@@ -115,6 +118,7 @@ static INLINE const char *prob2desc(ProbDivType d) {
         case REVERSE_POISSON: return "Reverse KL divergence";
         case SQRL2: return "Squared L2 Norm";
         case TOTAL_VARIATION_DISTANCE: return "Total Variation Distance: 1/2 sum_{i in D}(|x_i - y_i|)";
+        case ITAKURA_SAITO: return "Itakura-Saito divergence, a Bregman divergence ";
         default: return "INVALID TYPE";
     }
 }
@@ -140,7 +144,8 @@ static void print_measures() {
         TOTAL_VARIATION_DISTANCE,
         WASSERSTEIN,
         PSD,
-        PSM
+        PSM,
+        ITAKURA_SAITO
     };
     for(const auto measure: measures) {
         std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
@@ -153,7 +158,7 @@ class ProbDivApplicator {
     //using opposite_type = typename base_type::OppositeType;
     MatrixType &data_;
     using VecT = blaze::DynamicVector<typename MatrixType::ElementType>;
-    std::unique_ptr<VecT> row_sums_;
+    VecT row_sums_;
     std::unique_ptr<MatrixType> logdata_;
     std::unique_ptr<MatrixType> sqrdata_;
     std::unique_ptr<VecT> jsd_cache_;
@@ -254,8 +259,7 @@ public:
     }
     // Accessors
     decltype(auto) weighted_row(size_t ind) const {
-        if(unlikely(!row_sums_)) throw std::runtime_error("no row sums\n");
-        return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_->operator[](ind);
+        return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_[ind];
     }
     auto row(size_t ind) const {return blz::row(data_, ind BLAZE_CHECK_DEBUG);}
     auto logrow(size_t ind) const {return blz::row(*logdata_, ind BLAZE_CHECK_DEBUG);}
@@ -265,34 +269,81 @@ public:
     /*
      * Distances
      */
-    INLINE double operator()(size_t i, size_t j) const {
+    INLINE auto operator()(size_t i, size_t j) const {
         return this->operator()(i, j, measure_);
     }
-    INLINE double operator()(size_t i, size_t j, ProbDivType measure) const {
+    template<ProbDivType constexpr_measure>
+    INLINE FT call(size_t i, size_t j) const {
+        FT ret;
+        CONST_IF(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
+            ret = discrete_total_variation_distance(row(i), row(j));
+        } else CONST_IF(constexpr_measure == L1) {
+            ret = l1Norm(weighted_row(i) - weighted_row(j));
+        } else CONST_IF(constexpr_measure == L2) {
+            ret = l2Norm(weighted_row(i) - weighted_row(j));
+        } else CONST_IF(constexpr_measure == SQRL2) {
+            ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j));
+        } else CONST_IF(constexpr_measure == JSD) {
+            ret = jsd(i, j);
+        } else CONST_IF(constexpr_measure == JSM) {
+            ret = jsm(i, j);
+        } else CONST_IF(constexpr_measure == REVERSE_MKL) {
+            ret = mkl(j, i);
+        } else CONST_IF(constexpr_measure == MKL) {
+            ret = mkl(i, j);
+        } else CONST_IF(constexpr_measure == EMD) {
+            ret = p_wasserstein(row(i), row(j));
+        } else CONST_IF(constexpr_measure == WEMD) {
+            ret = p_wasserstein(weighted_row(i), weighted_row(j));
+        } else CONST_IF(constexpr_measure == REVERSE_POISSON) {
+            ret = pkl(j, i);
+        } else CONST_IF(constexpr_measure == POISSON) {
+            ret = pkl(i, j);
+        } else CONST_IF(constexpr_measure == HELLINGER) {
+            ret = hellinger(i, j);
+        } else CONST_IF(constexpr_measure == BHATTACHARYYA_METRIC) {
+            ret = bhattacharyya_metric(i, j);
+        } else CONST_IF(constexpr_measure == BHATTACHARYYA_DISTANCE) {
+            ret = bhattacharyya_distance(i, j);
+        } else CONST_IF(constexpr_measure == LLR) {
+            ret = llr(i, j);
+        } else CONST_IF(constexpr_measure == UWLLR) {
+            ret = uwllr(i, j);
+        } else CONST_IF(constexpr_measure == OLLR) {
+            ret = ollr(i, j);
+        } else CONST_IF(constexpr_measure == ITAKURA_SAITO) {
+            ret = itakura_saito(i, j);
+        } else {
+            throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
+        }
+        return ret;
+    }
+    INLINE FT operator()(size_t i, size_t j, ProbDivType measure) const {
         if(unlikely(i >= data_.rows() || j >= data_.rows())) {
             std::cerr << (std::string("Invalid rows selection: ") + std::to_string(i) + ", " + std::to_string(j) + '\n');
             std::exit(1);
         }
-        double ret;
+        FT ret;
         switch(measure) {
-            case TOTAL_VARIATION_DISTANCE: ret = discrete_total_variation_distance(row(i), row(j)); break;
-            case L1:    ret = l1Norm(weighted_row(i) - weighted_row(j)); break;
-            case L2:    ret = l2Norm(weighted_row(i) - weighted_row(j)); break;
-            case SQRL2: ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j)); break;
-            case JSD:   ret = jsd(i, j); break;
-            case JSM:   ret = jsm(i, j); break;
-            case REVERSE_MKL: std::swap(i, j); [[fallthrough]];
-            case MKL:   ret = mkl(i, j); break;
-            case EMD:   ret = p_wasserstein(row(i), row(j)); break;
-            case WEMD:   ret = p_wasserstein(weighted_row(i), weighted_row(j)); break;
-            case REVERSE_POISSON: std::swap(i, j); [[fallthrough]];
-            case POISSON: ret = pkl(i, j); break;
-            case HELLINGER: ret = hellinger(i, j); break;
-            case BHATTACHARYYA_METRIC: ret = bhattacharyya_metric(i, j); break;
-            case BHATTACHARYYA_DISTANCE: ret = bhattacharyya_distance(i, j); break;
-            case LLR: ret = llr(i, j); break;
-            case UWLLR: ret = uwllr(i, j); break;
-            case OLLR: ret = ollr(i, j); break;
+            case TOTAL_VARIATION_DISTANCE: ret = call<TOTAL_VARIATION_DISTANCE>(i, j); break;
+            case L1: ret = call<L1>(i, j); break;
+            case L2: ret = call<L2>(i, j); break;
+            case SQRL2: ret = call<SQRL2>(i, j); break;
+            case JSD: ret = call<JSD>(i, j); break;
+            case JSM: ret = call<JSM>(i, j); break;
+            case REVERSE_MKL: ret = call<REVERSE_MKL>(i, j); break;
+            case MKL: ret = call<MKL>(i, j); break;
+            case EMD: ret = call<EMD>(i, j); break;
+            case WEMD: ret = call<WEMD>(i, j); break;
+            case REVERSE_POISSON: ret = call<REVERSE_POISSON>(i, j); break;
+            case POISSON: ret = call<POISSON>(i, j); break;
+            case HELLINGER: ret = call<HELLINGER>(i, j); break;
+            case BHATTACHARYYA_METRIC: ret = call<BHATTACHARYYA_METRIC>(i, j); break;
+            case BHATTACHARYYA_DISTANCE: ret = call<BHATTACHARYYA_DISTANCE>(i, j); break;
+            case LLR: ret = call<LLR>(i, j); break;
+            case UWLLR: ret = call<UWLLR>(i, j); break;
+            case OLLR: ret = call<OLLR>(i, j); break;
+            case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, j); break;
             default: __builtin_unreachable();
         }
         return ret;
@@ -310,14 +361,26 @@ public:
         return make_distance_matrix(measure_);
     }
 
-    double hellinger(size_t i, size_t j) const {
+    auto itakura_saito(size_t i, size_t j) const {
+        FT ret;
+        CONST_IF(IsSparseMatrix_v<MatrixType>) {
+            ret = -std::numeric_limits<FT>::max();
+            std::fprintf(stderr, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%zu\n", i, j);
+        } else {
+            auto div = row(i) / row(j);
+            ret = blaze::sum(div - blaze::log(div)) - row(i).size();
+        }
+        return ret;
+    }
+
+    auto hellinger(size_t i, size_t j) const {
         return sqrdata_ ? blaze::sqrNorm(sqrtrow(i) - sqrtrow(j))
                         : blaze::sqrNorm(blz::sqrt(row(i)) - blz::sqrt(row(j)));
     }
-    double jsd(size_t i, size_t j) const {
+    auto jsd(size_t i, size_t j) const {
         assert(i < data_.rows());
         assert(j < data_.rows());
-        double ret;
+        FT ret;
         auto ri = row(i), rj = row(j);
         //constexpr FT logp5 = -0.693147180559945; // std::log(0.5)
         auto s = ri + rj;
@@ -328,108 +391,108 @@ public:
                                 ? 0.: -1e-5;
         assert(ret >= threshold || !std::fprintf(stderr, "ret: %g (numerical stability issues)\n", ret));
 #endif
-        return std::max(ret, 0.);
+        return std::max(ret, static_cast<FT>(0.));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
-    double jsd(size_t i, const OT &o, const OT2 &olog) const {
+    auto jsd(size_t i, const OT &o, const OT2 &olog) const {
         auto mnlog = evaluate(log(0.5 * (row(i) + o)));
         return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    double jsd(size_t i, const OT &o) const {
+    auto jsd(size_t i, const OT &o) const {
         auto olog = evaluate(blaze::neginf2zero(blz::log(o)));
         return jsd(i, o, olog);
     }
-    double mkl(size_t i, size_t j) const {
+    auto mkl(size_t i, size_t j) const {
         // Multinomial KL
         return get_jsdcache(i) - blz::dot(row(i), logrow(j));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    double mkl(size_t i, const OT &o) const {
+    auto mkl(size_t i, const OT &o) const {
         // Multinomial KL
         return get_jsdcache(i) - blz::dot(row(i), blaze::neginf2zero(blz::log(o)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
-    double mkl(size_t i, const OT &, const OT2 &olog) const {
+    auto mkl(size_t i, const OT &, const OT2 &olog) const {
         // Multinomial KL
         return blz::dot(row(i), logrow(i) - olog);
     }
-    double pkl(size_t i, size_t j) const {
+    auto pkl(size_t i, size_t j) const {
         // Poission KL
         return get_jsdcache(i) - blz::dot(row(i), logrow(j)) + blz::sum(row(j) - row(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
-    double pkl(size_t i, const OT &o, const OT2 &olog) const {
+    auto pkl(size_t i, const OT &o, const OT2 &olog) const {
         // Poission KL
         return get_jsdcache(i) - blz::dot(row(i), olog) + blz::sum(row(i) - o);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    double pkl(size_t i, const OT &o) const {
+    auto pkl(size_t i, const OT &o) const {
         return pkl(i, o, neginf2zero(blz::log(o)));
     }
-    double psd(size_t i, size_t j) const {
+    auto psd(size_t i, size_t j) const {
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + row(j))));
         return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(row(j), logrow(j) - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
-    double psd(size_t i, const OT &o, const OT2 &olog) const {
+    auto psd(size_t i, const OT &o, const OT2 &olog) const {
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + o)));
         return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    double psd(size_t i, const OT &o) const {
+    auto psd(size_t i, const OT &o) const {
         return psd(i, o, neginf2zero(blz::log(o)));
     }
-    double bhattacharyya_sim(size_t i, size_t j) const {
+    auto bhattacharyya_sim(size_t i, size_t j) const {
         return sqrdata_ ? blz::dot(sqrtrow(i), sqrtrow(j))
                         : blz::sum(blz::sqrt(row(i) * row(j)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
-    double bhattacharyya_sim(size_t i, const OT &o, const OT2 &osqrt) const {
+    auto bhattacharyya_sim(size_t i, const OT &o, const OT2 &osqrt) const {
         return sqrdata_ ? blz::dot(sqrtrow(i), osqrt)
                         : blz::sum(blz::sqrt(row(i) * o));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    double bhattacharyya_sim(size_t i, const OT &o) const {
+    auto bhattacharyya_sim(size_t i, const OT &o) const {
         return bhattacharyya_sim(i, o, blz::sqrt(o));
     }
     template<typename...Args>
-    double bhattacharyya_distance(Args &&...args) const {
+    auto bhattacharyya_distance(Args &&...args) const {
         return -std::log(bhattacharyya_sim(std::forward<Args>(args)...));
     }
     template<typename...Args>
-    double bhattacharyya_metric(Args &&...args) const {
+    auto bhattacharyya_metric(Args &&...args) const {
         return std::sqrt(1 - bhattacharyya_sim(std::forward<Args>(args)...));
     }
     template<typename...Args>
-    double psm(Args &&...args) const {return std::sqrt(std::forward<Args>(args)...);}
+    auto psm(Args &&...args) const {return std::sqrt(std::forward<Args>(args)...);}
     auto llr(size_t i, size_t j) const {
-            //blaze::dot(row(i), logrow(i)) * row_sums_->operator[](i)
+            //blaze::dot(row(i), logrow(i)) * row_sums_[i]
             //+
-            //blaze::dot(row(j), logrow(j)) * row_sums_->operator[](j)
+            //blaze::dot(row(j), logrow(j)) * row_sums_[j]
             // X_j^Tlog(p_j)
             // X_k^Tlog(p_k)
             // (X_k + X_j)^Tlog(p_jk)
-        const auto lhn = row_sums_->operator[](i), rhn = row_sums_->operator[](j);
+        const auto lhn = row_sums_[i], rhn = row_sums_[j];
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
         auto ret = lhn * get_jsdcache(i) + rhn * get_jsdcache(j)
             -
             blz::dot(weighted_row(i) + weighted_row(j),
                 neginf2zero(blz::log(lambda * row(i) + m1l * row(j)))
             );
-        assert(ret >= -1e-2 * (row_sums_->operator[](i) + row_sums_->operator[](j)) || !std::fprintf(stderr, "ret: %g\n", ret));
+        assert(ret >= -1e-2 * (row_sums_[i] + row_sums_[j]) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
     }
-    double ollr(size_t i, size_t j) const {
-        auto ret = get_jsdcache(i) * row_sums_->operator[](i) + get_jsdcache(j) * row_sums_->operator[](j)
+    auto ollr(size_t i, size_t j) const {
+        auto ret = get_jsdcache(i) * row_sums_[i] + get_jsdcache(j) * row_sums_[j]
             - blz::dot(weighted_row(i) + weighted_row(j), neginf2zero(blz::log((row(i) + row(j)) * .5)));
         return std::max(ret, 0.);
     }
-    double uwllr(size_t i, size_t j) const {
-        const auto lhn = row_sums_->operator[](i), rhn = row_sums_->operator[](j);
-        const double lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+    auto uwllr(size_t i, size_t j) const {
+        const auto lhn = row_sums_[i], rhn = row_sums_[j];
+        const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
         return
           std::max(
             lambda * get_jsdcache(i) +
@@ -440,17 +503,17 @@ public:
           0.);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    double llr(size_t, const OT &) const {
+    auto llr(size_t, const OT &) const {
         throw std::runtime_error("llr is not implemented for this.");
         return 0.;
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
-    double llr(size_t, const OT &, const OT2 &) const {
+    auto llr(size_t, const OT &, const OT2 &) const {
         throw std::runtime_error("llr is not implemented for this.");
         return 0.;
     }
     template<typename...Args>
-    double jsm(Args &&...args) const {
+    auto jsm(Args &&...args) const {
         return std::sqrt(jsd(std::forward<Args>(args)...));
     }
     void set_lambda(FT param) {
@@ -461,26 +524,12 @@ public:
 private:
     template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>
     void prep(Prior prior, const Container *c=nullptr) {
-        //std::fprintf(stderr, "[%s] Starting prep\n", __PRETTY_FUNCTION__);
-        row_sums_.reset(new VecT(data_.rows()));
-        auto rowsumit = row_sums_->begin();
-        for(auto r: blz::rowiterator(data_)) {
-            CONST_IF(blz::IsDenseMatrix_v<MatrixType>) {
-                if(prior == NONE) {
-                    r += 1e-50;
-                    assert(blz::min(r) > 0.);
-                }
-            }
-            const auto countsum = blz::sum(r);
-            r /= countsum;
-            *rowsumit++ = countsum;
-        }
         switch(prior) {
             case NONE:
             break;
             case DIRICHLET:
                 CONST_IF(!IsSparseMatrix_v<MatrixType>) {
-                    data_ += (1. / data_.columns());
+                    data_ += static_cast<FT>(1);
                 } else {
                     throw std::invalid_argument("Can't use Dirichlet prior for sparse matrix");
                 }
@@ -488,26 +537,35 @@ private:
             case GAMMA_BETA:
                 if(c == nullptr) throw std::invalid_argument("Can't do gamma_beta with null pointer");
                 CONST_IF(!IsSparseMatrix_v<MatrixType>) {
-                    data_ += (1. / *std::begin(*c));
+                    data_ += (*c)[0];
                 } else {
                     throw std::invalid_argument("Can't use gamma beta prior for sparse matrix");
                 }
             break;
             case FEATURE_SPECIFIC_PRIOR:
                 if(c == nullptr) throw std::invalid_argument("Can't do feature-specific with null pointer");
-                for(auto rw: blz::rowiterator(data_))
-                    rw += *c;
+                data_ += blz::expand(*c, data_.rows());
         }
-        if(!row_sums_) throw std::runtime_error("Row sums not set");
-        if(row_sums_->size() != data_.rows()) {
-            char buf[256];
-            std::sprintf(buf, "Wrong size: %zu, expected %zu\n", row_sums_->size(), data_.rows());
-            throw std::runtime_error(buf);
+        row_sums_.resize(data_.rows());
+        {
+            auto rowsumit = row_sums_.data();
+            for(auto r: blz::rowiterator(data_)) {
+                CONST_IF(blz::IsDenseMatrix_v<MatrixType>) {
+                    if(prior == NONE) {
+                        r += 1e-50;
+                        assert(blz::min(r) > 0.);
+                    }
+                }
+                const auto countsum = blz::sum(r);
+                r /= countsum;
+                *rowsumit++ = countsum;
+            }
         }
 
         if(detail::needs_logs(measure_)) {
             logdata_.reset(new MatrixType(neginf2zero(log(data_))));
-        } else if(detail::needs_sqrt(measure_)) {
+        }
+        if(detail::needs_sqrt(measure_)) {
             sqrdata_.reset(new MatrixType(blz::sqrt(data_)));
         }
         if(logdata_) {
@@ -524,6 +582,7 @@ private:
     }
     FT get_llrcache(size_t index) const {
         assert(jsd_cache_ && jsd_cache_->size() > index);
+        return get_jsdcache(index) * row_sums_->operator[](index);
         return (*jsd_cache_)[index] * row_sums_->operator[](index);
     }
 }; // ProbDivApplicator
@@ -593,14 +652,10 @@ auto make_kmeanspp(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_
 
 template<typename MatrixType, typename WFT=typename MatrixType::ElementType, typename IT=uint32_t>
 auto make_d2_coreset_sampler(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, coresets::SensitivityMethod sens=cs::LBK) {
-    wy::WyRand<uint64_t> gen(seed);
-    auto [centers, asn, costs] = coresets::kmeanspp(app, gen, app.size(), k);
-    //for(const auto c: centers) std::fprintf(stderr, "%u,", c);
-    //std::fputc('\n', stderr);
-    //std::fprintf(stderr, "costs size: %zu. centers size: %zu\n", costs.size(), centers.size());
+    auto [centers, asn, costs] = make_kmeanspp(app, k, seed);
     coresets::CoresetSampler<typename MatrixType::ElementType, IT> cs;
     cs.make_sampler(app.size(), centers.size(), costs.data(), asn.data(), weights,
-                    /*seed=*/gen(), sens);
+                    seed + 1, sens);
     return cs;
 }
 
