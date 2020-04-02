@@ -89,9 +89,6 @@ struct IndexCoreset {
         weights_.resize(newsz);
         DBG_ONLY(std::fprintf(stderr, "Shrinking to fit\n");)
         if(shrink_to_fit) indices_.shrinkToFit(), weights_.shrinkToFit();
-#if 0
-        std::fprintf(stderr, "compacted\n");
-#endif
     }
     std::vector<std::pair<IT, FT>> to_pairs() const {
         std::vector<std::pair<IT, FT>> ret(size());
@@ -396,11 +393,13 @@ struct CoresetSampler {
     {
         // See https://arxiv.org/pdf/1106.1379.pdf, figures 2,3,4
         fl_asn_.reset(new IT[np_]);
+        blaze::CustomVector<IT, blaze::unaligned, blaze::unpadded>(fl_asn_.get(), np_) =
+            blaze::CustomVector<const IT, blaze::unaligned, blaze::unpadded>(asn, np_);
+
         fl_bicriteria_points_.reset(new blz::DV<IT>(b_));
         if(bicriteria_centers)
             *fl_bicriteria_points_ = blaze::CustomVector<const IT, blaze::unaligned, blaze::unpadded>(bicriteria_centers, b_);
-        blaze::CustomVector<IT, blaze::unaligned, blaze::unpadded>(fl_asn_.get(), np_) =
-            blaze::CustomVector<const IT, blaze::unaligned, blaze::unpadded>(asn, np_);
+
         auto cv = blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded>(const_cast<CFT *>(costs), np_);
         auto total_cost =
             weights_ ? blaze::dot(*weights_, cv)
