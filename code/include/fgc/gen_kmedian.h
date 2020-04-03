@@ -10,7 +10,6 @@ namespace jsd {
 
 template<typename ContainerType, typename MatrixType, typename...Args>
 void directional_kmeans(const ProbDivApplicator<MatrixType> &) {
-    //
 }
 
 // 2. 
