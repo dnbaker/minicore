@@ -31,6 +31,7 @@ script:
   - ./dmlsearchdbg
   - ./jsdhashdbg
   - ./fgcinctestdbg
+  - ./geomedtestdbg
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:

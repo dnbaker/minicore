@@ -41,6 +41,7 @@ enum ProbDivType {
             */
     OLLR,       // Old LLR, deprecated (included for compatibility/comparisons)
     ITAKURA_SAITO, // \sum_{i=1}^D[\frac{a_i}{b_i} - \log{\frac{a_i}{b_i}} - 1]
+    REVERSE_ITAKURA_SAITO, // Reverse I-S
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
@@ -53,7 +54,7 @@ namespace detail {
 static constexpr INLINE bool  needs_logs(ProbDivType d)  {
     switch(d) {
         case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
-        case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: return true;
+        case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: case REVERSE_ITAKURA_SAITO: return true;
         default: break;
     }
     return false;
@@ -75,7 +76,6 @@ static constexpr INLINE bool is_symmetric(ProbDivType d) {
 }
 
 
-
 static constexpr INLINE const char *prob2str(ProbDivType d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "BHATTACHARYYA_DISTANCE";
@@ -94,6 +94,7 @@ static constexpr INLINE const char *prob2str(ProbDivType d) {
         case POISSON: return "POISSON";
         case REVERSE_MKL: return "REVERSE_MKL";
         case REVERSE_POISSON: return "REVERSE_POISSON";
+        case REVERSE_ITAKURA_SAITO: return "REVERSE_ITAKURA_SAITO";
         case SQRL2: return "SQRL2";
         case TOTAL_VARIATION_DISTANCE: return "TOTAL_VARIATION_DISTANCE";
         default: return "INVALID TYPE";
@@ -118,7 +119,8 @@ static constexpr INLINE const char *prob2desc(ProbDivType d) {
         case REVERSE_POISSON: return "Reverse KL divergence";
         case SQRL2: return "Squared L2 Norm";
         case TOTAL_VARIATION_DISTANCE: return "Total Variation Distance: 1/2 sum_{i in D}(|x_i - y_i|)";
-        case ITAKURA_SAITO: return "Itakura-Saito divergence, a Bregman divergence ";
+        case ITAKURA_SAITO: return "Itakura-Saito divergence, a Bregman divergence [sum((a / b) - log(a / b) - 1 for a, b in zip(A, B))]";
+        case REVERSE_ITAKURA_SAITO: return "Reversed Itakura-Saito divergence, a Bregman divergence";
         default: return "INVALID TYPE";
     }
 }
@@ -252,36 +254,39 @@ public:
     void set_distance_matrix(MatType &m, ProbDivType measure, bool symmetrize=false) const {
         switch(measure) {
             case TOTAL_VARIATION_DISTANCE: set_distance_matrix<MatType, TOTAL_VARIATION_DISTANCE>(m, symmetrize); break;
-            case L1: set_distance_matrix<MatType, L1>(m, symmetrize); break;
-            case L2: set_distance_matrix<MatType, L2>(m, symmetrize); break;
-            case SQRL2: set_distance_matrix<MatType, SQRL2>(m, symmetrize); break;
-            case JSD: set_distance_matrix<MatType, JSD>(m, symmetrize); break;
-            case JSM: set_distance_matrix<MatType, JSM>(m, symmetrize); break;
-            case REVERSE_MKL: set_distance_matrix<MatType, REVERSE_MKL>(m, symmetrize); break;
-            case MKL: set_distance_matrix<MatType, MKL>(m, symmetrize); break;
-            case EMD: set_distance_matrix<MatType, EMD>(m, symmetrize); break;
-            case WEMD: set_distance_matrix<MatType, WEMD>(m, symmetrize); break;
-            case REVERSE_POISSON: set_distance_matrix<MatType, REVERSE_POISSON>(m, symmetrize); break;
-            case POISSON: set_distance_matrix<MatType, POISSON>(m, symmetrize); break;
-            case HELLINGER: set_distance_matrix<MatType, HELLINGER>(m, symmetrize); break;
-            case BHATTACHARYYA_METRIC: set_distance_matrix<MatType, BHATTACHARYYA_METRIC>(m, symmetrize); break;
-            case BHATTACHARYYA_DISTANCE: set_distance_matrix<MatType, BHATTACHARYYA_DISTANCE>(m, symmetrize); break;
-            case LLR: set_distance_matrix<MatType, LLR>(m, symmetrize); break;
-            case UWLLR: set_distance_matrix<MatType, UWLLR>(m, symmetrize); break;
-            case OLLR: set_distance_matrix<MatType, OLLR>(m, symmetrize); break;
-            case ITAKURA_SAITO: set_distance_matrix<MatType, ITAKURA_SAITO>(m, symmetrize); break;
-            default: break;
+            case L1:                       set_distance_matrix<MatType, L1>(m, symmetrize); break;
+            case L2:                       set_distance_matrix<MatType, L2>(m, symmetrize); break;
+            case SQRL2:                    set_distance_matrix<MatType, SQRL2>(m, symmetrize); break;
+            case JSD:                      set_distance_matrix<MatType, JSD>(m, symmetrize); break;
+            case JSM:                      set_distance_matrix<MatType, JSM>(m, symmetrize); break;
+            case REVERSE_MKL:              set_distance_matrix<MatType, REVERSE_MKL>(m, symmetrize); break;
+            case MKL:                      set_distance_matrix<MatType, MKL>(m, symmetrize); break;
+            case EMD:                      set_distance_matrix<MatType, EMD>(m, symmetrize); break;
+            case WEMD:                     set_distance_matrix<MatType, WEMD>(m, symmetrize); break;
+            case REVERSE_POISSON:          set_distance_matrix<MatType, REVERSE_POISSON>(m, symmetrize); break;
+            case POISSON:                  set_distance_matrix<MatType, POISSON>(m, symmetrize); break;
+            case HELLINGER:                set_distance_matrix<MatType, HELLINGER>(m, symmetrize); break;
+            case BHATTACHARYYA_METRIC:     set_distance_matrix<MatType, BHATTACHARYYA_METRIC>(m, symmetrize); break;
+            case BHATTACHARYYA_DISTANCE:   set_distance_matrix<MatType, BHATTACHARYYA_DISTANCE>(m, symmetrize); break;
+            case LLR:                      set_distance_matrix<MatType, LLR>(m, symmetrize); break;
+            case UWLLR:                    set_distance_matrix<MatType, UWLLR>(m, symmetrize); break;
+            case OLLR:                     set_distance_matrix<MatType, OLLR>(m, symmetrize); break;
+            case ITAKURA_SAITO:            set_distance_matrix<MatType, ITAKURA_SAITO>(m, symmetrize); break;
+            case REVERSE_ITAKURA_SAITO:    set_distance_matrix<MatType, REVERSE_ITAKURA_SAITO>(m, symmetrize); break;
+            default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + prob2str(measure));
         }
     }
-    blaze::DynamicMatrix<float> make_distance_matrix() const {
-        blaze::DynamicMatrix<float> ret = make_distance_matrix(measure_);
-        return ret;
+    template<typename OFT=FT>
+    blaze::DynamicMatrix<OFT> make_distance_matrix(bool symmetrize=false) const {
+        return make_distance_matrix<OFT>(measure_, symmetrize);
     }
-    blaze::DynamicMatrix<float> make_distance_matrix(ProbDivType measure, bool symmetrize=false) const {
-        blaze::DynamicMatrix<float> ret(data_.rows(), data_.rows());
+    template<typename OFT=FT>
+    blaze::DynamicMatrix<OFT> make_distance_matrix(ProbDivType measure, bool symmetrize=false) const {
+        blaze::DynamicMatrix<OFT> ret(data_.rows(), data_.rows());
         set_distance_matrix(ret, measure, symmetrize);
         return ret;
     }
+
     // Accessors
     decltype(auto) weighted_row(size_t ind) const {
         return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_[ind];

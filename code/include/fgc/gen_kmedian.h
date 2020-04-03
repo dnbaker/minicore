@@ -6,6 +6,8 @@ namespace fgc {
 
 namespace jsd {
 
+
+#if 0
 // 1.  Directional k-means for asymmetric measures.
 
 template<typename ContainerType, typename MatrixType, typename...Args>
@@ -34,6 +36,7 @@ void optimize_parameters_hard() {
         case measure: optimize_parameters_soft<measure>();
     }
 }
+#endif
 
 } // namespace jsd
 
