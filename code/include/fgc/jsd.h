@@ -50,7 +50,7 @@ enum ProbDivType {
 };
 
 namespace detail {
-static INLINE bool  needs_logs(ProbDivType d)  {
+static constexpr INLINE bool  needs_logs(ProbDivType d)  {
     switch(d) {
         case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: return true;
@@ -60,11 +60,11 @@ static INLINE bool  needs_logs(ProbDivType d)  {
 }
 
 
-static INLINE bool  needs_sqrt(ProbDivType d) {
+static constexpr INLINE bool  needs_sqrt(ProbDivType d) {
     return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
 }
 
-static INLINE bool is_symmetric(ProbDivType d) {
+static constexpr INLINE bool is_symmetric(ProbDivType d) {
     switch(d) {
         case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
         case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
@@ -76,7 +76,7 @@ static INLINE bool is_symmetric(ProbDivType d) {
 
 
 
-static INLINE const char *prob2str(ProbDivType d) {
+static constexpr INLINE const char *prob2str(ProbDivType d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "BHATTACHARYYA_DISTANCE";
         case BHATTACHARYYA_METRIC: return "BHATTACHARYYA_METRIC";
@@ -99,7 +99,7 @@ static INLINE const char *prob2str(ProbDivType d) {
         default: return "INVALID TYPE";
     }
 }
-static INLINE const char *prob2desc(ProbDivType d) {
+static constexpr INLINE const char *prob2desc(ProbDivType d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";
         case BHATTACHARYYA_METRIC: return "Bhattacharyya metric: sqrt(1 - BhattacharyyaSimilarity(x, y))";
@@ -188,28 +188,28 @@ public:
     template<typename MatType>
     void set_distance_matrix(MatType &m, bool symmetrize=false) const {set_distance_matrix(m, measure_, symmetrize);}
 
-    template<typename MatType>
-    void set_distance_matrix(MatType &m, ProbDivType measure, bool symmetrize=false) const {
+    template<typename MatType, ProbDivType measure>
+    void set_distance_matrix(MatType &m, bool symmetrize=false) const {
         using blaze::sqrt;
         const size_t nr = m.rows();
         assert(nr == m.columns());
         assert(nr == data_.rows());
-        ProbDivType actual_measure = measure == JSM ? JSD: measure;
+        static constexpr ProbDivType actual_measure = measure == JSM ? JSD: measure;
         for(size_t i = 0; i < nr; ++i) {
             CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
                 for(size_t j = i + 1; j < nr; ++j) {
-                    auto v = this->operator()(i, j, actual_measure);
+                    auto v = this->call<actual_measure>(i, j);
                     m(i, j) = v;
                 }
             } else {
                 OMP_PFOR
                 for(size_t j = i + 1; j < nr; ++j) {
-                    auto v = this->operator()(i, j, actual_measure);
+                    auto v = this->call<actual_measure>(i, j);
                     m(i, j) = v;
                 }
             }
         }
-        if(measure == JSM) {
+        CONST_IF(measure == JSM) {
             CONST_IF(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
                 m = blz::sqrt(m);
             } else CONST_IF(dm::is_distance_matrix_v<MatType>) {
@@ -219,7 +219,7 @@ public:
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
             }
         }
-        if(detail::is_symmetric(measure)) {
+        CONST_IF(detail::is_symmetric(measure)) {
             //std::fprintf(stderr, "Symmetric measure %s/%s\n", detail::prob2str(measure), detail::prob2desc(measure));
             if(symmetrize) {
                 fill_symmetric_upper_triangular(m);
@@ -233,19 +233,44 @@ public:
                     CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
                         //std::fprintf(stderr, "Filling bottom half\n");
                         for(size_t j = 0; j < i; ++j) {
-                            auto v = this->operator()(i, j, measure);
+                            auto v = this->call<measure>(i, j);
                             m(i, j) = v;
                         }
                     } else {
                         OMP_PFOR
                         for(size_t j = 0; j < i; ++j) {
-                            auto v = this->operator()(i, j, measure);
+                            auto v = this->call<measure>(i, j);
                             m(i, j) = v;
                         }
                     }
                     m(i, i) = 0.;
                 }
             }
+        }
+    }
+    template<typename MatType>
+    void set_distance_matrix(MatType &m, ProbDivType measure, bool symmetrize=false) const {
+        switch(measure) {
+            case TOTAL_VARIATION_DISTANCE: set_distance_matrix<MatType, TOTAL_VARIATION_DISTANCE>(m, symmetrize); break;
+            case L1: set_distance_matrix<MatType, L1>(m, symmetrize); break;
+            case L2: set_distance_matrix<MatType, L2>(m, symmetrize); break;
+            case SQRL2: set_distance_matrix<MatType, SQRL2>(m, symmetrize); break;
+            case JSD: set_distance_matrix<MatType, JSD>(m, symmetrize); break;
+            case JSM: set_distance_matrix<MatType, JSM>(m, symmetrize); break;
+            case REVERSE_MKL: set_distance_matrix<MatType, REVERSE_MKL>(m, symmetrize); break;
+            case MKL: set_distance_matrix<MatType, MKL>(m, symmetrize); break;
+            case EMD: set_distance_matrix<MatType, EMD>(m, symmetrize); break;
+            case WEMD: set_distance_matrix<MatType, WEMD>(m, symmetrize); break;
+            case REVERSE_POISSON: set_distance_matrix<MatType, REVERSE_POISSON>(m, symmetrize); break;
+            case POISSON: set_distance_matrix<MatType, POISSON>(m, symmetrize); break;
+            case HELLINGER: set_distance_matrix<MatType, HELLINGER>(m, symmetrize); break;
+            case BHATTACHARYYA_METRIC: set_distance_matrix<MatType, BHATTACHARYYA_METRIC>(m, symmetrize); break;
+            case BHATTACHARYYA_DISTANCE: set_distance_matrix<MatType, BHATTACHARYYA_DISTANCE>(m, symmetrize); break;
+            case LLR: set_distance_matrix<MatType, LLR>(m, symmetrize); break;
+            case UWLLR: set_distance_matrix<MatType, UWLLR>(m, symmetrize); break;
+            case OLLR: set_distance_matrix<MatType, OLLR>(m, symmetrize); break;
+            case ITAKURA_SAITO: set_distance_matrix<MatType, ITAKURA_SAITO>(m, symmetrize); break;
+            default: break;
         }
     }
     blaze::DynamicMatrix<float> make_distance_matrix() const {

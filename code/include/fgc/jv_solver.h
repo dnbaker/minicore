@@ -248,12 +248,9 @@ struct NaiveJVSolver {
 };
 
 struct Correct {
-    Correct = 1; // Fail compilation so that the branch fails until it is ready.
+    //Correct = 1; // Fail compilation so that the branch fails until it is ready.
 };
-#if 0
-TODO Adapt method from https://raw.githubusercontent.com/nathan-cordner/facility-location/master/fl-cpp/facility_location.C
-
-#endif
+//TODO Adapt method from https://raw.githubusercontent.com/nathan-cordner/facility-location/master/fl-cpp/facility_location.C
 
 } // namespace fgc
 

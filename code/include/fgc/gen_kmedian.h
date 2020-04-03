@@ -10,7 +10,6 @@ namespace jsd {
 
 template<typename ContainerType, typename MatrixType, typename...Args>
 void directional_kmeans(const ProbDivApplicator<MatrixType> &) {
-    static_assert(is_finished, "This must be finished before I let it pass CI.");
     //
 }
 
@@ -19,7 +18,6 @@ void directional_kmeans(const ProbDivApplicator<MatrixType> &) {
 template<typename Measure, typename ContainerType>
 void optimize_parameters_soft() {
     throw std::runtime_error("NotImplemented yet. This should take a set of points or indices and assignments and select the new centroids");
-    // This will
 }
 template<typename ContainerType>
 void optimize_parameters_soft() {
