@@ -6,17 +6,20 @@ namespace fgc {
 
 namespace jsd {
 
-#if 0
 // 1.  Directional k-means for asymmetric measures.
 
-template<typename ContainerType, typename...Args>
-void directional_kmeans() {
+template<typename ContainerType, typename MatrixType, typename...Args>
+void directional_kmeans(const ProbDivApplicator<MatrixType> &) {
+    static_assert(is_finished, "This must be finished before I let it pass CI.");
+    //
 }
 
 // 2. 
 
 template<typename Measure, typename ContainerType>
 void optimize_parameters_soft() {
+    throw std::runtime_error("NotImplemented yet. This should take a set of points or indices and assignments and select the new centroids");
+    // This will
 }
 template<typename ContainerType>
 void optimize_parameters_soft() {
@@ -34,8 +37,6 @@ void optimize_parameters_hard() {
         case measure: optimize_parameters_soft<measure>();
     }
 }
-
-#endif
 
 } // namespace jsd
 
