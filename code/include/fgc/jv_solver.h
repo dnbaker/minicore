@@ -3,6 +3,7 @@
 #include "blaze_adaptor.h"
 #include "pdqsort/pdqsort.h"
 #include <stdexcept>
+#include <chrono>
 
 namespace fgc {
 
@@ -34,7 +35,7 @@ template<typename FT>
 struct NaiveJVSolver {
     // Complexity: something like F^2N + N^2F
     // Much slower than it should be
-    using DefIT = long unsigned int;
+    using DefIT = unsigned int;
     blz::DM<FT> w_;
     blz::DV<FT> v_;
     blz::DV<uint32_t> numconnected_, numtight_;
@@ -65,7 +66,7 @@ struct NaiveJVSolver {
             std::sprintf(buf, "Wrong number of rows or columns: received %zu/%zu, expected %zu/%zu\n", mat.rows(), mat.columns(), w_.rows(), w_.columns());
             throw std::runtime_error(buf);
         }
-        OMP_PRAGMA("omp parallel for")
+        OMP_PFOR
         for(size_t i = 0; i < mat.rows(); ++i) {
             auto p = &edges_[i * mat.columns()];
             auto r = row(mat, i);
@@ -157,8 +158,10 @@ struct NaiveJVSolver {
             else
                 maxcost = medcost; // med has too few, lower cost.
             medcost = (mincost + maxcost) / 2.;
+            auto start = std::chrono::high_resolution_clock::now();
             med = ufl<MatType, IType>(mat, medcost);
-            std::fprintf(stderr, "Solution cost: %f. size: %zu\n", calculate_cost(mat, med), med.size());
+            auto stop = std::chrono::high_resolution_clock::now();
+            std::fprintf(stderr, "Solution cost: %f. size: %zu. Time in ms: %g. Dimensions: %zu/%zu\n", calculate_cost(mat, med), med.size(), (stop - start).count() * 0.000001, w_.rows(), w_.columns());
             if(roundnum > maxrounds) {
                 break;
             }
