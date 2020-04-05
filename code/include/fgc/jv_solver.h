@@ -23,6 +23,9 @@ struct edgetup: public std::tuple<double, uint32_t, uint32_t> {
     auto sprintf(char *buf) const {
         return std::sprintf(buf, "%f:%u:%u", cost(), fi(), di());
     }
+    auto print(std::FILE *ofp=stderr) {
+        return std::fprintf(ofp, "%f:%u:%u", cost(), fi(), di());
+    }
 };
 
 /*
@@ -61,6 +64,7 @@ struct NaiveJVSolver {
     }
     template<typename MatType>
     void setup(const MatType &mat) {
+        auto start = std::chrono::high_resolution_clock::now();
         if(mat.rows() != w_.rows() || mat.columns() != w_.columns()) {
             char buf[256];
             std::sprintf(buf, "Wrong number of rows or columns: received %zu/%zu, expected %zu/%zu\n", mat.rows(), mat.columns(), w_.rows(), w_.columns());
@@ -71,12 +75,14 @@ struct NaiveJVSolver {
             auto p = &edges_[i * mat.columns()];
             auto r = row(mat, i);
             for(size_t j = 0; j < mat.columns(); ++j) {
-                p[j] = {r[j], i, j};
+                *p++ = {r[j], i, j};
             }
         }
         pdqsort(&edges_[0], &edges_[edges_.size()], [](const auto x, const auto y) {return x.cost() < y.cost();});
         tempopen_.clear();
         for(size_t i = 0; i < mat.rows(); ++i) nottempopen_.insert(i);
+        auto stop = std::chrono::high_resolution_clock::now();
+        std::fprintf(stderr, "Setup took %g\n", 0.000001 * (stop - start).count());
     }
     template<typename MatType, typename IType=DefIT>
     std::vector<IType> phase2() { // Electric Boogaloo
