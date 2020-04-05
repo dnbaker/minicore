@@ -53,7 +53,6 @@ void l1_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &r
     const bool odd = dr.rows() % 2;
     const size_t hlf = dr.rows() / 2;
     const blaze::DynamicVector<uint32_t> indices = generate(dr.rows(), [](auto x){return x;});
-    OMP_PFOR
     for(size_t i = 0; i < dr.columns(); ++i) {
         blaze::DynamicVector<ElementType_t<MT>, blaze::columnVector> tmpind = column(data, i); // Should do fast copying.
         shared::sort(tmpind.begin(), tmpind.end());

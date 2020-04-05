@@ -12,6 +12,40 @@
 namespace blz {
 
 inline namespace distance {
+
+enum ProbDivType {
+    L1,
+    L2,
+    SQRL2,
+    JSM, // Multinomial Jensen-Shannon Metric
+    JSD, // Multinomial Jensen-Shannon Divergence
+    MKL, // Multinomial KL Divergence
+    POISSON, // Poisson KL
+    HELLINGER,
+    BHATTACHARYYA_METRIC,
+    BHATTACHARYYA_DISTANCE,
+    TOTAL_VARIATION_DISTANCE,
+    LLR,
+    EMD,
+    WEMD, // Weighted Earth-mover's distance
+    REVERSE_MKL,
+    REVERSE_POISSON,
+    UWLLR, /* Unweighted Log-likelihood Ratio.
+            * Specifically, this is the D_{JSD}^{\lambda}(x, y),
+            * where \lambda = \frac{N_p}{N_p + N_q}
+            *
+            */
+    OLLR,       // Old LLR, deprecated (included for compatibility/comparisons)
+    ITAKURA_SAITO, // \sum_{i=1}^D[\frac{a_i}{b_i} - \log{\frac{a_i}{b_i}} - 1]
+    REVERSE_ITAKURA_SAITO, // Reverse I-S
+    WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
+    TVD = TOTAL_VARIATION_DISTANCE,
+    WASSERSTEIN=EMD,
+    PSD = JSD, // Poisson JSD, but algebraically equivalent
+    PSM = JSM,
+    IS=ITAKURA_SAITO
+};
+
 #define DECL_DIST(norm) \
 template<typename FT, bool SO>\
 INLINE auto norm##Dist(const blaze::DynamicVector<FT, SO> &lhs, const blaze::DynamicVector<FT, SO> &rhs) {\

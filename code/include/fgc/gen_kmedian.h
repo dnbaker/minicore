@@ -6,6 +6,10 @@ namespace fgc {
 
 namespace jsd {
 
+template<ProbDivType measure, typename MatrixType, typename MT2>
+void optimize_parameters(const ProbDivApplicator<MatrixType> &app, ) {
+}
+
 
 #if 0
 // 1.  Directional k-means for asymmetric measures.
