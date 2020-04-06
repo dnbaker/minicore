@@ -16,111 +16,6 @@ namespace jsd {
 using namespace blz;
 using namespace blz::distance;
 
-namespace detail {
-static constexpr INLINE bool  needs_logs(ProbDivType d)  {
-    switch(d) {
-        case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
-        case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: case REVERSE_ITAKURA_SAITO: return true;
-        default: break;
-    }
-    return false;
-}
-
-
-static constexpr INLINE bool  needs_sqrt(ProbDivType d) {
-    return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
-}
-
-static constexpr INLINE bool is_symmetric(ProbDivType d) {
-    switch(d) {
-        case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
-        case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
-            return true;
-        default: ;
-    }
-    return false;
-}
-
-
-static constexpr INLINE const char *prob2str(ProbDivType d) {
-    switch(d) {
-        case BHATTACHARYYA_DISTANCE: return "BHATTACHARYYA_DISTANCE";
-        case BHATTACHARYYA_METRIC: return "BHATTACHARYYA_METRIC";
-        case EMD: return "EMD";
-        case HELLINGER: return "HELLINGER";
-        case JSD: return "JSD/PSD";
-        case JSM: return "JSM/PSM";
-        case L1: return "L1";
-        case L2: return "L2";
-        case LLR: return "LLR";
-        case OLLR: return "OLLR";
-        case UWLLR: return "UWLLR";
-        case ITAKURA_SAITO: return "ITAKURA_SAITO";
-        case MKL: return "MKL";
-        case POISSON: return "POISSON";
-        case REVERSE_MKL: return "REVERSE_MKL";
-        case REVERSE_POISSON: return "REVERSE_POISSON";
-        case REVERSE_ITAKURA_SAITO: return "REVERSE_ITAKURA_SAITO";
-        case SQRL2: return "SQRL2";
-        case TOTAL_VARIATION_DISTANCE: return "TOTAL_VARIATION_DISTANCE";
-        default: return "INVALID TYPE";
-    }
-}
-static constexpr INLINE const char *prob2desc(ProbDivType d) {
-    switch(d) {
-        case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";
-        case BHATTACHARYYA_METRIC: return "Bhattacharyya metric: sqrt(1 - BhattacharyyaSimilarity(x, y))";
-        case EMD: return "Earth Mover's Distance: Optimal Transport";
-        case HELLINGER: return "Hellinger Distance: sqrt(sum((sqrt(x) - sqrt(y))^2))/2";
-        case JSD: return "Jensen-Shannon Divergence for Poisson and Multinomial models, for which they are equivalent";
-        case JSM: return "Jensen-Shannon Metric, known as S2JSD and the Endres metric, for Poisson and Multinomial models, for which they are equivalent";
-        case L1: return "L1 distance";
-        case L2: return "L2 distance";
-        case LLR: return "Log-likelihood Ratio under the multinomial model";
-        case OLLR: return "Original log-likelihood ratio. This is likely not correct, but it is related to the Jensen-Shannon Divergence";
-        case UWLLR: return "Unweighted Log-likelihood Ratio. This is effectively the Generalized Jensen-Shannon Divergence with lambda parameter corresponding to the fractional contribution of counts in the first observation. This is symmetric, unlike the G_JSD, because the parameter comes from the counts.";
-        case MKL: return "Multinomial KL divergence";
-        case POISSON: return "Poisson KL Divergence";
-        case REVERSE_MKL: return "Reverse Multinomial KL divergence";
-        case REVERSE_POISSON: return "Reverse KL divergence";
-        case SQRL2: return "Squared L2 Norm";
-        case TOTAL_VARIATION_DISTANCE: return "Total Variation Distance: 1/2 sum_{i in D}(|x_i - y_i|)";
-        case ITAKURA_SAITO: return "Itakura-Saito divergence, a Bregman divergence [sum((a / b) - log(a / b) - 1 for a, b in zip(A, B))]";
-        case REVERSE_ITAKURA_SAITO: return "Reversed Itakura-Saito divergence, a Bregman divergence";
-        default: return "INVALID TYPE";
-    }
-}
-static void print_measures() {
-    std::set<ProbDivType> measures {
-        L1,
-        L2,
-        SQRL2,
-        JSM,
-        JSD,
-        MKL,
-        POISSON,
-        HELLINGER,
-        BHATTACHARYYA_METRIC,
-        BHATTACHARYYA_DISTANCE,
-        TOTAL_VARIATION_DISTANCE,
-        LLR,
-        OLLR,
-        EMD,
-        REVERSE_MKL,
-        REVERSE_POISSON,
-        UWLLR,
-        TOTAL_VARIATION_DISTANCE,
-        WASSERSTEIN,
-        PSD,
-        PSM,
-        ITAKURA_SAITO
-    };
-    for(const auto measure: measures) {
-        std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
-    }
-}
-} // detail
-
 template<typename MatrixType>
 class ProbDivApplicator {
     //using opposite_type = typename base_type::OppositeType;
@@ -239,7 +134,7 @@ public:
             case OLLR:                     set_distance_matrix<MatType, OLLR>(m, symmetrize); break;
             case ITAKURA_SAITO:            set_distance_matrix<MatType, ITAKURA_SAITO>(m, symmetrize); break;
             case REVERSE_ITAKURA_SAITO:    set_distance_matrix<MatType, REVERSE_ITAKURA_SAITO>(m, symmetrize); break;
-            default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + prob2str(measure));
+            default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + detail::prob2str(measure));
         }
     }
     template<typename OFT=FT>
@@ -309,6 +204,8 @@ public:
             ret = ollr(i, j);
         } else CONST_IF(constexpr_measure == ITAKURA_SAITO) {
             ret = itakura_saito(i, j);
+        } else CONST_IF(constexpr_measure == REVERSE_ITAKURA_SAITO) {
+            ret = itakura_saito(j, i);
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
         }

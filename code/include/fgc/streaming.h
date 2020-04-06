@@ -1,14 +1,20 @@
 #pragma once
 #ifndef FGC_STREAMING_H__
 #define FGC_STREAMING_H__
-#include <iostream>
 #include <cstdio>
-#include <type_traits>
 #include <cmath>
+
+#include <iostream>
+#include <type_traits>
 #include <stdexcept>
-#include <stack>
 #include <random>
+#include <stack>
+
+
 #include <zlib.h>
+
+#include "fgc/distance.h"
+
 
 namespace fgc {
 namespace streaming {
@@ -68,10 +74,10 @@ struct is_uniform_weighting<UniformW<FT>>: public std::true_type {};
        https://web.cs.ucla.edu/~rafail/PUBLIC/116.pdf
  *  ** Online Facility Location, Adam Meyerson
        http://web.cs.ucla.edu/~awm/papers/ofl.pdf
-    process(Generator, WeightGenerator) processes the full stream in Generator, such that Generator
-    returns a const reference to the object to be added, and WeightGenerator returns a real-valued weight.
+    process(Generator, WeightGen) processes the full stream in Generator, such that Generator
+    returns a const reference to the object to be added, and WeightGen returns a real-valued weight.
     
-    WeightGenerator defaults to UniformW, which returns 1. each time. ZlibW, istreamW, and PointerW load
+    WeightGen defaults to UniformW, which returns 1. each time. ZlibW, istreamW, and PointerW load
     successive values from a stream as described by their names.
 
     When the stream has been completely processed, the set of points on the sack (mstack_)
@@ -80,12 +86,12 @@ struct is_uniform_weighting<UniformW<FT>>: public std::true_type {};
     For k-means, k-medians, and Bregman Divergences, we recommend Lloyd's algorithm/EM.
  */
 
-template<typename Func, typename Item, typename WT=double, typename RNG=std::mt19937_64>
+template<typename Item, typename Func, typename WT=double, typename RNG=std::mt19937_64>
 class KServiceClusterer {
     Func func_;
-    WT l_i_, f_, cost_, beta_, gamma_;
+    WT l_i_, f_, cost_, alpha_, beta_;
     unsigned k_;
-    size_t n_, i_ = 0;
+    size_t n_ = 0, i_ = 0;
 public:
     struct mutable_stack: public std::stack<std::pair<Item, WT>> {
         mutable_stack() {}
@@ -96,6 +102,18 @@ public:
     typename mutable_stack::container_type readingstack_;
     std::uniform_real_distribution<WT> urd_;
     RNG rng_;
+
+    double get_cofl() const {
+        return 3 * alpha_ + 1;
+    }
+    double get_kofl() const {
+        return (6 * alpha_  + 1) * k_ * (1. + std::log(n_));
+    }
+    double get_gamma() const {
+        return std::max(beta_ * get_kofl() + 1.,
+                        4. * alpha_ * alpha_ * alpha_ * get_cofl() * get_cofl() + 2 * alpha_ * alpha_ * get_cofl());
+    }
+
     template<typename AItem>
     std::pair<unsigned, WT> assign(const AItem &item) const {
         if(mstack_.empty()) return {-1, std::numeric_limits<WT>::max()};
@@ -110,13 +128,14 @@ public:
         auto rv = urd_(rng_);
         auto [asn, mincost] = assign(item);
         auto cost = weight * mincost;
+        auto gam = get_gamma();
         if(cost / f_ > urd_(rng_)) {
             mstack_.push(std::make_pair<Item, WT>(item, weight));
         } else {
             cost_ += cost;
             mstack_[asn].second += weight;
         }
-        if(cost_ > gamma_ * l_i_ || mstack_.size() > (gamma_ - 1) * (1 + std::log(n_)) * k_) {
+        if(cost_ > gam * l_i_ || mstack_.size() > (gam - 1) * (1 + std::log(n_)) * k_) {
             readingstack_ = std::move(mstack_.getc());
             ++i_;
             l_i_ *= beta_;
@@ -129,6 +148,7 @@ public:
             add(readingstack_.top().first, readingstack_.top().second);
             readingstack_.pop();
         }
+        ++n_;
         add(gen(), wgen());
     }
     template<typename Generator, typename WeightGen=UniformW<WT>>
@@ -138,20 +158,33 @@ public:
             process_step(gen, wgen);
         }
     }
-    KServiceClusterer(Func func, unsigned k, size_t n, double gamma, double beta):
-        func_(func),
-        beta_(beta), gamma_(gamma), l_i_(1), k_(k), n_(n), i_(1) {
-        rng_.seed(std::rand());
+    KServiceClusterer(Func func, unsigned k, size_t n, double alpha, uint64_t seed=std::rand()):
+        func_(func), l_i_(1),
+        alpha_(alpha), beta_(2. * alpha_ * alpha_  * get_cofl() + 2. * alpha_), k_(k), n_(n), i_(1)
+    {
+        rng_.seed(seed);
     }
 };
 
-template<typename Func, template<typename> class WeightGen=UniformW, typename FT=double>
-auto make_kservice_clusterer(Func func, unsigned k, size_t n, double alpha, WeightGen<FT> &wg) {
-    double cofl = is_uniform_weighting<WeightGen<FT>>::value ? 8: 20;
-    double kofl = is_uniform_weighting<WeightGen<FT>>::value ? 5: 22;
-    double beta = 2 * alpha * alpha * cofl + 2 * alpha;
-    double gamma = std::max(4. * std::pow(alpha, 3) * cofl * cofl, beta * kofl + 1.);
-    KServiceClusterer(std::move(func), k, n, gamma, beta);
+template<typename Item, typename Func, template<typename> class WeightGen=UniformW, typename FT=double>
+auto make_kservice_clusterer(Func func, unsigned k, size_t n, double alpha, bool uniform_weighting=is_uniform_weighting<WeightGen<FT>>::value) {
+    return KServiceClusterer<Item, Func, FT>(func, k, n, alpha);
+}
+
+template<typename Item, template<typename> class WeightGen=UniformW, typename FT=double>
+auto make_online_kmedian_clusterer(unsigned k, size_t n, bool uniform_weighting=is_uniform_weighting<WeightGen<FT>>::value) {
+    blz::L1Norm func;
+    return make_kservice_clusterer<Item, blz::L1Norm, FT>(blz::L1Norm(), k, n, 1., uniform_weighting);
+}
+template<typename Item, template<typename> class WeightGen=UniformW, typename FT=double>
+auto make_online_kmeans_clusterer(unsigned k, size_t n, bool uniform_weighting=is_uniform_weighting<WeightGen<FT>>::value) {
+    blz::sqrL2Norm func;
+    return make_kservice_clusterer<Item, blz::sqrL2Norm, FT>(blz::sqrL2Norm(), k, n, 2., uniform_weighting);
+}
+template<typename Item, template<typename> class WeightGen=UniformW, typename FT=double>
+auto make_online_l2_clusterer(unsigned k, size_t n, bool uniform_weighting=is_uniform_weighting<WeightGen<FT>>::value) {
+    blz::L2Norm func;
+    return make_kservice_clusterer<Item, blz::L2Norm, FT>(blz::L2Norm(), k, n, 1., uniform_weighting);
 }
 
 } // namespace streaming
