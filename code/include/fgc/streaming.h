@@ -107,7 +107,7 @@ public:
         return 3 * alpha_ + 1;
     }
     double get_kofl() const {
-        return (6 * alpha_  + 1) * k_ * (1. + std::log(n_));
+        return (6 * alpha_  + 1) * k_;
     }
     double get_gamma() const {
         return std::max(beta_ * get_kofl() + 1.,

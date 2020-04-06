@@ -69,5 +69,35 @@ struct dumbrange {
 template<typename T>
 inline dumbrange<T> make_dumbrange(T beg, T end) {return dumbrange<T>(beg, end);}
 
+template<typename T1, typename T2>
+struct packed_pair {
+    T1 first;
+    T2 second;
+    packed_pair(T1 f, T2 sec): first(f), second(sec) {}
+    packed_pair(): first(), second() {}
+    template<class _U1, class _U2>
+         packed_pair(_U1&& __x, _U2&& __y)
+     : first(std::forward<_U1>(__x)),
+       second(std::forward<_U2>(__y)) { }
+    packed_pair(packed_pair &&o)     = default;
+    packed_pair(const packed_pair &o) = default;
+    template<class _U1, class _U2>
+        packed_pair(packed_pair<_U1, _U2>&& __p): first(std::move(__p.first)),
+                                                  second(std::move(__p.second)) { }
+    template<typename V>
+    packed_pair(std::initializer_list<V> l): first(std::move(l.at(0))), second(std::move(l.at(1))) {
+    }
+    bool operator<(const packed_pair &o) const {return std::tie(first, second) < std::tie(o.first, o.second);}
+    bool operator>(const packed_pair &o) const {return std::tie(first, second) > std::tie(o.first, o.second);}
+    bool operator<=(const packed_pair &o) const {return std::tie(first, second) <= std::tie(o.first, o.second);}
+    bool operator>=(const packed_pair &o) const {return std::tie(first, second) >= std::tie(o.first, o.second);}
+    bool operator==(const packed_pair &o) const {return std::tie(first, second) == std::tie(o.first, o.second);}
+    bool operator!=(const packed_pair &o) const {return std::tie(first, second) != std::tie(o.first, o.second);}
+}
+#if __GNUC__ || __clang__
+__attribute__((__packed__))
+#endif
+;
+
 } // shared
 } // fgc

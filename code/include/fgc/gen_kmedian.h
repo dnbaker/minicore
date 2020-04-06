@@ -1,6 +1,6 @@
 #ifndef FGC_GENERALIZED_K_MEDIAN_H
 #define FGC_GENERALIZED_K_MEDIAN_H
-#include "fgc/jsd.h"
+#include "fgc/applicator.h"
 
 namespace fgc {
 

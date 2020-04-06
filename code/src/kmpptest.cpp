@@ -1,6 +1,6 @@
 #include "kmeans.h"
 #include "kcenter.h"
-#include "jsd.h"
+#include "applicator.h"
 #include <new>
 #include <chrono>
 #include <thread>

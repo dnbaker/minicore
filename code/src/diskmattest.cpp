@@ -1,6 +1,6 @@
 #include "fgc/distance.h"
 #include "fgc/diskmat.h"
-#include "fgc/jsd.h"
+#include "fgc/applicator.h"
 
 using namespace fgc;
 using namespace blz;
