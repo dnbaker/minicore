@@ -87,6 +87,9 @@ struct packed_pair {
     template<typename V>
     packed_pair(std::initializer_list<V> l): first(std::move(l.at(0))), second(std::move(l.at(1))) {
     }
+    packed_pair &operator=(const packed_pair &o) {
+        first = o.first; second = o.second; return *this;
+    }
     bool operator<(const packed_pair &o) const {return std::tie(first, second) < std::tie(o.first, o.second);}
     bool operator>(const packed_pair &o) const {return std::tie(first, second) > std::tie(o.first, o.second);}
     bool operator<=(const packed_pair &o) const {return std::tie(first, second) <= std::tie(o.first, o.second);}
