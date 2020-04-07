@@ -85,8 +85,7 @@ struct packed_pair {
         packed_pair(packed_pair<_U1, _U2>&& __p): first(std::move(__p.first)),
                                                   second(std::move(__p.second)) { }
     template<typename V>
-    packed_pair(std::initializer_list<V> l): first(std::move(l.at(0))), second(std::move(l.at(1))) {
-    }
+    packed_pair(std::initializer_list<V> l): first(std::move(l[0])), second(std::move(l[1])) {}
     packed_pair &operator=(const packed_pair &o) {
         first = o.first; second = o.second; return *this;
     }

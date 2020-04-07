@@ -3,7 +3,7 @@
 #include "blaze_adaptor.h"
 
 namespace fgc {
-namespace jv2 {
+namespace jv {
 struct edgetup: public std::tuple<double, uint32_t, uint32_t> {
     // Consists of:
     // 1. Cost of edge
@@ -29,10 +29,14 @@ struct edgetup: public std::tuple<double, uint32_t, uint32_t> {
 #endif
 
 
-template<typename FT=float, typename IT=uint32_t>
+template<typename MatrixType, typename FT=float, typename IT=uint32_t>
 struct JVSolver {
 
+    static_assert(std::is_floating_point<FT>::value, "FT must be floating-point");
+    static_assert(std::is_integral<IT>::value, "IT must be integral");
+
     using payment_t = shared::packed_pair<FT, IT>;
+private:
     struct pay_compare_t {
         bool operator()(const payment_t lhs, const payment_t rhs) const {
             return lhs.first < rhs.first || lhs.second < rhs.second;
@@ -62,13 +66,13 @@ struct JVSolver {
         }
     };
 
-private:
-    blz::DM<FT> w_;
+    const MatrixType *distmatp_;
+    blz::DM<FT> client_w_;
     // W matrix
     // Willing of each client to pay for each facility
     std::unique_ptr<edgetup[]> edges_;
     // list of all edges, sorted by cost
-    std::unique_ptr<shared::packed_pair<FT, IT>[]> client_v_;
+    std::unique_ptr<payment_t[]> client_v_;
     // List of coverage by each facility
 
     blz::DV<FT> facility_cost_;
@@ -78,10 +82,13 @@ private:
     std::unique_ptr<std::vector<IT>[]> clients_cpy_;
 
     // List of temporarily open facilities
-    std::unique_ptr<std::vector<IT>[]> open_facilities_;
+    std::unique_ptr<std::vector<IT>[]> working_open_facilities_;
 
-    // List of temporarily open facilities
-    std::vector<std::vector<IT>> final_open_facilities_;
+    // List of final open facilities
+    std::vector<IT> final_open_facilities_;
+
+    // List of final facility assignments
+    std::vector<std::vector<IT>> final_open_facility_assignments_;
 
     // Time when contributions are made to a facility
     std::unique_ptr<FT[]> contribution_time_;
@@ -108,7 +115,7 @@ private:
             if(next_fac.first > 0) {
                 time_ = next_fac.first;
             }
-            n_open_clients_ = update_facilities(next_fac.second, open_facilities_[next_fac.second], time_);
+            n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time_);
             if(n_open_clients_ == 0) break;
         }
     }
@@ -127,12 +134,12 @@ private:
             if(!open_client(assigned_facilities)) continue;
 
             for(const IT fid: assigned_facilities) {
-                auto &open_fac = open_facilities_[fid];
+                auto &open_fac = working_open_facilities_[fid];
                 if(open_client(open_fac) && fid != gfid) {
                     auto &fac_pay = pay_schedule_[fid];
                     if(fac_pay.first != PAID_IN_FULL) {
-                        if(w_(fid, cid) != PAID_IN_FULL) {
-                            FT nclients_fid = open_facilities_[fid].size();
+                        if(client_w_(fid, cid) != PAID_IN_FULL) {
+                            FT nclients_fid = working_open_facilities_[fid].size();
                             FT update_pay = nclients_fid * (cost - contribution_time_[fid]);
                             FT oldv = fac_pay.first;
                             FT current_contrib = fac_contributions_[fid] + update_pay;
@@ -141,8 +148,8 @@ private:
                             contribution_time_[fid] = cost;
                             FT remaining_time;
                             FT opening_cost = get_fac_cost(fid);
-                            if(!open_facilities_[fid].empty()) {
-                                auto &ofr = open_facilities_[fid];
+                            if(!working_open_facilities_[fid].empty()) {
+                                auto &ofr = working_open_facilities_[fid];
                                 if(std::find(ofr.begin(), ofr.end(), cid) != ofr.end()) {
                                     remaining_time = ofr.size() > 1 ? (opening_cost - current_contrib) / (ofr.size() - 1)
                                                                     :  opening_cost - cost + EPS;
@@ -179,7 +186,70 @@ private:
     }
 
     void cluster_results() {
-        throw std::runtime_error("Not implemented");
+        std::vector<IT> temporarily_open;
+        for(size_t i = 0; i < pay_schedule_.size(); ++i) {
+            if(pay_schedule_[i].first == PAID_IN_FULL)
+                temporarily_open.push_back(i);
+        }
+        std::vector<std::vector<IT>> open_facility_assignments;
+        std::vector<IT> open_facilities;
+        shared::flat_hash_set<IT> assigned_clients;
+        if(!distmatp_) {
+            throw std::runtime_error("distmatp must be set");
+        }
+        const MatrixType &distmat(*distmatp_);
+        // Close temporary facilities
+        while(!temporarily_open.empty()) {
+            IT cfid = temporarily_open.back();
+            temporarily_open.pop_back();
+            std::vector<IT> facility_assignment;
+            for(IT cid = 0; cid < ncities_; ++cid) {
+                payment_t client_data = client_v_[cid];
+                IT witness = client_data.second; // WITNESS ME
+                FT witness_cost = client_data.first - client_w_(witness, cid) + distmat(witness, cid);
+                FT current_cost = client_data.first - client_w_(cfid, cid) + distmat(cfid, cid);
+                if(current_cost <= witness_cost && client_w_(cfid, cid) != PAID_IN_FULL) {
+                    assigned_clients.insert(cid);
+                    facility_assignment.push_back(cid);
+                    std::vector<IT> facilities_to_rm;
+                    const FT cwc = client_w_(cfid, cid);
+                    if(cwc > 0 && cwc != PAID_IN_FULL) {
+                        for(const auto f2rm: temporarily_open) {
+                            FT c2c = client_w_(f2rm, cid);
+                            if(c2c > 0 && c2c != PAID_IN_FULL) {
+                                facilities_to_rm.push_back(f2rm);
+                            }
+                        }
+                    } // TODO: speed up this removal
+                    for(const auto f2rm: facilities_to_rm) {
+                        auto it = std::find(temporarily_open.begin(), temporarily_open.end(), f2rm);
+                        if(it != temporarily_open.end()) {
+                            std::swap(*it, temporarily_open.back());
+                            temporarily_open.pop_back();
+                        } else throw std::runtime_error("Error in facility removal");
+                    }
+                }
+            }
+            if(facility_assignment.size()) {
+                open_facility_assignments.push_back(std::move(facility_assignment));
+                open_facilities.push_back(cfid);
+            }
+        }
+
+        // Assign all unassigned
+        for(IT cid = 0; cid < ncities_; ++cid) {
+            if(assigned_clients.find(cid) != assigned_clients.end()) continue;
+            // cout << "Assigning client " << j << endl;
+            IT best_fid = 0;
+            FT mindist = distmat(open_facilities.front(), cid), cdist;
+            for(size_t i = 1; i < open_facilities.size(); ++i) {
+                if((cdist = distmat(open_facilities[i], cid)) < mindist)
+                    mindist = cdist, best_fid = i;
+            }
+            open_facility_assignments[best_fid].push_back(cid);
+        }
+        final_open_facilities_ = std::move(open_facilities);
+        final_open_facility_assignments_ = std::move(open_facility_assignments);
     }
 
     IT service_tight_edge(edgetup edge) {
@@ -191,19 +261,19 @@ private:
         //Set when cid starts contributing to fid
         const bool open_cid = open_client(clients_cpy_[cid]);
         if(open_cid) {
-            w_(fid, cid) = cost;
+            client_w_(fid, cid) = cost;
         }
 
         //
         if(pay_schedule_.__access(fid).first == PAID_IN_FULL) {
-            open_facilities_[fid].push_back(cid);
+            working_open_facilities_[fid].push_back(cid);
             updated_clients.push_back(cid);
             n_open_clients_ = update_facilities(fid, std::vector<IT>{cid}, cost);
         } else {
             if(open_cid) {
                 clients_cpy_[cid].push_back(fid);
             }
-            auto &fac_clients = open_facilities_[fid];
+            auto &fac_clients = working_open_facilities_[fid];
             const FT current_facility_cost = get_fac_cost(fid);
             if(!open_client(fac_clients)) {
                 std::replace(fac_clients.begin(), fac_clients.end(), EMPTY, cid);
@@ -217,13 +287,13 @@ private:
                 fac_contributions_[fid] += update_client_pay;
                 FT current_pay = fac_contributions_[fid];
                 if(open_cid) {
-                    open_facilities_[fid].push_back(cid);
+                    working_open_facilities_[fid].push_back(cid);
                     ++nclients_fid;
                 }
                 contribution_time_[fid] = cost;
                 if(current_pay >= current_facility_cost) {
                     // Open facility
-                    n_open_clients_ = update_facilities(fid, open_facilities_[fid], cost);
+                    n_open_clients_ = update_facilities(fid, working_open_facilities_[fid], cost);
                 } else {
                     FT oldc = pay_schedule_[fid].first;
                     FT remaining_time = fac_clients.size() ? (current_facility_cost - current_pay) / nclients_fid
@@ -246,27 +316,28 @@ private:
     }
 
 public:
-    JVSolver(): nedges_(0), ncities_(0), nfac_(0) {
+    JVSolver(): distmatp_(nullptr), nedges_(0), ncities_(0), nfac_(0) {
     }
 
-    template<typename Mat, typename CostType>
-    void set(const Mat &mat, const CostType &cost) {
+    template<typename CostType>
+    void set(const MatrixType &mat, const CostType &cost) {
+        distmatp_ = &mat;
         // Set facility cost (either a single value or one per facility)
         set_fac_cost(cost);
 
         // Initialize W and edge vector
-        w_.resize(mat.rows(), mat.columns());
-        if(nedges_ < w_.rows() * w_.columns()) {
-            nedges_ = w_.rows() * w_.columns();
+        client_w_.resize(mat.rows(), mat.columns());
+        if(nedges_ < client_w_.rows() * client_w_.columns()) {
+            nedges_ = client_w_.rows() * client_w_.columns();
             edges_.reset(new edgetup[nedges_]);
         }
         // Set edge values, then sort by cost
         OMP_PFOR
-        for(size_t i = 0; i < w_.rows(); ++i) {
-            edgetup *const eptr = &edges_[i * w_.columns()];
+        for(size_t i = 0; i < client_w_.rows(); ++i) {
+            edgetup *const eptr = &edges_[i * client_w_.columns()];
             auto matptr = row(mat, i, blaze::unchecked);
             _Pragma("GCC unroll 8")
-            for(size_t j = 0; j < w_.columns(); ++j) {
+            for(size_t j = 0; j < client_w_.columns(); ++j) {
                 eptr[j] = {matptr[j], i, j};
             }
         }
@@ -275,26 +346,26 @@ public:
         });
 
         // Initialize V, T, and S
-        if(ncities_ < w_.columns()) {
-            client_v_.reset(new shared::packed_pair<FT, IT>[w_.columns()]);
-            clients_cpy_.reset(new std::vector<IT>[w_.columns()]);
+        if(ncities_ < client_w_.columns()) {
+            client_v_.reset(new shared::packed_pair<FT, IT>[client_w_.columns()]);
+            clients_cpy_.reset(new std::vector<IT>[client_w_.columns()]);
         } else {
-            for(size_t i = 0; i < w_.columns(); ++i) clients_cpy_[i].clear();
+            for(size_t i = 0; i < client_w_.columns(); ++i) clients_cpy_[i].clear();
         }
-        std::fill(client_v_.get(), &client_v_[w_.columns()], shared::packed_pair<FT, IT>{-1.,EMPTY});
-        if(nfac_ < w_.rows()) {
-            open_facilities_.reset(new std::vector<IT>[w_.rows()]);
-            nfac_ = w_.rows();
+        std::fill(client_v_.get(), &client_v_[client_w_.columns()], shared::packed_pair<FT, IT>{-1.,EMPTY});
+        if(nfac_ < client_w_.rows()) {
+            working_open_facilities_.reset(new std::vector<IT>[client_w_.rows()]);
+            nfac_ = client_w_.rows();
             contribution_time_.reset(new FT[nfac_]());
             fac_contributions_.reset(new FT[nfac_]());
         } else {
             for(size_t i = 0; i < nfac_; ++i)
-                open_facilities_[i] = {EMPTY};
+                working_open_facilities_[i] = {EMPTY};
             std::memset(contribution_time_.get(), 0, sizeof(contribution_time_[0]) * nfac_);
             std::memset(fac_contributions_.get(), 0, sizeof(fac_contributions_[0]) * nfac_);
         }
-        ncities_ = w_.columns();
-        nfac_ = w_.rows();
+        ncities_ = client_w_.columns();
+        nfac_ = client_w_.rows();
         n_open_clients_ = ncities_;
         pay_schedule_.resize(nfac_);
         for(size_t i = 0; i < nfac_; ++i) {
@@ -332,7 +403,7 @@ public:
                 time_ = current_edge_cost;
                 ++edge_idx;
             } else {
-                n_open_clients_ = update_facilities(next_fac.second, open_facilities_[next_fac.second], time_);
+                n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time_);
                 time_ = next_fac.first;
             }
         }
@@ -344,7 +415,7 @@ public:
 
     template<typename VT, bool TF>
     void set_fac_cost(const blaze::Vector<VT, TF> &val) {
-        if((~val).size() != w_.rows()) throw std::invalid_argument("Val has wrong number of rows");
+        if((~val).size() != client_w_.rows()) throw std::invalid_argument("Val has wrong number of rows");
         facility_cost_.resize((~val).size());
         facility_cost_ = (~val);
     }
@@ -354,7 +425,7 @@ public:
         facility_cost_[0] = val;
     }
     size_t nedges() const {
-        return w_.rows() * w_.columns();
+        return client_w_.rows() * client_w_.columns();
     }
 };
 

@@ -7,7 +7,7 @@ int main() {
         fgc::Graph<boost::undirectedS, float> g;
         std::vector<typename fgc::Graph<boost::undirectedS, float>::vertex_descriptor> vxs(g.vertices().begin(), g.vertices().end());
         fgc::jain_vazirani_kmedian(g, vxs, 15);
-        fgc::jv2::JVSolver<float, uint32_t> jvs;
+        fgc::jv::JVSolver<blaze::DynamicMatrix<float>, float, uint32_t> jvs;
         jvs.run();
     }
     std::fprintf(stderr, "Getting here only checks compilation, not correctness, of JV draft.\n");

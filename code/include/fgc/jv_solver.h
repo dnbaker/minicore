@@ -1,7 +1,6 @@
 #ifndef JV_SOLVER_H__
 #define JV_SOLVER_H__
 #include "blaze_adaptor.h"
-#include "pdqsort/pdqsort.h"
 #include <stdexcept>
 #include <chrono>
 
@@ -78,7 +77,7 @@ struct NaiveJVSolver {
                 *p++ = {r[j], i, j};
             }
         }
-        pdqsort(&edges_[0], &edges_[edges_.size()], [](const auto x, const auto y) {return x.cost() < y.cost();});
+        shared::sort(&edges_[0], &edges_[edges_.size()], [](const auto x, const auto y) {return x.cost() < y.cost();});
         tempopen_.clear();
         for(size_t i = 0; i < mat.rows(); ++i) nottempopen_.insert(i);
         auto stop = std::chrono::high_resolution_clock::now();
