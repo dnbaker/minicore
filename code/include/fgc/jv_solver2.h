@@ -35,7 +35,7 @@ struct JVSolver {
     using payment_t = shared::packed_pair<FT, IT>;
     struct pay_compare_t {
         bool operator()(const payment_t lhs, const payment_t rhs) const {
-            return lhs.first > rhs.first;
+            return lhs.first < rhs.first || lhs.second < rhs.second;
         }
     };
     struct payment_queue: public std::set<payment_t, pay_compare_t> {
@@ -54,7 +54,8 @@ struct JVSolver {
             // Remove old payment, add new payment
             payment_t tmp = {oldc, idx};
             auto it = this->find(tmp);
-            if(it == this->end()) throw 1;
+            if(unlikely(it == this->end()))
+                throw std::runtime_error("Payment missing from structure");
             this->erase(it);
             tmp.first = newc;
             this->insert(tmp);
@@ -113,11 +114,60 @@ private:
     }
 
     // TODO: consider replacing with blaze::SmallArray to avoid heap allocation/access
-    IT update_facilities(IT f_id, const std::vector<IT> &update_facilities, FT cost) {
+    IT update_facilities(IT gfid, const std::vector<IT> &update_facilities, const FT cost) {
         std::fprintf(stderr, "About to update facility %zu with update_facilities of size %zu with cost %g\n",
-                     size_t(f_id), update_facilities.size(), cost);
-        throw std::runtime_error("Not implemented");
-        return 0;
+                     size_t(gfid), update_facilities.size(), cost);
+        if(!open_client(update_facilities)) {
+            return n_open_clients_;
+        }
+        for(const IT cid: update_facilities) {
+            if(cid == EMPTY) break;
+
+            auto &assigned_facilities = clients_cpy_[cid];
+            if(!open_client(assigned_facilities)) continue;
+
+            for(const IT fid: assigned_facilities) {
+                auto &open_fac = open_facilities_[fid];
+                if(open_client(open_fac) && fid != gfid) {
+                    auto &fac_pay = pay_schedule_[fid];
+                    if(fac_pay.first != PAID_IN_FULL) {
+                        if(w_(fid, cid) != PAID_IN_FULL) {
+                            FT nclients_fid = open_facilities_[fid].size();
+                            FT update_pay = nclients_fid * (cost - contribution_time_[fid]);
+                            FT oldv = fac_pay.first;
+                            FT current_contrib = fac_contributions_[fid] + update_pay;
+                            fac_contributions_[fid] = current_contrib;
+                            fac_pay.first -= current_contrib;
+                            contribution_time_[fid] = cost;
+                            FT remaining_time;
+                            FT opening_cost = get_fac_cost(fid);
+                            if(!open_facilities_[fid].empty()) {
+                                auto &ofr = open_facilities_[fid];
+                                if(std::find(ofr.begin(), ofr.end(), cid) != ofr.end()) {
+                                    remaining_time = ofr.size() > 1 ? (opening_cost - current_contrib) / (ofr.size() - 1)
+                                                                    :  opening_cost - cost + EPS;
+                                } else {
+                                    remaining_time = (opening_cost - current_contrib) / ofr.size();
+                                }
+                            } else {
+                                remaining_time = opening_cost - cost + EPS;
+                            }
+                            FT newv = cost + remaining_time;
+                            fac_pay.first = newv;
+                            next_paid_.update(oldv, newv, fid);
+                        }
+                    }
+                }
+            }
+            clients_cpy_[cid].push_back(EMPTY);
+            client_v_[cid] = {cost, gfid};
+            --n_open_clients_;
+        }
+        if(FT oldv = pay_schedule_[gfid].first; oldv != PAID_IN_FULL) {
+            next_paid_.erase(payment_t{oldv, gfid});
+            pay_schedule_[gfid].first = PAID_IN_FULL;
+        }
+        return n_open_clients_;
     }
 
     FT get_fac_cost(size_t ind) const {
