@@ -41,8 +41,8 @@ int main() {
             dists(i, j) = blz::l2Dist(row(facilities, i), row(points, j));
     fgc::NaiveJVSolver<float> njv(dists.rows(), dists.columns());
     njv.setup(dists);
-    auto res = njv.ufl(dists, 1.5);
+    auto res = njv.ufl(dists, 5500);
     std::fprintf(stderr, "res size: %zu\n", res.size());
-    auto kmedsol = njv.kmedian(dists, k);
+    auto kmedsol = njv.kmedian(dists, k, 50, 1500);
     assert(kmedsol.size() == k);
 }

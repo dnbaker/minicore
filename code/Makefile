@@ -82,6 +82,7 @@ CXXFLAGS += $(LDFLAGS)
 printlibs:
 	echo $(LIBPATHS)
 
+
 graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 

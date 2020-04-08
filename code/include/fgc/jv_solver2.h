@@ -1,26 +1,11 @@
 #ifndef JV_SOLVER2_H__
 #define JV_SOLVER2_H__
 #include "blaze_adaptor.h"
+#include "jv_util.h"
 
 namespace fgc {
+
 namespace jv {
-struct edgetup: public std::tuple<double, uint32_t, uint32_t> {
-    // Consists of:
-    // 1. Cost of edge
-    // 2. Facility index
-    // 3 Distance index.
-    // Can be easily accessed with these member functions:
-    template<typename...A> edgetup(A &&...args): std::tuple<double, uint32_t, uint32_t>(std::forward<A>(args)...) {}
-    auto cost() const {return std::get<0>(*this);}
-    auto &cost() {return std::get<0>(*this);}
-    auto fi() const {return std::get<1>(*this);}
-    auto &fi() {return std::get<1>(*this);}
-    auto di() const {return std::get<2>(*this);}
-    auto &di() {return std::get<2>(*this);}
-    auto sprintf(char *buf) const {
-        return std::sprintf(buf, "%f:%u:%u", cost(), fi(), di());
-    }
-};
 
 #ifndef NDEBUG
 #define __access operator[]
@@ -29,13 +14,19 @@ struct edgetup: public std::tuple<double, uint32_t, uint32_t> {
 #endif
 
 
-template<typename MatrixType, typename FT=float, typename IT=uint32_t>
+template<typename MatrixType, typename FT=blaze::ElementType_t<MatrixType>, typename IT=uint32_t>
 struct JVSolver {
 
     static_assert(std::is_floating_point<FT>::value, "FT must be floating-point");
     static_assert(std::is_integral<IT>::value, "IT must be integral");
 
-    using payment_t = shared::packed_pair<FT, IT>;
+#if 1
+    using payment_t = packed::pair<FT, IT>;
+#else
+    using payment_t = std::pair<FT, IT>;
+#endif
+    using edge_type = jvutil::edgetup<FT, IT>;
+
 private:
     struct pay_compare_t {
         bool operator()(const payment_t lhs, const payment_t rhs) const {
@@ -46,7 +37,12 @@ private:
         void push(payment_t payment) {
             this->insert(payment);
         }
+        template<typename IterT>
+        void push(IterT start, IterT end) {
+            this->insert(start, end);
+        }
         auto top() const {
+            if(this->empty()) throw std::runtime_error("Attempting to access an empty structure");
             return *this->begin();
         }
         auto pop() {
@@ -55,31 +51,41 @@ private:
             return ret;
         }
         void update(FT oldc, FT newc, IT idx) {
+#if !NDEBUG
+            //std::fprintf(stderr, "Removing %g and replacing it with %g for idx = %u. Size at start: %zu\n",
+            //             oldc, newc, unsigned(idx), this->size());
+            assert(oldc != PAID_IN_FULL);
+            assert(newc != PAID_IN_FULL);
+            //if(oldc == PAID_IN_FULL) std::fprintf(stderr, "Old value was PAID_IN_FULL\n");
+            //if(newc == PAID_IN_FULL) std::fprintf(stderr, "New value was PAID_IN_FULL\n");
+#endif
             // Remove old payment, add new payment
             payment_t tmp = {oldc, idx};
             auto it = this->find(tmp);
-            if(unlikely(it == this->end()))
-                throw std::runtime_error("Payment missing from structure");
-            this->erase(it);
-            tmp.first = newc;
-            this->insert(tmp);
+            if(it != this->end()) {
+                this->erase(it);
+                tmp.first = newc;
+                assert(this->find(tmp) == this->end() || !std::fprintf(stderr, "Just removed %g:%u, and just found it here with value %g:%u\n", tmp.first, tmp.second, this->find(tmp)->first, this->find(tmp)->second));
+                this->insert(tmp);
+            }
         }
     };
 
     const MatrixType *distmatp_;
     blz::DM<FT> client_w_;
     // W matrix
-    // Willing of each client to pay for each facility
-    std::unique_ptr<edgetup[]> edges_;
+    // Willingness of each client to pay for each facility
+    std::unique_ptr<edge_type[]> edges_;
     // list of all edges, sorted by cost
-    std::unique_ptr<payment_t[]> client_v_;
+
+    std::vector<payment_t> client_v_;
     // List of coverage by each facility
 
     blz::DV<FT> facility_cost_;
     // Costs for facilities. Of size 1 if uniform, of size # fac otherwise.
 
     // List of facilities assigned to
-    std::unique_ptr<std::vector<IT>[]> clients_cpy_;
+    std::vector<std::vector<IT>> clients_cpy_;
 
     // List of temporarily open facilities
     std::unique_ptr<std::vector<IT>[]> working_open_facilities_;
@@ -111,7 +117,7 @@ private:
     // Private code
     void final_phase1_loop() {
         while(!next_paid_.empty()) {
-            shared::packed_pair<FT, IT> next_fac = next_facility();
+            payment_t next_fac = next_facility();
             if(next_fac.first > 0) {
                 time_ = next_fac.first;
             }
@@ -122,8 +128,10 @@ private:
 
     // TODO: consider replacing with blaze::SmallArray to avoid heap allocation/access
     IT update_facilities(IT gfid, const std::vector<IT> &update_facilities, const FT cost) {
+#if VERBOSE_AF
         std::fprintf(stderr, "About to update facility %zu with update_facilities of size %zu with cost %g\n",
                      size_t(gfid), update_facilities.size(), cost);
+#endif
         if(!open_client(update_facilities)) {
             return n_open_clients_;
         }
@@ -161,6 +169,7 @@ private:
                             }
                             FT newv = cost + remaining_time;
                             fac_pay.first = newv;
+                            //std::fprintf(stderr, "About to update in update_facilities. fid = %u. cid = %u. Under gfid %u\n", fid, cid, gfid);
                             next_paid_.update(oldv, newv, fid);
                         }
                     }
@@ -250,39 +259,51 @@ private:
         }
         final_open_facilities_ = std::move(open_facilities);
         final_open_facility_assignments_ = std::move(open_facility_assignments);
+        std::fprintf(stderr, "%zu open facilities\n", final_open_facilities_.size());
     }
 
-    IT service_tight_edge(edgetup edge) {
+    IT service_tight_edge(edge_type edge) {
+        //std::fprintf(stderr, "About to service tight edge\n");
         payment_t oldp, newp;
         IT fid = edge.fi(), cid = edge.di(); // Facility id, city id
         auto cost = edge.cost();
         std::vector<IT> updated_clients;
+        //std::fprintf(stderr, "edge cost: %g\n", cost);
 
         //Set when cid starts contributing to fid
         const bool open_cid = open_client(clients_cpy_[cid]);
+        //std::fprintf(stderr, "open_cid? %d\n", open_cid);
         if(open_cid) {
             client_w_(fid, cid) = cost;
         }
 
         //
         if(pay_schedule_.__access(fid).first == PAID_IN_FULL) {
+            //std::fprintf(stderr, "Facility fid = %u is paid in full\n", fid);
             working_open_facilities_[fid].push_back(cid);
             updated_clients.push_back(cid);
             n_open_clients_ = update_facilities(fid, std::vector<IT>{cid}, cost);
         } else {
             if(open_cid) {
                 clients_cpy_[cid].push_back(fid);
+                //std::fprintf(stderr, "City %d now has facility %u as its newest with total number of facilities %zu\n", cid, fid, clients_cpy_[cid].size());
             }
             auto &fac_clients = working_open_facilities_[fid];
             const FT current_facility_cost = get_fac_cost(fid);
             if(!open_client(fac_clients)) {
+                //std::fprintf(stderr, "No current contributing clients. Now add empty to fac clients.\n");
+                if(fac_clients.size() != 1) throw std::runtime_error("Testing if this assumption is true");
+#if 0
+                fac_clients[0] = cid;
+#else
                 std::replace(fac_clients.begin(), fac_clients.end(), EMPTY, cid);
                 contribution_time_[fid] = cost;
+#endif
                 next_paid_.update(pay_schedule_[fid].first, current_facility_cost, fid);
             } else {
                 // facility already has some clients
                 size_t nclients_fid = fac_clients.size();
-                assert(nclients_fid);
+                //assert(nclients_fid);
                 FT update_client_pay = nclients_fid * (cost - contribution_time_[fid]);
                 fac_contributions_[fid] += update_client_pay;
                 FT current_pay = fac_contributions_[fid];
@@ -296,8 +317,8 @@ private:
                     n_open_clients_ = update_facilities(fid, working_open_facilities_[fid], cost);
                 } else {
                     FT oldc = pay_schedule_[fid].first;
-                    FT remaining_time = fac_clients.size() ? (current_facility_cost - current_pay) / nclients_fid
-                                                           : current_facility_cost - cost + EPS;
+                    FT remaining_time = nclients_fid ? (current_facility_cost - current_pay) / nclients_fid
+                                                     : current_facility_cost - cost + EPS;
                     FT newc = cost + remaining_time;
                     pay_schedule_[fid].first = newc;
                     next_paid_.update(oldc, newc, fid);
@@ -311,48 +332,111 @@ private:
     static constexpr FT PAID_IN_FULL = std::numeric_limits<FT>::max();
     static constexpr FT EPS = 1e-10;
 
-    INLINE static constexpr bool open_client(const std::vector<IT> &client) {
-        return client.empty() || std::find(client.begin(), client.end(), EMPTY) == client.end();
+    INLINE static bool open_client(const std::vector<IT> &client) {
+        const bool ret = client.empty() || std::find(client.begin(), client.end(), EMPTY) == client.end();
+#ifndef NDEBUG
+        {
+            bool oret = !client.empty() && std::find(client.begin(), client.end(), EMPTY) != client.end()
+                        ? false: true;
+            assert(oret == ret);
+        }
+#endif
+        return ret;
     }
+    
 
 public:
     JVSolver(): distmatp_(nullptr), nedges_(0), ncities_(0), nfac_(0) {
     }
 
     template<typename CostType>
-    void set(const MatrixType &mat, const CostType &cost) {
+    JVSolver(const MatrixType &mat, const CostType &cost): JVSolver() {
+        setup(mat, cost);
+    }
+    JVSolver(const MatrixType &mat): JVSolver(mat, blz::max(mat)) {
+    }
+
+    template<typename CostType>
+    void reset_cost(const CostType &cost) {
+        set_fac_cost(cost);
+        client_w_ = static_cast<FT>(0);
+        for(size_t i = 0; i < client_w_.columns(); ++i) clients_cpy_[i].clear();
+            for(size_t i = 0; i < nfac_; ++i)
+                working_open_facilities_[i] = {EMPTY};
+        std::memset(contribution_time_.get(), 0, sizeof(contribution_time_[0]) * nfac_);
+        std::memset(fac_contributions_.get(), 0, sizeof(fac_contributions_[0]) * nfac_);
+        n_open_clients_ = ncities_;
+        pay_schedule_.resize(nfac_);
+        for(size_t i = 0; i < nfac_; ++i) {
+            pay_schedule_[i] = {get_fac_cost(i), i};
+        }
+        next_paid_.clear();
+        next_paid_.push(pay_schedule_.begin(), pay_schedule_.end());
+        assert(next_paid_.find({get_fac_cost(0), 0}) != next_paid_.end());
+        assert(next_paid_.size() == pay_schedule_.size());
+    }
+
+    template<typename CostType>
+    void setup(const MatrixType &mat, const CostType &cost) {
+        std::fprintf(stderr, "starting setup\n");
         distmatp_ = &mat;
         // Set facility cost (either a single value or one per facility)
+        std::fprintf(stderr, "setting facility cost\n");
         set_fac_cost(cost);
 
         // Initialize W and edge vector
+        std::fprintf(stderr, "resizing client w\n");
         client_w_.resize(mat.rows(), mat.columns());
+        std::fprintf(stderr, "setting client w\n");
+        client_w_ = static_cast<FT>(0);
         if(nedges_ < client_w_.rows() * client_w_.columns()) {
-            nedges_ = client_w_.rows() * client_w_.columns();
-            edges_.reset(new edgetup[nedges_]);
+            edges_.reset(new edge_type[client_w_.rows() * client_w_.columns()]);
         }
+        nedges_ = client_w_.rows() * client_w_.columns();
         // Set edge values, then sort by cost
+        edge_type *const total_eptr = &edges_[nedges_];
         OMP_PFOR
         for(size_t i = 0; i < client_w_.rows(); ++i) {
-            edgetup *const eptr = &edges_[i * client_w_.columns()];
+            edge_type *const eptr = &edges_[i * client_w_.columns()];
             auto matptr = row(mat, i, blaze::unchecked);
-            _Pragma("GCC unroll 8")
-            for(size_t j = 0; j < client_w_.columns(); ++j) {
-                eptr[j] = {matptr[j], i, j};
+            const size_t nc = client_w_.columns();
+            size_t j = 0;
+#if 0
+            do {
+                eptr[j] =     {matptr[j], i, j};
+                eptr[j + 1] = {matptr[j + 1], i, j + 1};
+                eptr[j + 2] = {matptr[j + 2], i, j + 2};
+                eptr[j + 3] = {matptr[j + 3], i, j + 3};
+                eptr[j + 4] = {matptr[j + 4], i, j + 4};
+                eptr[j + 5] = {matptr[j + 5], i, j + 5};
+                eptr[j + 6] = {matptr[j + 6], i, j + 6};
+                eptr[j + 7] = {matptr[j + 7], i, j + 7};
+                j += 8;
+            } while(j + 8 <= nc);
+            assert(j <= matptr.size()); 
+#endif
+            while(j < nc) {
+                assert(j < matptr.size());
+                eptr[j] = {matptr[j], i, j}, ++j;
             }
         }
-        shared::sort(edges_.get(), edges_.get() + nedges_, [](edgetup x, edgetup y) {
+        shared::sort(edges_.get(), edges_.get() + nedges_, [](edge_type x, edge_type y) {
             return x.cost() < y.cost();
         });
+#if 0
+        //for(const auto edge: shared::make_dumbrange(edges_.get(), edges_.get() + nedges_)) edge.printf();
+#endif
 
         // Initialize V, T, and S
         if(ncities_ < client_w_.columns()) {
-            client_v_.reset(new shared::packed_pair<FT, IT>[client_w_.columns()]);
-            clients_cpy_.reset(new std::vector<IT>[client_w_.columns()]);
+            client_v_.clear();
+            client_v_.resize(client_w_.columns());
+            clients_cpy_.clear();
+            clients_cpy_.resize(client_w_.columns());
         } else {
             for(size_t i = 0; i < client_w_.columns(); ++i) clients_cpy_[i].clear();
         }
-        std::fill(client_v_.get(), &client_v_[client_w_.columns()], shared::packed_pair<FT, IT>{-1.,EMPTY});
+        std::fill(client_v_.data(), &client_v_[client_w_.columns()], payment_t{PAID_IN_FULL, EMPTY});
         if(nfac_ < client_w_.rows()) {
             working_open_facilities_.reset(new std::vector<IT>[client_w_.rows()]);
             nfac_ = client_w_.rows();
@@ -371,7 +455,10 @@ public:
         for(size_t i = 0; i < nfac_; ++i) {
             pay_schedule_[i] = {get_fac_cost(i), i};
         }
-        for(const auto payment: pay_schedule_) next_paid_.push(payment);
+        next_paid_.clear();
+        next_paid_.push(pay_schedule_.begin(), pay_schedule_.end());
+        assert(next_paid_.find({get_fac_cost(0), 0}) != next_paid_.end());
+        assert(next_paid_.size() == pay_schedule_.size());
     }
 
     payment_t next_facility() {
@@ -387,16 +474,18 @@ public:
         time_ = 0.;
         while(n_open_clients_) {
             if(edge_idx == nedges_) {
+                std::fprintf(stderr, "All edges processed, now starting final loop\n");
                 final_phase1_loop();
                 break;
             }
-            edgetup current_edge = edges_[edge_idx];
+            edge_type current_edge = edges_[edge_idx];
             auto current_edge_cost = current_edge.cost();
-            shared::packed_pair<FT, IT> next_fac;
+            payment_t next_fac;
             if(!next_paid_.empty())
                 next_fac = next_facility();
-            else
-                next_fac = {current_edge_cost + EPS, 0};
+            else {
+                next_fac = {current_edge_cost + 1e10, 0};
+            }
 
             if(current_edge_cost <= next_fac.first) {
                 n_open_clients_ = service_tight_edge(current_edge);
@@ -416,6 +505,7 @@ public:
     template<typename VT, bool TF>
     void set_fac_cost(const blaze::Vector<VT, TF> &val) {
         if((~val).size() != client_w_.rows()) throw std::invalid_argument("Val has wrong number of rows");
+        std::cerr << ~val << '\n';
         facility_cost_.resize((~val).size());
         facility_cost_ = (~val);
     }
@@ -423,13 +513,28 @@ public:
     void set_fac_cost(CostType val) {
         facility_cost_.resize(1);
         facility_cost_[0] = val;
+        std::fprintf(stderr, "facility cost: %g\n", val);
     }
     size_t nedges() const {
         return client_w_.rows() * client_w_.columns();
     }
+    FT calculate_solution_cost(bool including_costs=true) {
+        FT sum = 0.;
+        for(size_t i = 0; i < final_open_facilities_.size(); ++i) {
+            const auto fid = final_open_facilities_[i];
+            const auto &clients = final_open_facility_assignments_[i];
+            for(const auto cid: clients) {
+                sum += (*distmatp_)(fid, cid);
+            }
+            if(including_costs) {
+                sum += get_fac_cost(fid);
+            }
+        }
+        return sum;
+    }
 };
 
-} // namespace jv2
+} // namespace jv
 
 } // namespace fgc
 

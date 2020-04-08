@@ -3,29 +3,9 @@
 #include "blaze_adaptor.h"
 #include <stdexcept>
 #include <chrono>
+#include "jv_util.h"
 
 namespace fgc {
-
-struct edgetup: public std::tuple<double, uint32_t, uint32_t> {
-    // Consists of:
-    // 1. Cost of edge
-    // 2. Facility index
-    // 3 Distance index.
-    // Can be easily accessed with these member functions:
-    template<typename...A> edgetup(A &&...args): std::tuple<double, uint32_t, uint32_t>(std::forward<A>(args)...) {}
-    auto cost() const {return std::get<0>(*this);}
-    auto &cost() {return std::get<0>(*this);}
-    auto fi() const {return std::get<1>(*this);}
-    auto &fi() {return std::get<1>(*this);}
-    auto di() const {return std::get<2>(*this);}
-    auto &di() {return std::get<2>(*this);}
-    auto sprintf(char *buf) const {
-        return std::sprintf(buf, "%f:%u:%u", cost(), fi(), di());
-    }
-    auto print(std::FILE *ofp=stderr) {
-        return std::fprintf(ofp, "%f:%u:%u", cost(), fi(), di());
-    }
-};
 
 /*
  * Note:
@@ -38,10 +18,11 @@ struct NaiveJVSolver {
     // Complexity: something like F^2N + N^2F
     // Much slower than it should be
     using DefIT = unsigned int;
+    using edge_type = jvutil::edgetup<FT, DefIT>;
     blz::DM<FT> w_;
     blz::DV<FT> v_;
     blz::DV<uint32_t> numconnected_, numtight_;
-    std::vector<edgetup> edges_;
+    std::vector<edge_type> edges_;
     size_t edgeindex_ = 0;
     double facility_cost_, maxalph_;
     std::unordered_set<uint32_t> S_, tempopen_, nottempopen_;
@@ -137,9 +118,9 @@ struct NaiveJVSolver {
         return phase2<MatType, IType>();
     }
     template<typename MatType, typename IType=DefIT>
-    std::vector<IType> kmedian(const MatType &mat, unsigned k, unsigned maxrounds=500) {
+    std::vector<IType> kmedian(const MatType &mat, unsigned k, unsigned maxrounds=500, double maxcost_starting=0.) {
         setup(mat);
-        double maxcost = mat.columns() * max(mat);
+        double maxcost = maxcost_starting ? maxcost_starting: double(mat.columns() * max(mat));
         if(std::isinf(maxcost)) {
             maxcost = std::numeric_limits<double>::min();
             for(const auto r: blz::rowiterator(mat)) {
@@ -255,12 +236,6 @@ struct NaiveJVSolver {
     }
 };
 
-struct Correct {
-    //Correct = 1; // Fail compilation so that the branch fails until it is ready.
-};
-#if 0
-TODO Adapt method from https://raw.githubusercontent.com/nathan-cordner/facility-location/master/fl-cpp/facility_location.C
-#endif
 
 } // namespace fgc
 
