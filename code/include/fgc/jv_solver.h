@@ -48,10 +48,10 @@ private:
             return ret;
         }
         void update(FT oldc, FT newc, IT idx) {
+            // Remove old payment, add new payment
             if(oldc == newc) return;
             assert(oldc != PAID_IN_FULL);
             assert(newc != PAID_IN_FULL);
-            // Remove old payment, add new payment
             payment_t tmp = {oldc, idx};
             auto it = this->find(tmp);
             if(it != this->end()) {
@@ -334,7 +334,7 @@ private:
     INLINE static bool open_client(const std::vector<IT> &client) {
         return client.empty() || std::find(client.begin(), client.end(), EMPTY) == client.end();
     }
-    
+
 
 public:
     JVSolver(): distmatp_(nullptr), nedges_(0), ncities_(0), nfac_(0) {
@@ -390,27 +390,40 @@ public:
         //DBG_ONLY(edge_type *const total_eptr = &edges_[nedges_];)
         OMP_PFOR
         for(size_t i = 0; i < client_w_.rows(); ++i) {
+            const size_t nc = client_w_.columns();
             edge_type *const eptr = &edges_[i * client_w_.columns()];
             auto matptr = row(mat, i, blaze::unchecked);
-            const size_t nc = client_w_.columns();
-            size_t j = 0;
-#if 0
-            for(;j + 8 <= nc;j += 8) {
-                eptr[j] =     {matptr[j], i, j};
-                eptr[j + 1] = {matptr[j + 1], i, j + 1};
-                eptr[j + 2] = {matptr[j + 2], i, j + 2};
-                eptr[j + 3] = {matptr[j + 3], i, j + 3};
-                eptr[j + 4] = {matptr[j + 4], i, j + 4};
-                eptr[j + 5] = {matptr[j + 5], i, j + 5};
-                eptr[j + 6] = {matptr[j + 6], i, j + 6};
-                eptr[j + 7] = {matptr[j + 7], i, j + 7};
-                j += 8;
-            }
-            assert(j <= matptr.size()); 
+            CONST_IF(blaze::IsDenseMatrix_v<MatrixType>) {
+                size_t j = 0;
+#if 1
+                for(;j + 8 <= nc; j += 8) {
+                    eptr[j] =     {matptr[j], i, j};
+                    eptr[j + 1] = {matptr[j + 1], i, j + 1};
+                    eptr[j + 2] = {matptr[j + 2], i, j + 2};
+                    eptr[j + 3] = {matptr[j + 3], i, j + 3};
+                    eptr[j + 4] = {matptr[j + 4], i, j + 4};
+                    eptr[j + 5] = {matptr[j + 5], i, j + 5};
+                    eptr[j + 6] = {matptr[j + 6], i, j + 6};
+                    eptr[j + 7] = {matptr[j + 7], i, j + 7};
+                }
+                assert(j <= matptr.size());
 #endif
-            while(j < nc) {
-                assert(j < matptr.size());
-                eptr[j] = {matptr[j], i, j}, ++j;
+                while(j < nc) {
+                    assert(j < matptr.size());
+                    eptr[j] = {matptr[j], i, j}, ++j;
+                }
+            } else {
+                auto rit = matptr.begin();
+                size_t j = 0;
+                while(rit != matptr.end()) {
+                    while(j < rit->index())
+                        eptr[j] = {std::numeric_limits<FT>::max(), i, j}, ++j;
+                    eptr[j] = {rit->value(), i, j};
+                    ++j;
+                    ++rit;
+                }
+                while(j < nc)
+                    eptr[j] = {std::numeric_limits<FT>::max(), i, j}, ++j;
             }
         }
         shared::sort(edges_.get(), edges_.get() + nedges_, [](edge_type x, edge_type y) {
@@ -556,7 +569,7 @@ public:
                 mincost = medcost; // med has too many, increase cost.
                 //std::fprintf(stderr, "Assigning mincost to current cost. New lower bound on cost: %g. k: %u. current sol size %zu\n", mincost, k, nopen);
             } else {
-                maxcost = medcost; // med has too few, lower cost. 
+                maxcost = medcost; // med has too few, lower cost.
                 //std::fprintf(stderr, "Assigning maxcost to current cost. New upper bound on cost: %g because we have too few items (%zu instead of %u)\n", maxcost, nopen, k);
             }
             //std::fprintf(stderr, "##mincost: %g. maxcost: %g\n", mincost, maxcost);

@@ -76,7 +76,7 @@ struct is_uniform_weighting<UniformW<FT>>: public std::true_type {};
        http://web.cs.ucla.edu/~awm/papers/ofl.pdf
     process(Generator, WeightGen) processes the full stream in Generator, such that Generator
     returns a const reference to the object to be added, and WeightGen returns a real-valued weight.
-    
+
     WeightGen defaults to UniformW, which returns 1. each time. ZlibW, istreamW, and PointerW load
     successive values from a stream as described by their names.
 

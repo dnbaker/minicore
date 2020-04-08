@@ -134,7 +134,7 @@ public:
             case OLLR:                     set_distance_matrix<MatType, OLLR>(m, symmetrize); break;
             case ITAKURA_SAITO:            set_distance_matrix<MatType, ITAKURA_SAITO>(m, symmetrize); break;
             case REVERSE_ITAKURA_SAITO:    set_distance_matrix<MatType, REVERSE_ITAKURA_SAITO>(m, symmetrize); break;
-            default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + detail::prob2str(measure));
+            default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + blz::detail::prob2str(measure));
         }
     }
     template<typename OFT=FT>
@@ -455,10 +455,10 @@ private:
             }
         }
 
-        if(detail::needs_logs(measure_)) {
+        if(blz::detail::needs_logs(measure_)) {
             logdata_.reset(new MatrixType(neginf2zero(log(data_))));
         }
-        if(detail::needs_sqrt(measure_)) {
+        if(blz::detail::needs_sqrt(measure_)) {
             sqrdata_.reset(new MatrixType(blz::sqrt(data_)));
         }
         if(logdata_) {
@@ -520,7 +520,7 @@ template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typen
 auto make_probdiv_applicator(MatrixType &data, ProbDivType type=JSM, Prior prior=NONE, const PriorContainer *pc=nullptr) {
 #if VERBOSE_AF
     std::fprintf(stderr, "[%s:%s:%d] Making probdiv applicator with %d/%s as measure, %d/%s as prior, and %s for prior container.\n",
-                 __PRETTY_FUNCTION__, __FILE__, __LINE__, int(type), detail::prob2str(type), int(prior), prior == NONE ? "No prior": prior == DIRICHLET ? "Dirichlet" : prior == GAMMA_BETA ? "Gamma/Beta": "Feature-specific prior",
+                 __PRETTY_FUNCTION__, __FILE__, __LINE__, int(type), blz::detail::prob2str(type), int(prior), prior == NONE ? "No prior": prior == DIRICHLET ? "Dirichlet" : prior == GAMMA_BETA ? "Gamma/Beta": "Feature-specific prior",
                 pc == nullptr ? "No prior container": (std::string("Container of size ") + std::to_string(pc->size())).data());
 #endif
     return ProbDivApplicator<MatrixType>(data, type, prior, pc);

@@ -46,7 +46,7 @@ void resize_and_assign(Mat &dest, const View &view) {
 template<typename FT, typename IT, typename MatrixType, typename CMatrixType=blaze::DynamicMatrix<FT>>
 MatrixCoreset<MatrixType, FT>
 index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
-             bool rowwise=(blaze::StorageOrder_v<MatrixType> == blaze::rowMajor))   
+             bool rowwise=(blaze::StorageOrder_v<MatrixType> == blaze::rowMajor))
 {
     auto weights = ic.weights_;
     CMatrixType ret;

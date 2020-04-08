@@ -4,6 +4,7 @@
 
 namespace fgc {
 
+#if 0
 namespace jsd {
 
 template<ProbDivType measure, typename MatrixType, typename MT2>
@@ -18,7 +19,7 @@ template<typename ContainerType, typename MatrixType, typename...Args>
 void directional_kmeans(const ProbDivApplicator<MatrixType> &) {
 }
 
-// 2. 
+// 2.
 
 template<typename Measure, typename ContainerType>
 void optimize_parameters_soft() {
@@ -43,6 +44,7 @@ void optimize_parameters_hard() {
 #endif
 
 } // namespace jsd
+#endif
 
 } // namespace fgc
 

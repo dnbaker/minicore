@@ -581,7 +581,7 @@ network_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<
     if(rc != (int)net.OPTIMAL) {
         std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
     }
-    
+
     FT ret(0);
     OMP_PRAGMA("omp parallel for reduction(+:ret)")
     for(size_t i = 0; i < nl; ++i) {

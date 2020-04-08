@@ -63,7 +63,7 @@ struct BoundingBoxData {
         llat = std::strtod(++s, const_cast<char **>(&s));
         ulon = std::strtod(++s, const_cast<char **>(&s));
         ulat = std::strtod(++s, const_cast<char **>(&s));
-    
+
         if(*s == ',') {
             highprob = std::strtod(++s, const_cast<char **>(&s));
             if(*s == ',') {
