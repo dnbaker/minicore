@@ -332,15 +332,7 @@ private:
     static constexpr FT EPS = 1e-10;
 
     INLINE static bool open_client(const std::vector<IT> &client) {
-        const bool ret = client.empty() || std::find(client.begin(), client.end(), EMPTY) == client.end();
-#ifndef NDEBUG
-        {
-            bool oret = !client.empty() && std::find(client.begin(), client.end(), EMPTY) != client.end()
-                        ? false: true;
-            assert(oret == ret);
-        }
-#endif
-        return ret;
+        return client.empty() || std::find(client.begin(), client.end(), EMPTY) == client.end();
     }
     
 
@@ -642,12 +634,36 @@ struct NaiveJVSolver {
             std::sprintf(buf, "Wrong number of rows or columns: received %zu/%zu, expected %zu/%zu\n", mat.rows(), mat.columns(), w_.rows(), w_.columns());
             throw std::runtime_error(buf);
         }
-        OMP_PFOR
-        for(size_t i = 0; i < mat.rows(); ++i) {
-            auto p = &edges_[i * mat.columns()];
-            auto r = row(mat, i);
-            for(size_t j = 0; j < mat.columns(); ++j) {
-                *p++ = {r[j], i, j};
+        CONST_IF(blaze::IsDenseMatrix_v<MatType>) {
+            OMP_PFOR
+            for(size_t i = 0; i < mat.rows(); ++i) {
+                auto p = &edges_[i * mat.columns()];
+                auto r = row(mat, i);
+                for(size_t j = 0; j < mat.columns(); ++j) {
+                    *p++ = {r[j], i, j};
+                }
+            }
+        } else {
+            OMP_PFOR
+            for(size_t i = 0; i < mat.rows(); ++i) {
+                auto p = &edges_[i * mat.columns()];
+                auto r = row(mat, i);
+                auto rit = r.begin();
+                size_t j = 0;
+                if(rit == r.end()) {
+                    for(size_t j = 0; j < r.size();
+                        *p++ = {std::numeric_limits<FT>::max(), i, j++});
+                    continue;
+                }
+                while(rit != r.end()) {
+                    while(j < rit.index()) {
+                        *p++ = {std::numeric_limits<FT>::max(),
+                                i, j++};
+                    }
+                    *p = {rit->value(), i, j++};
+                    ++rit;
+                }
+                while(j < r.size()) *p++ = {std::numeric_limits<FT>::max(), i, j++};
             }
         }
         shared::sort(&edges_[0], &edges_[edges_.size()], [](const auto x, const auto y) {return x.cost() < y.cost();});
