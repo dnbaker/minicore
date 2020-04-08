@@ -107,12 +107,8 @@ std::vector<typename Graph::vertex_descriptor>
 #endif
     // maxcost = (maxcostedgecost * num_cities)
 
-    NaiveJVSolver<float> jvs(c.rows(), c.columns(), 0.);
-    auto sol = jvs.kmedian(c, k);
-#ifndef NDEBUG
-    for(const auto v: sol)
-        assert(v <= candidates.size());
-#endif
+    jv::JVSolver<blaze::DynamicMatrix<float>> jvs(c);
+    auto [sol, solasn] = jvs.kmedian(k);
     std::vector<typename Graph::vertex_descriptor> ret(sol.size());
     for(size_t i = 0; i < sol.size(); ++i)
         ret[i] = candidates[sol[i]];
