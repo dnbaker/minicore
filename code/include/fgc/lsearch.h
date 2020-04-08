@@ -15,7 +15,8 @@
  */
 
 namespace fgc {
-template<typename T> class TD;
+
+namespace graph {
 
 template<typename Graph, typename MatType, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
 void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullptr, bool only_sources_as_dests=false, bool all_sources=false) {
@@ -55,7 +56,7 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
 #endif
             auto vtx = all_sources ? vertices[i]: (*sources)[i];
             auto wrow(row(working_space, rowid BLAZE_CHECK_DEBUG));
-            boost::dijkstra_shortest_paths(x, vtx, distance_map(&wrow[0]));
+            boost::dijkstra_shortest_paths(x, vtx, boost::distance_map(&wrow[0]));
             row(mat, i BLAZE_CHECK_DEBUG) = blaze::serial(blaze::elements(wrow, sources->data(), sources->size()));
             ++rows_complete;
             const auto val = rows_complete.load();
@@ -526,6 +527,15 @@ auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, uint64_t s
                          const IndexContainer *wc=nullptr, double initdiv=0.) {
     return LocalKMedSearcher<Mat, IType>(mat, k, eps, seed, best_improvement, wc, initdiv);
 }
+
+} // graph
+using graph::make_kmed_esearcher;
+using graph::make_kmed_lsearcher;
+using graph::LocalKMedSearcher;
+using graph::ExhaustiveSearcher;
+using graph::fill_graph_distmat;
+using graph::graph2diskmat;
+using graph::graph2rammat;
 
 
 } // fgc

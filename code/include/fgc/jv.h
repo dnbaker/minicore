@@ -63,7 +63,7 @@ void fill_cand_distance_mat(const Graph &x, Mat &mat, const std::vector<typename
         auto r = row(mat, i);
         assert(r.size() == x.num_vertices());
         boost::dijkstra_shortest_paths(x, edge,
-                                       distance_map(&r[0]));
+                                       boost::distance_map(&r[0]));
         if(r[0] == std::numeric_limits<float>::max()) {
             throw std::runtime_error("This is probably not connected");
         }

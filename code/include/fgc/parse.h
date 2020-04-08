@@ -19,6 +19,7 @@ enum ParsedFiletype {
     TSP,
     NBER
 };
+namespace graph {
 
 template<typename DirectedS, typename VtxProps=boost::no_property, typename GraphProps=boost::no_property>
 Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(std::string fn) {
@@ -176,6 +177,14 @@ static fgc::Graph<undirectedS> parse_by_fn(std::string input) {
     } else g = dimacs_parse(input);
     return g;
 }
+
+} // namespace graph
+using graph::parse_dimacs_unweighted;
+using graph::parse_by_fn;
+using graph::csv_parse;
+using graph::parse_nber;
+using graph::dimacs_parse;
+using graph::dimacs_official_parse;
 
 
 } // fgc
