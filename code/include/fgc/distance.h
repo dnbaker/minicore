@@ -1,39 +1,182 @@
 #ifndef FGC_DISTANCE_AND_MEANING_H__
 #define FGC_DISTANCE_AND_MEANING_H__
+#include <vector>
+#include <iostream>
+#include <set>
+
+
 #include "blaze_adaptor.h"
+
 #ifndef BOOST_NO_AUTO_PTR
 #define BOOST_NO_AUTO_PTR 1
 #endif
+
 #include "network_simplex/network_simplex_simple.h"
 #include "boost/iterator/transform_iterator.hpp"
-#include <vector>
-#include <iostream>
 
 namespace blz {
 
 inline namespace distance {
+
+enum ProbDivType {
+    L1,
+    L2,
+    SQRL2,
+    JSM, // Multinomial Jensen-Shannon Metric
+    JSD, // Multinomial Jensen-Shannon Divergence
+    MKL, // Multinomial KL Divergence
+    POISSON, // Poisson KL
+    HELLINGER,
+    BHATTACHARYYA_METRIC,
+    BHATTACHARYYA_DISTANCE,
+    TOTAL_VARIATION_DISTANCE,
+    LLR,
+    EMD,
+    WEMD, // Weighted Earth-mover's distance
+    REVERSE_MKL,
+    REVERSE_POISSON,
+    UWLLR, /* Unweighted Log-likelihood Ratio.
+            * Specifically, this is the D_{JSD}^{\lambda}(x, y),
+            * where \lambda = \frac{N_p}{N_p + N_q}
+            *
+            */
+    OLLR,       // Old LLR, deprecated (included for compatibility/comparisons)
+    ITAKURA_SAITO, // \sum_{i=1}^D[\frac{a_i}{b_i} - \log{\frac{a_i}{b_i}} - 1]
+    REVERSE_ITAKURA_SAITO, // Reverse I-S
+    WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
+    TVD = TOTAL_VARIATION_DISTANCE,
+    WASSERSTEIN=EMD,
+    PSD = JSD, // Poisson JSD, but algebraically equivalent
+    PSM = JSM,
+    IS=ITAKURA_SAITO
+};
+namespace detail {
+static constexpr INLINE bool  needs_logs(ProbDivType d)  {
+    switch(d) {
+        case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
+        case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: case REVERSE_ITAKURA_SAITO: return true;
+        default: break;
+    }
+    return false;
+}
+
+
+static constexpr INLINE bool  needs_sqrt(ProbDivType d) {
+    return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
+}
+
+static constexpr INLINE bool is_symmetric(ProbDivType d) {
+    switch(d) {
+        case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
+        case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
+            return true;
+        default: ;
+    }
+    return false;
+}
+
+static constexpr INLINE const char *prob2str(ProbDivType d) {
+    switch(d) {
+        case BHATTACHARYYA_DISTANCE: return "BHATTACHARYYA_DISTANCE";
+        case BHATTACHARYYA_METRIC: return "BHATTACHARYYA_METRIC";
+        case EMD: return "EMD";
+        case HELLINGER: return "HELLINGER";
+        case JSD: return "JSD/PSD";
+        case JSM: return "JSM/PSM";
+        case L1: return "L1";
+        case L2: return "L2";
+        case LLR: return "LLR";
+        case OLLR: return "OLLR";
+        case UWLLR: return "UWLLR";
+        case ITAKURA_SAITO: return "ITAKURA_SAITO";
+        case MKL: return "MKL";
+        case POISSON: return "POISSON";
+        case REVERSE_MKL: return "REVERSE_MKL";
+        case REVERSE_POISSON: return "REVERSE_POISSON";
+        case REVERSE_ITAKURA_SAITO: return "REVERSE_ITAKURA_SAITO";
+        case SQRL2: return "SQRL2";
+        case TOTAL_VARIATION_DISTANCE: return "TOTAL_VARIATION_DISTANCE";
+        default: return "INVALID TYPE";
+    }
+}
+static constexpr INLINE const char *prob2desc(ProbDivType d) {
+    switch(d) {
+        case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";
+        case BHATTACHARYYA_METRIC: return "Bhattacharyya metric: sqrt(1 - BhattacharyyaSimilarity(x, y))";
+        case EMD: return "Earth Mover's Distance: Optimal Transport";
+        case HELLINGER: return "Hellinger Distance: sqrt(sum((sqrt(x) - sqrt(y))^2))/2";
+        case JSD: return "Jensen-Shannon Divergence for Poisson and Multinomial models, for which they are equivalent";
+        case JSM: return "Jensen-Shannon Metric, known as S2JSD and the Endres metric, for Poisson and Multinomial models, for which they are equivalent";
+        case L1: return "L1 distance";
+        case L2: return "L2 distance";
+        case LLR: return "Log-likelihood Ratio under the multinomial model";
+        case OLLR: return "Original log-likelihood ratio. This is likely not correct, but it is related to the Jensen-Shannon Divergence";
+        case UWLLR: return "Unweighted Log-likelihood Ratio. This is effectively the Generalized Jensen-Shannon Divergence with lambda parameter corresponding to the fractional contribution of counts in the first observation. This is symmetric, unlike the G_JSD, because the parameter comes from the counts.";
+        case MKL: return "Multinomial KL divergence";
+        case POISSON: return "Poisson KL Divergence";
+        case REVERSE_MKL: return "Reverse Multinomial KL divergence";
+        case REVERSE_POISSON: return "Reverse KL divergence";
+        case SQRL2: return "Squared L2 Norm";
+        case TOTAL_VARIATION_DISTANCE: return "Total Variation Distance: 1/2 sum_{i in D}(|x_i - y_i|)";
+        case ITAKURA_SAITO: return "Itakura-Saito divergence, a Bregman divergence [sum((a / b) - log(a / b) - 1 for a, b in zip(A, B))]";
+        case REVERSE_ITAKURA_SAITO: return "Reversed Itakura-Saito divergence, a Bregman divergence";
+        default: return "INVALID TYPE";
+    }
+}
+static void print_measures() {
+    std::set<ProbDivType> measures {
+        L1,
+        L2,
+        SQRL2,
+        JSM,
+        JSD,
+        MKL,
+        POISSON,
+        HELLINGER,
+        BHATTACHARYYA_METRIC,
+        BHATTACHARYYA_DISTANCE,
+        TOTAL_VARIATION_DISTANCE,
+        LLR,
+        OLLR,
+        EMD,
+        REVERSE_MKL,
+        REVERSE_POISSON,
+        UWLLR,
+        TOTAL_VARIATION_DISTANCE,
+        WASSERSTEIN,
+        PSD,
+        PSM,
+        ITAKURA_SAITO
+    };
+    for(const auto measure: measures) {
+        std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
+    }
+}
+} // detail
+
+
 #define DECL_DIST(norm) \
 template<typename FT, bool SO>\
-INLINE double norm##Dist(const blaze::DynamicVector<FT, SO> &lhs, const blaze::DynamicVector<FT, SO> &rhs) {\
+INLINE auto norm##Dist(const blaze::DynamicVector<FT, SO> &lhs, const blaze::DynamicVector<FT, SO> &rhs) {\
     return norm##Norm(rhs - lhs);\
 }\
 template<typename VT, typename VT2, bool SO>\
-INLINE double norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, SO> &rhs) {\
+INLINE auto norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, SO> &rhs) {\
     return norm##Norm(~rhs - ~lhs);\
 }\
 \
 template<typename VT, typename VT2, bool SO>\
-INLINE double norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, !SO> &rhs) {\
+INLINE auto norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, !SO> &rhs) {\
     return norm##Norm(~rhs - trans(~lhs));\
 }\
 \
 template<typename VT, typename VT2, bool SO>\
-INLINE double norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, SO> &rhs) {\
+INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, SO> &rhs) {\
     return norm##Norm(~rhs - ~lhs);\
 }\
 \
 template<typename VT, typename VT2, bool SO>\
-INLINE double norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, !SO> &rhs) {\
+INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, !SO> &rhs) {\
     return norm##Norm(~rhs - trans(~lhs));\
 }\
 
@@ -47,95 +190,95 @@ DECL_DIST(max)
 DECL_DIST(inf)
 #undef DECL_DIST
 template<typename FT, typename A, typename OA>
-inline double l2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline auto l2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     return l2Dist(CustomVector<const FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
                   CustomVector<const FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
 }
 
 template<typename FT, typename FT2, bool SO>
-inline double sqrL2Dist(const blz::Vector<FT, SO> &v1, const blz::Vector<FT2, SO> &v2) {
+inline auto sqrL2Dist(const blz::Vector<FT, SO> &v1, const blz::Vector<FT2, SO> &v2) {
     return sqrDist(~v1, ~v2);
 }
 template<typename FT, blaze::AlignmentFlag AF, blaze::PaddingFlag PF, bool SO, blaze::AlignmentFlag OAF, blaze::PaddingFlag OPF, bool OSO>
-inline double sqrL2Dist(const blz::CustomVector<FT, AF, PF, SO> &v1, const blz::CustomVector<FT, OAF, OPF, OSO> &v2) {
+inline auto sqrL2Dist(const blz::CustomVector<FT, AF, PF, SO> &v1, const blz::CustomVector<FT, OAF, OPF, OSO> &v2) {
     return sqrDist(v1, v2);
 }
 
 template<typename FT, typename A, typename OA>
-inline double sqrL2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline auto sqrL2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     return sqrL2Dist(CustomVector<const FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
                      CustomVector<const FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
 }
 
 template<typename FT, typename A, typename OA>
-INLINE double sqrDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+INLINE auto sqrDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     return sqrL2Dist(lhs, rhs);
 }
 
 template<typename FT, typename A, typename OA>
-inline double l1Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline auto l1Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     return l1Dist(CustomVector<const FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
                   CustomVector<const FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
 }
 template<typename FT, typename A, typename OA>
-inline double l3Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline auto l3Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     return l3Dist(CustomVector<const FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
                   CustomVector<const FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
 }
 
 template<typename FT, typename A, typename OA>
-inline double l4Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline auto l4Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     return l4Dist(CustomVector<FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
                   CustomVector<FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
 }
 template<typename FT, typename A, typename OA>
-inline double maxDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
+inline auto maxDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
     return maxDist(CustomVector<FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
                   CustomVector<FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
 }
 template<typename FT, typename A, typename OA>
-inline double infDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {return maxDist(lhs, rhs);}
+inline auto infDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {return maxDist(lhs, rhs);}
 
 template<typename Base>
 struct sqrBaseNorm: public Base {
     template<typename C1, typename C2>
-    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
         return std::pow(Base::operator()(lhs, rhs), 2);
     }
 };
 struct L1Norm {
     template<typename C1, typename C2>
-    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
         return l1Dist(lhs, rhs);
     }
 };
 struct L2Norm {
     template<typename C1, typename C2>
-    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
         return l2Dist(lhs, rhs);
     }
 };
 struct sqrL2Norm {
     template<typename C1, typename C2>
-    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
         return sqrDist(lhs, rhs);
     }
 };
 struct L3Norm {
     template<typename C1, typename C2>
-    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
         return l3Dist(lhs, rhs);
     }
 };
 struct L4Norm {
     template<typename C1, typename C2>
-    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
         return l4Dist(lhs, rhs);
     }
 };
 struct maxNormFunctor {
     template<typename C1, typename C2>
-    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
+    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
         return maxDist(lhs, rhs);
     }
 };
@@ -151,8 +294,8 @@ template<typename BaseDist>
 struct SqrNormFunctor: public BaseDist {
     template<typename...Args> SqrNormFunctor(Args &&...args): BaseDist(std::forward<Args>(args)...) {}
     template<typename C1, typename C2>
-    INLINE constexpr double operator()(const C1 &lhs, const C2 &rhs) const {
-        double basedist = BaseDist::operator()(lhs, rhs);
+    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
+        auto basedist = BaseDist::operator()(lhs, rhs);
         return basedist * basedist;
     }
 };
@@ -172,15 +315,15 @@ struct SqrNormFunctor<L2Norm>: public sqrL2Norm {};
  */
 
 template<typename FT, bool SO>
-double logsumexp(const blaze::DenseVector<FT, SO> &x) {
+auto logsumexp(const blaze::DenseVector<FT, SO> &x) {
     const auto maxv = blaze::max(~x);
     return maxv + std::log(blaze::sum(blaze::exp(~x - maxv)));
 }
 
 template<typename FT, bool SO>
-double logsumexp(const blaze::SparseVector<FT, SO> &x) {
+auto logsumexp(const blaze::SparseVector<FT, SO> &x) {
     auto maxv = blaze::max(~x);
-    double s = 0.;
+    auto s = 0.;
     for(const auto p: ~x) {
         s += std::exp(p.value() - maxv); // Sum over sparse elements
     }
@@ -189,11 +332,11 @@ double logsumexp(const blaze::SparseVector<FT, SO> &x) {
 }
 
 template<typename VT1, typename VT2, typename Scalar, bool TF>
-double logsumexp(const SVecScalarMultExpr<SVecSVecAddExpr<VT1, VT2, TF>, Scalar, TF> &exp) {
+auto logsumexp(const SVecScalarMultExpr<SVecSVecAddExpr<VT1, VT2, TF>, Scalar, TF> &exp) {
     // Specifically for calculating the logsumexp of the mean of the two sparse vectors.
     // SVecScalarMultExpr doesn't provide a ConstIterator, so we're rolling our own specialized function.
     auto maxv = blaze::max(~exp), mmax = -maxv;
-    double s = 0.;
+    auto s = 0.;
     auto lit = exp.leftOperand().leftOperand().begin(), rit = exp.leftOperand().rightOperand().begin(),
          lie = exp.leftOperand().leftOperand().end(),   rie = exp.leftOperand().rightOperand().end();
     Scalar scalar = exp.rightOperand();
@@ -251,7 +394,7 @@ double logsumexp(const SVecScalarMultExpr<SVecSVecAddExpr<VT1, VT2, TF>, Scalar,
     */
 
 template<typename VT>
-INLINE double multinomial_cumulant(const VT &x) {return logsumexp(x);}
+INLINE auto multinomial_cumulant(const VT &x) {return logsumexp(x);}
 
 template<bool VT>
 struct FilterNans {
@@ -260,78 +403,82 @@ struct FilterNans {
 
 namespace bnj {
 
-template<typename VT, typename VT2, bool SO>
-INLINE double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
-                              const blaze::DenseVector<VT, SO> &rhs,
-                              const blaze::DenseVector<VT2, SO> &lhlog,
-                              const blaze::DenseVector<VT2, SO> &rhlog)
+template<typename VT, typename VT2, bool SO, typename RT=blz::CommonType_t<blz::ElementType_t<VT>, blz::ElementType_t<VT2>> >
+INLINE auto multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
+                            const blaze::DenseVector<VT, SO> &rhs,
+                            const blaze::DenseVector<VT2, SO> &lhlog,
+                            const blaze::DenseVector<VT2, SO> &rhlog)
 {
-    auto mn = (~lhs + ~rhs) * 0.5;
+    auto mn = (~lhs + ~rhs) * RT(0.5);
     auto mnlog = blaze::evaluate(blaze::neginf2zero(blaze::log(~mn)));
-    double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
-    double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
-    return 0.5 * (lhc + rhc);
+    auto lhc = blaze::dot(~lhs, ~lhlog - mnlog);
+    auto rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    return RT(0.5) * (lhc + rhc);
 }
 
 template<typename VT, typename VT2, bool SO>
-INLINE double multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
-                              const blaze::SparseVector<VT, SO> &rhs,
-                              const blaze::SparseVector<VT2, SO> &lhlog,
-                              const blaze::SparseVector<VT2, SO> &rhlog)
+INLINE auto multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
+                            const blaze::SparseVector<VT, SO> &rhs,
+                            const blaze::SparseVector<VT2, SO> &lhlog,
+                            const blaze::SparseVector<VT2, SO> &rhlog)
 {
-    auto mnlog = blaze::evaluate(blaze::log((~lhs + ~rhs) * 0.5));
-    double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
-    double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
-    return 0.5 * (lhc + rhc);
+    using RT = blz::CommonType_t<blz::ElementType_t<VT>, blz::ElementType_t<VT2>>;
+    auto mnlog = blaze::evaluate(blaze::log((~lhs + ~rhs) * RT(0.5)));
+    auto lhc = blaze::dot(~lhs, ~lhlog - mnlog);
+    auto rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    return RT(0.5) * (lhc + rhc);
 }
 template<typename VT, bool SO>
-INLINE double multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
-                              const blaze::DenseVector<VT, SO> &rhs)
+INLINE auto multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
+                            const blaze::DenseVector<VT, SO> &rhs)
 {
+    using RT = blz::ElementType_t<VT>;
     auto lhlog = blaze::evaluate(neginf2zero(log(lhs)));
     auto rhlog = blaze::evaluate(neginf2zero(log(rhs)));
-    auto mnlog = blaze::evaluate(neginf2zero(log((~lhs + ~rhs) * 0.5)));
-    double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
-    double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
-    return 0.5 * (lhc + rhc);
+    auto mnlog = blaze::evaluate(neginf2zero(log((~lhs + ~rhs) * RT(0.5))));
+    auto lhc = blaze::dot(~lhs, ~lhlog - mnlog);
+    auto rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    return RT(0.5) * (lhc + rhc);
 }
 template<typename VT, typename VT2, bool SO>
-INLINE double multinomial_jsd(const blaze::Vector<VT, SO> &lhs,
-                              const blaze::Vector<VT2, SO> &rhs)
+INLINE auto multinomial_jsd(const blaze::Vector<VT, SO> &lhs,
+                            const blaze::Vector<VT2, SO> &rhs)
 {
+    using RT = blz::ElementType_t<VT>;
     auto lhlog = blaze::evaluate(neginf2zero(log(~lhs)));
     auto rhlog = blaze::evaluate(neginf2zero(log(~rhs)));
-    auto mnlog = blaze::evaluate(neginf2zero(log((~lhs + ~rhs) * 0.5)));
-    double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
-    double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
-    return 0.5 * (lhc + rhc);
+    auto mnlog = blaze::evaluate(neginf2zero(log((~lhs + ~rhs) * RT(0.5))));
+    auto lhc = blaze::dot(~lhs, ~lhlog - mnlog);
+    auto rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    return RT(0.5) * (lhc + rhc);
 }
 template<typename VT, bool SO>
-INLINE double multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
-                              const blaze::SparseVector<VT, SO> &rhs)
+INLINE auto multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
+                            const blaze::SparseVector<VT, SO> &rhs)
 {
+    using RT = blz::ElementType_t<VT>;
     auto lhlog = blaze::log(lhs), rhlog = blaze::log(rhs);
-    auto mnlog = blaze::evaluate(blaze::log((~lhs + ~rhs) * 0.5));
-    double lhc = blaze::dot(~lhs, ~lhlog - mnlog);
-    double rhc = blaze::dot(~rhs, ~rhlog - mnlog);
-    return 0.5 * (lhc + rhc);
+    auto mnlog = blaze::evaluate(blaze::log((~lhs + ~rhs) * RT(0.5)));
+    auto lhc = blaze::dot(~lhs, ~lhlog - mnlog);
+    auto rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    return RT(0.5) * (lhc + rhc);
 }
 
 template<typename FT, bool SO>
-INLINE double multinomial_bregman(const blaze::DenseVector<FT, SO> &lhs,
-                                  const blaze::DenseVector<FT, SO> &rhs,
-                                  const blaze::DenseVector<FT, SO> &lhlog,
-                                  const blaze::DenseVector<FT, SO> &rhlog)
+INLINE auto multinomial_bregman(const blaze::DenseVector<FT, SO> &lhs,
+                                const blaze::DenseVector<FT, SO> &rhs,
+                                const blaze::DenseVector<FT, SO> &lhlog,
+                                const blaze::DenseVector<FT, SO> &rhlog)
 {
     assert_all_nonzero(lhs);
     assert_all_nonzero(rhs);
     return blaze::dot(lhs, lhlog - rhlog);
 }
 template<typename FT, bool SO>
-INLINE double      poisson_bregman(const blaze::DenseVector<FT, SO> &lhs,
-                                   const blaze::DenseVector<FT, SO> &rhs,
-                                   const blaze::DenseVector<FT, SO> &lhlog,
-                                   const blaze::DenseVector<FT, SO> &rhlog)
+INLINE auto      poisson_bregman(const blaze::DenseVector<FT, SO> &lhs,
+                                 const blaze::DenseVector<FT, SO> &rhs,
+                                 const blaze::DenseVector<FT, SO> &lhlog,
+                                 const blaze::DenseVector<FT, SO> &rhlog)
 {
     // Assuming these are all independent (not ideal)
     assert_all_nonzero(lhs);
@@ -351,7 +498,7 @@ enum Prior {
 
 
 template<typename LHVec, typename RHVec>
-double bhattacharyya_measure(const LHVec &lhs, const RHVec &rhs) {
+auto bhattacharyya_measure(const LHVec &lhs, const RHVec &rhs) {
     // Requires same storage.
     // TODO: generalize for different storage classes/transpose flags using DenseVector and SparseVector
     // base classes
@@ -359,14 +506,14 @@ double bhattacharyya_measure(const LHVec &lhs, const RHVec &rhs) {
 }
 
 template<typename LHVec, typename RHVec>
-double bhattacharyya_metric(const LHVec &lhs, const RHVec &rhs) {
+auto bhattacharyya_metric(const LHVec &lhs, const RHVec &rhs) {
     // Comaniciu, D., Ramesh, V. & Meer, P. (2003). Kernel-based object tracking.IEEE Transactionson Pattern Analysis and Machine Intelligence,25(5), 564-577.
     // Proves that this extension is a valid metric
     // See http://www.cse.yorku.ca/~kosta/CompVis_Notes/bhattacharyya.pdf
     return std::sqrt(1. - bhattacharyya_measure(lhs, rhs));
 }
 template<typename LHVec, typename RHVec>
-double matusita_distance(const LHVec &lhs, const RHVec &rhs) {
+auto matusita_distance(const LHVec &lhs, const RHVec &rhs) {
     return sqrL2Dist(sqrt(lhs), sqrt(rhs));
 }
 template<typename...Args>
@@ -379,7 +526,7 @@ INLINE decltype(auto) multinomial_jsm(Args &&...args) {
 template<typename VT, typename VT2, bool SO>
 inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &rhs) {
     // Approximate jsd function for use in LSH tables.
-    return std::sqrt(blz::sum(blz::pow(~lhs - ~rhs, 2) / (~lhs + ~rhs)) * 0.5);
+    return std::sqrt(blz::sum(blz::pow(~lhs - ~rhs, 2) / (~lhs + ~rhs)) * ElementType_t<VT>(0.5));
 }
 
 
@@ -434,7 +581,7 @@ network_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<
     if(rc != (int)net.OPTIMAL) {
         std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
     }
-    
+
     FT ret(0);
     OMP_PRAGMA("omp parallel for reduction(+:ret)")
     for(size_t i = 0; i < nl; ++i) {
@@ -619,7 +766,7 @@ auto wasserstein_p2(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, !SO> &y
 
 template<typename VT, typename VT2, bool SO>
 auto discrete_total_variation_distance(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs) {
-    return 0.5 * blz::l1Norm(~lhs - ~rhs);
+    return ElementType_t<VT>(0.5) * blz::l1Norm(~lhs - ~rhs);
 }
 
 #if 0

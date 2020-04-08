@@ -14,7 +14,7 @@
 #include "fgc/gmm.h"
 #include "fgc/graph.h"
 #include "fgc/hash.h"
-#include "fgc/jsd.h"
+#include "fgc/applicator.h"
 #include "fgc/jv.h"
 #include "fgc/jv_solver.h"
 #include "fgc/kcenter.h"

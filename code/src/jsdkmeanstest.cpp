@@ -1,10 +1,13 @@
-#include "fgc/jsd.h"
+#include "fgc/applicator.h"
 #include "fgc/csc.h"
 #include "fgc/timer.h"
 #include <getopt.h>
 #include "blaze/util/Serialization.h"
+#include "fgc/gen_kmedian.h"
 
+#ifndef FT
 #define FT double
+#endif
 
 void usage(char *s) {
     std::fprintf(stderr, "Usage: %s <flags> <input=\"\"> <output>\n-r\tMax nrows [50000]\n-c\tmin count [50]\n-k\tk [50]\n-m\tkmc2 chain length [100]\n",

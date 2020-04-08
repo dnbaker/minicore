@@ -69,5 +69,6 @@ struct dumbrange {
 template<typename T>
 inline dumbrange<T> make_dumbrange(T beg, T end) {return dumbrange<T>(beg, end);}
 
+
 } // shared
 } // fgc

@@ -342,7 +342,7 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
         wcopy.insert(wcopy.end(), weights, weights + n);
     }
 #endif
-    
+
 
     std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
     auto func = [&](Graph &localx){

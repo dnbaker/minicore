@@ -16,143 +16,6 @@ namespace jsd {
 using namespace blz;
 using namespace blz::distance;
 
-
-enum ProbDivType {
-    L1,
-    L2,
-    SQRL2,
-    JSM, // Multinomial Jensen-Shannon Metric
-    JSD, // Multinomial Jensen-Shannon Divergence
-    MKL, // Multinomial KL Divergence
-    POISSON, // Poisson KL
-    HELLINGER,
-    BHATTACHARYYA_METRIC,
-    BHATTACHARYYA_DISTANCE,
-    TOTAL_VARIATION_DISTANCE,
-    LLR,
-    EMD,
-    WEMD, // Weighted Earth-mover's distance
-    REVERSE_MKL,
-    REVERSE_POISSON,
-    UWLLR, /* Unweighted Log-likelihood Ratio.
-            * Specifically, this is the D_{JSD}^{\lambda}(x, y),
-            * where \lambda = \frac{N_p}{N_p + N_q}
-            *
-            */
-    OLLR,       // Old LLR, deprecated (included for compatibility/comparisons)
-    ITAKURA_SAITO, // \sum_{i=1}^D[\frac{a_i}{b_i} - \log{\frac{a_i}{b_i}} - 1]
-    WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
-    TVD = TOTAL_VARIATION_DISTANCE,
-    WASSERSTEIN=EMD,
-    PSD = JSD, // Poisson JSD, but algebraically equivalent
-    PSM = JSM,
-    IS=ITAKURA_SAITO
-};
-
-namespace detail {
-static INLINE bool  needs_logs(ProbDivType d)  {
-    switch(d) {
-        case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
-        case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: return true;
-        default: break;
-    }
-    return false;
-}
-
-
-static INLINE bool  needs_sqrt(ProbDivType d) {
-    return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
-}
-
-static INLINE bool is_symmetric(ProbDivType d) {
-    switch(d) {
-        case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
-        case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
-            return true;
-        default: ;
-    }
-    return false;
-}
-
-
-
-static INLINE const char *prob2str(ProbDivType d) {
-    switch(d) {
-        case BHATTACHARYYA_DISTANCE: return "BHATTACHARYYA_DISTANCE";
-        case BHATTACHARYYA_METRIC: return "BHATTACHARYYA_METRIC";
-        case EMD: return "EMD";
-        case HELLINGER: return "HELLINGER";
-        case JSD: return "JSD/PSD";
-        case JSM: return "JSM/PSM";
-        case L1: return "L1";
-        case L2: return "L2";
-        case LLR: return "LLR";
-        case OLLR: return "OLLR";
-        case UWLLR: return "UWLLR";
-        case ITAKURA_SAITO: return "ITAKURA_SAITO";
-        case MKL: return "MKL";
-        case POISSON: return "POISSON";
-        case REVERSE_MKL: return "REVERSE_MKL";
-        case REVERSE_POISSON: return "REVERSE_POISSON";
-        case SQRL2: return "SQRL2";
-        case TOTAL_VARIATION_DISTANCE: return "TOTAL_VARIATION_DISTANCE";
-        default: return "INVALID TYPE";
-    }
-}
-static INLINE const char *prob2desc(ProbDivType d) {
-    switch(d) {
-        case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";
-        case BHATTACHARYYA_METRIC: return "Bhattacharyya metric: sqrt(1 - BhattacharyyaSimilarity(x, y))";
-        case EMD: return "Earth Mover's Distance: Optimal Transport";
-        case HELLINGER: return "Hellinger Distance: sqrt(sum((sqrt(x) - sqrt(y))^2))/2";
-        case JSD: return "Jensen-Shannon Divergence for Poisson and Multinomial models, for which they are equivalent";
-        case JSM: return "Jensen-Shannon Metric, known as S2JSD and the Endres metric, for Poisson and Multinomial models, for which they are equivalent";
-        case L1: return "L1 distance";
-        case L2: return "L2 distance";
-        case LLR: return "Log-likelihood Ratio under the multinomial model";
-        case OLLR: return "Original log-likelihood ratio. This is likely not correct, but it is related to the Jensen-Shannon Divergence";
-        case UWLLR: return "Unweighted Log-likelihood Ratio. This is effectively the Generalized Jensen-Shannon Divergence with lambda parameter corresponding to the fractional contribution of counts in the first observation. This is symmetric, unlike the G_JSD, because the parameter comes from the counts.";
-        case MKL: return "Multinomial KL divergence";
-        case POISSON: return "Poisson KL Divergence";
-        case REVERSE_MKL: return "Reverse Multinomial KL divergence";
-        case REVERSE_POISSON: return "Reverse KL divergence";
-        case SQRL2: return "Squared L2 Norm";
-        case TOTAL_VARIATION_DISTANCE: return "Total Variation Distance: 1/2 sum_{i in D}(|x_i - y_i|)";
-        case ITAKURA_SAITO: return "Itakura-Saito divergence, a Bregman divergence ";
-        default: return "INVALID TYPE";
-    }
-}
-static void print_measures() {
-    std::set<ProbDivType> measures {
-        L1,
-        L2,
-        SQRL2,
-        JSM,
-        JSD,
-        MKL,
-        POISSON,
-        HELLINGER,
-        BHATTACHARYYA_METRIC,
-        BHATTACHARYYA_DISTANCE,
-        TOTAL_VARIATION_DISTANCE,
-        LLR,
-        OLLR,
-        EMD,
-        REVERSE_MKL,
-        REVERSE_POISSON,
-        UWLLR,
-        TOTAL_VARIATION_DISTANCE,
-        WASSERSTEIN,
-        PSD,
-        PSM,
-        ITAKURA_SAITO
-    };
-    for(const auto measure: measures) {
-        std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
-    }
-}
-} // detail
-
 template<typename MatrixType>
 class ProbDivApplicator {
     //using opposite_type = typename base_type::OppositeType;
@@ -188,28 +51,28 @@ public:
     template<typename MatType>
     void set_distance_matrix(MatType &m, bool symmetrize=false) const {set_distance_matrix(m, measure_, symmetrize);}
 
-    template<typename MatType>
-    void set_distance_matrix(MatType &m, ProbDivType measure, bool symmetrize=false) const {
+    template<typename MatType, ProbDivType measure>
+    void set_distance_matrix(MatType &m, bool symmetrize=false) const {
         using blaze::sqrt;
         const size_t nr = m.rows();
         assert(nr == m.columns());
         assert(nr == data_.rows());
-        ProbDivType actual_measure = measure == JSM ? JSD: measure;
+        static constexpr ProbDivType actual_measure = measure == JSM ? JSD: measure;
         for(size_t i = 0; i < nr; ++i) {
             CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
                 for(size_t j = i + 1; j < nr; ++j) {
-                    auto v = this->operator()(i, j, actual_measure);
+                    auto v = this->call<actual_measure>(i, j);
                     m(i, j) = v;
                 }
             } else {
                 OMP_PFOR
                 for(size_t j = i + 1; j < nr; ++j) {
-                    auto v = this->operator()(i, j, actual_measure);
+                    auto v = this->call<actual_measure>(i, j);
                     m(i, j) = v;
                 }
             }
         }
-        if(measure == JSM) {
+        CONST_IF(measure == JSM) {
             CONST_IF(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
                 m = blz::sqrt(m);
             } else CONST_IF(dm::is_distance_matrix_v<MatType>) {
@@ -219,7 +82,7 @@ public:
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
             }
         }
-        if(detail::is_symmetric(measure)) {
+        CONST_IF(detail::is_symmetric(measure)) {
             //std::fprintf(stderr, "Symmetric measure %s/%s\n", detail::prob2str(measure), detail::prob2desc(measure));
             if(symmetrize) {
                 fill_symmetric_upper_triangular(m);
@@ -233,13 +96,13 @@ public:
                     CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
                         //std::fprintf(stderr, "Filling bottom half\n");
                         for(size_t j = 0; j < i; ++j) {
-                            auto v = this->operator()(i, j, measure);
+                            auto v = this->call<measure>(i, j);
                             m(i, j) = v;
                         }
                     } else {
                         OMP_PFOR
                         for(size_t j = 0; j < i; ++j) {
-                            auto v = this->operator()(i, j, measure);
+                            auto v = this->call<measure>(i, j);
                             m(i, j) = v;
                         }
                     }
@@ -248,15 +111,43 @@ public:
             }
         }
     }
-    blaze::DynamicMatrix<float> make_distance_matrix() const {
-        blaze::DynamicMatrix<float> ret = make_distance_matrix(measure_);
-        return ret;
+    template<typename MatType>
+    void set_distance_matrix(MatType &m, ProbDivType measure, bool symmetrize=false) const {
+        switch(measure) {
+            case TOTAL_VARIATION_DISTANCE: set_distance_matrix<MatType, TOTAL_VARIATION_DISTANCE>(m, symmetrize); break;
+            case L1:                       set_distance_matrix<MatType, L1>(m, symmetrize); break;
+            case L2:                       set_distance_matrix<MatType, L2>(m, symmetrize); break;
+            case SQRL2:                    set_distance_matrix<MatType, SQRL2>(m, symmetrize); break;
+            case JSD:                      set_distance_matrix<MatType, JSD>(m, symmetrize); break;
+            case JSM:                      set_distance_matrix<MatType, JSM>(m, symmetrize); break;
+            case REVERSE_MKL:              set_distance_matrix<MatType, REVERSE_MKL>(m, symmetrize); break;
+            case MKL:                      set_distance_matrix<MatType, MKL>(m, symmetrize); break;
+            case EMD:                      set_distance_matrix<MatType, EMD>(m, symmetrize); break;
+            case WEMD:                     set_distance_matrix<MatType, WEMD>(m, symmetrize); break;
+            case REVERSE_POISSON:          set_distance_matrix<MatType, REVERSE_POISSON>(m, symmetrize); break;
+            case POISSON:                  set_distance_matrix<MatType, POISSON>(m, symmetrize); break;
+            case HELLINGER:                set_distance_matrix<MatType, HELLINGER>(m, symmetrize); break;
+            case BHATTACHARYYA_METRIC:     set_distance_matrix<MatType, BHATTACHARYYA_METRIC>(m, symmetrize); break;
+            case BHATTACHARYYA_DISTANCE:   set_distance_matrix<MatType, BHATTACHARYYA_DISTANCE>(m, symmetrize); break;
+            case LLR:                      set_distance_matrix<MatType, LLR>(m, symmetrize); break;
+            case UWLLR:                    set_distance_matrix<MatType, UWLLR>(m, symmetrize); break;
+            case OLLR:                     set_distance_matrix<MatType, OLLR>(m, symmetrize); break;
+            case ITAKURA_SAITO:            set_distance_matrix<MatType, ITAKURA_SAITO>(m, symmetrize); break;
+            case REVERSE_ITAKURA_SAITO:    set_distance_matrix<MatType, REVERSE_ITAKURA_SAITO>(m, symmetrize); break;
+            default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + blz::detail::prob2str(measure));
+        }
     }
-    blaze::DynamicMatrix<float> make_distance_matrix(ProbDivType measure, bool symmetrize=false) const {
-        blaze::DynamicMatrix<float> ret(data_.rows(), data_.rows());
+    template<typename OFT=FT>
+    blaze::DynamicMatrix<OFT> make_distance_matrix(bool symmetrize=false) const {
+        return make_distance_matrix<OFT>(measure_, symmetrize);
+    }
+    template<typename OFT=FT>
+    blaze::DynamicMatrix<OFT> make_distance_matrix(ProbDivType measure, bool symmetrize=false) const {
+        blaze::DynamicMatrix<OFT> ret(data_.rows(), data_.rows());
         set_distance_matrix(ret, measure, symmetrize);
         return ret;
     }
+
     // Accessors
     decltype(auto) weighted_row(size_t ind) const {
         return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_[ind];
@@ -313,6 +204,8 @@ public:
             ret = ollr(i, j);
         } else CONST_IF(constexpr_measure == ITAKURA_SAITO) {
             ret = itakura_saito(i, j);
+        } else CONST_IF(constexpr_measure == REVERSE_ITAKURA_SAITO) {
+            ret = itakura_saito(j, i);
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
         }
@@ -562,10 +455,10 @@ private:
             }
         }
 
-        if(detail::needs_logs(measure_)) {
+        if(blz::detail::needs_logs(measure_)) {
             logdata_.reset(new MatrixType(neginf2zero(log(data_))));
         }
-        if(detail::needs_sqrt(measure_)) {
+        if(blz::detail::needs_sqrt(measure_)) {
             sqrdata_.reset(new MatrixType(blz::sqrt(data_)));
         }
         if(logdata_) {
@@ -627,7 +520,7 @@ template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typen
 auto make_probdiv_applicator(MatrixType &data, ProbDivType type=JSM, Prior prior=NONE, const PriorContainer *pc=nullptr) {
 #if VERBOSE_AF
     std::fprintf(stderr, "[%s:%s:%d] Making probdiv applicator with %d/%s as measure, %d/%s as prior, and %s for prior container.\n",
-                 __PRETTY_FUNCTION__, __FILE__, __LINE__, int(type), detail::prob2str(type), int(prior), prior == NONE ? "No prior": prior == DIRICHLET ? "Dirichlet" : prior == GAMMA_BETA ? "Gamma/Beta": "Feature-specific prior",
+                 __PRETTY_FUNCTION__, __FILE__, __LINE__, int(type), blz::detail::prob2str(type), int(prior), prior == NONE ? "No prior": prior == DIRICHLET ? "Dirichlet" : prior == GAMMA_BETA ? "Gamma/Beta": "Feature-specific prior",
                 pc == nullptr ? "No prior container": (std::string("Container of size ") + std::to_string(pc->size())).data());
 #endif
     return ProbDivApplicator<MatrixType>(data, type, prior, pc);

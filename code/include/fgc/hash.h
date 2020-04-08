@@ -175,14 +175,14 @@ public:
     decltype(auto) hash(const blz::Matrix<MT, SO> &input) const {
         if constexpr(use_offsets)
             return trans(blz::floor(randproj_ * trans(~input)) + blz::expand(boffsets_, (~input).rows()));
-        else                 
+        else
             return trans(blz::floor(randproj_ * trans(~input)));
     }
     template<typename MT>
     decltype(auto) hash(const blz::Matrix<MT, !SO> &input) const {
         if constexpr(use_offsets)
             return trans(blz::floor(randproj_ * trans(~input)) + blz::expand(boffsets_, (~input).columns()));
-        else                 
+        else
             return trans(blz::floor(randproj_ * trans(~input)));
     }
     const auto &matrix() const {return randproj_;}

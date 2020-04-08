@@ -340,7 +340,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     std::unique_ptr<typename MatrixType::ElementType[]> costs;
     get_assignment_counts:
     centers_reassigned = false;
-    
+
     OMP_PRAGMA("omp parallel for schedule(dynamic)")
     for(size_t i = 0; i < nr; ++i) {
         assert(assignments[i] < centers.rows());

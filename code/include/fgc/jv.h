@@ -63,7 +63,7 @@ void fill_cand_distance_mat(const Graph &x, Mat &mat, const std::vector<typename
         auto r = row(mat, i);
         assert(r.size() == x.num_vertices());
         boost::dijkstra_shortest_paths(x, edge,
-                                       distance_map(&r[0]));
+                                       boost::distance_map(&r[0]));
         if(r[0] == std::numeric_limits<float>::max()) {
             throw std::runtime_error("This is probably not connected");
         }
@@ -107,12 +107,8 @@ std::vector<typename Graph::vertex_descriptor>
 #endif
     // maxcost = (maxcostedgecost * num_cities)
 
-    NaiveJVSolver<float> jvs(c.rows(), c.columns(), 0.);
-    auto sol = jvs.kmedian(c, k);
-#ifndef NDEBUG
-    for(const auto v: sol)
-        assert(v <= candidates.size());
-#endif
+    jv::JVSolver<blaze::DynamicMatrix<float>> jvs(c);
+    auto [sol, solasn] = jvs.kmedian(k);
     std::vector<typename Graph::vertex_descriptor> ret(sol.size());
     for(size_t i = 0; i < sol.size(); ++i)
         ret[i] = candidates[sol[i]];

@@ -61,7 +61,7 @@ LINKS += -ltbb
 endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
-      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg
+      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg
 
 clust: kzclustexpdbg kzclustexp kzclustexpf
 
@@ -82,6 +82,7 @@ CXXFLAGS += $(LDFLAGS)
 printlibs:
 	echo $(LIBPATHS)
 
+
 graphrun: src/graphtest.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
@@ -90,6 +91,12 @@ dmlrun: src/dmlsearch.cpp $(wildcard include/fgc/*.h)
 
 %: src/%.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+
+alphaest: src/alphaest.cpp $(wildcard include/fgc/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+
+dae: src/alphaest.cpp $(wildcard include/fgc/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB
 
 jsdkmeanstest: src/jsdkmeanstest.cpp $(wildcard include/fgc/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0

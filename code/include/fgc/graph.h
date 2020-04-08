@@ -22,6 +22,8 @@ struct EdgeWeight<WeightType>: boost::property<boost::edge_weight_t, WeightType>
     EdgeWeight(T x): boost::property<boost::edge_weight_t, WeightType>(x) {}
 };
 #endif
+
+namespace graph {
 using namespace boost;
 
 template<typename DirectedS=undirectedS, typename EdgeProps=float, typename VtxProps=boost::no_property,
@@ -214,6 +216,12 @@ struct BidirGraph: public Graph<bidirectionalS, EdgeProps, VtxProps, GraphProps>
     BidirGraph(Args &&... args): super(std::forward<Args>(args)...) {
     }
 };
+
+} // namespace graph
+using graph::BidirGraph;
+using graph::UndirGraph;
+using graph::Graph;
+using graph::DirGraph;
 
 #ifndef NDEBUG
 template<typename Graph>
