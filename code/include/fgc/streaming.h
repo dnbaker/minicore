@@ -130,7 +130,7 @@ public:
         auto cost = weight * mincost;
         auto gam = get_gamma();
         if(cost / f_ > urd_(rng_)) {
-            mstack_.push(std::make_pair<Item, WT>(item, weight));
+            mstack_.push(std::pair<Item, WT>{item, weight});
         } else {
             cost_ += cost;
             mstack_[asn].second += weight;
@@ -168,6 +168,7 @@ public:
 
 template<typename Item, typename Func, template<typename> class WeightGen=UniformW, typename FT=double>
 auto make_kservice_clusterer(Func func, unsigned k, size_t n, double alpha, bool uniform_weighting=is_uniform_weighting<WeightGen<FT>>::value) {
+    std::fprintf(stderr, "Is uniform ? %d\n", uniform_weighting);
     return KServiceClusterer<Item, Func, FT>(func, k, n, alpha);
 }
 

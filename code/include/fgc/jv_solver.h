@@ -17,8 +17,9 @@ struct JVSolver {
 
     using payment_t = packed::pair<FT, IT>;
     using edge_type = jvutil::edgetup<FT, IT>;
+    using this_type = JVSolver<MatrixType, FT, IT>;
 
-private:
+    // Helper structure
     struct pay_compare_t {
         bool operator()(const payment_t lhs, const payment_t rhs) const {
             return lhs.first < rhs.first || lhs.second < rhs.second;
@@ -57,24 +58,20 @@ private:
         }
     };
 
+private:
+    // Private members
+    // Distance matrix: values are infinite for those missing (e.g., sparse)
     const MatrixType *distmatp_;
-    blaze::DynamicMatrix<FT> client_w_;
-    // W matrix
-    // Willingness of each client to pay for each facility
-    std::unique_ptr<edge_type[]> edges_;
-    // list of all edges, sorted by cost
-
-    std::vector<payment_t> client_v_;
-    // List of coverage by each facility
+    blaze::DynamicMatrix<FT> client_w_;  // W matrix: Willingness of each client to pay for each facility
+    std::shared_ptr<edge_type[]> edges_; // list of all edges, sorted by cost (shared ptr so that it can be shared by multiple instances)
+    std::vector<payment_t> client_v_;    // List of coverage by each facility
 
     blaze::DynamicVector<FT> facility_cost_;
     // Costs for facilities. Of size 1 if uniform, of size # fac otherwise.
 
     // List of facilities assigned to
-    std::vector<std::vector<IT>> clients_cpy_;
-
-    // List of temporarily open facilities
-    std::unique_ptr<std::vector<IT>[]> working_open_facilities_;
+    std::vector<std::vector<IT>> clients_cpy_; //List of facilities each client is assigned to
+    std::unique_ptr<std::vector<IT>[]> working_open_facilities_; // temporarily open facilities
 
     // List of final open facilities
     std::vector<IT> final_open_facilities_;
@@ -82,35 +79,31 @@ private:
     // List of final facility assignments
     std::vector<std::vector<IT>> final_open_facility_assignments_;
 
-    // Time when contributions are made to a facility
-    std::unique_ptr<FT[]> contribution_time_;
-    // Track of contributions to a given facility
-    std::unique_ptr<FT[]> fac_contributions_;
+    std::unique_ptr<FT[]> contribution_time_; // Time when contributions are made to a facility
+    std::unique_ptr<FT[]> fac_contributions_; // Track of contributions to a given facility
 
     std::vector<FT> pay_schedule_;
 
     payment_queue next_paid_;
 
     size_t n_open_clients_;
-
     size_t nedges_;
     size_t ncities_;
     size_t nfac_;
 
-    FT time_;
-
 
     // Private code
-    void final_phase1_loop() {
+
+    FT final_phase1_loop(FT time) {
         while(!next_paid_.empty()) {
             payment_t next_fac = next_facility();
             if(next_fac.first > 0) {
-                time_ = next_fac.first;
+                time = next_fac.first;
             }
-            n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time_);
+            n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time);
             if(n_open_clients_ == 0) break;
         }
-        //std::fprintf(stderr, "Finished final_phase1_loop\n");
+        return time;
     }
 
     // TODO: consider replacing with blaze::SmallArray to avoid heap allocation/access
@@ -180,8 +173,6 @@ private:
         }
         throw std::invalid_argument("Facility cost must be set");
     }
-
-
 
     void cluster_results() {
         std::vector<IT> temporarily_open;
@@ -285,7 +276,7 @@ private:
             const FT current_facility_cost = get_fac_cost(fid);
             if(!open_client(fac_clients)) {
                 //std::fprintf(stderr, "No current contributing clients. Now add empty to fac clients.\n");
-                if(fac_clients.size() != 1) throw std::runtime_error("Testing if this assumption is true");
+                assert(fac_clients.size() == 1);
 #if 0
                 fac_clients[0] = cid;
 #else
@@ -335,6 +326,32 @@ public:
     }
 
     template<typename CostType>
+    JVSolver(const this_type &o, const CostType &cost):
+        distmatp_(o.distmatp_),
+        client_w_(o.client_w_.rows(), o.client_w_.columns()),
+        edges_(o.edges_), // Note: this is copying a reference to the shared ptr of edges_.
+        client_v_(o.client_w_.columns(), payment_t{PAID_IN_FULL, EMPTY}),
+        clients_cpy_(o.distmatp_->columns(), std::vector<IT>()),
+        working_open_facilities_(new std::vector<IT>[o.distmatp_->rows()]),
+        contribution_time_(new FT[o.distmatp_->rows()]()),
+        fac_contributions_(new FT[o.distmatp_->rows()]()),
+        n_open_clients_(o.distmatp_->columns()),
+        nedges_(o.nedges_),
+        ncities_(o.ncities_),
+        nfac_(o.nfac_)
+    {
+        client_w_ = FT(0);
+        set_fac_cost(cost);
+        pay_schedule_.resize(nfac_);
+        next_paid_.clear();
+        for(size_t i = 0; i < nfac_; ++i) {
+            auto cost = get_fac_cost(i);
+            next_paid_.push({cost, i});
+            pay_schedule_[i] = cost;
+        }
+    }
+
+    template<typename CostType>
     JVSolver(const MatrixType &mat, const CostType &cost): JVSolver() {
         setup(mat, cost);
     }
@@ -345,7 +362,7 @@ public:
     void reset_cost(const CostType &cost) {
         set_fac_cost(cost);
         client_w_ = static_cast<FT>(0);
-        for(size_t i = 0; i < client_w_.columns(); ++i) clients_cpy_[i].clear();
+        for(size_t i = 0; i < ncities_; ++i) clients_cpy_[i].clear();
             for(size_t i = 0; i < nfac_; ++i)
                 working_open_facilities_[i] = {EMPTY};
         std::memset(contribution_time_.get(), 0, sizeof(contribution_time_[0]) * nfac_);
@@ -365,32 +382,31 @@ public:
     }
 
     template<typename CostType>
+    this_type clone_with_cost(const CostType &cost) {
+        return this_type(*this, cost);
+    }
+
+    template<typename CostType>
     void setup(const MatrixType &mat, const CostType &cost) {
-        //std::fprintf(stderr, "starting setup\n");
         distmatp_ = &mat;
-        // Set facility cost (either a single value or one per facility)
-        //std::fprintf(stderr, "setting facility cost\n");
         set_fac_cost(cost);
 
         // Initialize W and edge vector
-        //std::fprintf(stderr, "resizing client w\n");
         client_w_.resize(mat.rows(), mat.columns());
-        //std::fprintf(stderr, "setting client w\n");
         client_w_ = static_cast<FT>(0);
-        if(nedges_ < client_w_.rows() * client_w_.columns()) {
-            edges_.reset(new edge_type[client_w_.rows() * client_w_.columns()]);
+        const size_t edges_to_use = blaze::IsDenseMatrix_v<MatrixType> ? mat.rows() * mat.columns(): blaze::nonZeros(mat);
+        if(nedges_ != edges_to_use) {
+            edges_.reset(new edge_type[edges_to_use]);
         }
-        nedges_ = client_w_.rows() * client_w_.columns();
+        nedges_ = edges_to_use;
         // Set edge values, then sort by cost
-        //DBG_ONLY(edge_type *const total_eptr = &edges_[nedges_];)
-        OMP_PFOR
-        for(size_t i = 0; i < client_w_.rows(); ++i) {
-            const size_t nc = client_w_.columns();
-            edge_type *const eptr = &edges_[i * client_w_.columns()];
-            auto matptr = row(mat, i, blaze::unchecked);
-            CONST_IF(blaze::IsDenseMatrix_v<MatrixType>) {
+        if constexpr(blaze::IsDenseMatrix_v<MatrixType>) {
+            OMP_PFOR
+            for(size_t i = 0; i < mat.rows(); ++i) {
+                const size_t nc = mat.columns();
+                edge_type *const eptr = &edges_[i * mat.columns()];
+                auto matptr = row(mat, i, blaze::unchecked);
                 size_t j = 0;
-#if 1
                 for(;j + 8 <= nc; j += 8) {
                     eptr[j] =     {matptr[j], i, j};
                     eptr[j + 1] = {matptr[j + 1], i, j + 1};
@@ -401,53 +417,58 @@ public:
                     eptr[j + 6] = {matptr[j + 6], i, j + 6};
                     eptr[j + 7] = {matptr[j + 7], i, j + 7};
                 }
-                assert(j <= matptr.size());
-#endif
-                while(j < nc) {
-                    assert(j < matptr.size());
-                    eptr[j] = {matptr[j], i, j}, ++j;
-                }
-            } else {
-                auto rit = matptr.begin();
-                size_t j = 0;
-                while(rit != matptr.end()) {
-                    while(j < rit->index())
-                        eptr[j] = {std::numeric_limits<FT>::max(), i, j}, ++j;
-                    eptr[j] = {rit->value(), i, j};
-                    ++j;
-                    ++rit;
-                }
-                while(j < nc)
-                    eptr[j] = {std::numeric_limits<FT>::max(), i, j}, ++j;
+                for(;j < nc; eptr[j] = {matptr[j], i, j}, ++j);
             }
+        } else if constexpr(blaze::IsSparseMatrix_v<MatrixType>) {
+#ifdef _OPENMP
+            std::unique_ptr<IT[]> offsets(new IT[mat.rows()]);
+            offsets[0] = 0;
+            for(size_t i = 1; i < mat.rows(); ++i) {
+                offsets[i] = offsets[i - 1] + blaze::nonZeros(row(mat, i, blaze::unchecked));
+            }
+            OMP_PFOR
+            for(size_t i = 0; i < mat.rows(); ++i) {
+                auto eptr = edges_.get() + offsets[i];
+                if(offsets[i] != offsets[i + 1]) // If non-empty
+                    for(const auto &pair: row(mat, i, blaze::unchecked))
+                        *eptr++ = {pair->value(), i, pair->index()};
+            }
+#else
+            auto eptr = edges_.get();
+            for(size_t i = 0; i < mat.rows(); ++i)
+                for(const auto &pair: row(mat, i, blaze::unchecked))
+                    *eptr++ = {pair->value(), i, pair->index()};
+            assert(eptr == &edges_[nedges_]);
+#endif
+        } else {
+            throw std::runtime_error("Not currently supported: non-blaze matrices");
         }
         shared::sort(edges_.get(), edges_.get() + nedges_, [](edge_type x, edge_type y) {
             return x.cost() < y.cost();
         });
 
         // Initialize V, T, and S
-        if(ncities_ < client_w_.columns()) {
+        if(ncities_ < mat.columns()) {
             client_v_.clear();
-            client_v_.resize(client_w_.columns());
+            client_v_.resize(mat.columns());
             clients_cpy_.clear();
-            clients_cpy_.resize(client_w_.columns());
+            clients_cpy_.resize(mat.columns());
         } else {
-            for(size_t i = 0; i < client_w_.columns(); ++i) clients_cpy_[i].clear();
+            for(size_t i = 0; i < mat.columns(); ++i) clients_cpy_[i].clear();
         }
-        std::fill(client_v_.data(), &client_v_[client_w_.columns()], payment_t{PAID_IN_FULL, EMPTY});
-        if(nfac_ < client_w_.rows()) {
-            working_open_facilities_.reset(new std::vector<IT>[client_w_.rows()]);
-            nfac_ = client_w_.rows();
+        std::fill(client_v_.data(), &client_v_[mat.columns()], payment_t{PAID_IN_FULL, EMPTY});
+        if(nfac_ < mat.rows()) {
+            working_open_facilities_.reset(new std::vector<IT>[mat.rows()]);
+            nfac_ = mat.rows();
             contribution_time_.reset(new FT[nfac_]());
             fac_contributions_.reset(new FT[nfac_]());
         } else {
-            for(size_t i = 0; i < nfac_; ++i)
-                working_open_facilities_[i] = {EMPTY};
+            for(size_t i = 0; i < nfac_; working_open_facilities_[i++] = {EMPTY});
             std::memset(contribution_time_.get(), 0, sizeof(contribution_time_[0]) * nfac_);
             std::memset(fac_contributions_.get(), 0, sizeof(fac_contributions_[0]) * nfac_);
         }
-        ncities_ = client_w_.columns();
-        nfac_ = client_w_.rows();
+        ncities_ = mat.columns();
+        nfac_ = mat.rows();
         n_open_clients_ = ncities_;
         pay_schedule_.resize(nfac_);
         next_paid_.clear();
@@ -456,8 +477,6 @@ public:
             next_paid_.push({cost, i});
             pay_schedule_[i] = cost;
         }
-        assert(next_paid_.find({get_fac_cost(0), 0}) != next_paid_.end());
-        assert(next_paid_.size() == pay_schedule_.size());
     }
 
     payment_t next_facility() {
@@ -466,46 +485,39 @@ public:
 
     auto &run() {
         open_candidates();
-        return prune_candidates();
+        cluster_results();
+        return final_open_facilities_;
     }
-    void open_candidates() {
+
+    FT open_candidates() {
         IT edge_idx = 0;
-        time_ = 0.;
+        FT time = 0.;
         while(n_open_clients_) {
             if(edge_idx == nedges_) {
                 //std::fprintf(stderr, "All edges processed, now starting final loop\n");
-                final_phase1_loop();
+                time = final_phase1_loop(time);
                 break;
             }
             edge_type current_edge = edges_[edge_idx];
             auto current_edge_cost = current_edge.cost();
-            payment_t next_fac;
-            if(!next_paid_.empty())
-                next_fac = next_facility();
-            else {
-                next_fac = {current_edge_cost + 1e10, 0};
-            }
+            payment_t next_fac = next_paid_.empty() ? payment_t{current_edge_cost + 1e10, 0}
+                                                    : next_facility();
 
             if(current_edge_cost <= next_fac.first) {
                 n_open_clients_ = service_tight_edge(current_edge);
-                time_ = current_edge_cost;
+                time = current_edge_cost;
                 ++edge_idx;
             } else {
-                n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time_);
-                time_ = next_fac.first;
+                n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time);
+                time = next_fac.first;
             }
         }
-    }
-    auto &prune_candidates() {
-        //std::fprintf(stderr, "Starting pruning\n");
-        cluster_results();
-        return final_open_facilities_;
+        return time;
     }
 
     template<typename VT, bool TF>
     void set_fac_cost(const blaze::Vector<VT, TF> &val) {
         if((~val).size() != client_w_.rows()) throw std::invalid_argument("Val has wrong number of rows");
-        //std::cerr << ~val << '\n';
         facility_cost_.resize((~val).size());
         facility_cost_ = (~val);
     }
@@ -513,7 +525,6 @@ public:
     void set_fac_cost(CostType val) {
         facility_cost_.resize(1);
         facility_cost_[0] = val;
-        //std::fprintf(stderr, "facility cost: %g\n", val);
     }
     size_t nedges() const {
         return client_w_.rows() * client_w_.columns();
@@ -603,258 +614,6 @@ public:
         return std::make_pair(final_open_facilities_, final_open_facility_assignments_);
     }
 };
-#if 0
-namespace dontuse {
-
-template<typename FT>
-struct NaiveJVSolver {
-    // Complexity: something like F^2N + N^2F
-    // Much slower than it should be
-    using DefIT = unsigned int;
-    using edge_type = jvutil::edgetup<FT, DefIT>;
-    blaze::DynamicMatrix<FT> w_;
-    blaze::DynamicVector<FT> v_;
-    blaze::DynamicVector<uint32_t> numconnected_, numtight_;
-    std::vector<edge_type> edges_;
-    size_t edgeindex_ = 0;
-    double facility_cost_, maxalph_;
-    std::unordered_set<uint32_t> S_, tempopen_, nottempopen_;
-    NaiveJVSolver(size_t nf, size_t nc, double fc=1.):
-        w_(nf, nc, 0), v_(nc, 0), numconnected_(nf, 0), numtight_(nf, 0), edges_(nf * nc), facility_cost_(fc), maxalph_(0)
-    {
-    }
-    void reset(double newfacility_cost) {
-        if(newfacility_cost) facility_cost_ = newfacility_cost;
-        w_ = FT(0);
-        //((blaze::DynamicMatrix<FT> &)w_) = FT(0);
-        v_ = FT(0);
-        numconnected_ = 0;
-        numtight_ = 0;
-        maxalph_ = 0;
-        nottempopen_.clear();
-        for(size_t i = 0; i < w_.rows(); ++i) nottempopen_.insert(i);
-        tempopen_.clear();
-    }
-    template<typename MatType>
-    void setup(const MatType &mat) {
-        auto start = std::chrono::high_resolution_clock::now();
-        if(mat.rows() != w_.rows() || mat.columns() != w_.columns()) {
-            char buf[256];
-            std::sprintf(buf, "Wrong number of rows or columns: received %zu/%zu, expected %zu/%zu\n", mat.rows(), mat.columns(), w_.rows(), w_.columns());
-            throw std::runtime_error(buf);
-        }
-        CONST_IF(blaze::IsDenseMatrix_v<MatType>) {
-            OMP_PFOR
-            for(size_t i = 0; i < mat.rows(); ++i) {
-                auto p = &edges_[i * mat.columns()];
-                auto r = row(mat, i);
-                for(size_t j = 0; j < mat.columns(); ++j) {
-                    *p++ = {r[j], i, j};
-                }
-            }
-        } else {
-            OMP_PFOR
-            for(size_t i = 0; i < mat.rows(); ++i) {
-                auto p = &edges_[i * mat.columns()];
-                auto r = row(mat, i);
-                auto rit = r.begin();
-                size_t j = 0;
-                if(rit == r.end()) {
-                    for(size_t j = 0; j < r.size();
-                        *p++ = {std::numeric_limits<FT>::max(), i, j++});
-                    continue;
-                }
-                while(rit != r.end()) {
-                    while(j < rit.index()) {
-                        *p++ = {std::numeric_limits<FT>::max(),
-                                i, j++};
-                    }
-                    *p = {rit->value(), i, j++};
-                    ++rit;
-                }
-                while(j < r.size()) *p++ = {std::numeric_limits<FT>::max(), i, j++};
-            }
-        }
-        shared::sort(&edges_[0], &edges_[edges_.size()], [](const auto x, const auto y) {return x.cost() < y.cost();});
-        tempopen_.clear();
-        for(size_t i = 0; i < mat.rows(); ++i) nottempopen_.insert(i);
-        auto stop = std::chrono::high_resolution_clock::now();
-        std::fprintf(stderr, "Setup took %g\n", 0.000001 * (stop - start).count());
-    }
-    template<typename MatType, typename IType=DefIT>
-    std::vector<IType> phase2() { // Electric Boogaloo
-        std::fprintf(stderr, "tos: ntos: %zu/%zu\n", tempopen_.size(), nottempopen_.size());
-        double sum = blaze::sum(w_);
-        uint64_t seed;
-        std::memcpy(&seed, &sum, sizeof(seed));
-        wy::WyRand<uint32_t, 2> rng(seed);
-        std::vector<uint32_t> tov(tempopen_.begin(), tempopen_.end());
-        std::vector<uint32_t> to_remove;
-        auto lai = rng() % tov.size();
-        std::swap(tov[lai], tov.back());
-        auto la = tov.back();
-        tov.pop_back();
-        std::vector<IType> ret{la};
-        while(tov.size()) {
-            auto r = row(w_, la);
-            for(size_t i = 0; i < w_.columns(); ++i) {
-                if(r[i] > 0.) {
-                    for(size_t j = 0; j < w_.rows(); ++j)
-                        if(w_(j, i) > 0.)
-                            to_remove.push_back(j);
-                }
-            }
-            for(const auto item: to_remove)
-                tempopen_.erase(item);
-            tov.assign(tempopen_.begin(), tempopen_.end());
-            if(tempopen_.empty()) break;
-            to_remove.clear();
-            auto ci = rng() % tov.size();
-            la = tov[ci];
-            std::swap(tov[ci], tov.back());
-            tov.pop_back();
-            ret.push_back(la);
-        }
-        return ret;
-    }
-    template<typename MatType, typename CT>
-    double calculate_cost(const MatType &mat, const CT &open_facilities) const {
-        if(open_facilities.empty()) return std::numeric_limits<double>::max();
-        double faccost = open_facilities.size() * facility_cost_;
-        double citycost = blaze::sum(blaze::min<blaze::columnwise>(rows(mat, open_facilities, blaze::unchecked)));
-        return citycost + faccost;
-    }
-    template<typename MatType, typename IType=DefIT>
-    std::vector<IType> ufl(const MatType &mat, double faccost) {
-        // Uncapacited Facility Location problem with facility cost = faccost
-        this->reset(faccost);
-        assert(nottempopen_.size() == w_.rows());
-        assert(tempopen_.size() == 0);
-        std::fprintf(stderr, "##Starting phase1 with faccost %.12g\n", faccost);
-        phase1(mat);
-        return phase2<MatType, IType>();
-    }
-    template<typename MatType, typename IType=DefIT>
-    std::vector<IType> kmedian(const MatType &mat, unsigned k, unsigned maxrounds=500, double maxcost_starting=0.) {
-        setup(mat);
-        double maxcost = maxcost_starting ? maxcost_starting: double(mat.columns() * max(mat));
-        if(std::isinf(maxcost)) {
-            maxcost = std::numeric_limits<double>::min();
-            for(size_t i = 0; i < mat.rows(); ++i)
-                for(const auto v: row(mat, i, blaze::unchecked))
-                    if(!std::isinf(v) && v > maxcost)
-                        maxcost = v;
-            }
-        }
-        double mincost = 0.;
-        double medcost = maxcost / 2;
-        //auto ubound = ufl(mat, maxcost);
-        //auto lbound = ufl(mat, mincost);
-        auto med = ufl(mat, medcost);
-        std::fprintf(stderr, "##first solution: %zu (want k %u)\n", med.size(), k);
-        size_t roundnum = 0;
-        while(med.size() != k) {
-            std::fprintf(stderr, "##round %zu. current size: %zu\n", ++roundnum, med.size());
-            if(med.size() == k) break;
-            if(med.size() > k)
-                mincost = medcost; // med has too many, increase cost.
-            else
-                maxcost = medcost; // med has too few, lower cost.
-            medcost = (mincost + maxcost) / 2.;
-            auto start = std::chrono::high_resolution_clock::now();
-            med = ufl<MatType, IType>(mat, medcost);
-            auto stop = std::chrono::high_resolution_clock::now();
-            std::fprintf(stderr, "Solution cost: %f. size: %zu. Time in ms: %g. Dimensions: %zu/%zu\n", calculate_cost(mat, med), med.size(), (stop - start).count() * 0.000001, w_.rows(), w_.columns());
-            if(roundnum > maxrounds) {
-                break;
-            }
-        }
-        return med;
-    }
-    std::pair<uint32_t, double> min_tightening_cost() const {
-        if(edgeindex_ == edges_.size()) return std::make_pair(uint32_t(-1), std::numeric_limits<double>::max());
-        auto edge = edges_[edgeindex_];
-        return std::make_pair(edge.di(), edge.cost() - maxalph_);
-    }
-    std::pair<uint32_t, double> min_opening_cost() const {
-        double mincost = std::numeric_limits<double>::max();
-        uint32_t ind = -1u;
-        for(const auto fid: nottempopen_) {
-            auto nsupport = std::accumulate(row(w_, fid).begin(), row(w_, fid).end(), size_t(0), [](auto x, auto y) {return x + y >= 0.;});
-            if(nsupport == 0) return std::make_pair(-1u, std::numeric_limits<double>::max());
-            auto availsum = std::accumulate(row(w_, fid).begin(), row(w_, fid).end(), 0.);
-            //std::fprintf(stderr, "rowsum: %f. facility cost: %f\n", availsum, facility_cost_);
-            auto diff = facility_cost_ - availsum;
-            auto cost = nsupport ? diff / nsupport: std::numeric_limits<double>::max();
-            //std::fprintf(stderr, "diff: %g. cost: %g\n", diff, cost);
-            if(cost < mincost) mincost = cost, ind = fid;
-        }
-        return std::make_pair(ind, mincost);
-    }
-    template<typename MatType>
-    void perform_increment(double inc,  std::vector<uint32_t> &to_remove, const MatType &mat) {
-        maxalph_ += inc;
-        for(const auto item: S_) {
-            v_[item] = maxalph_;
-            for(size_t fi = 0; fi < w_.rows(); ++fi) {
-                if(maxalph_ >= mat(fi,item)) {
-                    if(tempopen_.find(fi) != tempopen_.end()) // && std::find(to_remove.begin(), to_remove.end(), item) != to_remove.end())
-                        to_remove.push_back(item);
-                }
-                w_(fi, item) = std::max(0., maxalph_ - mat(fi, item));
-            }
-        }
-    }
-    template<typename MatType>
-    void phase1(const MatType &mat) {
-        auto &S(S_);
-        S.clear(); S.reserve(v_.size());
-        for(size_t i = 0; i < v_.size(); S.insert(i++));
-        assert(nottempopen_.size() == w_.rows());
-        assert(w_.rows());
-        std::vector<uint32_t> to_remove;
-        size_t nz = 0;
-        edgeindex_ = std::find_if(edges_.begin(), edges_.end(), [](auto x) {return x.cost() > 0.;})
-                     - edges_.begin();
-        // Skip over 0 indices
-        std::fprintf(stderr, "nz: %zu\n", nz);
-        while(S.size()) {
-            //std::fprintf(stderr, "Size of S: %zu. nto size: %zu. tos: %zu\n", S.size(), nottempopen_.size(), tempopen_.size());
-            //std::fprintf(stderr, "getting min tight cost\n");
-            auto [bestedge, tightinc] = min_tightening_cost();
-            //std::fprintf(stderr, "got min tight cost\n");
-            auto [bestfac, openinc]   = min_opening_cost();
-            //std::fprintf(stderr, "got min opening cost\n");
-            bool tighten = true;
-            if(tightinc < openinc) {
-                auto bec = edges_[edgeindex_].cost();
-                do ++edgeindex_; while(edges_[edgeindex_].cost() == bec);
-                // Skip over identical weights
-            } else tighten = false;
-            const double inc = std::min(tightinc, openinc);
-            //std::fprintf(stderr, "inc: %g. open: %g. tighten: %g\n", inc, openinc, tightinc);
-            perform_increment(inc, to_remove, mat);
-            //std::fprintf(stderr, "new alpha: %g\n", maxalph_);
-            if(!tighten) {
-                //auto fc = facility_cost_;
-                tempopen_.insert(bestfac);
-                nottempopen_.erase(bestfac);
-                //std::fprintf(stderr, "Inserting bestfac %u. nto size %zu. tempopen size: %zu\n", bestfac, nottempopen_.size(), tempopen_.size());
-                for(const auto item: S) {
-                    assert(v_.size() && v_.size() > item);
-                    if(v_.at(item) >= mat(bestfac, item)) // && std::find(to_remove.begin(), to_remove.end(), s) != to_remove.end())
-                        to_remove.push_back(item);
-                }
-            }
-            for(const auto item: to_remove) {
-                S.erase(item);
-            }
-        }
-    }
-};
-
-} // namespace dontuse
-#endif
 
 } // namespace jv
 

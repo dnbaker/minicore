@@ -42,4 +42,6 @@ int main() {
     std::fprintf(stderr, "jvs solution cost: %g\n", jvs.calculate_cost(false));
     auto [kmedcenters, kmedasns] = jvs.kmedian(k, 1000);
     assert(kmedcenters.size() == k);
+    fgc::jv::JVSolver<blaze::DynamicMatrix<float>, float, uint32_t> jvs2(jvs, 14000);
+    auto jvs2sol = jvs2.run();
 }

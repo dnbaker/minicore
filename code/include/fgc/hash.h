@@ -447,6 +447,11 @@ public:
 
 } // namespace hash
 
+using hash::clipped_cauchy_distribution;
+using hash::cms_distribution;
+
+using hash::LSHasherSettings;
+
 using hash::L1LSHasher;        // D_{L1} = \sqrt{\sum_{d=1}^D |P_i - Q_i|}
 using hash::L2LSHasher;        // D_{L2} = \sqrt{\sum_{d=1}^D (P_i - Q_i)^2}
 using hash::ClippedL1LSHasher;
