@@ -336,16 +336,7 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
     const size_t n = bbox_vertices_ptr ? bbox_vertices_ptr->size(): boost::num_vertices(x);
     const double logn = std::log2(n);
     const size_t samples_per_round = std::ceil(npermult * logn * k / eps);
-#if 0
-    std::vector<WeightType> wcopy;
-    if(weights) {
-        wcopy.insert(wcopy.end(), weights, weights + n);
-    }
-#endif
-
-
-    std::fprintf(stderr, "nv: %zu\n", boost::num_vertices(x));
-    auto func = [&](Graph &localx){
+    auto func = [&](Graph &localx) {
         //auto wworking = wcopy;
         return thorup_d(localx, rng, samples_per_round, nroundmult * logn, bbox_vertices_ptr, weights);
     };
@@ -354,12 +345,8 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
     bestsol.second = std::numeric_limits<double>::max();
     OMP_PFOR
     for(unsigned i = 0; i < num_iter; ++i) {
-#ifdef _OPENMP
-        Graph cpy = x;
+        OMP_ELSE(Graph, Graph &) cpy(x);
         auto next = func(cpy);
-#else
-        auto next = func(x);
-#endif
         if(next.second == std::numeric_limits<double>::max()) {
             // This round failed.
             --i;
@@ -434,14 +421,9 @@ thorup_sample_mincost_with_weights(Graph &x, unsigned k, uint64_t seed,
         assert(ccounts.size() == firstset.first.size());
         auto ccountcpy = ccounts;
         assert(check_sum(ccountcpy));
-#if VERBOSE_AF
-        std::fprintf(stderr, "Starting thorup sample mincost with set of elements %zu in size\n", ccountcpy.size());
-#endif
+        VERBOSE_ONLY(std::fprintf(stderr, "Starting thorup sample mincost with set of elements %zu in size\n", ccountcpy.size());)
         auto nextset = thorup_sample_mincost(x, k, seed + 1, num_trials, &(firstset.first), ccountcpy.data(), npermult, nroundmult);
         ccountcpy = histogram_assignments(nextset.second, nextset.first.size(), *bbox_vertices_ptr);
-#if VERBOSE_AF
-        std::fprintf(stderr, "sum ccountcpy after recalc: %u/%zu\n", blaze::sum(ccountcpy), ccountcpy.size());
-#endif
         assert(ccountcpy.size() == nextset.first.size());
         ccounts = std::move(ccountcpy);
         std::swap(firstset, nextset);

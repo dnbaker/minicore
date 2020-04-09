@@ -8,12 +8,6 @@ namespace fgc {
 
 namespace jv {
 
-#ifndef NDEBUG
-#define __access operator[]
-#else
-#define __access at
-#endif
-
 
 template<typename MatrixType, typename FT=blaze::ElementType_t<MatrixType>, typename IT=uint32_t>
 struct JVSolver {
@@ -64,7 +58,7 @@ private:
     };
 
     const MatrixType *distmatp_;
-    blz::DM<FT> client_w_;
+    blaze::DynamicMatrix<FT> client_w_;
     // W matrix
     // Willingness of each client to pay for each facility
     std::unique_ptr<edge_type[]> edges_;
@@ -73,7 +67,7 @@ private:
     std::vector<payment_t> client_v_;
     // List of coverage by each facility
 
-    blz::DV<FT> facility_cost_;
+    blaze::DynamicVector<FT> facility_cost_;
     // Costs for facilities. Of size 1 if uniform, of size # fac otherwise.
 
     // List of facilities assigned to
@@ -93,7 +87,7 @@ private:
     // Track of contributions to a given facility
     std::unique_ptr<FT[]> fac_contributions_;
 
-    std::vector<payment_t> pay_schedule_;
+    std::vector<FT> pay_schedule_;
 
     payment_queue next_paid_;
 
@@ -138,14 +132,14 @@ private:
                 auto &open_fac = working_open_facilities_[fid];
                 if(open_client(open_fac) && fid != gfid) {
                     auto &fac_pay = pay_schedule_[fid];
-                    if(fac_pay.first != PAID_IN_FULL) {
+                    if(fac_pay != PAID_IN_FULL) {
                         if(client_w_(fid, cid) != PAID_IN_FULL) {
                             FT nclients_fid = working_open_facilities_[fid].size();
                             FT update_pay = nclients_fid * (cost - contribution_time_[fid]);
-                            FT oldv = fac_pay.first;
+                            FT oldv = fac_pay;
                             FT current_contrib = fac_contributions_[fid] + update_pay;
                             fac_contributions_[fid] = current_contrib;
-                            fac_pay.first -= current_contrib;
+                            fac_pay -= current_contrib;
                             contribution_time_[fid] = cost;
                             FT remaining_time;
                             FT opening_cost = get_fac_cost(fid);
@@ -161,7 +155,7 @@ private:
                                 remaining_time = opening_cost - cost + EPS;
                             }
                             FT newv = cost + remaining_time;
-                            fac_pay.first = newv;
+                            fac_pay = newv;
                             //std::fprintf(stderr, "About to update in update_facilities. fid = %u. cid = %u. Under gfid %u\n", fid, cid, gfid);
                             next_paid_.update(oldv, newv, fid);
                         }
@@ -172,9 +166,9 @@ private:
             client_v_[cid] = {cost, gfid};
             --n_open_clients_;
         }
-        if(FT oldv = pay_schedule_[gfid].first; oldv != PAID_IN_FULL) {
+        if(FT oldv = pay_schedule_[gfid]; oldv != PAID_IN_FULL) {
             next_paid_.erase(payment_t{oldv, gfid});
-            pay_schedule_[gfid].first = PAID_IN_FULL;
+            pay_schedule_[gfid] = PAID_IN_FULL;
         }
         return n_open_clients_;
     }
@@ -182,7 +176,7 @@ private:
     FT get_fac_cost(size_t ind) const {
         if(facility_cost_.size()) {
             if(facility_cost_.size() == 1) return facility_cost_[0];
-            return facility_cost_.__access(ind);
+            return facility_cost_[ind];
         }
         throw std::invalid_argument("Facility cost must be set");
     }
@@ -192,7 +186,7 @@ private:
     void cluster_results() {
         std::vector<IT> temporarily_open;
         for(size_t i = 0; i < pay_schedule_.size(); ++i) {
-            if(pay_schedule_[i].first == PAID_IN_FULL)
+            if(pay_schedule_[i] == PAID_IN_FULL)
                 temporarily_open.push_back(i);
         }
         std::vector<std::vector<IT>> open_facility_assignments;
@@ -277,7 +271,7 @@ private:
         }
 
         //
-        if(pay_schedule_.__access(fid).first == PAID_IN_FULL) {
+        if(pay_schedule_[fid] == PAID_IN_FULL) {
             //std::fprintf(stderr, "Facility fid = %u is paid in full\n", fid);
             working_open_facilities_[fid].push_back(cid);
             updated_clients.push_back(cid);
@@ -298,7 +292,7 @@ private:
                 std::replace(fac_clients.begin(), fac_clients.end(), EMPTY, cid);
                 contribution_time_[fid] = cost;
 #endif
-                next_paid_.update(pay_schedule_[fid].first, current_facility_cost, fid);
+                next_paid_.update(pay_schedule_[fid], current_facility_cost, fid);
             } else {
                 // facility already has some clients
                 size_t nclients_fid = fac_clients.size();
@@ -315,11 +309,11 @@ private:
                     // Open facility
                     n_open_clients_ = update_facilities(fid, working_open_facilities_[fid], cost);
                 } else {
-                    FT oldc = pay_schedule_[fid].first;
+                    FT oldc = pay_schedule_[fid];
                     FT remaining_time = nclients_fid ? (current_facility_cost - current_pay) / nclients_fid
                                                      : current_facility_cost - cost + EPS;
                     FT newc = cost + remaining_time;
-                    pay_schedule_[fid].first = newc;
+                    pay_schedule_[fid] = newc;
                     next_paid_.update(oldc, newc, fid);
                 }
             }
@@ -358,11 +352,12 @@ public:
         std::memset(fac_contributions_.get(), 0, sizeof(fac_contributions_[0]) * nfac_);
         n_open_clients_ = ncities_;
         pay_schedule_.resize(nfac_);
-        for(size_t i = 0; i < nfac_; ++i) {
-            pay_schedule_[i] = {get_fac_cost(i), i};
-        }
         next_paid_.clear();
-        next_paid_.push(pay_schedule_.begin(), pay_schedule_.end());
+        for(size_t i = 0; i < nfac_; ++i) {
+            auto cost = get_fac_cost(i);
+            next_paid_.push({cost, i});
+            pay_schedule_[i] = cost;
+        }
         assert(next_paid_.find({get_fac_cost(0), 0}) != next_paid_.end());
         assert(next_paid_.size() == pay_schedule_.size());
         assert(client_w_.rows() == distmatp_->rows());
@@ -455,11 +450,12 @@ public:
         nfac_ = client_w_.rows();
         n_open_clients_ = ncities_;
         pay_schedule_.resize(nfac_);
-        for(size_t i = 0; i < nfac_; ++i) {
-            pay_schedule_[i] = {get_fac_cost(i), i};
-        }
         next_paid_.clear();
-        next_paid_.push(pay_schedule_.begin(), pay_schedule_.end());
+        for(size_t i = 0; i < nfac_; ++i) {
+            auto cost = get_fac_cost(i);
+            next_paid_.push({cost, i});
+            pay_schedule_[i] = cost;
+        }
         assert(next_paid_.find({get_fac_cost(0), 0}) != next_paid_.end());
         assert(next_paid_.size() == pay_schedule_.size());
     }
@@ -607,7 +603,7 @@ public:
         return std::make_pair(final_open_facilities_, final_open_facility_assignments_);
     }
 };
-
+#if 0
 namespace dontuse {
 
 template<typename FT>
@@ -616,9 +612,9 @@ struct NaiveJVSolver {
     // Much slower than it should be
     using DefIT = unsigned int;
     using edge_type = jvutil::edgetup<FT, DefIT>;
-    blz::DM<FT> w_;
-    blz::DV<FT> v_;
-    blz::DV<uint32_t> numconnected_, numtight_;
+    blaze::DynamicMatrix<FT> w_;
+    blaze::DynamicVector<FT> v_;
+    blaze::DynamicVector<uint32_t> numconnected_, numtight_;
     std::vector<edge_type> edges_;
     size_t edgeindex_ = 0;
     double facility_cost_, maxalph_;
@@ -725,7 +721,7 @@ struct NaiveJVSolver {
     double calculate_cost(const MatType &mat, const CT &open_facilities) const {
         if(open_facilities.empty()) return std::numeric_limits<double>::max();
         double faccost = open_facilities.size() * facility_cost_;
-        double citycost = blz::sum(blz::min<blz::columnwise>(rows(mat, open_facilities, blaze::unchecked)));
+        double citycost = blaze::sum(blaze::min<blaze::columnwise>(rows(mat, open_facilities, blaze::unchecked)));
         return citycost + faccost;
     }
     template<typename MatType, typename IType=DefIT>
@@ -744,8 +740,8 @@ struct NaiveJVSolver {
         double maxcost = maxcost_starting ? maxcost_starting: double(mat.columns() * max(mat));
         if(std::isinf(maxcost)) {
             maxcost = std::numeric_limits<double>::min();
-            for(const auto r: blz::rowiterator(mat)) {
-                for(const auto v: r)
+            for(size_t i = 0; i < mat.rows(); ++i)
+                for(const auto v: row(mat, i, blaze::unchecked))
                     if(!std::isinf(v) && v > maxcost)
                         maxcost = v;
             }
@@ -858,6 +854,7 @@ struct NaiveJVSolver {
 };
 
 } // namespace dontuse
+#endif
 
 } // namespace jv
 
