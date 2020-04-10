@@ -6,8 +6,8 @@
 #include <boost/accumulators/accumulators.hpp>                                                         
 #include <boost/accumulators/statistics/p_square_cumul_dist.hpp>                                       
 #include <boost/accumulators/statistics/stats.hpp>                                                     
-#include <boost/accumulators/statistics/stats.hpp>                                                     
 #include <boost/accumulators/statistics/sum.hpp>                                                       
+#include <boost/accumulators/statistics/median.hpp>
 #include <boost/accumulators/statistics/weighted_median.hpp>
 
 namespace fgc {
@@ -53,17 +53,27 @@ auto &geomedian(const blz::DenseMatrix<MT, SO> &mat, blz::DenseVector<VT, !SO> &
 }
 
 template<typename MT, bool SO, typename VT, bool TF>
-void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret) {
+void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, bool approx_med=true) {
     assert((~ret).size() == (~data).columns());
     auto &rr(~ret);
     const auto &dr(~data);
     const bool odd = dr.rows() % 2;
     const size_t hlf = dr.rows() / 2;
     const blaze::DynamicVector<uint32_t> indices = generate(dr.rows(), [](auto x){return x;});
-    for(size_t i = 0; i < dr.columns(); ++i) {
-        blaze::DynamicVector<ElementType_t<MT>, blaze::columnVector> tmpind = column(data, i); // Should do fast copying.
-        shared::sort(tmpind.begin(), tmpind.end());
-        rr[i] = odd ? tmpind[hlf]: ElementType_t<MT>(.5) * (tmpind[hlf] + tmpind[hlf + 1]);
+    if(approx_med) {
+        using acc_tag = boost::accumulators::stats<boost::accumulators::tag::median(with_p_square_quantile)>;
+        using FT = ElementType_t<MT>;
+        for(size_t i = 0; i < dr.columns(); ++i) {
+            boost::accumulators::accumulator_set<FT, acc_tag> acc;
+            for(auto v: column(dr, i)) acc(v);
+            (~ret)[i] = boost::accumulators::median(acc);
+        }
+    } else {
+        for(size_t i = 0; i < dr.columns(); ++i) {
+            blaze::DynamicVector<ElementType_t<MT>, blaze::columnVector> tmpind = column(data, i); // Should do fast copying.
+            shared::sort(tmpind.begin(), tmpind.end());
+            rr[i] = odd ? tmpind[hlf]: ElementType_t<MT>(.5) * (tmpind[hlf] + tmpind[hlf + 1]);
+        }
     }
 }
 
@@ -77,7 +87,7 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVe
         (~ret).resize(nc);
     }
     if(approx_med) {
-        OMP_PFOR
+        //OMP_PFOR
         for(size_t i = 0; i < nc; ++i) {
             auto &mat = ~data;
             using acc_tag = boost::accumulators::stats<boost::accumulators::tag::weighted_median>;
@@ -102,11 +112,10 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVe
 
 template<typename MT, bool SO, typename VT, bool TF, typename VT3=blz::CommonType_t<ElementType_t<MT>, ElementType_t<VT>>>
 void l1_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, const VT3 *weights=static_cast<VT3 *>(nullptr), bool approx_med=true) {
-    if(weights) {
-        l1_unweighted_median(data, ret);
-    } else {
+    if(weights)
         weighted_median(data, ret, weights, approx_med);
-    }
+    else
+        l1_unweighted_median(data, ret, approx_med);
 }
 
 
