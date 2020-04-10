@@ -53,7 +53,7 @@ auto &geomedian(const blz::DenseMatrix<MT, SO> &mat, blz::DenseVector<VT, !SO> &
 }
 
 template<typename MT, bool SO, typename VT, bool TF>
-void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, bool approx_med=true) {
+void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, bool approx_med=false) {
     assert((~ret).size() == (~data).columns());
     auto &rr(~ret);
     const auto &dr(~data);
@@ -80,7 +80,7 @@ void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector
 
 
 template<typename MT, bool SO, typename VT2, bool TF2, typename FT=CommonType_t<ElementType_t<MT>, ElementType_t<VT2>>>
-static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT2, TF2> &ret, const FT *weights, bool approx_med=true) {
+static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT2, TF2> &ret, const FT *weights, bool approx_med=false) {
     assert(weights);
     const size_t nc = (~data).columns();
     if((~ret).size() != nc) {
@@ -111,7 +111,7 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVe
 
 
 template<typename MT, bool SO, typename VT, bool TF, typename VT3=blz::CommonType_t<ElementType_t<MT>, ElementType_t<VT>>>
-void l1_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, const VT3 *weights=static_cast<VT3 *>(nullptr), bool approx_med=true) {
+void l1_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, const VT3 *weights=static_cast<VT3 *>(nullptr), bool approx_med=false) {
     if(weights)
         weighted_median(data, ret, weights, approx_med);
     else

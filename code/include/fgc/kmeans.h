@@ -410,7 +410,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         }
         assignments[i] = label;
         total_loss += getw(i) * dist;
-        DBG_ONLY(if(i % 500u == 0) std::fprintf(stderr, "tid %d at i = %zu/%zu\n", tid, i, nr);)
+        DBG_ONLY(if(i % (nr / 10) == 0) std::fprintf(stderr, "tid %d at i = %zu/%zu\n", tid, i, nr);)
     }
     std::fprintf(stderr, "total loss: %g\n", total_loss);
     if(std::isnan(total_loss)) total_loss = std::numeric_limits<decltype(total_loss)>::infinity();
