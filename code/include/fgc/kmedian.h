@@ -3,10 +3,17 @@
 #define FGC_KMEDIAN_H__
 #include "kmeans.h"
 #include <algorithm>
+#include <boost/accumulators/accumulators.hpp>                                                         
+#include <boost/accumulators/statistics/p_square_cumul_dist.hpp>                                       
+#include <boost/accumulators/statistics/stats.hpp>                                                     
+#include <boost/accumulators/statistics/stats.hpp>                                                     
+#include <boost/accumulators/statistics/sum.hpp>                                                       
+#include <boost/accumulators/statistics/weighted_median.hpp>
 
 namespace fgc {
 namespace coresets {
 using namespace blz;
+using namespace boost::accumulators;
 
 template<typename MT, bool SO, typename VT, typename WeightType=const typename MT::ElementType *>
 auto &geomedian(const blz::DenseMatrix<MT, SO> &mat, blz::DenseVector<VT, !SO> &dv, double eps=1e-8,
@@ -46,7 +53,7 @@ auto &geomedian(const blz::DenseMatrix<MT, SO> &mat, blz::DenseVector<VT, !SO> &
 }
 
 template<typename MT, bool SO, typename VT, bool TF>
-void l1_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret) {
+void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret) {
     assert((~ret).size() == (~data).columns());
     auto &rr(~ret);
     const auto &dr(~data);
@@ -60,11 +67,48 @@ void l1_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &r
     }
 }
 
-template<typename FT>
-static inline auto weighted_med(FT *ptr, FT *weights, size_t n, bool convex_comb=false) {
-    auto cbuf(std::make_unique<std::pair<FT,FT>[]>(n));
-    return weighted_med(ptr, weights, n, cbuf.get(), convex_comb);
+
+
+template<typename MT, bool SO, typename VT2, bool TF2, typename FT=CommonType_t<ElementType_t<MT>, ElementType_t<VT2>>>
+static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT2, TF2> &ret, const FT *weights, bool approx_med=true) {
+    assert(weights);
+    const size_t nc = (~data).columns();
+    if((~ret).size() != nc) {
+        (~ret).resize(nc);
+    }
+    if(approx_med) {
+        OMP_PFOR
+        for(size_t i = 0; i < nc; ++i) {
+            auto &mat = ~data;
+            using acc_tag = boost::accumulators::stats<boost::accumulators::tag::weighted_median>;
+            boost::accumulators::accumulator_set<FT, acc_tag, FT> acc;
+            auto col = column(mat, i);
+            for(size_t j = 0; j < col.size(); ++j) {
+                acc(col[j], weight = weights[j]);
+            }
+            (~ret)[i] = boost::accumulators::median(acc);
+        }
+    } else {
+        throw std::runtime_error("Not implemented yet; this process is expensive and hard to make cache-friendly.");
+    }
+#if 0
+    blz::DynamicVector<FT> midpoints = blz::sum<blz::columnwise>(~data) * .5;
+    shared::flat_hash_set<IT> indices;
+    indices.reserve(nc);
+    for(size_t i = 0; i < nc;indices.insert(i++));
+#endif
 }
+
+
+template<typename MT, bool SO, typename VT, bool TF, typename VT3=blz::CommonType_t<ElementType_t<MT>, ElementType_t<VT>>>
+void l1_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, const VT3 *weights=static_cast<VT3 *>(nullptr), bool approx_med=true) {
+    if(weights) {
+        l1_unweighted_median(data, ret);
+    } else {
+        weighted_median(data, ret, weights, approx_med);
+    }
+}
+
 
 } // namespace coresets
 } // namespace fgc

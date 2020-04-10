@@ -90,12 +90,16 @@ class JSDLSHasher {
 public:
     using ElementType = FT;
     static constexpr bool StorageOrder = SO;
-    JSDLSHasher(LSHasherSettings settings, double r, uint64_t seed=0): settings_(settings) {
+    JSDLSHasher(LSHasherSettings settings, const double r, uint64_t seed=0): settings_(settings) {
         unsigned nd = settings.dim_, nh = settings.nhashes();
         if(seed == 0) seed = nd * nh + r;
         std::mt19937_64 mt(seed);
         std::normal_distribution<FT> gen;
-        randproj_ = blz::generate(nh, nd, [&](size_t, size_t){return gen(mt);}) / r;
+        randproj_ = blz::generate(nh, nd, [&](size_t x, size_t y){
+            std::mt19937_64 mt(seed + x + seed * y);
+            return gen(mt);
+        });
+        randproj_ /= r;
         boffsets_ = blz::generate(nh, [&](size_t){return FT(mt()) / mt.max();});
         assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow, I suppose
     }
