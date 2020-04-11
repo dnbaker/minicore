@@ -59,8 +59,8 @@ void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector
     const auto &dr(~data);
     const bool odd = dr.rows() % 2;
     const size_t hlf = dr.rows() / 2;
-    const blaze::DynamicVector<uint32_t> indices = generate(dr.rows(), [](auto x){return x;});
     if(approx_med) {
+        //using acc_tag = boost::accumulators::stats<boost::accumulators::tag::median(boost::accumulators::tag::with_p_square_cumulative_distribution)>;
         using acc_tag = boost::accumulators::stats<boost::accumulators::tag::median(with_p_square_quantile)>;
         using FT = ElementType_t<MT>;
         for(size_t i = 0; i < dr.columns(); ++i) {
@@ -79,7 +79,7 @@ void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector
 
 
 
-template<typename MT, bool SO, typename VT2, bool TF2, typename FT=CommonType_t<ElementType_t<MT>, ElementType_t<VT2>>>
+template<typename MT, bool SO, typename VT2, bool TF2, typename FT=CommonType_t<ElementType_t<MT>, ElementType_t<VT2>>, typename IT=uint32_t>
 static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT2, TF2> &ret, const FT *weights, bool approx_med=false) {
     assert(weights);
     const size_t nc = (~data).columns();
@@ -99,7 +99,32 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVe
             (~ret)[i] = boost::accumulators::median(acc);
         }
     } else {
-        throw std::runtime_error("Not implemented yet; this process is expensive and hard to make cache-friendly.");
+        if(sizeof(IT) == 4 && (~data).columns() > 0xFFFFFFFFuLL) throw std::runtime_error("Use a different index type");
+        const size_t nr = (~data).rows();
+        auto pairs = std::make_unique<std::pair<ElementType_t<MT>, IT>[]>(nr);
+        std::unique_ptr<FT[]> cw(new FT[nr]); //
+        for(size_t i = 0; i < nc; ++i) {
+            auto col = column(~data, i);
+            for(size_t j = 0; j < nr; ++j)
+                pairs[j] = {col[j], j};
+            shared::sort(pairs.get(), pairs.get() + nr);
+            FT wsum = 0., maxw = -std::numeric_limits<FT>::max();
+            IT maxind = -0;
+            for(size_t j = 0; j < nr; ++j) {
+               auto neww = weights[pairs[j].second];
+               wsum += neww, cw[j] = wsum;
+               if(neww > maxw) maxw = neww, maxind = j;
+            }
+            if(maxw > wsum * .5) {
+                // Return the value of the tuple with maximum weight
+                (~ret)[i] = pairs[maxind].first;
+                continue;
+            }
+            FT mid = wsum * .5;
+            auto func = [](std::pair<ElementType_t<MT>, IT> x, FT y)-> bool {return x.first < y;};
+            auto it = std::lower_bound(pairs.get(), pairs.get() + nr, mid, func);
+            (~ret)[i] = it->first == mid ? FT(.5 * (it->first + it[1].first)): FT(it[1].first);
+        }
     }
 #if 0
     blz::DynamicVector<FT> midpoints = blz::sum<blz::columnwise>(~data) * .5;
