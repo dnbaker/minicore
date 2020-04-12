@@ -37,6 +37,9 @@ struct JVSolver {
             if(this->empty()) throw std::runtime_error("Attempting to access an empty structure");
             return *this->begin();
         }
+        void pop_top() {
+            this->erase(this->begin());
+        }
         auto pop() {
             auto ret = top();
             this->erase(this->begin());
@@ -98,11 +101,11 @@ private:
 
     FT final_phase1_loop(FT time) {
         while(!next_paid_.empty()) {
-            payment_t next_fac = next_facility();
-            if(next_fac.first > 0) {
-                time = next_fac.first;
+            if(next_paid_.top().first > 0) {
+                time = next_paid_.top().first;
             }
-            n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time);
+            n_open_clients_ = update_facilities(next_paid_.top().second, working_open_facilities_[next_paid_.top().second], time);
+            //next_paid_.pop_top();
             std::fprintf(stderr, "n open clients: %zu. facilities size: %zu\n", n_open_clients_, next_paid_.size());
             if(n_open_clients_ == 0) break;
         }
@@ -185,7 +188,6 @@ private:
                 temporarily_open.push_back(i);
         }
         const size_t ntemp = temporarily_open.size();
-        std::fprintf(stderr, "%zu temporarily open facilities\n", ntemp);
         std::vector<std::vector<IT>> open_facility_assignments;
         std::vector<IT> open_facilities;
         shared::flat_hash_set<IT> unassigned_clients;
@@ -254,7 +256,7 @@ private:
         }
         final_open_facilities_ = std::move(open_facilities);
         final_open_facility_assignments_ = std::move(open_facility_assignments);
-        if(verbose) std::fprintf(stderr, "%zu open facilities\n", final_open_facilities_.size());
+        DBG_ONLY(if(verbose) std::fprintf(stderr, "%zu open facilities\n", final_open_facilities_.size());)
     }
     void reassign() {
         final_open_facility_assignments_.resize(final_open_facilities_.size());
@@ -507,10 +509,6 @@ public:
         }
     }
 
-    payment_t next_facility() {
-        return next_paid_.pop();
-    }
-
     auto &run() {
         open_candidates();
         cluster_results();
@@ -529,18 +527,20 @@ public:
             }
             edge_type current_edge = edges_[edge_idx];
             auto current_edge_cost = current_edge.cost();
-            payment_t next_fac = next_paid_.empty() ? payment_t{current_edge_cost + 1e10, 0}
-                                                    : next_facility();
-
-            if(current_edge_cost <= next_fac.first) {
+            if(next_paid_.size() && next_paid_.top().first > current_edge_cost) {
+                const auto next_fac = next_paid_.top();
+                size_t current_n = next_paid_.size();
+                DBG_ONLY(std::fprintf(stderr, "Trying to update by removing the next facility. Current in next_paid_ %zu\n", next_paid_.size());)
+                n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time);
+                time = next_fac.first;
+                if(current_n == next_paid_.size()) // If it wasn't removed
+                    next_paid_.pop_top();
+                DBG_ONLY(std::fprintf(stderr, "n open: %zu. time: %g. Now facilities left to pay: %zu\n", size_t(n_open_clients_), time, next_paid_.size());)
+            } else {
                 n_open_clients_ = service_tight_edge(current_edge);
                 time = current_edge_cost;
                 ++edge_idx;
-                if(verbose && edge_idx % edge_log_num == 0) std::fprintf(stderr, "Processed %zu/%zu edges\n", size_t(edge_idx), nedges_);
-            } else {
-                n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time);
-                std::fprintf(stderr, "n open: %zu. time: %g\n", size_t(n_open_clients_), time);
-                time = next_fac.first;
+                DBG_ONLY(if(verbose && edge_idx % edge_log_num == 0) std::fprintf(stderr, "Processed %zu/%zu edges\n", size_t(edge_idx), nedges_);)
             }
         }
         return time;
@@ -607,7 +607,7 @@ public:
                 maxcost = medcost; // med has too few, lower cost.
                 if(verbose) std::fprintf(stderr, "Assigning maxcost to current cost. New upper bound on cost: %0.12g because we have too few items (%zu instead of %u)\n", maxcost, nopen, k);
             }
-            if(verbose) std::fprintf(stderr, "##mincost: %g. maxcost: %g\n", mincost, maxcost);
+            //if(verbose) std::fprintf(stderr, "##mincost: %g. maxcost: %g\n", mincost, maxcost);
             double rat = double(nopen) / k;
             if(rat > 1.1 || rat < 1. / 1.1) {
                 double lam = 1. - rat / (1. + rat);
@@ -642,12 +642,9 @@ public:
             }
         }
         auto kmed_stop = std::chrono::high_resolution_clock::now();
-#ifndef NDEBUG
-        std::fprintf(stderr, "Solution cost with %zu centers: %g. Time to perform clustering: %g\n", final_open_facilities_.size(), calculate_cost(false),
+        FT sol_cost = calculate_cost(false);
+        std::fprintf(stderr, "Solution cost with %zu centers: %g. Time to perform clustering: %g\n", final_open_facilities_.size(), sol_cost,
                      (kmed_stop - kmed_start).count() * 1.e-6);
-#else
-        std::fprintf(stderr, "Solution with %u centers took %zu iterations and %gms\n", k, roundnum, (kmed_stop - kmed_start).count() * 1.e-6);
-#endif
         return std::make_pair(final_open_facilities_, final_open_facility_assignments_);
     }
     IT local_best_to_add() const {
