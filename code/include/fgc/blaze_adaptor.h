@@ -259,13 +259,14 @@ void _assert_all_nonzero_(const MatType &x, const char *funcname, const char *fi
     }
 }
 
-template<typename...Args>
-INLINE decltype(auto) sum(const Args &&...args) {return blaze::sum(std::forward<Args>(args)...);}
-
 template<typename FT, typename Alloc>
 INLINE auto sum(const std::vector<FT, Alloc> &vec) {
     return blaze::sum(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
 }
+
+template<typename OT>
+INLINE decltype(auto) sum(const OT &x) {return blaze::sum(x);}
+
 
 template<typename MT, bool SO>
 void fill_helper(blaze::Matrix<MT, SO> &mat) {
