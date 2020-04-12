@@ -581,16 +581,8 @@ public:
             }
             //std::fprintf(stderr, "##mincost: %g. maxcost: %g\n", mincost, maxcost);
             double rat = double(nopen) / k;
-            if(rat > 1.1 || 1. / rat > 1.1) {
-            // TODO: This binary search can be tweaked a little, I'm sure
-                double lam = 1. - rat / (1. + rat);
-                medcost = lam * mincost + (1. - lam) * maxcost;
-#if VERBOSE_AF
-                std::fprintf(stderr, "Because of spaced out stuff, I'm trying an imbalanced binary search.\n"
-                                     "I would have used %g, but instead because %zu open with k = %u, using %g\n",
-                             (mincost + maxcost) / 2., nopen, k, medcost);
-#endif
-            } else medcost = (mincost + maxcost) / 2.;
+            double lam = 1. - rat / (1. + rat);
+            medcost = lam * mincost + (1. - lam) * maxcost;
 #ifndef NDEBUG
             auto start = std::chrono::high_resolution_clock::now();
 #endif
