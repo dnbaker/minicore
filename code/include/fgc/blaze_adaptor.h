@@ -259,8 +259,8 @@ void _assert_all_nonzero_(const MatType &x, const char *funcname, const char *fi
     }
 }
 
-template<typename Item>
-INLINE decltype(auto) sum(const Item &vec) {return blaze::sum(vec);}
+template<typename...Args>
+INLINE decltype(auto) sum(const Args &&...args) {return blaze::sum(std::forward<Args>(args)...);}
 
 template<typename FT, typename Alloc>
 INLINE auto sum(const std::vector<FT, Alloc> &vec) {

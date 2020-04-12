@@ -534,10 +534,6 @@ template<typename VT, bool SO, typename VT2>
 CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
 network_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y, double p=1., size_t maxiter=10000)
 {
-#ifndef _OPENMP
-    throw std::runtime_error("Not available without OpenMP");
-    return 0.;
-#else
     auto &xref = ~x;
     auto &yref = ~y;
     const size_t sz = xref.size();
@@ -545,8 +541,7 @@ network_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<
     using FT = CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>;
 
     using namespace lemon;
-	typedef lemon::FullBipartiteDigraph Digraph;
-	DIGRAPH_TYPEDEFS(FullBipartiteDigraph);
+    using Digraph = lemon::FullBipartiteDigraph;
     Digraph di(nl, nr);
     NetworkSimplexSimple<Digraph, FT, FT, unsigned> net(di, true, nl + nr, nl * nr);
     DV<FT> weights(nl + nr);
@@ -589,17 +584,12 @@ network_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<
            ret += net.flow(i * nr + j) * func(weights[i], weights[sz + j]);
     }
     return ret;
-#endif
 }
 
 template<typename VT, bool SO, typename VT2>
 CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
 network_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1., size_t maxiter=100)
 {
-#ifndef _OPENMP
-    throw std::runtime_error("Not available without OpenMP");
-    return 0.;
-#else
     auto &xref = ~x;
     const size_t sz = xref.size();
     size_t nl = nonZeros(xref), nr = nonZeros(~y);
@@ -607,7 +597,6 @@ network_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVecto
 
     using namespace lemon;
 	typedef lemon::FullBipartiteDigraph Digraph;
-	DIGRAPH_TYPEDEFS(FullBipartiteDigraph);
     Digraph di(nl, nr);
     NetworkSimplexSimple<Digraph, FT, FT, unsigned> net(di, true, nl + nr, nl * nr, maxiter);
     DV<FT> weights(nl + nr);
@@ -645,7 +634,6 @@ network_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVecto
            ret += net.flow(i * nr + j) * func(weights[i], weights[sz + j]);
     }
     return ret;
-#endif
 }
 
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>

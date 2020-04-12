@@ -5,17 +5,17 @@ void disptime(std::chrono::time_point<std::chrono::high_resolution_clock> s, std
               std::string label="") {
     std::fprintf(stderr, "%s: %g ms\n", label.data(), (e - s).count() * 1.e-6);
 }
+#define float double
 
-int main() {
-    if(0) {
-        fgc::Graph<boost::undirectedS, float> g;
-        std::vector<typename fgc::Graph<boost::undirectedS, float>::vertex_descriptor> vxs(g.vertices().begin(), g.vertices().end());
-        fgc::jain_vazirani_kmedian(g, vxs, 15);
+int main(int argc, char *argv[]) {
+    if(std::find_if(argv, argv + argc, [](auto x){return std::strcmp(x, "-h") == 0 || std::strcmp(x, "--help") == 0;}) != argv + argc) {
+        std::fprintf(stderr, "Usage: %s [npoints=3000] [nfac=400] [k=50]\nAll arguments optional\n", argv[0]);
+        std::exit(1);
     }
-    std::fprintf(stderr, "Getting here only checks compilation, not correctness, of JV draft.\n");
     size_t dim = 50;
-    size_t np = 3000;
-    unsigned k = 50, nf = 400;
+    size_t np =  argc == 1 ? 3000: std::atoi(argv[1]);
+    size_t nf =  argc <= 2 ? 400: std::atoi(argv[2]);
+    unsigned k = argc <= 3 ? 50: std::atoi(argv[3]);
     wy::WyRand<uint32_t, 2> rng(13);
     std::uniform_real_distribution<float> gen(0);
     blaze::DynamicMatrix<float> points = blaze::generate(np, dim, [&](auto,auto){return 1. / gen(rng);});
@@ -39,6 +39,7 @@ int main() {
     auto t2 = std::chrono::high_resolution_clock::now();
     jvs.run();
     disptime(t, t2, "JV new");
+    jvs.make_verbose();
     std::fprintf(stderr, "jvs solution cost: %g\n", jvs.calculate_cost(false));
     auto [kmedcenters, kmedasns] = jvs.kmedian(k, 1000);
     assert(kmedcenters.size() == k);

@@ -91,6 +91,8 @@ private:
     size_t ncities_;
     size_t nfac_;
 
+    bool verbose = false;
+
 
     // Private code
 
@@ -101,6 +103,7 @@ private:
                 time = next_fac.first;
             }
             n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time);
+            std::fprintf(stderr, "n open clients: %zu. facilities size: %zu\n", n_open_clients_, next_paid_.size());
             if(n_open_clients_ == 0) break;
         }
         return time;
@@ -166,6 +169,7 @@ private:
         return n_open_clients_;
     }
 
+
     FT get_fac_cost(size_t ind) const {
         if(facility_cost_.size()) {
             if(facility_cost_.size() == 1) return facility_cost_[0];
@@ -180,9 +184,13 @@ private:
             if(pay_schedule_[i] == PAID_IN_FULL)
                 temporarily_open.push_back(i);
         }
+        const size_t ntemp = temporarily_open.size();
+        std::fprintf(stderr, "%zu temporarily open facilities\n", ntemp);
         std::vector<std::vector<IT>> open_facility_assignments;
         std::vector<IT> open_facilities;
-        shared::flat_hash_set<IT> assigned_clients;
+        shared::flat_hash_set<IT> unassigned_clients;
+        for(size_t i = 0; i < ncities_; ++i)
+            unassigned_clients.insert(i);
         if(!distmatp_) {
             throw std::runtime_error("distmatp must be set");
         }
@@ -198,7 +206,7 @@ private:
                 FT witness_cost = client_data.first - client_w_(witness, cid) + distmat(witness, cid);
                 FT current_cost = client_data.first - client_w_(cfid, cid) + distmat(cfid, cid);
                 if(current_cost <= witness_cost && client_w_(cfid, cid) != PAID_IN_FULL) {
-                    assigned_clients.insert(cid);
+                    unassigned_clients.erase(cid);
                     facility_assignment.push_back(cid);
                     std::vector<IT> facilities_to_rm;
                     const FT cwc = client_w_(cfid, cid);
@@ -230,8 +238,11 @@ private:
 #endif
 
         // Assign all unassigned
-        for(IT cid = 0; cid < ncities_; ++cid) {
-            if(assigned_clients.find(cid) != assigned_clients.end()) continue;
+        if(open_facilities.empty()) {
+            blz::DV<FT> fac_costs = blaze::sum<blz::rowwise>(distmat);
+            open_facilities.push_back(std::min_element(fac_costs.begin(), fac_costs.end()) - fac_costs.begin());
+        }
+        for(const IT cid: unassigned_clients) {
             // cout << "Assigning client " << j << endl;
             IT best_fid = 0;
             FT mindist = distmat(open_facilities.front(), cid), cdist;
@@ -243,7 +254,20 @@ private:
         }
         final_open_facilities_ = std::move(open_facilities);
         final_open_facility_assignments_ = std::move(open_facility_assignments);
-        std::fprintf(stderr, "%zu open facilities\n", final_open_facilities_.size());
+        if(verbose) std::fprintf(stderr, "%zu open facilities\n", final_open_facilities_.size());
+    }
+    void reassign() {
+        final_open_facility_assignments_.resize(final_open_facilities_.size());
+        for(auto &f: final_open_facility_assignments_) f.clear();
+        for(IT cid = 0; cid < ncities_; ++cid) {
+            IT best_fid = 0;
+            FT mindist = (*distmatp_)(final_open_facilities_.front(), cid), cdist;
+            for(size_t i = 1; i < final_open_facilities_.size(); ++i) {
+                if((cdist = (*distmatp_)(final_open_facilities_[i], cid)) < mindist)
+                    mindist = cdist, best_fid = i;
+            }
+            final_open_facility_assignments_[best_fid].push_back(cid);
+        }
     }
 
     IT service_tight_edge(edge_type edge) {
@@ -349,6 +373,10 @@ public:
             next_paid_.push({cost, i});
             pay_schedule_[i] = cost;
         }
+    }
+
+    void make_verbose() {
+        verbose = true;
     }
 
     template<typename CostType>
@@ -492,6 +520,7 @@ public:
     FT open_candidates() {
         IT edge_idx = 0;
         FT time = 0.;
+        const size_t edge_log_num = nedges_ / 10;
         while(n_open_clients_) {
             if(edge_idx == nedges_) {
                 //std::fprintf(stderr, "All edges processed, now starting final loop\n");
@@ -507,8 +536,10 @@ public:
                 n_open_clients_ = service_tight_edge(current_edge);
                 time = current_edge_cost;
                 ++edge_idx;
+                if(verbose && edge_idx % edge_log_num == 0) std::fprintf(stderr, "Processed %zu/%zu edges\n", size_t(edge_idx), nedges_);
             } else {
                 n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time);
+                std::fprintf(stderr, "n open: %zu. time: %g\n", size_t(n_open_clients_), time);
                 time = next_fac.first;
             }
         }
@@ -544,7 +575,7 @@ public:
         return sum;
     }
     std::pair<std::vector<IT>, std::vector<std::vector<IT>>>
-    kmedian(unsigned k, unsigned maxrounds=500, double maxcost_starting=0.) {
+    kmedian(unsigned k, unsigned maxrounds=100, double maxcost_starting=0., double mincost=0.) {
         auto kmed_start = std::chrono::high_resolution_clock::now();
         auto &dm = *distmatp_;
         double maxcost;
@@ -560,29 +591,32 @@ public:
             }
             maxcost *= dm.columns();
         }
-        double mincost = 0.;
-        double medcost = maxcost / 2;
+        double medcost = (maxcost - mincost) / (k * dm.columns()) + mincost;
+        if(verbose) std::fprintf(stderr, "First iteration, medcost = %0.12g, mincost = %0.12g, maxcost = %0.12g\n", medcost, mincost, maxcost);
         reset_cost(medcost);
         run();
-        DBG_ONLY(std::fprintf(stderr, "##first solution for cost %g: %zu (want k %u)\n", medcost, final_open_facilities_.size(), k);)
+        DBG_ONLY(if(verbose) std::fprintf(stderr, "##first solution for cost %g: %zu (want k %u)\n", medcost, final_open_facilities_.size(), k);)
         size_t roundnum = 0;
         for(;;) {
-#if !NDEBUG
-            std::fprintf(stderr, "##round %zu. current size: %zu\n", ++roundnum, final_open_facilities_.size());
-#endif
             size_t nopen = final_open_facilities_.size();
             if(nopen == k) break;
             if(nopen > k) {
                 mincost = medcost; // med has too many, increase cost.
-                //std::fprintf(stderr, "Assigning mincost to current cost. New lower bound on cost: %g. k: %u. current sol size %zu\n", mincost, k, nopen);
+                if(verbose) std::fprintf(stderr, "Assigning mincost to current cost. New lower bound on cost: %0.12g. k: %u. current sol size %zu\n", mincost, k, nopen);
             } else {
                 maxcost = medcost; // med has too few, lower cost.
-                //std::fprintf(stderr, "Assigning maxcost to current cost. New upper bound on cost: %g because we have too few items (%zu instead of %u)\n", maxcost, nopen, k);
+                if(verbose) std::fprintf(stderr, "Assigning maxcost to current cost. New upper bound on cost: %0.12g because we have too few items (%zu instead of %u)\n", maxcost, nopen, k);
             }
-            //std::fprintf(stderr, "##mincost: %g. maxcost: %g\n", mincost, maxcost);
+            if(verbose) std::fprintf(stderr, "##mincost: %g. maxcost: %g\n", mincost, maxcost);
             double rat = double(nopen) / k;
-            double lam = 1. - rat / (1. + rat);
-            medcost = lam * mincost + (1. - lam) * maxcost;
+            if(rat > 1.1 || rat < 1. / 1.1) {
+                double lam = 1. - rat / (1. + rat);
+                medcost = lam * mincost + (1. - lam) * maxcost;
+                std::fprintf(stderr, "%g * mincost + %g * maxcost\n", lam, 1. - lam);
+            } else medcost = (mincost + maxcost) * .5;
+#if !NDEBUG
+            std::fprintf(stderr, "##round %zu. current size: %zu. Now applying medcost = %g, with ratio of open to k desired %g\n", roundnum + 1, final_open_facilities_.size(), medcost, rat);
+#endif
 #ifndef NDEBUG
             auto start = std::chrono::high_resolution_clock::now();
 #endif
@@ -592,8 +626,19 @@ public:
             auto stop = std::chrono::high_resolution_clock::now();
             std::fprintf(stderr, "##Solution cost: %f. size: %zu. Time in ms: %g. Dimensions: %zu/%zu\n", calculate_cost(false), final_open_facilities_.size(), (stop - start).count() * 0.000001, client_w_.rows(), client_w_.columns());
 #endif
-            if(roundnum > maxrounds) {
-                break;
+            if(++roundnum > maxrounds || mincost == maxcost) {
+                std::fprintf(stderr, "Failed to find exact solution using JV in %zu rounds. Now using local search from current solution of %zu points to desired k = %u\n",
+                             roundnum, final_open_facilities_.size(), k);
+                while(final_open_facilities_.size() < k) {
+                    final_open_facilities_.push_back(local_best_to_add());
+                }
+                while(final_open_facilities_.size() > k) {
+                    IT to_rm = local_best_to_rm();
+                    auto it = std::find(final_open_facilities_.begin(), final_open_facilities_.end(), to_rm);
+                    final_open_facilities_.erase(it);
+                    final_open_facility_assignments_.erase(final_open_facility_assignments_.begin() + (it - final_open_facilities_.begin()));
+                }
+                reassign();
             }
         }
         auto kmed_stop = std::chrono::high_resolution_clock::now();
@@ -601,9 +646,51 @@ public:
         std::fprintf(stderr, "Solution cost with %zu centers: %g. Time to perform clustering: %g\n", final_open_facilities_.size(), calculate_cost(false),
                      (kmed_stop - kmed_start).count() * 1.e-6);
 #else
-        std::fprintf(stderr, "Solution with %u centers took %gms\n", k, (kmed_stop - kmed_start).count() * 1.e-6);
+        std::fprintf(stderr, "Solution with %u centers took %zu iterations and %gms\n", k, roundnum, (kmed_stop - kmed_start).count() * 1.e-6);
 #endif
         return std::make_pair(final_open_facilities_, final_open_facility_assignments_);
+    }
+    IT local_best_to_add() const {
+        blz::DV<FT,blaze::rowVector> current_costs = blz::min<blz::columnwise>(blz::rows(*distmatp_, final_open_facilities_.data(), final_open_facilities_.size()));
+        FT max_improvement = -std::numeric_limits<FT>::max();
+        IT bestind = -1;
+        for(size_t i = 0; i < nfac_; ++i) {
+            if(std::find(final_open_facilities_.begin(), final_open_facilities_.end(), i) !=  final_open_facilities_.end())
+                continue;
+            FT improvement = 0.;
+            auto lrow = row(*distmatp_, i);
+            for(size_t j = 0; j < lrow.size(); ++j) {
+                FT cost = lrow[j];
+                if(cost < current_costs[j])
+                    improvement += (current_costs[j] - cost);
+            }
+            if(improvement > max_improvement) improvement = max_improvement, bestind = i;
+        }
+        return bestind;
+    }
+    IT local_best_to_rm() const {
+        blz::DV<FT, blaze::rowVector> current_costs = blz::min<blz::columnwise>(blz::rows(*distmatp_, final_open_facilities_.data(), final_open_facilities_.size()));
+        FT min_loss = std::numeric_limits<FT>::max();
+        IT bestind = -1;
+        std::unique_ptr<IT[]> min_counters(new IT[ncities_]());
+        for(size_t i = 0; i < ncities_; ++i)
+            for(const auto fid: final_open_facilities_)
+                if(current_costs[i] == (*distmatp_)(fid, i))
+                    ++min_counters[i];
+        for(const auto fid: final_open_facilities_) {
+            FT loss = 0.;
+            for(size_t i = 0; i < ncities_; ++i) {
+                if(current_costs[i] == (*distmatp_)(fid, i) && min_counters[i] == 1) {
+                    FT minv = std::numeric_limits<FT>::max(); // Get the next-lowest cost in this set
+                    for(const auto fid2: final_open_facilities_)
+                        if(fid != fid2)
+                            minv = std::min(minv, (*distmatp_)(fid2, i));
+                    loss += current_costs[i] - minv; // Should be nonpositive
+                }
+            }
+            if(loss < min_loss) min_loss = loss, bestind = fid;
+        }
+        return bestind;
     }
 };
 

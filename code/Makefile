@@ -1,4 +1,4 @@
-INCLUDE_PATHS=. include include/fgc blaze libosmium/include protozero/include pdqsort
+INCLUDE_PATHS=. include include/fgc blaze libosmium/include protozero/include pdqsort third_party
 LIBPATHS+=
 
 ifdef BOOST_DIR
