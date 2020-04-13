@@ -184,7 +184,7 @@ private:
         throw std::invalid_argument("Facility cost must be set");
     }
 
-    void cluster_results() {
+    void cluster_results(std::atomic<int> *early_terminate=nullptr) {
         std::vector<IT> temporarily_open;
         for(size_t i = 0; i < pay_schedule_.size(); ++i) {
             if(pay_schedule_[i] == PAID_IN_FULL)
@@ -203,6 +203,7 @@ private:
         const MatrixType &distmat(*distmatp_);
         // Close temporary facilities
         while(!temporarily_open.empty()) {
+            if(early_terminate && early_terminate->load()) return;
             IT cfid = temporarily_open.back();
             temporarily_open.pop_back();
             std::vector<IT> facility_assignment;
@@ -243,6 +244,7 @@ private:
         std::fprintf(stderr, "Got here, assigning the rest of unassigned\n");
 #endif
 
+        if(early_terminate && early_terminate->load()) return;
         // Assign all unassigned
         if(open_facilities.empty()) {
             blz::DV<FT> fac_costs = blaze::sum<blz::rowwise>(distmat);
@@ -521,17 +523,20 @@ public:
         }
     }
 
-    auto &run() {
-        open_candidates();
-        cluster_results();
+    auto &run(std::atomic<int> *early_terminate=nullptr) {
+        if(early_terminate && early_terminate->load()) return final_open_facilities_;
+        open_candidates(early_terminate);
+        if(early_terminate && early_terminate->load()) return final_open_facilities_;
+        cluster_results(early_terminate);
         return final_open_facilities_;
     }
 
-    FT open_candidates() {
+    FT open_candidates(std::atomic<int> *early_terminate=nullptr) {
         IT edge_idx = 0;
         FT time = 0.;
         DBG_ONLY(const size_t edge_log_num = nedges_ / 10;)
         while(n_open_clients_) {
+            if(early_terminate && early_terminate->load()) return time;
             if(edge_idx == nedges_) {
                 //std::fprintf(stderr, "All edges processed, now starting final loop\n");
                 time = final_phase1_loop(time);
@@ -597,7 +602,7 @@ public:
         for(;;) {
             solver.reset_cost(mycost);
             if(terminate.load()) break;
-            solver.run();
+            solver.run(&terminate);
             if(terminate.load()) break;
             ++rounds_completed;
             if(rounds_completed.load() >= max_rounds) {
@@ -626,7 +631,7 @@ public:
                      std::fprintf(stderr, "Doing compare/weak with mincost = %g and last = %g\n", mincost.load(), lastmincost);
                 }
                 if(nf < maxk) {
-                    std::fprintf(stderr, "[%zu] nf > k, setting maxk from %u to %u at %g \n", my_id, maxk, nf, mycost);
+                    std::fprintf(stderr, "[%zu] nf > k, setting maxk from %u to %zu at %g \n", my_id, maxk, nf, mycost);
                     std::lock_guard<std::mutex> lock(mut);
                     maxk = nf;
                 }
@@ -643,7 +648,7 @@ public:
                 }
                 std::fprintf(stderr, "[%zu] released lock, nf < k [%u] (csize: %zu at %g). Old max cost: %g\n", my_id, k,  nf, mycost, lastmaxcost);
             }
-            double cost, myspacing;
+            double cost;
             typename std::set<double>::const_iterator it;
             // do
             {
