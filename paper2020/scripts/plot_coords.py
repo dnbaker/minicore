@@ -67,7 +67,7 @@ if __name__ == '__main__':
     fontsize = args.font_size
     fn = args.coords
     lons, lats = parse_data(open(fn).read())
-    
+
     #title = sys.argv[2] if sys.argv[2:] else "Dataset: " + sys.argv[1].split("/")[-1].split(".")[0]
     color = ['k'] * len(lons)
     marker = '.'
@@ -100,4 +100,4 @@ if __name__ == '__main__':
     ofname = f"{fn.split('/')[-1].split('.')[0]}.{fontsize}.svg"
     plt.savefig(ofname)
     plt.savefig(ofname.replace("svg", "png"))
-        
+

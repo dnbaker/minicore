@@ -35,7 +35,7 @@ def path2dat(path):
         if not line or line[0] == "#" or line[0] == '\n': continue
         xlabels.append(int(line.split()[0]))
         data.append(list(map(float, line.strip().split()[1:])))
-    
+
     data = np.array(data)[2:]
     xlabels = np.array(xlabels)[2:]
     return xlabels, data
@@ -83,5 +83,5 @@ if __name__ == "__main__":
         plt.legend(names)
         plt.savefig(args.infnamefile + "%d.save.svg" % n)
         plt.savefig(args.infnamefile + "%d.save.png" % n, dpi=600)
-        
+
     sys.exit(0)

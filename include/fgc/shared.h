@@ -30,11 +30,19 @@ template<typename T> class TD; // Debugging only
 
 namespace shared {
 template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
-          typename KeyEqual = std::equal_to<Key>, size_t MaxLoadFactor100 = 80>
-using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, MaxLoadFactor100>;
+          typename KeyEqual = std::equal_to<Key>>
+struct flat_hash_map: public robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, 80> {
+    using super = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, 80>;
+    template<typename...Args>
+    flat_hash_map(Args &&...args): super(std::forward<Args>(args)...) {}
+};
 
 template<typename T, typename H = robin_hood::hash<T>, typename E = std::equal_to<T>>
-using flat_hash_set = robin_hood::unordered_flat_set<T, H, E>;
+struct flat_hash_set: public robin_hood::unordered_flat_set<T, H, E> {
+    using super = robin_hood::unordered_flat_set<T, H, E>;
+    template<typename...Args>
+    flat_hash_set(Args &&...args): super(std::forward<Args>(args)...) {}
+};
 
 INLINE auto checked_posix_write(int fd, const void *buf, ssize_t count) {
     ssize_t ret = ::write(fd, buf, count);

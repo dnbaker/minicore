@@ -41,7 +41,7 @@ if __name__ == "__main__":
         if not line or line[0] == "#" or line[0] == '\n': continue
         xlabels.append(int(line.split()[0]))
         data.append(list(map(float, line.strip().split()[1:])))
-    
+
     data = np.array(data)[2:]
     xlabels = np.array(xlabels)[2:]
     print(xlabels)

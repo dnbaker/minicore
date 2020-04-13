@@ -128,9 +128,9 @@ if __name__ == "__main__":
                 #linestyle='',
                 linewidth=2)
     #plt.axhline(y=thorup_opt_cost, color='k', linestyle='--')
-    
-    #plt.legend((r"$D\times D$", r"$D\times V$", r"$V\times V$", r"$T_{\text{cs}}$")) 
-    plt.legend((r"$D\times D$", r"$D\times V$", r"$X\times V$")) 
+
+    #plt.legend((r"$D\times D$", r"$D\times V$", r"$V\times V$", r"$T_{\text{cs}}$"))
+    plt.legend((r"$D\times D$", r"$D\times V$", r"$X\times V$"))
     plt.xlabel("Coreset Size", fontsize=18)
     plt.xticks(fontsize=10)
     plt.ylabel(Y, fontsize=18)

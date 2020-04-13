@@ -57,7 +57,7 @@ def parse_data(lines):
 
 if __name__ == '__main__':
     import sys
-    
+
     fn = sys.argv[1]
     lons, lats = parse_data(open(fn if sys.argv[1:] else "all_nyc.txt").read())
     color = ['b'] * len(lons)
