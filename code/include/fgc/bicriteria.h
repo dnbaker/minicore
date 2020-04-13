@@ -117,7 +117,7 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
             auto weighted_select = [&]() {
                 return std::lower_bound(cdf.get(), cdf.get() + rsz, cdf[rsz - 1] * urd(rng)) - cdf.get();
             };
-            if(R.size() > nperround) {
+            if(cdf[rsz - 1] > nperround) {
                 WType sampled_sum = 0;
                 do {
                     auto v = R[weighted_select()];
@@ -433,57 +433,115 @@ thorup_sample_mincost_with_weights(Graph &x, unsigned k, uint64_t seed,
 }
 
 /*
- * Calculates facility centers
- * and costs for points
+ * Calculates facility centers, costs, and the facility ID to which each point in the dataset is assigned.
+ * This could be made iterative by:
+ *  1. Performing one iteration.
+ *  2. Use the selected points F as the new set of points (``npoints''), with weight = |C_f| (number of cities assigned to facility f)
+ *  3. Wrap the previous oracle in another oracle that maps indices within F to the original data
+ *  4. Performing the next iteration
  */
 template<typename Oracle,
          typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
-         typename WFT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+         typename WFT=FT,
          typename IT=uint32_t
         >
-std::pair<std::vector<IT>, blz::DV<FT>>
-lazy_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weights=nullptr, double npermult=21, double nroundmult=3, double eps=0.5, uint64_t seed=1337)
+std::tuple<std::vector<IT>, blz::DV<FT>, std::vector<IT>>
+lazy_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weights=static_cast<const WFT *>(nullptr), double npermult=21, double nroundmult=3, double eps=0.5, uint64_t seed=1337)
 {
     if(weights) throw std::runtime_error("Should not have weights yet because the code isn't written");
+    size_t nperround = npermult * k * std::log(npoints) / eps;
+
+
     wy::WyRand<IT, 2> rng(seed);
-    blz::DV<FT> mincosts(npoints);
+    blz::DV<FT> mincosts(npoints);   // minimum costs per point
     mincosts = std::numeric_limits<FT>::max();
+    std::vector<IT> minindices(npoints); // indices to which points are assigned
     size_t nr = npoints; // Manually managing count
     std::unique_ptr<IT[]> R(new IT[npoints]);
     fastiota::iota(R.get(), npoints, 0);
-    size_t nperround = 21. * k * std::log(npoints) / eps;
     std::vector<IT> F;
     shared::flat_hash_set<IT> tmp;
     std::vector<IT> current_batch;
-    for(size_t rounds_left = std::ceil(3 * std::log(npoints)); rounds_left--;) {
+    std::unique_ptr<FT[]> cdf(new FT[nr]);
+    std::uniform_real_distribution<WFT> urd;
+    auto weighted_select = [&]() {
+        return std::lower_bound(cdf.get(), cdf.get() + nr, cdf[nr - 1] * urd(rng)) - cdf.get();
+    };
+    for(size_t rounds_left = std::ceil(nroundmult * std::log(npoints)); rounds_left--;) {
         // Sample points not yet added and calculate un-calculated distances
-        if(nr < nperround) {
+        if(!weights && nr < nperround) {
             F.insert(F.end(), R.get(), R.get() + nr);
             nr = 0;
             for(auto it = R.get(), eit = R.get() + nr; it < eit; ++it) {
                 auto v = *it;
                 for(size_t j = 0; j < npoints; ++j) {
-                    mincosts[j] = std::min(oracle(v, j), mincosts[j]);
+                    if(mincosts[j] == 0.) {
+                        continue;
+                    } else if(j == v) {
+                        mincosts[j] = 0.;
+                        minindices[j] = v;
+                    } else {
+                        if(auto score = oracle(v, j);score < mincosts[j]) {
+                            mincosts[j] = score;
+                            minindices[j] = v;
+                        }
+                    }
                 }
             }
         } else {
-            while(tmp.size() < nperround) {
-                tmp.insert(rng() % nr);
+            // Sample new points, either at random
+            if(!weights) {
+                while(tmp.size() < nperround) {
+                    tmp.insert(rng() % nr);
+                }
+            // or weighted
+            } else {
+                inclusive_scan(R.get(), R.get() + nr, cdf.get(), [weights](auto csum, auto newv) {
+                    return csum + weights[newv];
+                });
+                if(cdf[nr - 1] >= nperround) {
+                    for(IT i = 0; i < nr; ++i) tmp.insert(i);
+                } else {
+                    WFT weight_so_far = 0;
+                    while(weight_so_far < nperround) {
+                        auto ind = weighted_select();
+                        if(tmp.find(ind) != tmp.end()) continue;
+                        tmp.insert(ind);
+                        weight_so_far += weights[R[ind]];
+                    }
+                }
             }
+            // Update F, R, and mincosts/minindices
             current_batch.assign(tmp.begin(), tmp.end());
             tmp.clear();
-            F.insert(F.end(), current_batch.begin(), current_batch.end());
+            for(const auto item: current_batch)
+                F.push_back(R[item]);
             shared::sort(current_batch.begin(), current_batch.end(), std::greater<>());
             for(const auto v: current_batch) {
+                auto actual_index = R[v];
                 std::swap(R[v], R[--nr]);
                 for(size_t j = 0; j < npoints; ++j) {
-                    mincosts[j] = std::min(oracle(v, j), mincosts[j]);
+                    auto oldcost = mincosts[j];
+                    auto newcost = oracle(actual_index, j);
+                    if(newcost < oldcost) {
+                        mincosts[j] = newcost;
+                        minindices[j] = actual_index;
+                    }
                 }
             }
         }
         // Select pivot and remove others.
         if(nr == 0) break;
-        auto &pivot = R[rng() % nr];
+        unsigned pivot_index;
+        if(weights) {
+            inclusive_scan(R.get(), R.get() + nr, cdf.get(), [weights](auto csum, auto newv) {
+                return csum + weights[newv];
+            });
+            pivot_index = weighted_select();
+        } else {
+            pivot_index = rng() % nr;
+        }
+        auto &pivot = R[pivot_index];
         FT pivot_mincost = mincosts[pivot];
         std::fprintf(stderr, "mincost for pivot = %u is %g\n", pivot, pivot_mincost);
         std::swap(pivot, R[--nr]); // Remove this, as it will be removed later.
@@ -494,7 +552,7 @@ lazy_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weigh
         }
     }
     std::fprintf(stderr, "Returning solution of size %zu/%zu\n", F.size(), npoints);
-    return {F, mincosts};
+    return {F, mincosts, minindices};
 }
 
 
