@@ -191,7 +191,7 @@ private:
                 temporarily_open.push_back(i);
         }
         if(verbose) std::fprintf(stderr, "%zu temporarily open\n", temporarily_open.size());
-        
+
         std::vector<std::vector<IT>> open_facility_assignments;
         std::vector<IT> open_facilities;
         shared::flat_hash_set<IT> unassigned_clients;
@@ -584,7 +584,7 @@ public:
     {
         wy::WyRand<uint32_t, 0> rng(seed);
         std::uniform_real_distribution<double> urd;
-        const double spacing = 1. / nthreads;
+        //const double spacing = 1. / nthreads;
         const size_t my_id = std::hash<std::thread::id>()(std::this_thread::get_id());
         for(;;) {
             solver.reset_cost(mycost);
@@ -637,10 +637,18 @@ public:
             }
             double cost, myspacing;
             typename std::set<double>::const_iterator it;
-            do {
-                cost = urd(rng) * (maxcost.load() - mincost.load()) + mincost.load();
+            // do
+            {
+                auto randval = urd(rng);
+                if(mincost.load()) {
+                    double exp = std::pow(maxcost.load() / mincost.load(), 1. / nthreads);
+                    cost = std::pow(exp, randval) * mincost.load();
+                } else {
+                    cost = (maxcost.load() - mincost.load()) * std::pow(randval, 3) + mincost.load();
+                }
                 std::fprintf(stderr, "[%zu] randomly selected cost: %g\n", my_id, cost);
                 // TODO: Consider random selection in geometric mean
+#if 0
                 it = current_running.lower_bound(cost);
                 if(it != current_running.end()) {
                     myspacing = std::abs(cost - *it);
@@ -650,9 +658,11 @@ public:
                     --it;
                     myspacing = std::abs(*it - cost);
                 }
-            } while(maxcost.load() != mincost.load() &&
-                    myspacing / (maxcost.load() - mincost.load()) < spacing * .25
-                    && !terminate.load());
+#endif
+            }
+            //while(maxcost.load() != mincost.load() &&
+            //      myspacing / (maxcost.load() - mincost.load()) < spacing * .1 &&
+            //      !terminate.load());
             std::fprintf(stderr, "Selected new cost: %g\n", cost);
             {
                 std::lock_guard<std::mutex> lock(mut);
@@ -685,20 +695,23 @@ public:
         }
         std::unique_ptr<double[]> assigned_costs(new double[num_threads]);
         if(mincost == 0) {
-            while(solvers.size() < num_threads) {
+            while(solvers.size() < size_t(num_threads)) {
                 double frac = (1. + solvers.size()) / (num_threads + 1);
-                double assigned_cost = maxcost * std::pow(frac, 2);
+                double assigned_cost = maxcost * std::pow(frac, 4);
                 assigned_costs[solvers.size()] = assigned_cost;
                 solvers.emplace_back(clone_with_cost(assigned_cost));
             }
         } else {
             double mul = std::pow(maxcost / mincost, 1. / (num_threads + 1));
-            while(solvers.size() < num_threads) {
-                double assigned_cost = mincost * std::pow(mul, 2 * (solvers.size() + 1));
+            while(solvers.size() < unsigned(num_threads)) {
+                double assigned_cost = mincost * std::pow(mul, 4 * (solvers.size() + 1));
                 assigned_costs[solvers.size()] = assigned_cost;
                 solvers.emplace_back(clone_with_cost(assigned_cost));
             }
         }
+        // One randomly goes to a small cost to ensure we have a non-zero lower bound
+        // to then use the geometric mean rather than arithmetic
+        assigned_costs[wy::WyRand<uint32_t, 0>(seed)() % num_threads] = 1.e-6 * maxcost;
         std::atomic<double> amaxcost, amincost;
         amaxcost.store(maxcost);
         amincost.store(mincost);
@@ -711,7 +724,7 @@ public:
         std::set<double> current_running_costs(assigned_costs.get(), assigned_costs.get() + num_threads);
         std::atomic<uint32_t> rounds_completed;
         rounds_completed.store(0);
-        while(threads.size() < num_threads) {
+        while(threads.size() < size_t(num_threads)) {
             unsigned ind = threads.size();
             threads.emplace_back(
                 run_loop, std::ref(solvers[ind]), assigned_costs[ind],
