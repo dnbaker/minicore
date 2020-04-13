@@ -648,17 +648,6 @@ public:
                 }
                 std::fprintf(stderr, "[%zu] randomly selected cost: %g\n", my_id, cost);
                 // TODO: Consider random selection in geometric mean
-#if 0
-                it = current_running.lower_bound(cost);
-                if(it != current_running.end()) {
-                    myspacing = std::abs(cost - *it);
-                    if(++it != current_running.end())
-                        myspacing = std::min(myspacing, std::abs(cost - *it));
-                } else {
-                    --it;
-                    myspacing = std::abs(*it - cost);
-                }
-#endif
             }
             //while(maxcost.load() != mincost.load() &&
             //      myspacing / (maxcost.load() - mincost.load()) < spacing * .1 &&
@@ -809,15 +798,19 @@ public:
                 if(verbose) std::fprintf(stderr, "Assigning maxcost to current cost. New upper bound on cost: %0.12g because we have too few items (%zu instead of %u). k lower: %u\n", maxcost, nopen, k, lower_k_);
             }
             double ratio = double(nopen) / k;
+#if 0
+            // Old filter to fall back on arithmetic mean, but it might be okay to remve.
             if(ratio < 1.05 && ratio > 0.95) {
                 medcost = (maxcost + mincost) * .5;
-            } else if(mincost != 0 && ((maxcost / mincost) > 10 || ratio > 8. || ratio < 0.125)) {
+            } else
+#endif
+            if(mincost != 0) {
                 medcost = std::sqrt(maxcost) * std::sqrt(mincost); // Geometric mean instead of arithmetic
                 if(verbose) std::fprintf(stderr, "%0.12g = sqrt(%0.12g [mincost] * [maxcost] %0.12g)\n", medcost, mincost, maxcost);
             } else {
                 double lam = 1. - ratio / (1. + ratio);
                 medcost = lam * mincost + (1. - lam) * maxcost;
-                if(verbose) std::fprintf(stderr, "%0.12g = %0.12g * mincost + %0.12g * maxcost\n", medcost, lam, 1. - lam);
+                if(verbose) std::fprintf(stderr, "%0.12g = %0.12g * (mincost/%g) + %0.12g * (maxcost/%g)\n", medcost, lam, 1. - lam, mincost, maxcost);
             }
             fstart = std::chrono::high_resolution_clock::now();
             reset_cost(medcost);
