@@ -4,6 +4,7 @@
 #include <thread>
 #include "graph.h"
 #include "blaze_adaptor.h"
+#include "fastiota/fastiota_ho.h"
 
 
 namespace fgc {
@@ -429,6 +430,71 @@ thorup_sample_mincost_with_weights(Graph &x, unsigned k, uint64_t seed,
         std::swap(firstset, nextset);
     }
     return firstset;
+}
+
+/*
+ * Calculates facility centers
+ * and costs for points
+ */
+template<typename Oracle,
+         typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+         typename WFT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+         typename IT=uint32_t
+        >
+std::pair<std::vector<IT>, blz::DV<FT>>
+lazy_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weights=nullptr, double npermult=21, double nroundmult=3, double eps=0.5, uint64_t seed=1337)
+{
+    if(weights) throw std::runtime_error("Should not have weights yet because the code isn't written");
+    wy::WyRand<IT, 2> rng(seed);
+    blz::DV<FT> mincosts(npoints);
+    mincosts = std::numeric_limits<FT>::max();
+    size_t nr = npoints; // Manually managing count
+    std::unique_ptr<IT[]> R(new IT[npoints]);
+    fastiota::iota(R.get(), npoints, 0);
+    size_t nperround = 21. * k * std::log(npoints) / eps;
+    std::vector<IT> F;
+    shared::flat_hash_set<IT> tmp;
+    std::vector<IT> current_batch;
+    for(size_t rounds_left = std::ceil(3 * std::log(npoints)); rounds_left--;) {
+        // Sample points not yet added and calculate un-calculated distances
+        if(nr < nperround) {
+            F.insert(F.end(), R.get(), R.get() + nr);
+            nr = 0;
+            for(auto it = R.get(), eit = R.get() + nr; it < eit; ++it) {
+                auto v = *it;
+                for(size_t j = 0; j < npoints; ++j) {
+                    mincosts[j] = std::min(oracle(v, j), mincosts[j]);
+                }
+            }
+        } else {
+            while(tmp.size() < nperround) {
+                tmp.insert(rng() % nr);
+            }
+            current_batch.assign(tmp.begin(), tmp.end());
+            tmp.clear();
+            F.insert(F.end(), current_batch.begin(), current_batch.end());
+            shared::sort(current_batch.begin(), current_batch.end(), std::greater<>());
+            for(const auto v: current_batch) {
+                std::swap(R[v], R[--nr]);
+                for(size_t j = 0; j < npoints; ++j) {
+                    mincosts[j] = std::min(oracle(v, j), mincosts[j]);
+                }
+            }
+        }
+        // Select pivot and remove others.
+        if(nr == 0) break;
+        auto &pivot = R[rng() % nr];
+        FT pivot_mincost = mincosts[pivot];
+        std::fprintf(stderr, "mincost for pivot = %u is %g\n", pivot, pivot_mincost);
+        std::swap(pivot, R[--nr]); // Remove this, as it will be removed later.
+        for(auto it = R.get() + nr, e = R.get(); --it >= e;) {
+            if(mincosts[*it] <= pivot_mincost) {
+                std::swap(*it, R[--nr]);
+            }
+        }
+    }
+    std::fprintf(stderr, "Returning solution of size %zu/%zu\n", F.size(), npoints);
+    return {F, mincosts};
 }
 
 

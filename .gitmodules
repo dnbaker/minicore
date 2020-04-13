@@ -40,3 +40,6 @@
 [submodule "code/cpp-taskflow"]
 	path = code/cpp-taskflow
 	url = https://github.com/cpp-taskflow/cpp-taskflow
+[submodule "code/fastiota"]
+	path = code/fastiota
+	url = https://github.com/dnbaker/fastiota
