@@ -389,7 +389,7 @@ namespace lemon {
 			//int n = _arc_num-arc._id-1;
 			ArcsType n = _arc_num - GR::id(arc) - 1;
 
-			//ArcsType a = mixingCoeff*(n%mixingCoeff) + n/mixingCoeff; 
+			//ArcsType a = mixingCoeff*(n%mixingCoeff) + n/mixingCoeff;
 			//ArcsType b = _arc_id[arc];
 			if (_arc_mixing)
 				return sequence(n);
@@ -515,7 +515,7 @@ namespace lemon {
 			}
 
 
-			// Find next entering arc 
+			// Find next entering arc
 			/*bool findEnteringArc() {
 				Cost min_val = 0;
 				int N = omp_get_max_threads();
@@ -572,7 +572,7 @@ namespace lemon {
 
 				return true;
 			}*/
-			
+
 
 			/*bool findEnteringArc() {
 				Cost c, min = 0;
@@ -904,7 +904,7 @@ namespace lemon {
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static)
 #endif
-				for (Arc a = 0; a <= _graph.maxArcId(); a++) {   // --a <=> _graph.next(a)  , -1 == INVALID 
+				for (Arc a = 0; a <= _graph.maxArcId(); a++) {   // --a <=> _graph.next(a)  , -1 == INVALID
 					ArcsType i = sequence(_graph.maxArcId()-a);
 					_source[i] = _node_id(_graph.source(a));
 					_target[i] = _node_id(_graph.target(a));
@@ -1412,7 +1412,7 @@ namespace lemon {
 				_pi[u] += sigma;
 			}
 		}
-		
+
 
 		// Heuristic initial pivots
 		bool initialPivots() {
@@ -1471,8 +1471,8 @@ namespace lemon {
 								min_cost = c;
 								min_arc = a;
 							}
-						}						
-						arc_vector[i] = getArcID(min_arc);					
+						}
+						arc_vector[i] = getArcID(min_arc);
 					}
 					arc_vector.erase(std::remove(arc_vector.begin(), arc_vector.end(), INVALID), arc_vector.end());
 				}

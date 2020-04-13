@@ -37,3 +37,6 @@
 [submodule "code/xxHash"]
 	path = code/xxHash
 	url = https://github.com/Cyan4973/xxHash
+[submodule "code/cpp-taskflow"]
+	path = code/cpp-taskflow
+	url = https://github.com/cpp-taskflow/cpp-taskflow

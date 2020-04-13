@@ -3,10 +3,10 @@
 #define FGC_KMEDIAN_H__
 #include "kmeans.h"
 #include <algorithm>
-#include <boost/accumulators/accumulators.hpp>                                                         
-#include <boost/accumulators/statistics/p_square_cumul_dist.hpp>                                       
-#include <boost/accumulators/statistics/stats.hpp>                                                     
-#include <boost/accumulators/statistics/sum.hpp>                                                       
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/p_square_cumul_dist.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/sum.hpp>
 #include <boost/accumulators/statistics/median.hpp>
 #include <boost/accumulators/statistics/weighted_median.hpp>
 

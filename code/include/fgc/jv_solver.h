@@ -3,6 +3,9 @@
 #include "blaze_adaptor.h"
 #include "jv_util.h"
 #include <chrono>
+#include <atomic>
+#include <mutex>
+#include <thread>
 
 namespace fgc {
 
@@ -55,7 +58,7 @@ struct JVSolver {
             if(it != this->end()) {
                 this->erase(it);
                 tmp.first = newc;
-                assert(this->find(tmp) == this->end() || !std::fprintf(stderr, "Just removed %g:%u, and just found it here with value %g:%u\n", tmp.first, tmp.second, this->find(tmp)->first, this->find(tmp)->second));
+                assert(this->find(tmp) == this->end() || !std::fprintf(stderr, "Just removed %0.12g:%u, and just found it here with value %0.12g:%u\n", tmp.first, tmp.second, this->find(tmp)->first, this->find(tmp)->second));
                 this->insert(tmp);
             }
         }
@@ -115,7 +118,7 @@ private:
     // TODO: consider replacing with blaze::SmallArray to avoid heap allocation/access
     IT update_facilities(IT gfid, const std::vector<IT> &update_facilities, const FT cost) {
 #if VERBOSE_AF
-        std::fprintf(stderr, "About to update facility %zu with update_facilities of size %zu with cost %g\n",
+        std::fprintf(stderr, "About to update facility %zu with update_facilities of size %zu with cost %0.12g\n",
                      size_t(gfid), update_facilities.size(), cost);
 #endif
         if(!open_client(update_facilities)) {
@@ -187,7 +190,8 @@ private:
             if(pay_schedule_[i] == PAID_IN_FULL)
                 temporarily_open.push_back(i);
         }
-        const size_t ntemp = temporarily_open.size();
+        if(verbose) std::fprintf(stderr, "%zu temporarily open\n", temporarily_open.size());
+        
         std::vector<std::vector<IT>> open_facility_assignments;
         std::vector<IT> open_facilities;
         shared::flat_hash_set<IT> unassigned_clients;
@@ -518,7 +522,7 @@ public:
     FT open_candidates() {
         IT edge_idx = 0;
         FT time = 0.;
-        const size_t edge_log_num = nedges_ / 10;
+        DBG_ONLY(const size_t edge_log_num = nedges_ / 10;)
         while(n_open_clients_) {
             if(edge_idx == nedges_) {
                 //std::fprintf(stderr, "All edges processed, now starting final loop\n");
@@ -530,12 +534,12 @@ public:
             if(next_paid_.size() && next_paid_.top().first > current_edge_cost) {
                 const auto next_fac = next_paid_.top();
                 size_t current_n = next_paid_.size();
-                DBG_ONLY(std::fprintf(stderr, "Trying to update by removing the next facility. Current in next_paid_ %zu\n", next_paid_.size());)
+                //DBG_ONLY(std::fprintf(stderr, "Trying to update by removing the next facility. Current in next_paid_ %zu\n", next_paid_.size());)
                 n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time);
                 time = next_fac.first;
                 if(current_n == next_paid_.size()) // If it wasn't removed
                     next_paid_.pop_top();
-                DBG_ONLY(std::fprintf(stderr, "n open: %zu. time: %g. Now facilities left to pay: %zu\n", size_t(n_open_clients_), time, next_paid_.size());)
+                //DBG_ONLY(std::fprintf(stderr, "n open: %zu. time: %0.12g. Now facilities left to pay: %zu\n", size_t(n_open_clients_), time, next_paid_.size());)
             } else {
                 n_open_clients_ = service_tight_edge(current_edge);
                 time = current_edge_cost;
@@ -574,13 +578,82 @@ public:
         }
         return sum;
     }
+    static void run_loop(this_type &solver, double mycost, std::atomic<double> &maxcost, std::atomic<double> &mincost,
+                         std::set<double> &current_running, std::mutex &mut, unsigned &maxk, unsigned &mink,
+                         std::atomic<int> &terminate, uint64_t seed, unsigned nthreads, std::atomic<uint32_t> &rounds_completed, uint32_t max_rounds, unsigned k)
+    {
+        wy::WyRand<uint32_t, 0> rng(seed);
+        std::uniform_real_distribution<double> urd;
+        const double spacing = 1. / nthreads;
+        for(;;) {
+            solver.reset_cost(mycost);
+            if(terminate.load()) break;
+            solver.run();
+            if(terminate.load()) break;
+            size_t nf = solver.final_open_facilities_.size();
+            if(nf == k) {
+                terminate.store(1);
+                maxcost.store(mycost);
+                mincost.store(mycost);
+                {
+                    std::lock_guard<std::mutex> lock;
+                    mink = maxk = nf;
+                }
+                break;
+            } else if(nf > k) {
+                double lastmincost = mincost;
+                while(mycost > lastmincost && !std::atomic_compare_exchange_weak(
+                      &mincost,
+                      &lastmincost,
+                      mycost));
+                if(nf < maxk) {
+                    std::lock_guard<std::mutex> lock;
+                    maxk = nf;
+                }
+            } else {
+                double lastmaxcost = maxcost;
+                while(mycost < lastmaxcost && !std::atomic_compare_exchange_weak(
+                      &maxcost,
+                      &lastmaxcost,
+                      mycost));
+                if(nf > mink) {
+                    std::lock_guard<std::mutex> lock;
+                    mink = nf;
+                }
+            }
+            double cost, myspacing;
+            typename std::set<double>::const_iterator it;
+            do {
+                cost = urd(rng) * mincost.load() + (maxcost.load() - mincost.load());
+                // TODO: Consider random selection in geometric mean
+                it = current_running.lower_bound(cost);
+                if(it != current_running.end()) {
+                    myspacing = std::abs(cost - *it);
+                    if(++it != current_running.end())
+                        myspacing = std::min(myspacing, std::abs(cost - *it));
+                } else {
+                    --it;
+                    myspacing = std::abs(*it - cost);
+                }
+            } while(maxcost.load() != mincost.load() &&
+                    myspacing / (maxcost.load() - mincost.load()) < spacing * .25
+                    && !terminate.load());
+            {
+                std::lock_guard<std::mutex> lock(mut);
+                current_running.erase(mycost);
+                current_running.insert(cost);
+            }
+            mycost = cost;
+            if(terminate.load()) break;
+        }
+    }
     std::pair<std::vector<IT>, std::vector<std::vector<IT>>>
-    kmedian(unsigned k, unsigned maxrounds=100, double maxcost_starting=0., double mincost=0.) {
-        auto kmed_start = std::chrono::high_resolution_clock::now();
+    kmedian_parallel(int num_threads, unsigned k, unsigned maxrounds, double maxcost=0., double mincost=0., uint64_t seed = 0) {
+        if(num_threads <= 1)
+            return kmedian(k, maxrounds, maxcost, mincost);
+        std::vector<this_type> solvers;
         auto &dm = *distmatp_;
-        double maxcost;
-        if(maxcost_starting) maxcost = maxcost_starting;
-        else {
+        if(maxcost == 0.) {
             maxcost = max(dm);
             if(std::isinf(maxcost)) {
                 maxcost = 0.;
@@ -591,42 +664,129 @@ public:
             }
             maxcost *= dm.columns();
         }
-        double medcost = (maxcost - mincost) / (k * dm.columns()) + mincost;
+        std::unique_ptr<double[]> assigned_costs(new double[num_threads]);
+        if(mincost == 0) {
+            while(solvers.size() < num_threads) {
+                double frac = (1. + solvers.size()) / (num_threads + 1);
+                double assigned_cost = maxcost * std::pow(frac, 2);
+                assigned_costs[solvers.size()] = assigned_cost;
+                solvers.emplace_back(clone_with_cost(assigned_cost));
+            }
+        } else {
+            double mul = std::pow(maxcost / mincost, 1. / (num_threads + 1));
+            while(solvers.size() < num_threads) {
+                double assigned_cost = mincost * std::pow(mul, 2 * (solvers.size() + 1));
+                assigned_costs[solvers.size()] = assigned_cost;
+                solvers.emplace_back(clone_with_cost(assigned_cost));
+            }
+        }
+        std::atomic<double> amaxcost, amincost;
+        amaxcost.store(maxcost);
+        amincost.store(mincost);
+        std::mutex mut;
+        unsigned maxk = std::numeric_limits<unsigned>::max(), mink = 0;
+        std::atomic<int> terminate;
+        std::vector<std::thread> threads;
+        threads.reserve(num_threads);
+        std::set<double> current_running_costs(assigned_costs.get(), assigned_costs.get() + num_threads);
+        std::atomic<uint32_t> rounds_completed;
+        while(threads.size() < num_threads) {
+            unsigned ind = threads.size();
+            threads.emplace_back(
+                run_loop(std::ref(solvers[ind]), assigned_costs[ind],
+                         amaxcost, amincost, std::ref(current_running_costs), mut, std::ref(maxk), std::ref(mink),
+                         std::ref(terminate), seed + ind, num_threads, std::ref(rounds_completed), maxrounds, k)
+            );
+        }
+        for(auto &t: threads) t.join();
+        maxcost = amaxcost.load();
+        mincost = amincost.load();
+        std::pair<std::vector<IT>, std::vector<std::vector<IT>>> ret;
+        if(maxcost == mincost) { // Success!
+            auto it = std::find_if(solvers.begin(), solvers.end(), [maxcost](const auto &x) {
+                return x.get_fac_cost(0) == maxcost;
+            });
+            if(it == solvers.end()) throw 1;
+            ret = std::make_pair(std::move(it->final_open_facilities_), std::move(it->final_open_facility_assignments_));
+        } else {
+            auto it = std::min_element(solvers.begin(), solvers.end(),[k](const auto &x, const auto &y) {
+                std::ptrdiff_t lhdiff = x.final_open_facilities_.size() > k ? x.final_open_facilities_.size() - k: k - x.final_open_facilities_.size();
+                std::ptrdiff_t rhdiff = y.final_open_facilities_.size() > k ? y.final_open_facilities_.size() - k: k - y.final_open_facilities_.size();
+                return lhdiff < rhdiff;
+            });
+            // Got close. Greedy local search to desired count.
+            auto &lsolver = *it;
+            while(lsolver.final_open_facilities_.size() < k) {
+                lsolver.final_open_facilities_.push_back(lsolver.local_best_to_add());
+            }
+            while(lsolver.final_open_facilities_.size() > k) {
+                IT to_rm = lsolver.local_best_to_rm();
+                auto lit = std::find(lsolver.final_open_facilities_.begin(), lsolver.final_open_facilities_.end(), to_rm);
+                lsolver.final_open_facilities_.erase(lit);
+                lsolver.final_open_facility_assignments_.erase(lsolver.final_open_facility_assignments_.begin() + (lit - lsolver.final_open_facilities_.begin()));
+            }
+            lsolver.reassign();
+            ret = std::make_pair(std::move(lsolver.final_open_facilities_), std::move(lsolver.final_open_facility_assignments_));
+        }
+        return ret;
+    }
+    std::pair<std::vector<IT>, std::vector<std::vector<IT>>>
+    kmedian(unsigned k, unsigned maxrounds=100, double maxcost=0., double mincost=0.)
+    {
+        auto kmed_start = std::chrono::high_resolution_clock::now();
+        auto &dm = *distmatp_;
+        if(maxcost == 0.) {
+            maxcost = max(dm);
+            if(std::isinf(maxcost)) {
+                maxcost = 0.;
+                for(auto r: blz::rowiterator(dm))
+                    for(auto v: r)
+                        if(std::isfinite(v) && v > maxcost)
+                            maxcost = v;
+            }
+            maxcost *= dm.columns();
+        }
+        double medcost = (maxcost - mincost) / (dm.columns()) + mincost;
         if(verbose) std::fprintf(stderr, "First iteration, medcost = %0.12g, mincost = %0.12g, maxcost = %0.12g\n", medcost, mincost, maxcost);
+        auto fstart = std::chrono::high_resolution_clock::now();
         reset_cost(medcost);
         run();
-        DBG_ONLY(if(verbose) std::fprintf(stderr, "##first solution for cost %g: %zu (want k %u)\n", medcost, final_open_facilities_.size(), k);)
+        auto fstop = std::chrono::high_resolution_clock::now();
+        if(verbose) std::fprintf(stderr, "[V|%s:%d:%s] first solution for cost %0.12g took %0.6gms and had %zu facilities (want k %u)\n",
+                                 __PRETTY_FUNCTION__, __LINE__, __FILE__, medcost, (fstop - fstart).count() *1.e-6, final_open_facilities_.size(), k);
         size_t roundnum = 0;
-        for(;;) {
+        unsigned lower_k_ = -1, upper_k_ = -1;
+        if(final_open_facilities_.size() > k) upper_k_ = final_open_facilities_.size();
+        else                                  lower_k_ = final_open_facilities_.size();
+        while(final_open_facilities_.size() != k) {
             size_t nopen = final_open_facilities_.size();
-            if(nopen == k) break;
             if(nopen > k) {
                 mincost = medcost; // med has too many, increase cost.
-                if(verbose) std::fprintf(stderr, "Assigning mincost to current cost. New lower bound on cost: %0.12g. k: %u. current sol size %zu\n", mincost, k, nopen);
+                upper_k_ = nopen;
+                if(verbose) std::fprintf(stderr, "Assigning mincost to current cost. New lower bound on cost: %0.12g. k: %u. current sol size %zu. upper k: %u\n", mincost, k, nopen, upper_k_);
             } else {
                 maxcost = medcost; // med has too few, lower cost.
-                if(verbose) std::fprintf(stderr, "Assigning maxcost to current cost. New upper bound on cost: %0.12g because we have too few items (%zu instead of %u)\n", maxcost, nopen, k);
+                lower_k_ = nopen;
+                if(verbose) std::fprintf(stderr, "Assigning maxcost to current cost. New upper bound on cost: %0.12g because we have too few items (%zu instead of %u). k lower: %u\n", maxcost, nopen, k, lower_k_);
             }
-            //if(verbose) std::fprintf(stderr, "##mincost: %g. maxcost: %g\n", mincost, maxcost);
-            double rat = double(nopen) / k;
-            if(rat > 1.1 || rat < 1. / 1.1) {
-                double lam = 1. - rat / (1. + rat);
+            double ratio = double(nopen) / k;
+            if(ratio < 1.05 && ratio > 0.95) {
+                medcost = (maxcost + mincost) * .5;
+            } else if(mincost != 0 && ((maxcost / mincost) > 10 || ratio > 8. || ratio < 0.125)) {
+                medcost = std::sqrt(maxcost) * std::sqrt(mincost); // Geometric mean instead of arithmetic
+                if(verbose) std::fprintf(stderr, "%0.12g = sqrt(%0.12g [mincost] * [maxcost] %0.12g)\n", medcost, mincost, maxcost);
+            } else {
+                double lam = 1. - ratio / (1. + ratio);
                 medcost = lam * mincost + (1. - lam) * maxcost;
-                std::fprintf(stderr, "%g * mincost + %g * maxcost\n", lam, 1. - lam);
-            } else medcost = (mincost + maxcost) * .5;
-#if !NDEBUG
-            std::fprintf(stderr, "##round %zu. current size: %zu. Now applying medcost = %g, with ratio of open to k desired %g\n", roundnum + 1, final_open_facilities_.size(), medcost, rat);
-#endif
-#ifndef NDEBUG
-            auto start = std::chrono::high_resolution_clock::now();
-#endif
+                if(verbose) std::fprintf(stderr, "%0.12g = %0.12g * mincost + %0.12g * maxcost\n", medcost, lam, 1. - lam);
+            }
+            fstart = std::chrono::high_resolution_clock::now();
             reset_cost(medcost);
             run();
-#ifndef NDEBUG
-            auto stop = std::chrono::high_resolution_clock::now();
-            std::fprintf(stderr, "##Solution cost: %f. size: %zu. Time in ms: %g. Dimensions: %zu/%zu\n", calculate_cost(false), final_open_facilities_.size(), (stop - start).count() * 0.000001, client_w_.rows(), client_w_.columns());
-#endif
-            if(++roundnum > maxrounds || mincost == maxcost) {
+            fstop = std::chrono::high_resolution_clock::now();
+            if(verbose) std::fprintf(stderr, "[Round %zu] Facility cost: %0.12g. Size: %zu. Time in ms: %g. \n",
+                                     roundnum, medcost, final_open_facilities_.size(), (fstop - fstart).count() * 0.000001);
+            if(++roundnum > maxrounds || std::abs(mincost - maxcost) < 1e-16 * medcost) {
                 std::fprintf(stderr, "Failed to find exact solution using JV in %zu rounds. Now using local search from current solution of %zu points to desired k = %u\n",
                              roundnum, final_open_facilities_.size(), k);
                 while(final_open_facilities_.size() < k) {
