@@ -477,9 +477,11 @@ public:
         } else {
             throw std::runtime_error("Not currently supported: non-blaze matrices");
         }
+        if(verbose) std::fprintf(stderr, "Edges set\n");
         shared::sort(edges_.get(), edges_.get() + nedges_, [](edge_type x, edge_type y) {
             return x.cost() < y.cost();
         });
+        if(verbose) std::fprintf(stderr, "Edges sorted\n");
 
         // Initialize V, T, and S
         if(ncities_ < mat.columns()) {
@@ -488,16 +490,22 @@ public:
             clients_cpy_.clear();
             clients_cpy_.resize(mat.columns());
         } else {
+            OMP_PFOR
             for(size_t i = 0; i < mat.columns(); ++i) clients_cpy_[i].clear();
         }
-        std::fill(client_v_.data(), &client_v_[mat.columns()], payment_t{PAID_IN_FULL, EMPTY});
+        OMP_PRAGMA("omp parallel for schedule(static,256)")
+        for(size_t i = 0; i < mat.columns(); ++i)
+            client_v_[i] = payment_t{PAID_IN_FULL, EMPTY};
         if(nfac_ < mat.rows()) {
             working_open_facilities_.reset(new std::vector<IT>[mat.rows()]);
             nfac_ = mat.rows();
             contribution_time_.reset(new FT[nfac_]());
             fac_contributions_.reset(new FT[nfac_]());
         } else {
-            for(size_t i = 0; i < nfac_; working_open_facilities_[i++] = {EMPTY});
+            OMP_PRAGMA("omp parallel for schedule(static,512)")
+            for(size_t i = 0; i < nfac_; ++i)
+                working_open_facilities_[i] = {EMPTY};
+
             std::memset(contribution_time_.get(), 0, sizeof(contribution_time_[0]) * nfac_);
             std::memset(fac_contributions_.get(), 0, sizeof(fac_contributions_[0]) * nfac_);
         }
