@@ -618,11 +618,11 @@ public:
                      std::fprintf(stderr, "Doing compare/weak with mincost = %g and last = %g\n", mincost.load(), lastmincost);
                 }
                 if(nf < maxk) {
-                    std::fprintf(stderr, "[%zu] nf > k, setting maxcost from %g to %g\n", my_id, maxcost.load(), mycost);
+                    std::fprintf(stderr, "[%zu] nf > k, setting maxk from %u to %u at %g \n", my_id, maxk, nf, mycost);
                     std::lock_guard<std::mutex> lock(mut);
                     maxk = nf;
                 }
-                std::fprintf(stderr, "[%zu] released lock, nf > k[%u] (csize: %zu at %g)\n", my_id, k, nf, mycost);
+                std::fprintf(stderr, "[%zu] released lock, nf > k[%u] (csize: %zu at %g) Old min cost: %g\n", my_id, k, nf, mycost, lastmincost);
             } else {
                 double lastmaxcost = maxcost;
                 while(mycost < lastmaxcost && !std::atomic_compare_exchange_weak(
@@ -633,7 +633,7 @@ public:
                     std::lock_guard<std::mutex> lock(mut);
                     mink = nf;
                 }
-                std::fprintf(stderr, "[%zu] released lock, nf < k [%u] (csize: %zu at %g)\n", my_id, k,  nf, mycost);
+                std::fprintf(stderr, "[%zu] released lock, nf < k [%u] (csize: %zu at %g). Old max cost: %g\n", my_id, k,  nf, mycost, lastmaxcost);
             }
             double cost, myspacing;
             typename std::set<double>::const_iterator it;
