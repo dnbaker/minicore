@@ -585,31 +585,44 @@ public:
         wy::WyRand<uint32_t, 0> rng(seed);
         std::uniform_real_distribution<double> urd;
         const double spacing = 1. / nthreads;
+        const size_t my_id = std::hash<std::thread::id>()(std::this_thread::get_id());
         for(;;) {
             solver.reset_cost(mycost);
             if(terminate.load()) break;
             solver.run();
             if(terminate.load()) break;
+            ++rounds_completed;
+            if(rounds_completed.load() >= max_rounds) {
+                terminate.store(1);
+                break;
+            }
             size_t nf = solver.final_open_facilities_.size();
             if(nf == k) {
+                std::fprintf(stderr, "[%zu] nf == k, setting to terminate\n", my_id);
                 terminate.store(1);
                 maxcost.store(mycost);
                 mincost.store(mycost);
                 {
-                    std::lock_guard<std::mutex> lock;
+                    std::lock_guard<std::mutex> lock(mut);
                     mink = maxk = nf;
                 }
                 break;
             } else if(nf > k) {
+                std::fprintf(stderr, "[%zu] nf > k, setting mincost from %g to %g\n", my_id, mincost.load(), mycost);
                 double lastmincost = mincost;
                 while(mycost > lastmincost && !std::atomic_compare_exchange_weak(
                       &mincost,
                       &lastmincost,
-                      mycost));
+                      mycost))
+                {
+                     std::fprintf(stderr, "Doing compare/weak with mincost = %g and last = %g\n", mincost.load(), lastmincost);
+                }
                 if(nf < maxk) {
-                    std::lock_guard<std::mutex> lock;
+                    std::fprintf(stderr, "[%zu] nf > k, setting maxcost from %g to %g\n", my_id, maxcost.load(), mycost);
+                    std::lock_guard<std::mutex> lock(mut);
                     maxk = nf;
                 }
+                std::fprintf(stderr, "[%zu] released lock, nf > k[%u] (csize: %zu at %g)\n", my_id, k, nf, mycost);
             } else {
                 double lastmaxcost = maxcost;
                 while(mycost < lastmaxcost && !std::atomic_compare_exchange_weak(
@@ -617,14 +630,16 @@ public:
                       &lastmaxcost,
                       mycost));
                 if(nf > mink) {
-                    std::lock_guard<std::mutex> lock;
+                    std::lock_guard<std::mutex> lock(mut);
                     mink = nf;
                 }
+                std::fprintf(stderr, "[%zu] released lock, nf < k [%u] (csize: %zu at %g)\n", my_id, k,  nf, mycost);
             }
             double cost, myspacing;
             typename std::set<double>::const_iterator it;
             do {
-                cost = urd(rng) * mincost.load() + (maxcost.load() - mincost.load());
+                cost = urd(rng) * (maxcost.load() - mincost.load()) + mincost.load();
+                std::fprintf(stderr, "[%zu] randomly selected cost: %g\n", my_id, cost);
                 // TODO: Consider random selection in geometric mean
                 it = current_running.lower_bound(cost);
                 if(it != current_running.end()) {
@@ -638,6 +653,7 @@ public:
             } while(maxcost.load() != mincost.load() &&
                     myspacing / (maxcost.load() - mincost.load()) < spacing * .25
                     && !terminate.load());
+            std::fprintf(stderr, "Selected new cost: %g\n", cost);
             {
                 std::lock_guard<std::mutex> lock(mut);
                 current_running.erase(mycost);
@@ -645,10 +661,13 @@ public:
             }
             mycost = cost;
             if(terminate.load()) break;
+            std::fprintf(stderr, "thread %zu viewing min/max costs of %g/%g\n", my_id,
+                                mincost.load(), maxcost.load());
         }
     }
     std::pair<std::vector<IT>, std::vector<std::vector<IT>>>
     kmedian_parallel(int num_threads, unsigned k, unsigned maxrounds, double maxcost=0., double mincost=0., uint64_t seed = 0) {
+        auto fstart = std::chrono::high_resolution_clock::now();
         if(num_threads <= 1)
             return kmedian(k, maxrounds, maxcost, mincost);
         std::vector<this_type> solvers;
@@ -686,25 +705,29 @@ public:
         std::mutex mut;
         unsigned maxk = std::numeric_limits<unsigned>::max(), mink = 0;
         std::atomic<int> terminate;
+        terminate.store(0);
         std::vector<std::thread> threads;
         threads.reserve(num_threads);
         std::set<double> current_running_costs(assigned_costs.get(), assigned_costs.get() + num_threads);
         std::atomic<uint32_t> rounds_completed;
+        rounds_completed.store(0);
         while(threads.size() < num_threads) {
             unsigned ind = threads.size();
             threads.emplace_back(
-                run_loop(std::ref(solvers[ind]), assigned_costs[ind],
-                         amaxcost, amincost, std::ref(current_running_costs), mut, std::ref(maxk), std::ref(mink),
-                         std::ref(terminate), seed + ind, num_threads, std::ref(rounds_completed), maxrounds, k)
+                run_loop, std::ref(solvers[ind]), assigned_costs[ind],
+                          std::ref(amaxcost), std::ref(amincost), std::ref(current_running_costs),
+                          std::ref(mut), std::ref(maxk), std::ref(mink),
+                          std::ref(terminate), seed + ind, num_threads, std::ref(rounds_completed), maxrounds, k
             );
         }
+        std::fprintf(stderr, "Threads started [%zu]\n", threads.size());
         for(auto &t: threads) t.join();
         maxcost = amaxcost.load();
         mincost = amincost.load();
         std::pair<std::vector<IT>, std::vector<std::vector<IT>>> ret;
         if(maxcost == mincost) { // Success!
-            auto it = std::find_if(solvers.begin(), solvers.end(), [maxcost](const auto &x) {
-                return x.get_fac_cost(0) == maxcost;
+            auto it = std::find_if(solvers.begin(), solvers.end(), [k](const auto &x) {
+                return x.final_open_facilities_.size() == k;
             });
             if(it == solvers.end()) throw 1;
             ret = std::make_pair(std::move(it->final_open_facilities_), std::move(it->final_open_facility_assignments_));
@@ -728,6 +751,9 @@ public:
             lsolver.reassign();
             ret = std::make_pair(std::move(lsolver.final_open_facilities_), std::move(lsolver.final_open_facility_assignments_));
         }
+        auto fstop = std::chrono::high_resolution_clock::now();
+        if(verbose) std::fprintf(stderr, "Solution of size %zu took %u rounds and %0.12gms\n",
+                                 ret.first.size(), rounds_completed.load(), (fstop - fstart).count() * 1.e-6);
         return ret;
     }
     std::pair<std::vector<IT>, std::vector<std::vector<IT>>>
