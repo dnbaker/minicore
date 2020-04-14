@@ -86,6 +86,8 @@ struct IndexDistMetric<Iter, MatrixLookup> {
     IndexDistMetric(const Iter iter, Dist dist): mat_((*iter).operand()), dist_(std::move(dist)) {}
 
     ET operator()(size_t i, size_t j) const {
+        assert(i < mat_.rows());
+        assert(j < mat_.columns());
         return mat_(i, j);
         //return iter_[i][j];
     }
@@ -130,6 +132,7 @@ template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr) {
+    //std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
     std::vector<IT> centers;
     std::vector<FT> distances(np, 0.), cdf(np);
     {
@@ -142,14 +145,15 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
 #endif
         for(size_t i = 0; i < np; ++i) {
             if(unlikely(i == fc)) continue;
+            //std::fprintf(stderr, "Oracle about to call fc%zu / i%zu.\n", fc, i);
             double dist = oracle(fc, i);
             distances[i] = dist;
         }
         assert(distances[fc] == 0.);
-        if(weights) inclusive_scan(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
+        if(weights) ::std::partial_sum(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
             return x + y * weights[&y - ds];
         });
-        else inclusive_scan(distances.begin(), distances.end(), cdf.begin());
+        else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
     }
     std::vector<IT> assignments(np);
     std::uniform_real_distribution<double> urd;
@@ -159,25 +163,30 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         IT newc;
         do {
             newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
-        } while(newc >= np);
+        } while(newc >= np && // Ensure that it is within bounds
+                std::find(centers.data(), centers.data() + centers.size(), newc)
+                        != centers.data() + centers.size() // And unused thus far
+        );
+        //std::fprintf(stderr, "newc: %u/%zu\n", newc, distances.size());
         const auto current_center_id = centers.size();
         assignments[newc] = centers.size();
         centers.push_back(newc);
         distances[newc] = 0.;
         OMP_PFOR
         for(IT i = 0; i < np; ++i) {
-            if(unlikely(i == newc)) continue;
             auto &ldist = distances[i];
+            if(ldist == 0.) continue;
+            //std::fprintf(stderr, "Oracle about to call newc%zu / i%zu. centers size: %zu\n", newc, i, centers.size());
             auto dist = oracle(newc, i);
             if(dist < ldist) { // Only write if it changed
                 assignments[i] = current_center_id;
                 ldist = dist;
             }
         }
-        if(weights) inclusive_scan(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
+        if(weights) ::std::partial_sum(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
             return x + y * weights[&y - ds];
         });
-        else inclusive_scan(distances.begin(), distances.end(), cdf.begin());
+        else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
     }
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
 }
@@ -288,6 +297,7 @@ kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=
     std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(~mat);
+        std::fprintf(stderr, "Mat shape: %zu/%zu\n", (~mat).rows(), (~mat).columns());
         ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights);
     } else { // columnwise
         auto columnit = blz::columniterator(~mat);
@@ -376,7 +386,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
                     //std::fprintf(stderr, "costs[%zu] = %g\n", j, costs[j]);
                 }
             }
-            inclusive_scan(costs.get(), costs.get() + nr, costs.get());
+            ::std::partial_sum(costs.get(), costs.get() + nr, costs.get());
             //for(unsigned i = 0; i < nr; ++i) std::fprintf(stderr, "%u:%g\t", i, costs[i]);
             //std::fputc('\n', stderr);
             size_t item = std::lower_bound(costs.get(), costs.get() + nr, costs[nr - 1] * double(std::rand()) / RAND_MAX) - costs.get();
@@ -419,7 +429,7 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
 
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double,
          typename Functor=blz::sqrL2Norm>
-void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
+double lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
                 CMatrixType &centers, MatrixType &data,
                 double tolerance=0., size_t maxiter=-1,
                 const Functor &func=Functor(),
@@ -440,6 +450,7 @@ void lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
         oldloss = newloss;
     }
     std::fprintf(stderr, "Completed with final loss of %0.30g after %zu rounds\n", newloss, iternum);
+    return newloss;
 }
 
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double, typename Functor=blz::sqrL2Norm, typename RNG, typename SelContainer>

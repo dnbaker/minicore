@@ -9,40 +9,26 @@
 
 #if defined(USE_TBB)
 #  include <execution>
-#  define inclusive_scan(...) inclusive_scan(::std::execution::par_unseq, __VA_ARGS__)
-#  ifndef NDEBUG
-#    pragma message("Using parallel inclusive scan")
-#  endif
-#else
-#  define inclusive_scan(...) ::std::partial_sum(__VA_ARGS__)
 #endif
 
 namespace fgc {
 
-#ifdef USE_TBB
-using std::inclusive_scan;
-#endif
-
 #if !NDEBUG
 template<typename T> class TD; // Debugging only
+#endif
+
+#ifndef FGC_MAX_HASH_LOAD_FACTOR
+#define FGC_MAX_HASH_LOAD_FACTOR 80
 #endif
 
 
 namespace shared {
 template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
           typename KeyEqual = std::equal_to<Key>>
-struct flat_hash_map: public robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, 80> {
-    using super = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, 80>;
-    template<typename...Args>
-    flat_hash_map(Args &&...args): super(std::forward<Args>(args)...) {}
-};
+using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, FGC_MAX_HASH_LOAD_FACTOR>;
 
 template<typename T, typename H = robin_hood::hash<T>, typename E = std::equal_to<T>>
-struct flat_hash_set: public robin_hood::unordered_flat_set<T, H, E> {
-    using super = robin_hood::unordered_flat_set<T, H, E>;
-    template<typename...Args>
-    flat_hash_set(Args &&...args): super(std::forward<Args>(args)...) {}
-};
+using flat_hash_set = robin_hood::unordered_flat_set<T, H, E, FGC_MAX_HASH_LOAD_FACTOR>;
 
 INLINE auto checked_posix_write(int fd, const void *buf, ssize_t count) {
     ssize_t ret = ::write(fd, buf, count);
@@ -57,6 +43,7 @@ INLINE auto checked_posix_write(int fd, const void *buf, ssize_t count) {
     }
     return ret;
 }
+
 struct Deleter {
     void operator()(const void *x) const {
         std::free(const_cast<void *>(x));
@@ -74,6 +61,7 @@ struct dumbrange {
     auto begin() const {return beg;}
     auto end()   const {return e_;}
 };
+
 template<typename T>
 inline dumbrange<T> make_dumbrange(T beg, T end) {return dumbrange<T>(beg, end);}
 

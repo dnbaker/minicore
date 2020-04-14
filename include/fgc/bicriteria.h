@@ -111,7 +111,7 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
         pmap.reset(new Vertex[boost::num_vertices(x)]);
         for(i = 0; R.size() && i < maxnumrounds; ++i) {
             const size_t rsz = R.size();
-            inclusive_scan(R.data(), R.data() + rsz,
+            std::partial_sum(R.data(), R.data() + rsz,
                            cdf.get(), [weights,&r2wi](auto csum, auto newv){return csum + weights[r2wi[newv]];});
             std::uniform_real_distribution<float> urd;
             auto weighted_select = [&]() {
@@ -261,7 +261,7 @@ std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
         // remove all R with dist(x, F) leq dist(x, R)
         VERBOSE_ONLY(std::fprintf(stderr, "R size before: %zu\n", R.size());)
 #ifdef USE_TBB
-        R.erase(std::remove_if(std::execution::par_unseq, R.begin(), R.end(), [d=distances.data(),minv](auto x) {return d[x] <= minv;}), R.end());
+        R.erase(std::remove_if(std::execution::par_unseq, R.begin(), R.end(), [d=distances.get(),minv](auto x) {return d[x] <= minv;}), R.end());
 #elif __cplusplus > 201703uL
         std::erase_if(R, [d=distances.get(),minv](auto x) {return d[x] <= minv;});
 #else
@@ -496,7 +496,7 @@ lazy_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weigh
                 }
             // or weighted
             } else {
-                inclusive_scan(R.get(), R.get() + nr, cdf.get(), [weights](auto csum, auto newv) {
+                std::partial_sum(R.get(), R.get() + nr, cdf.get(), [weights](auto csum, auto newv) {
                     return csum + weights[newv];
                 });
                 if(cdf[nr - 1] >= nperround) {
@@ -534,7 +534,7 @@ lazy_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weigh
         if(nr == 0) break;
         unsigned pivot_index;
         if(weights) {
-            inclusive_scan(R.get(), R.get() + nr, cdf.get(), [weights](auto csum, auto newv) {
+            std::partial_sum(R.get(), R.get() + nr, cdf.get(), [weights](auto csum, auto newv) {
                 return csum + weights[newv];
             });
             pivot_index = weighted_select();

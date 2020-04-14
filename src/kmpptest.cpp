@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
     test_kccs(mat, gen, npoints, eps);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
     start = t();
-    auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, npoints * 100);
+    auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, std::min(size_t(npoints * 10), mat.rows() / 2));
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ matrix coreset: %gs\n", double((stop - start).count()) / 1e9);
     OMP_ONLY(omp_set_num_threads(1);)
@@ -117,9 +117,10 @@ int main(int argc, char *argv[]) {
     }
     double tolerance = 1e-4;
     decltype(centermatrix) copy_mat(centermatrix);
-    lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, 100);
+    double fulldata_cost = lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, 100);
+    if(npoints > kmppmcs.mat_.rows()) npoints = kmppmcs.mat_.rows();
     auto [wcenteridx, wasn, wcosts] = kmeanspp(kmppmcs.mat_, gen, npoints, blz::sqrL2Norm(), true, kmppmcs.weights_.data());
-    blaze::DynamicMatrix<FLOAT_TYPE> weight_kmppcenters = rows(kmppmcs.mat_, wcenteridx.data(), wcenteridx.size());
+    blaze::DynamicMatrix<FLOAT_TYPE> weight_kmppcenters = blz::rows(kmppmcs.mat_, wcenteridx.data(), wcenteridx.size());
     lloyd_loop(wasn, counts, weight_kmppcenters, kmppmcs.mat_, 0., 1000, blz::sqrL2Norm(), kmppmcs.weights_.data());
     double cost = 0.;
     for(size_t i = 0; i < mat.rows(); ++i) {
@@ -129,5 +130,5 @@ int main(int argc, char *argv[]) {
             rc = std::min(rc, blz::sqrL2Dist(mr, row(weight_kmppcenters, j)));
         cost += rc;
     }
-    std::fprintf(stderr, "Cost of coreset solution: %g\n", cost);
+    std::fprintf(stderr, "Cost of coreset solution: %g. Cost of solution on full dataset: %g\n", cost, fulldata_cost);
 }
