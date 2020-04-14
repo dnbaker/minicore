@@ -1,42 +1,45 @@
 [submodule "code/aesctr"]
-	path = code/aesctr
+	path = aesctr
 	url = https://github.com/dnbaker/aesctr
 [submodule "code/lemon"]
-	path = code/lemon
+	path = lemon
 	url = https://github.com/seqan/lemon
 [submodule "code/robin-hood-hashing"]
-	path = code/robin-hood-hashing
+	path = robin-hood-hashing
 	url = https://github.com/martinus/robin-hood-hashing/
 [submodule "code/alias_sampler"]
-	path = code/alias_sampler
+	path = alias_sampler
 	url = https://github.com/dnbaker/alias_sampler
 [submodule "code/blaze"]
-	path = code/blaze
+	path = blaze
 	url = https://github.com/dnbaker/blaze-lib
 [submodule "code/protozero"]
-	path = code/protozero
+	path = protozero
 	url = https://github.com/mapbox/protozero
 [submodule "code/libosmium"]
-	path = code/libosmium
+	path = libosmium
 	url = https://github.com/osmcode/libosmium
 [submodule "code/pybind11"]
-	path = code/pybind11
+	path = pybind11
 	url = https://github.com/pybind/pybind11
 [submodule "code/pdqsort"]
-	path = code/pdqsort
+	path = pdqsort
 	url = https://github.com/orlp/pdqsort
 [submodule "code/mio"]
-	path = code/mio
+	path = mio
 	url = https://github.com/mandreyel/mio
 [submodule "code/sleef"]
-	path = code/sleef
+	path = sleef
 	url = https://github.com/shibatch/sleef
 [submodule "code/distmat"]
-	path = code/distmat
+	path = distmat
 	url = https://github.com/dnbaker/distmat
 [submodule "code/xxHash"]
-	path = code/xxHash
+	path = xxHash
 	url = https://github.com/Cyan4973/xxHash
-[submodule "code/network_simplex"]
-	path = code/network_simplex
-	url = https://github.com/nbonneel/network_simplex
+[submodule "code/cpp-taskflow"]
+	path = cpp-taskflow
+	url = https://github.com/cpp-taskflow/cpp-taskflow
+[submodule "code/fastiota"]
+	path = fastiota
+	url = https://github.com/dnbaker/fastiota
