@@ -446,11 +446,9 @@ template<typename Oracle,
          typename IT=uint32_t
         >
 std::tuple<std::vector<IT>, blz::DV<FT>, std::vector<IT>>
-lazy_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weights=static_cast<const WFT *>(nullptr), double npermult=21, double nroundmult=3, double eps=0.5, uint64_t seed=1337)
+oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weights=static_cast<const WFT *>(nullptr), double npermult=21, double nroundmult=3, double eps=0.5, uint64_t seed=1337)
 {
-    if(weights) throw std::runtime_error("Should not have weights yet because the code isn't written");
     size_t nperround = npermult * k * std::log(npoints) / eps;
-
 
     wy::WyRand<IT, 2> rng(seed);
     blz::DV<FT> mincosts(npoints);   // minimum costs per point
@@ -555,6 +553,127 @@ lazy_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weigh
     return {F, mincosts, minindices};
 }
 
+template<typename Oracle, typename IT=uint32_t>
+struct OracleWrapper {
+    const Oracle &oracle_;
+    std::vector<IT> lut_;
+public:
+    template<typename Container>
+    OracleWrapper(const Oracle &oracle, const Container &indices): OracleWrapper(oracle, indices.begin(), indices.end()) {
+    }
+    template<typename It>
+    OracleWrapper(const Oracle &oracle, It start, It end):
+        oracle_(oracle), lut_(start, end) {}
+
+    INLINE decltype(auto) operator()(size_t i, size_t j) const {
+       return oracle_(lookup(i), lookup(j));
+    }
+
+    IT lookup(size_t idx) const {
+#ifndef NDEBUG
+        return lut_.at(idx);
+#else
+        return lut_[idx];
+#endif
+    }
+};
+
+template<typename Oracle, typename Container>
+auto
+make_oracle_wrapper(const Oracle &o, const Container &indices) {
+    using IT = std::decay_t<decltype(*indices.begin())>;
+    return OracleWrapper<Oracle, IT>(o, indices);
+}
+template<typename Oracle, typename It>
+auto
+make_oracle_wrapper(const Oracle &o, It start, It end) {
+    using IT = std::decay_t<decltype(*start)>;
+    return OracleWrapper<Oracle, IT>(o, start, end);
+}
+
+template<typename Oracle,
+         typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+         typename WFT=FT,
+         typename IT=uint32_t
+        >
+std::tuple<std::vector<IT>, blz::DV<FT>, std::vector<IT>>
+iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsigned num_iter, unsigned num_sub_iter=10,
+                         const WFT *weights=static_cast<const WFT *>(nullptr), double npermult=21, double nroundmult=3, double eps=0.5, uint64_t seed=1337)
+{
+    auto getw = [weights](size_t index) {
+        return weights ? weights[index]: static_cast<WFT>(1.);
+    };
+    wy::WyHash<uint64_t, 2> rng(seed);
+
+    // gather first set of sampled points
+    auto [centers, costs, bestindices] = oracle_thorup_d(oracle, npoints, k, weights, npermult, nroundmult, eps, rng());
+    auto best_cost = blz::sum(costs);
+
+    if(num_sub_iter == 0) num_sub_iter = 1;
+    // Repeat this process a number of times and select the best-scoring set of points.
+    for(unsigned sub_iter_left = num_sub_iter; --sub_iter_left;) {
+        auto [centers2, costs2, bestindices2] = oracle_thorup_d(oracle, npoints, k, weights, npermult, nroundmult, eps, rng());
+        auto next_cost = blaze::sum(costs2);
+        if(next_cost < best_cost) {
+            centers = std::move(centers2);
+            costs = std::move(costs2);
+            bestindices = std::move(bestindices2);
+            best_cost = next_cost;
+        }
+    }
+
+    // Calculate weights for center points
+    blz::DV<FT> center_weights(centers.size());
+    center_weights = FT(0);
+    shared::flat_hash_map<IT, IT> asn2id;
+    for(size_t i = 0; i < centers.size(); ++i)
+        asn2id[centers[i]] = i;
+    OMP_PRAGMA("omp parallel for")
+    for(size_t i = 0; i < npoints; ++i) {
+        auto weight = getw(i);
+        auto id = bestindices[i];
+        id = asn2id[id];
+        OMP_ATOMIC
+        center_weights[id] += weight;
+    }
+    for(size_t iter_left = num_iter; iter_left--;) {
+        auto wrapped_oracle = make_oracle_wrapper(oracle, centers);
+        auto [sub_centers, sub_costs, sub_bestindices] = oracle_thorup_d(oracle, centers.size(), k, center_weights.data(), npermult, nroundmult, eps, rng());
+        auto best_cost = blaze::dot(sub_costs, center_weights);
+        for(unsigned sub_iter_left = num_sub_iter; --sub_iter_left;) {
+            auto [centers2, costs2, bestindices2] = oracle_thorup_d(wrapped_oracle, centers.size(), k, center_weights.data(), npermult, nroundmult, eps, rng());
+            auto next_cost = blaze::dot(costs2, center_weights);
+            if(next_cost < best_cost) {
+                sub_centers = std::move(centers2);
+                sub_costs = std::move(costs2);
+                sub_bestindices = std::move(bestindices2);
+                best_cost = next_cost;
+            }
+        }
+        // reassign centers and weights
+        shared::flat_hash_map<IT, IT> sub_asn2id;
+        sub_asn2id.reserve(sub_centers.size());
+        for(size_t i = 0; i < sub_centers.size(); ++i)
+            sub_asn2id[sub_centers[i]] = i;
+        blz::DV<FT> sub_center_weights(sub_centers.size());
+        sub_center_weights = FT(0);
+        for(size_t i = 0; i < sub_bestindices.size(); ++i) {
+            auto asn = sub_bestindices[i];
+            auto center_id = sub_centers[asn]; // This is in sub-coordinates
+            auto weight_idx = sub_asn2id[center_id];
+            sub_center_weights[weight_idx] += center_weights[i];
+        }
+        std::transform(sub_centers.begin(), sub_centers.end(), sub_centers.begin(),
+                       [&wrapped_oracle](auto x) {return wrapped_oracle.lookup(x);});
+        std::transform(sub_bestindices.begin(), sub_bestindices.end(), sub_bestindices.begin(),
+                       [&wrapped_oracle](auto x) {return wrapped_oracle.lookup(x);});
+        centers = std::move(sub_centers);
+        center_weights = std::move(sub_center_weights);
+        bestindices = std::move(sub_bestindices);
+    }
+    return {std::move(centers), std::move(costs), std::move(bestindices)};
+}
+
 
 } // thorup
 
@@ -564,6 +683,7 @@ using thorup::sample_from_graph;
 using thorup::thorup_sample;
 using thorup::histogram_assignments;
 using thorup::thorup_d;
+using thorup::oracle_thorup_d;
 using thorup::get_costs;
 
 
