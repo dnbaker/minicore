@@ -80,13 +80,14 @@ namespace lemon {
 	class SparseValueVector
 	{
 	public:
-		SparseValueVector(size_t n = 0)   // parameter n for compatibility with standard vectors
+		template<typename...Args>
+		SparseValueVector(Args &&...)   // parameter n for compatibility with standard vectors
 		{
 		}
 		void resize(size_t n = 0) {};
 		T operator[](const size_t id) const
 		{
-            auto it = data.find(id);
+			auto it = data.find(id);
 			if (it == data.end())
 				return 0;
 			else
@@ -99,7 +100,7 @@ namespace lemon {
 		}
 
 		//private:
-        Map<size_t, T> data;
+		Map<size_t, T> data;
 	};
 
 	template <typename T, template<typename...> class Map>
@@ -117,7 +118,7 @@ namespace lemon {
 		operator T() {
 			// If we get here, we know that operator[] was called to perform a read access,
 			// so we can simply return the existing object
-            auto it = _v->data.find(_idx);
+			auto it = _v->data.find(_idx);
 			if (it == _v->data.end())
 				return 0;
 			else
@@ -127,7 +128,7 @@ namespace lemon {
 		void operator+=(T val)
 		{
 			if (val == 0) return;
-            auto it = _v->data.find(_idx);
+			auto it = _v->data.find(_idx);
 			if (it == _v->data.end())
 				_v->data[_idx] = val;
 			else
@@ -142,7 +143,7 @@ namespace lemon {
 		void operator-=(T val)
 		{
 			if (val == 0) return;
-            auto it = _v->data.find(_idx);
+			auto it = _v->data.find(_idx);
 			if (it == _v->data.end())
 				_v->data[_idx] = -val;
 			else
@@ -214,7 +215,6 @@ namespace lemon {
 		NetworkSimplexSimple(const GR& graph, bool arc_mixing, int nbnodes, ArcsType nb_arcs, size_t maxiters = 0) :
 			_graph(graph),  //_arc_id(graph),
 			_arc_mixing(arc_mixing), _init_nb_nodes(nbnodes), _init_nb_arcs(nb_arcs),
-			MAX_VAL(std::numeric_limits<Value>::max()),
 			INF(std::numeric_limits<Value>::has_infinity ?
 				std::numeric_limits<Value>::infinity() : MAX_VAL)
 		{
@@ -339,7 +339,7 @@ namespace lemon {
 		ArcsType stem, par_stem, new_stem;
 		Value delta;
 
-		const Value MAX_VAL;
+		static constexpr Value MAX_VAL = std::numeric_limits<Value>::max();
 
 		ArcsType mixingCoeff;
 
@@ -691,7 +691,7 @@ namespace lemon {
 			return *this;
 		}
 		template<typename SupplyMap>
-		NetworkSimplexSimple& supplyMap(const SupplyMap* map1, int n1, const SupplyMap* map2, int n2) {
+		NetworkSimplexSimple& supplyMap(const SupplyMap* map1, int n1, const SupplyMap* map2, int) {
 			Node n; _graph.first(n);
 			for (; n != INVALIDNODE; _graph.next(n)) {
 				if (n<n1)
@@ -702,7 +702,7 @@ namespace lemon {
 			return *this;
 		}
 		template<typename SupplyMap>
-		NetworkSimplexSimple& supplyMapAll(SupplyMap val1, int n1, SupplyMap val2, int n2) {
+		NetworkSimplexSimple& supplyMapAll(SupplyMap val1, int n1, SupplyMap val2, int) {
 			Node n; _graph.first(n);
 			for (; n != INVALIDNODE; _graph.next(n)) {
 				if (n<n1)
@@ -1086,7 +1086,7 @@ namespace lemon {
 				// EQ supply constraints
 				_search_arc_num = _arc_num;
 				_all_arc_num = _arc_num + _node_num;
-				for (ArcsType u = 0, e = _arc_num; u != _node_num; ++u, ++e) {
+				for (ArcsType u = 0, e = _arc_num; u != static_cast<ArcsType>(_node_num); ++u, ++e) {
 					_parent[u] = _root;
 					_pred[u] = e;
 					_thread[u] = u + 1;
@@ -1114,7 +1114,7 @@ namespace lemon {
 				// LEQ supply constraints
 				_search_arc_num = _arc_num + _node_num;
 				ArcsType f = _arc_num + _node_num;
-				for (ArcsType u = 0, e = _arc_num; u != _node_num; ++u, ++e) {
+				for (ArcsType u = 0, e = _arc_num; u != static_cast<ArcsType>(_node_num); ++u, ++e) {
 					_parent[u] = _root;
 					_thread[u] = u + 1;
 					_rev_thread[u + 1] = u;
@@ -1151,7 +1151,7 @@ namespace lemon {
 				// GEQ supply constraints
 				_search_arc_num = _arc_num + _node_num;
 				ArcsType f = _arc_num + _node_num;
-				for (ArcsType u = 0, e = _arc_num; u != _node_num; ++u, ++e) {
+				for (ArcsType u = 0, e = _arc_num; u != static_cast<ArcsType>(_node_num); ++u, ++e) {
 					_parent[u] = _root;
 					_thread[u] = u + 1;
 					_rev_thread[u + 1] = u;
