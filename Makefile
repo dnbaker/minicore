@@ -147,6 +147,9 @@ osm2dimacspg: src/osm2dimacs.cpp
 libsleef.a:
 	+cd sleef && mkdir -p __build && cd __build && cmake .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd .. && rm -r __build
 
+oracle_thorup_d: src/oracle_thorup_d.cpp $(wildcard include/fgc/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread
+
 
 clean:
 	rm -f $(EX) graphrun dmlrun $(FEX) $(PGEX) $(PGFEX) $(EX)
