@@ -7,10 +7,15 @@ int main(int argc, char **argv) {
     blaze::DynamicMatrix<double> mat(d, d);
     randomize(mat);
     mat = (abs(mat) * 50) + 1.;
-    std::cout << submatrix(mat, 0, 0, 25, 25) << '\n';
+    blaze::band<0>(mat) = 0.;
+    std::cerr << submatrix(mat, 0, 0, 25, 25) << '\n';
+    std::cerr.flush();
 #if 0
     auto [centers, costs, assignments] = fgc::thorup::oracle_thorup_d(mat, d, k);
     std::fprintf(stderr, "Original oracle thorup D, one iteration\n");
 #endif
-    auto [itercenters, itercosts, iterassignments] = fgc::thorup::iterated_oracle_thorup_d(mat, d, k, 1, 5, (float *)nullptr, 7);
+    auto [itercenters, itercosts, iterassignments] = fgc::thorup::iterated_oracle_thorup_d(mat, d, k, 3, 5, (float *)nullptr);
+    std::sort(itercenters.begin(), itercenters.end());
+    std::fprintf(stderr, "Center set of size %zu has cost %0.12g.\n", itercenters.size(), blz::sum(blz::min<blz::columnwise>(rows(mat, itercenters))));
+
 }

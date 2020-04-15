@@ -454,8 +454,10 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
         total_weight = blz::sum(blz::CustomVector<WFT, blz::unaligned, blz::unpadded>((WFT *)weights, npoints));
     }
     size_t nperround = npermult * k * std::log(total_weight) / eps;
+#if VERBOSE_AF
     std::fprintf(stderr, "npoints: %zu. total weight: %g. nperround: %zu. Weights? %s\n",
                  npoints, total_weight, nperround, weights ? "true": "false");
+#endif
 
     wy::WyRand<IT, 2> rng(seed);
     blz::DV<FT> mincosts(npoints, std::numeric_limits<FT>::max());   // minimum costs per point
@@ -467,21 +469,20 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
     shared::flat_hash_set<IT> tmp;
     std::vector<IT> current_batch;
     std::unique_ptr<FT[]> cdf(new FT[nr]);
-    std::fprintf(stderr, "nperround: %zu\n", nperround);
     std::uniform_real_distribution<WFT> urd;
     auto weighted_select = [&]() {
         return std::lower_bound(cdf.get(), cdf.get() + nr, cdf[nr - 1] * urd(rng)) - cdf.get();
     };
     size_t rounds_to_do = std::ceil(nroundmult * std::log(total_weight));
-    std::fprintf(stderr, "rounds to do: %zu\n", rounds_to_do);
-    for(; rounds_to_do--;) {
+    //std::fprintf(stderr, "rounds to do: %zu\n", rounds_to_do);
+    while(rounds_to_do--) {
         // Sample points not yet added and calculate un-calculated distances
         if(!weights && nr <= nperround) {
-            std::fprintf(stderr, "Adding all\n");
+            //std::fprintf(stderr, "Adding all\n");
             F.insert(F.end(), R.get(), R.get() + nr);
             for(auto it = R.get(), eit = R.get() + nr; it < eit; ++it) {
                 auto v = *it;
-                std::fprintf(stderr, "Adding index %zd/value %u\n", it - R.get(), v);
+                //std::fprintf(stderr, "Adding index %zd/value %u\n", it - R.get(), v);
                 mincosts[v] = 0.;
                 minindices[v] = v;
                 for(size_t j = 0; j < npoints; ++j) {
@@ -497,7 +498,7 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
         } else {
             // Sample new points, either at random
             if(!weights) {
-                std::fprintf(stderr, "Uniformly sampling to fill tmp\n");
+                //std::fprintf(stderr, "Uniformly sampling to fill tmp\n");
                 while(tmp.size() < nperround) {
                     tmp.insert(rng() % nr);
                 }
@@ -523,12 +524,16 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
                         if(tmp.find(ind) != tmp.end()) continue;
                         tmp.insert(ind);
                         weight_so_far += weights[R[ind]];
-                        std::fprintf(stderr, "tmp size after growing: %zu. nr: %zu. sample count: %zu\n", tmp.size(), nr, sample_count);
+                        //std::fprintf(stderr, "tmp size after growing: %zu. nr: %zu. sample count: %zu. Current weight: %g. Desired weight: %zu\n", tmp.size(), nr, sample_count, weight_so_far, size_t(nperround));
                     }
-                    std::fprintf(stderr, "Took %zu samples to get %zu items\n", sample_count, tmp.size());
+#if 0
+                    std::fprintf(stderr, "Took %zu samples to get %zu items of total weight %g\n", sample_count, tmp.size(), weight_so_far);
+#endif
                 }
+#if 0
                 std::fprintf(stderr, "Sampled %zu items of total weight %0.12g\n", tmp.size(),
                              std::accumulate(tmp.begin(), tmp.end(), 0., [&](auto y, auto x) {return y + weights[R[x]];}));
+#endif
             }
             // Update F, R, and mincosts/minindices
             current_batch.assign(tmp.begin(), tmp.end());
@@ -565,22 +570,24 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
         } else {
             pivot_index = rng() % nr;
         }
-        auto &pivot = R[pivot_index];
-        FT pivot_mincost = mincosts[pivot];
-        std::fprintf(stderr, "mincost for pivot = %u is %g\n", pivot, pivot_mincost);
-        for(auto it = R.get() + nr, e = R.get(); --it >= e;) {
+        //auto &pivot = R[pivot_index];
+        const FT pivot_mincost = mincosts[R[pivot_index]];
+        for(auto it = R.get() + nr, e = R.get(); --it >= e;)
             if(auto &v = *it; mincosts[v] <= pivot_mincost)
                 std::swap(v, R[--nr]);
-        }
     }
+#if VERBOSE_AF
     FT final_total_cost = 0.;
     for(size_t i = 0; i < mincosts.size(); ++i) {
         final_total_cost += weights ? mincosts[i] * weights[i]: mincosts[i];
     }
-    std::fprintf(stderr, "Returning solution of size %zu/%zu and final total cost %g for weight %g\n", F.size(), npoints, final_total_cost, total_weight);
+    std::fprintf(stderr, "[LINE %d] Returning solution with mincosts [%zu] and minindices [%zu] with F of size %zu/%zu and final total cost %g for weight %g.\n", __LINE__, mincosts.size(), minindices.size(), F.size(), npoints, final_total_cost, total_weight);
+#endif
+#if 0
     for(size_t i = 0; i < mincosts.size(); ++i) {
         std::fprintf(stderr, "ID %zu has %g as mincost and %u as minind\n", i, mincosts[i], minindices[i]);
     }
+#endif
     return {F, mincosts, minindices};
 }
 
@@ -622,13 +629,19 @@ make_oracle_wrapper(const Oracle &o, It start, It end) {
     return OracleWrapper<Oracle, IT>(o, start, end);
 }
 
+/*
+ * Note: iterated_oracle_thorup_d uses the cost *according to the weighted data* from previous iterations,
+ * not the cost of the current solution against the original data when selecting which
+ * sub-iteration to pursue. This might be change in future iterations.
+ */
+
 template<typename Oracle,
          typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename WFT=FT,
          typename IT=uint32_t
         >
 std::tuple<std::vector<IT>, blz::DV<FT>, std::vector<IT>>
-iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsigned num_iter, unsigned num_sub_iter=10,
+iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsigned num_iter=3, unsigned num_sub_iter=8,
                          const WFT *weights=static_cast<const WFT *>(nullptr), double npermult=21, double nroundmult=3, double eps=0.5, uint64_t seed=1337)
 {
     auto getw = [weights](size_t index) {
@@ -653,11 +666,11 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
         auto get_cost = [&](const auto &x) {
             return wview ? blz::dot(x, *wview): blz::sum(x);
         };
-    
+
         // gather first set of sampled points
         ret = do_thorup_sample();
         best_cost = get_cost(costs);
-    
+
         // Repeat this process a number of times and select the best-scoring set of points.
         OMP_PFOR
         for(unsigned sub_iter_left = num_sub_iter; --sub_iter_left;) {
@@ -669,12 +682,12 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
                 {
 #ifdef _OPENMP
                     if(next_cost < best_cost)
-                    // Check again after acquiring the lock in case the value has changed
+                    // Check again after acquiring the lock in case the value has changed, but only
+                    // if parallelized
 #endif
                     {
                         ret = std::move(next_sol);
                         best_cost = next_cost;
-                        std::fprintf(stderr, "sub_iter_left %u has replaced best cost with new best %g\n", sub_iter_left, best_cost);
                     }
                 }
             }
@@ -696,11 +709,10 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
         id = it->second;
         OMP_ATOMIC
         center_weights[id] += weight;
-        //std::fprintf(stderr, "%zu has weight %g now\n", id, center_weights[id]);
     }
 #ifndef NDEBUG
     auto weightsum = blz::sum(center_weights);
-    std::fprintf(stderr, "sum of center weights: %g. Expected total weight %g\n", weightsum, total_weight);
+    //std::fprintf(stderr, "sum of center weights: %g. Expected total weight %g\n", weightsum, total_weight);
     bool nofails = true;
     for(size_t i = 0; i < center_weights.size(); ++i) {
         if(center_weights[i] <= 0.) {
@@ -713,54 +725,69 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
            !std::fprintf(stderr, "Expected sum %g, found %g\n", total_weight, weightsum));
     assert(nofails);
 #endif
-    auto do_iter_thorup_sample = [&]() {
-        return oracle_thorup_d(oracle, centers.size(), k, center_weights.data(), npermult, nroundmult, eps, rng());
-    };
-    auto get_cost = [&](const auto &x) {
-        return blz::dot(x, center_weights);
-    };
-    std::fprintf(stderr, "[Iterthor] Finished initial sampling. Recursing.\n");
-    auto iter_ret = oracle_thorup_d(oracle, centers.size(), k, center_weights.data(), npermult, nroundmult, eps, rng());
-    auto &[sub_centers, sub_costs, sub_bestindices] = iter_ret;
-    best_cost = get_cost(sub_costs);
-    for(size_t iter_left = num_iter; --iter_left;) {
-        auto wrapped_oracle = make_oracle_wrapper(oracle, centers);
+    for(size_t iter = 0; iter < num_iter; ++iter) {
+        // Setup helpers:
+        auto wrapped_oracle = make_oracle_wrapper(oracle, centers); // Remapping old oracle to new points.
+        auto do_iter_thorup_sample = [&]() { // Performs wrapped oracle Thorup D
+            return oracle_thorup_d(wrapped_oracle, centers.size(), k, center_weights.data(), npermult, nroundmult, eps, rng());
+        };
+        auto get_cost = [&](const auto &x) { // PCalculates the cost of a set of centers.
+            return blz::dot(x, center_weights);
+        };
+
+        // Get first solution
+        auto [sub_centers, sub_costs, sub_bestindices] = do_iter_thorup_sample();
+        best_cost = get_cost(sub_costs);
         OMP_PFOR
-        for(unsigned sub_iter_left = num_sub_iter; --sub_iter_left;) {
+        for(unsigned sub_iter = 0; sub_iter < num_sub_iter; ++sub_iter) {
             auto new_ret = do_iter_thorup_sample();
-            auto &[centers2, costs2, bestindices2] = new_ret;
-            auto next_cost = get_cost(costs2);
-            if(next_cost < best_cost) {
+            if(auto next_cost = get_cost(std::get<1>(new_ret)); next_cost < best_cost) {
                 OMP_CRITICAL
                 {
 #ifdef _OPENMP
                     if(next_cost < best_cost)
 #endif
                     {
-                        iter_ret = std::move(new_ret);
+                        std::tie(sub_centers, sub_costs, sub_bestindices) = std::move(new_ret);
+#if VERBOSE_AF
+                        std::fprintf(stderr, "[subiter %zu|mainiter %u] iter ret sizes after replacing old cost %g with %g: %zu/%zu/%zu\n",
+                                     iter, sub_iter, best_cost, next_cost, sub_centers.size(), sub_costs.size(), sub_bestindices.size());
+#endif
                         best_cost = next_cost;
                     }
                 }
             }
         }
+#if VERBOSE_AF
+        std::fprintf(stderr, "[after leaving the loop] iter ret sizes after replacing old cost %g: %zu/%zu/%zu\n",
+                     best_cost, sub_centers.size(), sub_costs.size(), sub_bestindices.size());
+        std::fprintf(stderr, "[Iterthor:%d:%zu] Finished selecting next set of points to iterate over. Final sizes: %zu/%zu/%zu with cost %g\n",
+                     __LINE__, iter, sub_centers.size(), sub_costs.size(), sub_bestindices.size(), best_cost);
+#endif
         // reassign centers and weights
         shared::flat_hash_map<IT, IT> sub_asn2id;
         sub_asn2id.reserve(sub_centers.size());
+        // sub_centers has size (sub_centers) and range [0, centers.size()]
+        //
         for(size_t i = 0; i < sub_centers.size(); ++i)
             sub_asn2id[sub_centers[i]] = i;
-        blz::DV<FT> sub_center_weights(sub_centers.size());
-        sub_center_weights = FT(0);
+        assert(sub_bestindices.size() == center_weights.size() ||
+                !std::fprintf(stderr, "sub_bestindices size %zu, vs expected %zu\n", sub_bestindices.size(), center_weights.size()));
+        blz::DV<FT> sub_center_weights(sub_centers.size(), FT(0));
+        OMP_PFOR
         for(size_t i = 0; i < sub_bestindices.size(); ++i) {
             auto asn = sub_bestindices[i];
-            auto center_id = sub_centers[asn]; // This is in sub-coordinates
-            auto weight_idx = sub_asn2id[center_id];
+            //auto center_id = centers.at(asn); // From sub- to center- coordinates
+            // center_id is in center coordinates
+            auto weight_idx = sub_asn2id.at(asn);
             auto item_weight = center_weights[i];
+            OMP_ATOMIC
             sub_center_weights[weight_idx] += item_weight;
         }
 #ifndef NDEBUG
         auto sub_weight_sum = blz::sum(sub_center_weights);
-        std::fprintf(stderr, "sub weight sum: %g. Sum of weights before: %g. total weight: %g.\n",
-                     sub_weight_sum, weightsum, total_weight);
+        VERBOSE_ONLY(std::fprintf(stderr, "sub weight sum: %g. Sum of weights before: %g. total weight: %g.\n",
+                     sub_weight_sum, weightsum, total_weight);)
         for(const auto w: sub_center_weights) assert(w > 0.);
         assert(std::abs(sub_weight_sum - total_weight) <= 1.e-4);
 #endif
@@ -771,6 +798,10 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
         centers = std::move(sub_centers);
         center_weights = std::move(sub_center_weights);
         bestindices = std::move(sub_bestindices);
+#if VERBOSE_AF
+        std::fprintf(stderr, "after resizing, centers size: %zu\n", centers.size());
+        std::fprintf(stderr, "after resizing, center_weights size: %zu\n", center_weights.size());
+#endif
     }
     return {std::move(centers), std::move(costs), std::move(bestindices)};
 }
