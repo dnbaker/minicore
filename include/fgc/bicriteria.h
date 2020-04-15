@@ -178,23 +178,12 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
         const size_t nboxv = bbox_vertices_ptr->size();
         if(weights) {
             flat_hash_map<Vertex, Vertex> Fmap;
-            for(size_t i = 0; i < F.size(); ++i)
-                Fmap[F[i]] = i;
-            //auto newweights = std::make_unique<WType[]>(Fmap.size());
-            //std::memset(newweights.get(), 0, Fmap.size() * sizeof(WType));
+            for(size_t i = 0; i < F.size(); ++i) Fmap[F[i]] = i;
             OMP_PRAGMA("omp parallel for reduction(+:cost)")
             for(size_t i = 0; i < nboxv; ++i) {
-#if 0
-                auto p = bbox_vertices_ptr->operator[](i);
-                typename flat_hash_map<Vertex, Vertex>::iterator it;
-                while((it = Fmap.find(p)) == Fmap.end())
-                    p = pmap[p];
-#endif
-                cost += weights[i] * distances[bbox_vertices_ptr->operator[](i)];
-                //OMP_ATOMIC
-                //newweights[it->second] += weights[i];
+                const auto cost_inc = weights[i] * distances[bbox_vertices_ptr->operator[](i)];
+                cost += cost_inc;
             }
-            //std::copy(newweights.get(), newweights.get() + Fmap.size(), weights);
         } else {
             OMP_PRAGMA("omp parallel for reduction(+:cost)")
             for(size_t i = 0; i < nboxv; ++i) {
@@ -693,13 +682,12 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
     }
 
     // Calculate weights for center points
-    blz::DV<FT> center_weights(centers.size());
-    center_weights = FT(0);
+    blz::DV<FT> center_weights(centers.size(), FT(0));
     shared::flat_hash_map<IT, IT> asn2id; asn2id.reserve(centers.size());
     for(size_t i = 0; i < centers.size(); asn2id[centers[i]] = i, ++i);
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < npoints; ++i) {
-        auto weight = getw(i);
+        const auto weight = getw(i);
         auto it = asn2id.find(bestindices[i]);
         assert(it != asn2id.end());
         OMP_ATOMIC
