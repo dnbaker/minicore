@@ -62,7 +62,7 @@ LINKS += -ltbb
 endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
-      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg
+      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg
 
 clust: kzclustexpdbg kzclustexp kzclustexpf
 
@@ -146,6 +146,7 @@ osm2dimacspg: src/osm2dimacs.cpp
 
 libsleef.a:
 	+cd sleef && mkdir -p __build && cd __build && cmake .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd .. && rm -r __build
+
 
 
 clean:
