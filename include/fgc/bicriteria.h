@@ -449,10 +449,8 @@ template<typename Oracle,
 std::tuple<std::vector<IT>, blz::DV<FT>, std::vector<IT>>
 oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weights=static_cast<const WFT *>(nullptr), double npermult=21, double nroundmult=3, double eps=0.5, uint64_t seed=1337)
 {
-    FT total_weight = npoints;
-    if(weights) {
-        total_weight = blz::sum(blz::CustomVector<WFT, blz::unaligned, blz::unpadded>((WFT *)weights, npoints));
-    }
+    const FT total_weight = weights ? static_cast<FT>(blz::sum(blz::CustomVector<WFT, blz::unaligned, blz::unpadded>((WFT *)weights, npoints)))
+                                    : static_cast<FT>(npoints);
     size_t nperround = npermult * k * std::log(total_weight) / eps;
 #if VERBOSE_AF
     std::fprintf(stderr, "npoints: %zu. total weight: %g. nperround: %zu. Weights? %s\n",
@@ -647,19 +645,19 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
     auto getw = [weights](size_t index) {
         return weights ? weights[index]: static_cast<WFT>(1.);
     };
-    FT total_weight = weights ? blz::sum(blz::CustomVector<WFT, blz::unaligned, blz::unpadded>((WFT *)weights, npoints))
-                              : WFT(npoints);
+#if !NDEBUG
+    const FT total_weight = weights ? blz::sum(blz::CustomVector<WFT, blz::unaligned, blz::unpadded>((WFT *)weights, npoints))
+                                    : WFT(npoints);
+#endif
     wy::WyHash<uint64_t, 2> rng(seed);
     std::tuple<std::vector<IT>, blz::DV<FT>, std::vector<IT>> ret;
     auto &[centers, costs, bestindices] = ret; // Unpack for named access
-    if(!num_iter) num_iter = 1;
-    if(!num_sub_iter) num_sub_iter = 1;
     FT best_cost;
     // For convenience: a custom vector
     //                  which is empty if weights is null and full otherwise.
-    std::unique_ptr<blz::CustomVector<const WFT, blz::unaligned, blz::unpadded>> wview;
-    if(weights) wview.reset(new blz::CustomVector<const WFT, blz::unaligned, blz::unpadded>(weights, npoints));
     {
+        std::unique_ptr<blz::CustomVector<const WFT, blz::unaligned, blz::unpadded>> wview;
+        if(weights) wview.reset(new blz::CustomVector<const WFT, blz::unaligned, blz::unpadded>(weights, npoints));
         auto do_thorup_sample = [&]() {
             return oracle_thorup_d(oracle, npoints, k, weights, npermult, nroundmult, eps, rng());
         };
@@ -673,7 +671,7 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
 
         // Repeat this process a number of times and select the best-scoring set of points.
         OMP_PFOR
-        for(unsigned sub_iter_left = num_sub_iter; --sub_iter_left;) {
+        for(unsigned sub_iter = 0; sub_iter < num_sub_iter; ++sub_iter) {
             auto next_sol = do_thorup_sample();
             auto &[centers2, costs2, bestindices2] = next_sol;
             auto next_cost = get_cost(costs2);
@@ -697,32 +695,26 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
     // Calculate weights for center points
     blz::DV<FT> center_weights(centers.size());
     center_weights = FT(0);
-    shared::flat_hash_map<IT, IT> asn2id;
-    for(size_t i = 0; i < centers.size(); ++i)
-        asn2id[centers[i]] = i;
+    shared::flat_hash_map<IT, IT> asn2id; asn2id.reserve(centers.size());
+    for(size_t i = 0; i < centers.size(); asn2id[centers[i]] = i, ++i);
     OMP_PRAGMA("omp parallel for")
     for(size_t i = 0; i < npoints; ++i) {
         auto weight = getw(i);
-        auto id = bestindices[i];
-        auto it = asn2id.find(id);
-        if(it == asn2id.end()) throw 1;
-        id = it->second;
+        auto it = asn2id.find(bestindices[i]);
+        assert(it != asn2id.end());
         OMP_ATOMIC
-        center_weights[id] += weight;
+        center_weights[it->second] += weight;
     }
 #ifndef NDEBUG
-    auto weightsum = blz::sum(center_weights);
-    //std::fprintf(stderr, "sum of center weights: %g. Expected total weight %g\n", weightsum, total_weight);
     bool nofails = true;
     for(size_t i = 0; i < center_weights.size(); ++i) {
         if(center_weights[i] <= 0.) {
-            auto cid = centers.at(i);
-            std::fprintf(stderr, "weight %zu for center %u is nonpositive: %g and is a center\n", i, cid, center_weights[i]);
+            std::fprintf(stderr, "weight %zu for center %u is nonpositive: %g and is a center\n", i, centers[i], center_weights[i]);
             nofails = false;
         }
     }
     assert(std::abs(blz::sum(center_weights) - total_weight) < 1e-4 ||
-           !std::fprintf(stderr, "Expected sum %g, found %g\n", total_weight, weightsum));
+           !std::fprintf(stderr, "Expected sum %g, found %g\n", total_weight, blz::sum(center_weights)));
     assert(nofails);
 #endif
     for(size_t iter = 0; iter < num_iter; ++iter) {
@@ -731,7 +723,7 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
         auto do_iter_thorup_sample = [&]() { // Performs wrapped oracle Thorup D
             return oracle_thorup_d(wrapped_oracle, centers.size(), k, center_weights.data(), npermult, nroundmult, eps, rng());
         };
-        auto get_cost = [&](const auto &x) { // PCalculates the cost of a set of centers.
+        auto get_cost = [&](const auto &x) { // Calculates the cost of a set of centers.
             return blz::dot(x, center_weights);
         };
 
@@ -758,39 +750,24 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
                 }
             }
         }
-#if VERBOSE_AF
-        std::fprintf(stderr, "[after leaving the loop] iter ret sizes after replacing old cost %g: %zu/%zu/%zu\n",
-                     best_cost, sub_centers.size(), sub_costs.size(), sub_bestindices.size());
-        std::fprintf(stderr, "[Iterthor:%d:%zu] Finished selecting next set of points to iterate over. Final sizes: %zu/%zu/%zu with cost %g\n",
-                     __LINE__, iter, sub_centers.size(), sub_costs.size(), sub_bestindices.size(), best_cost);
-#endif
         // reassign centers and weights
-        shared::flat_hash_map<IT, IT> sub_asn2id;
-        sub_asn2id.reserve(sub_centers.size());
-        // sub_centers has size (sub_centers) and range [0, centers.size()]
-        //
-        for(size_t i = 0; i < sub_centers.size(); ++i)
-            sub_asn2id[sub_centers[i]] = i;
+        shared::flat_hash_map<IT, IT> sub_asn2id; sub_asn2id.reserve(sub_centers.size());
+        for(size_t i = 0; i < sub_centers.size(); sub_asn2id[sub_centers[i]] = i, ++i);
         assert(sub_bestindices.size() == center_weights.size() ||
                 !std::fprintf(stderr, "sub_bestindices size %zu, vs expected %zu\n", sub_bestindices.size(), center_weights.size()));
+
         blz::DV<FT> sub_center_weights(sub_centers.size(), FT(0));
         OMP_PFOR
         for(size_t i = 0; i < sub_bestindices.size(); ++i) {
-            auto asn = sub_bestindices[i];
-            //auto center_id = centers.at(asn); // From sub- to center- coordinates
-            // center_id is in center coordinates
-            auto weight_idx = sub_asn2id.at(asn);
+            auto weight_idx = sub_asn2id.operator[](sub_bestindices[i]); // at to bounds-check
             auto item_weight = center_weights[i];
             OMP_ATOMIC
             sub_center_weights[weight_idx] += item_weight;
         }
-#ifndef NDEBUG
-        auto sub_weight_sum = blz::sum(sub_center_weights);
-        VERBOSE_ONLY(std::fprintf(stderr, "sub weight sum: %g. Sum of weights before: %g. total weight: %g.\n",
-                     sub_weight_sum, weightsum, total_weight);)
-        for(const auto w: sub_center_weights) assert(w > 0.);
-        assert(std::abs(sub_weight_sum - total_weight) <= 1.e-4);
-#endif
+
+        DBG_ONLY(for(const auto w: sub_center_weights) assert(w > 0.);)
+        assert(std::abs(blz::sum(sub_center_weights) - total_weight) <= 1.e-4);
+
         std::transform(sub_centers.begin(), sub_centers.end(), sub_centers.begin(),
                        [&wrapped_oracle](auto x) {return wrapped_oracle.lookup(x);});
         std::transform(sub_bestindices.begin(), sub_bestindices.end(), sub_bestindices.begin(),
@@ -817,6 +794,8 @@ using thorup::histogram_assignments;
 using thorup::thorup_d;
 using thorup::oracle_thorup_d;
 using thorup::get_costs;
+using thorup::iterated_oracle_thorup_d;
+using thorup::oracle_thorup_d;
 
 
 } // namespace fgc
