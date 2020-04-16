@@ -12,7 +12,7 @@
 	url = https://github.com/dnbaker/alias_sampler
 [submodule "code/blaze"]
 	path = blaze
-	url = https://github.com/dnbaker/blaze-lib
+	url = https://bitbucket.org/blaze-lib/blaze.git
 [submodule "code/protozero"]
 	path = protozero
 	url = https://github.com/mapbox/protozero
