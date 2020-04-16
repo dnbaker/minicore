@@ -16,6 +16,7 @@ ifdef SLEEF_DIR
 INCLUDE_PATHS+= $(SLEEF_DIR)/include
 LIBPATHS+= $(SLEEF_DIR)/lib
 LINKS+= -lsleef
+CXXFLAGS+=-DBLAZE_USE_SLEEF=1
 endif
 
 ifdef CBLASFILE

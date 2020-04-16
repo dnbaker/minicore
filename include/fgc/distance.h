@@ -532,8 +532,9 @@ inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &
 
 template<typename VT, bool SO, typename VT2>
 CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
-network_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y, double p=1., size_t maxiter=10000)
+network_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1., size_t maxiter=10000)
 {
+    std::fprintf(stderr, "Warning: network_p_wasserstein seems to have a bug. Do not use.\n");
     auto &xref = ~x;
     auto &yref = ~y;
     const size_t sz = xref.size();
@@ -568,17 +569,18 @@ network_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<
         for(unsigned i = 0; i < nl; ++i) {
             auto arcid = i * nl;
             for(unsigned j = 0; j < nl; ++j) {
-                net.setCost(di.arcFromId(arcid++, func(weights[i], jptr[j])));
+                net.setCost(di.arcFromId(arcid++), func(weights[i], jptr[j]));
             }
         }
     }
     int rc = net.run();
     if(rc != (int)net.OPTIMAL) {
-        std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+        std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex. Error code: [%s]\n", __PRETTY_FUNCTION__, __FILE__, __LINE__,
+            rc == (int)net.INFEASIBLE ? "infeasible" : (int)net.UNBOUNDED ? "unbounded" : "unknown");
     }
 
     FT ret(0);
-    OMP_PRAGMA("omp parallel for reduction(+:ret)")
+    //OMP_PRAGMA("omp parallel for reduction(+:ret)")
     for(size_t i = 0; i < nl; ++i) {
         for(size_t j = 0; j < nr; ++j)
            ret += net.flow(i * nr + j) * func(weights[i], weights[sz + j]);
@@ -586,6 +588,7 @@ network_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<
     return ret;
 }
 
+#if 0
 template<typename VT, bool SO, typename VT2>
 CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
 network_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1., size_t maxiter=100)
@@ -625,16 +628,18 @@ network_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVecto
     }
     int rc = net.run();
     if(rc != (int)net.OPTIMAL) {
-        std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+        std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex. Error code: [%s]\n", __PRETTY_FUNCTION__, __FILE__, __LINE__,
+            rc == (int)net.INFEASIBLE ? "infeasible" : (int)net.UNBOUNDED ? "unbounded" : "unknown");
     }
     FT ret(0);
-    OMP_PRAGMA("omp parallel for reduction(+:ret)")
+    //OMP_PRAGMA("omp parallel for reduction(+:ret)")
     for(size_t i = 0; i < nl; ++i) {
         for(size_t j = 0; j < nr; ++j)
            ret += net.flow(i * nr + j) * func(weights[i], weights[sz + j]);
     }
     return ret;
 }
+#endif
 
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
 CT scipy_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {

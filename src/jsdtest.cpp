@@ -109,8 +109,4 @@ int main(int argc, char *argv[]) {
     ofs << jsd_bnj << '\n';
     ofs.flush();
     std::fprintf(stderr, "\n\nNumber of cells: %zu\n", nonemptyrows.size());
-    if(0) {
-        auto v = blz::distance::network_p_wasserstein(row(first25, 0), row(first25, 1));
-        std::fprintf(stderr, "V: %g\n", v);
-    }
 }

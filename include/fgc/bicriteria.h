@@ -668,9 +668,9 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
                 OMP_CRITICAL
                 {
 #ifdef _OPENMP
-                    if(next_cost < best_cost)
                     // Check again after acquiring the lock in case the value has changed, but only
                     // if parallelized
+                    if(next_cost < best_cost)
 #endif
                     {
                         ret = std::move(next_sol);
@@ -704,6 +704,7 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
     assert(std::abs(blz::sum(center_weights) - total_weight) < 1e-4 ||
            !std::fprintf(stderr, "Expected sum %g, found %g\n", total_weight, blz::sum(center_weights)));
     assert(nofails);
+    shared::flat_hash_map<IT, IT> sub_asn2id;
 #endif
     for(size_t iter = 0; iter < num_iter; ++iter) {
         // Setup helpers:
@@ -713,6 +714,7 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
         };
         auto get_cost = [&](const auto &x) { // Calculates the cost of a set of centers.
             return blz::dot(x, center_weights);
+            // Can this be easily done using the distance from the full without performing all recalculations?
         };
 
         // Get first solution
@@ -738,16 +740,16 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
                 }
             }
         }
-        // reassign centers and weights
-        shared::flat_hash_map<IT, IT> sub_asn2id; sub_asn2id.reserve(sub_centers.size());
-        for(size_t i = 0; i < sub_centers.size(); sub_asn2id[sub_centers[i]] = i, ++i);
-        assert(sub_bestindices.size() == center_weights.size() ||
-                !std::fprintf(stderr, "sub_bestindices size %zu, vs expected %zu\n", sub_bestindices.size(), center_weights.size()));
 
+        // reassign centers and weights
+        assert(sub_bestindices.size() == center_weights.size());
+        sub_asn2id.clear();
+        for(size_t i = 0; i < sub_centers.size(); sub_asn2id[sub_centers[i]] = i, ++i);
         blz::DV<FT> sub_center_weights(sub_centers.size(), FT(0));
         OMP_PFOR
         for(size_t i = 0; i < sub_bestindices.size(); ++i) {
-            auto weight_idx = sub_asn2id.operator[](sub_bestindices[i]); // at to bounds-check
+            assert(sub_asn2id.find(sub_bestindices[i]) != sub_asn2id.end());
+            const auto weight_idx = sub_asn2id[sub_bestindices[i]];
             auto item_weight = center_weights[i];
             OMP_ATOMIC
             sub_center_weights[weight_idx] += item_weight;
@@ -756,17 +758,14 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
         DBG_ONLY(for(const auto w: sub_center_weights) assert(w > 0.);)
         assert(std::abs(blz::sum(sub_center_weights) - total_weight) <= 1.e-4);
 
+        // Convert back to original coordinates
+        auto transform_func = [&wrapped_oracle](auto x) {return wrapped_oracle.lookup(x);};
         std::transform(sub_centers.begin(), sub_centers.end(), sub_centers.begin(),
-                       [&wrapped_oracle](auto x) {return wrapped_oracle.lookup(x);});
+                       transform_func);
         std::transform(sub_bestindices.begin(), sub_bestindices.end(), sub_bestindices.begin(),
-                       [&wrapped_oracle](auto x) {return wrapped_oracle.lookup(x);});
-        centers = std::move(sub_centers);
-        center_weights = std::move(sub_center_weights);
-        bestindices = std::move(sub_bestindices);
-#if VERBOSE_AF
-        std::fprintf(stderr, "after resizing, centers size: %zu\n", centers.size());
-        std::fprintf(stderr, "after resizing, center_weights size: %zu\n", center_weights.size());
-#endif
+                       transform_func);
+        std::tie(centers, center_weights, bestindices)
+            = std::tie(sub_centers, sub_center_weights, sub_bestindices);
     }
     return {std::move(centers), std::move(costs), std::move(bestindices)};
 }
