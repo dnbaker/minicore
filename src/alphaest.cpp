@@ -1,5 +1,5 @@
-#include "fgc/csc.h"
-#include "fgc/applicator.h"
+#include "minocore/csc.h"
+#include "minocore/applicator.h"
 
 #ifndef DENSESUB
 #define SUBMAT CompressedMatrix
@@ -9,10 +9,9 @@
 
 #define FLOAT_TYPE double
 int main(int ac, char **av) {
-    auto sm = fgc::csc2sparse<FLOAT_TYPE>("");
+    auto sm = minocore::csc2sparse<FLOAT_TYPE>("");
     unsigned nr = ac > 1 ? std::atoi(av[1]): 100;
     unsigned mc = ac > 2 ? std::atoi(av[2]): 50;
-    double inc = ac > 3 ? std::atof(av[3]): 1.;
     uint32_t seed = ac > 4 ? std::atoi(av[4]): 0;
     std::srand(seed);
     std::vector<unsigned> indices;
@@ -24,10 +23,11 @@ int main(int ac, char **av) {
     if(indices.size() > nr) nr = indices.size();
     blaze::SUBMAT<FLOAT_TYPE> subm(rows(sm, indices.data(), indices.size()));
 #if DENSESUB
+    double inc = ac > 3 ? std::atof(av[3]): 1.;
     subm += inc;
     //subm = (subm % subm % subm) + inc;
 #endif
-    auto app = fgc::jsd::make_probdiv_applicator(subm, blz::LLR);
+    auto app = minocore::jsd::make_probdiv_applicator(subm, blz::LLR);
     blaze::DynamicMatrix<FLOAT_TYPE> distmat(subm.rows(), subm.rows());
     auto t = std::chrono::high_resolution_clock::now();
     app.set_distance_matrix(distmat);
@@ -35,7 +35,7 @@ int main(int ac, char **av) {
     std::fprintf(stderr, "Distmat took %g ms\n", double((t2 - t).count()) / 1e6);
     size_t maxi = -1, maxj = -1, maxk = -1;
     std::set<unsigned> tmpind;
-    while(tmpind.size() < std::min(50, int(nr))) tmpind.insert(std::rand() % subm.rows());
+    while(int(tmpind.size()) < std::min(50, int(nr))) tmpind.insert(std::rand() % subm.rows());
     std::vector<unsigned> iv(tmpind.begin(), tmpind.end());
     FLOAT_TYPE mxv = 0., mxsq = 0.;
     for(size_t i = 0; i < nr; ++i) {

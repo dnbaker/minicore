@@ -3,7 +3,7 @@
 #define FGC_GMM_H__
 #include "kmeans.h"
 
-namespace fgc {
+namespace minocore {
 
 template<typename FT=float, bool SO=blaze::rowMajor>
 struct GMM {
@@ -73,6 +73,6 @@ struct GMM {
     }
 };
 
-} // fgc
+} // minocore
 
 #endif /* FGC_GMM_H__ */

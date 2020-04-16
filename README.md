@@ -1,8 +1,11 @@
-## Fast Generic Coresets [![Build Status](https://travis-ci.com/dnbaker/fgc.svg?token=nzWL3kpck4ymqu9SdesD&branch=master)](https://travis-ci.com/dnbaker/fgc
+## Minocore: Fast Generic Coresets [![Build Status](https://travis-ci.com/dnbaker/fgc.svg?token=nzWL3kpck4ymqu9SdesD&branch=master)](https://travis-ci.com/dnbaker/fgc)
 
-fgc is a library for generic coresets on graphs and other metric spaces.
-It includes methods for approximate, bicriteria solutions as well as sampling algorithms.
+Minocore is a fast, generic library for constructing and clustering coresets on graphs, in metric spaces and under non-metric dissimilarity measures.
+It includes methods for constant-factor and bicriteria approximation solutions, as well as coreset sampling algorithms.
 
+These methods allow for fast and accurate summarization of and clustering of datasets with strong theoretical guarantees.
+
+Minocore both stands for "mini" and "core", as it builds *concise representations* via *core*-sets, and as a portmanteau of Manticore and Minotaur.
 
 ### Dependencies
 
@@ -39,7 +42,7 @@ It includes methods for approximate, bicriteria solutions as well as sampling al
 6. [disk-based matrix](#diskmath)
     1. Falls back to disk-backed data if above a specified size, uses RAM otherwise.
 7. Streaming metric and `\alpha-`approximate metric clusterer
-    1. `fgc/streaming.h`
+    1. `minocore/streaming.h`
 8. Locality Sensitive Hashing
     1. LSH functions for:
         1. JSD
@@ -153,6 +156,7 @@ The k-center clustering, 2-approximation, and coreset *with outliers* is [Ding, 
 
 The importance sampling framework we use is from the [Braverman, Feldman, and Lang](https://arxiv.org/abs/1612.00889) paper from 2016,
 while its application to graph metrics is from [Baker, Braverman, Huang, Jiang, Krauthgamer, and Wu](https://arxiv.org/abs/1907.04733v2).
+We also support Varadarajan-Xiao, Feldman Langberg, and Bachem et al., methods for coreset sampling for differing dissimilarity measures.
 
-We use a modified iterative version of the sampling from [Thorup](https://epubs.siam.org/doi/pdf/10.1137/S0097539701388884) paper [from 2005](https://sci-hub.se/10.1137/s0097539701388884)
-for an initial graph bicriteria approximation.
+We use a modified iterative version of the sampling from [Thorup](https://epubs.siam.org/doi/pdf/10.1137/S0097539701388884) paper from 2005
+for an initial graph bicriteria approximation, which is described in the above Baker, et al. This can be found for shortest-paths graph metrics and oracle metrics in minocore/bicriteria.h.

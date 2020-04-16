@@ -1,3 +1,3 @@
-#include "fgc/fgc.h"
+#include "minocore/minocore.h"
 
 int main() {}

@@ -1,4 +1,4 @@
-#include "fgc/csc.h"
+#include "minocore/csc.h"
 #include <iostream>
 #include "blaze/util/Serialization.h"
 #include <getopt.h>
@@ -12,9 +12,9 @@ int main(int argc, char *argv[]) {
         out = argv[optind + 1];
     blaze::Archive<std::ofstream> ret(out);
     if(use_float) {
-        ret << fgc::mtx2sparse<float>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
+        ret << minocore::mtx2sparse<float>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
     } else {
-        ret << fgc::mtx2sparse<double>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
+        ret << minocore::mtx2sparse<double>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
     }
     return 0;
 }

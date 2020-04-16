@@ -31,11 +31,11 @@
  acmid = {375845},
  publisher = {ACM},
  address = {New York, NY, USA},
- keywords = {k-median problem, Lagrangian relaxation, approximation algorithms, facility location problem, linear prfgcramming},
+ keywords = {k-median problem, Lagrangian relaxation, approximation algorithms, facility location problem, linear prminocoreramming},
 }
  */
 
-namespace fgc {
+namespace minocore {
 
 struct FacilityInfo {
     size_t ncities_ = 0; // number of cities contributing
@@ -115,6 +115,6 @@ std::vector<typename Graph::vertex_descriptor>
     return ret;
 } // jain_vazirani_ufl
 
-} // namespace fgc
+} // namespace minocore
 
 #endif /* JAIN_VAZIRANI_H__ */

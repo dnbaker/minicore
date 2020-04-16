@@ -1,9 +1,9 @@
-#include "fgc/graph.h"
-#include "fgc/parse.h"
-#include "fgc/bicriteria.h"
-#include "fgc/coreset.h"
-#include "fgc/lsearch.h"
-#include "fgc/jv.h"
+#include "minocore/graph.h"
+#include "minocore/parse.h"
+#include "minocore/bicriteria.h"
+#include "minocore/coreset.h"
+#include "minocore/lsearch.h"
+#include "minocore/jv.h"
 #include <ctime>
 #include <getopt.h>
 #include "blaze/util/Serialization.h"
@@ -11,14 +11,14 @@
 template<typename T> class TD;
 
 
-using namespace fgc;
+using namespace minocore;
 using namespace boost;
 
 
 
 #if 0
-fgc::Graph<undirectedS> &
-max_component(fgc::Graph<undirectedS> &g) {
+minocore::Graph<undirectedS> &
+max_component(minocore::Graph<undirectedS> &g) {
 #endif
 template<typename GraphT>
 GraphT &
@@ -40,7 +40,7 @@ max_component(GraphT &g) {
             }
         }
         GraphT newg(counts[maxcomp]);
-        typename boost::property_map <fgc::Graph<undirectedS>,
+        typename boost::property_map <minocore::Graph<undirectedS>,
                              boost::edge_weight_t >::type EdgeWeightMap = get(boost::edge_weight, g);
         for(auto edge: g.edges()) {
             auto lhs = source(edge, g);
@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
 
     std::srand(std::hash<std::string>{}(input));
 
-    fgc::Graph<undirectedS, float> g = parse_by_fn(input);
+    minocore::Graph<undirectedS, float> g = parse_by_fn(input);
     max_component(g);
     // Assert that it's connected, or else the problem has infinite cost.
     uint64_t seed = 1337;

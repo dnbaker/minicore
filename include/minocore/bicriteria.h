@@ -6,9 +6,10 @@
 #include "blaze_adaptor.h"
 #include <cassert>
 #include "fastiota/fastiota_ho.h"
+#include "minocore/oracle.h"
 
 
-namespace fgc {
+namespace minocore {
 using namespace shared;
 namespace util {
 template<typename Graph>
@@ -578,44 +579,6 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
     return {F, mincosts, minindices};
 }
 
-template<typename Oracle, typename IT=uint32_t>
-struct OracleWrapper {
-    const Oracle &oracle_;
-    std::vector<IT> lut_;
-public:
-    template<typename Container>
-    OracleWrapper(const Oracle &oracle, const Container &indices): OracleWrapper(oracle, indices.begin(), indices.end()) {
-    }
-    template<typename It>
-    OracleWrapper(const Oracle &oracle, It start, It end):
-        oracle_(oracle), lut_(start, end) {}
-
-    INLINE decltype(auto) operator()(size_t i, size_t j) const {
-       return oracle_(lookup(i), lookup(j));
-    }
-
-    IT lookup(size_t idx) const {
-#ifndef NDEBUG
-        return lut_.at(idx);
-#else
-        return lut_[idx];
-#endif
-    }
-};
-
-template<typename Oracle, typename Container>
-auto
-make_oracle_wrapper(const Oracle &o, const Container &indices) {
-    using IT = std::decay_t<decltype(*indices.begin())>;
-    return OracleWrapper<Oracle, IT>(o, indices);
-}
-template<typename Oracle, typename It>
-auto
-make_oracle_wrapper(const Oracle &o, It start, It end) {
-    using IT = std::decay_t<decltype(*start)>;
-    return OracleWrapper<Oracle, IT>(o, start, end);
-}
-
 /*
  * Note: iterated_oracle_thorup_d uses the cost *according to the weighted data* from previous iterations,
  * not the cost of the current solution against the original data when selecting which
@@ -704,8 +667,8 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
     assert(std::abs(blz::sum(center_weights) - total_weight) < 1e-4 ||
            !std::fprintf(stderr, "Expected sum %g, found %g\n", total_weight, blz::sum(center_weights)));
     assert(nofails);
-    shared::flat_hash_map<IT, IT> sub_asn2id;
 #endif
+    shared::flat_hash_map<IT, IT> sub_asn2id;
     for(size_t iter = 0; iter < num_iter; ++iter) {
         // Setup helpers:
         auto wrapped_oracle = make_oracle_wrapper(oracle, centers); // Remapping old oracle to new points.
@@ -785,4 +748,4 @@ using thorup::iterated_oracle_thorup_d;
 using thorup::oracle_thorup_d;
 
 
-} // namespace fgc
+} // namespace minocore

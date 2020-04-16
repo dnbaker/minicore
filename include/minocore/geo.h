@@ -6,7 +6,7 @@
 #include <utility>
 #include <string>
 
-namespace fgc {
+namespace minocore {
 struct latlon_t: public std::pair<double, double> {
     using super = std::pair<double, double>;
     template<typename...Args>
@@ -78,6 +78,6 @@ struct BoundingBoxData {
     }
 };
 
-} // namespace fgc
+} // namespace minocore
 
 #endif /* FGC_GEO_H__ */

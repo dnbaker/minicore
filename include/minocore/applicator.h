@@ -1,15 +1,15 @@
 #ifndef FGC_JSD_H__
 #define FGC_JSD_H__
-#include "fgc/distance.h"
+#include "minocore/distance.h"
 #include "distmat/distmat.h"
-#include "fgc/kmeans.h"
-#include "fgc/coreset.h"
+#include "minocore/kmeans.h"
+#include "minocore/coreset.h"
 #include <boost/math/special_functions/digamma.hpp>
 #include <boost/math/special_functions/polygamma.hpp>
 #include <set>
 
 
-namespace fgc {
+namespace minocore {
 
 namespace jsd {
 
@@ -20,12 +20,15 @@ template<typename MatrixType>
 class ProbDivApplicator {
     //using opposite_type = typename base_type::OppositeType;
     MatrixType &data_;
-    using VecT = blaze::DynamicVector<typename MatrixType::ElementType>;
+    using VecT = blaze::DynamicVector<typename MatrixType::ElementType, IsRowMajorMatrix_v<MatrixType> ? blaze::rowVector: blaze::columnVector>;
     VecT row_sums_;
     std::unique_ptr<MatrixType> logdata_;
     std::unique_ptr<MatrixType> sqrdata_;
     std::unique_ptr<VecT> jsd_cache_;
+    std::unique_ptr<VecT> prior_data_;
     typename MatrixType::ElementType lambda_ = 0.5;
+    static constexpr bool IS_SPARSE      = IsSparseMatrix_v<MatrixType>;
+    static constexpr bool IS_DENSE_BLAZE = IsDenseMatrix_v<MatrixType>;
 public:
     using FT = typename MatrixType::ElementType;
     using MT = MatrixType;
@@ -59,7 +62,7 @@ public:
         assert(nr == data_.rows());
         static constexpr ProbDivType actual_measure = measure == JSM ? JSD: measure;
         for(size_t i = 0; i < nr; ++i) {
-            CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
+            if constexpr((blaze::IsDenseMatrix_v<MatrixType>)) {
                 for(size_t j = i + 1; j < nr; ++j) {
                     auto v = this->call<actual_measure>(i, j);
                     m(i, j) = v;
@@ -72,28 +75,28 @@ public:
                 }
             }
         }
-        CONST_IF(measure == JSM) {
-            CONST_IF(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
+        if constexpr(measure == JSM) {
+            if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
                 m = blz::sqrt(m);
-            } else CONST_IF(dm::is_distance_matrix_v<MatType>) {
+            } else if constexpr(dm::is_distance_matrix_v<MatType>) {
                 blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> cv(const_cast<FT *>(m.data()), m.size());
                 cv = blz::sqrt(cv);
             } else {
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
             }
         }
-        CONST_IF(detail::is_symmetric(measure)) {
+        if constexpr(detail::is_symmetric(measure)) {
             //std::fprintf(stderr, "Symmetric measure %s/%s\n", detail::prob2str(measure), detail::prob2desc(measure));
             if(symmetrize) {
                 fill_symmetric_upper_triangular(m);
             }
         } else {
-            CONST_IF(dm::is_distance_matrix_v<MatType>) {
+            if constexpr(dm::is_distance_matrix_v<MatType>) {
                 std::fprintf(stderr, "Warning: using asymmetric measure with an upper triangular matrix. You are computing only half the values");
             } else {
                 //std::fprintf(stderr, "Asymmetric measure %s/%s\n", detail::prob2str(measure), detail::prob2desc(measure));
                 for(size_t i = 1; i < nr; ++i) {
-                    CONST_IF((blaze::IsDenseMatrix_v<MatrixType>)) {
+                    if constexpr((blaze::IsDenseMatrix_v<MatrixType>)) {
                         //std::fprintf(stderr, "Filling bottom half\n");
                         for(size_t j = 0; j < i; ++j) {
                             auto v = this->call<measure>(i, j);
@@ -110,7 +113,7 @@ public:
                 }
             }
         }
-    }
+    } // set_distance_matrix
     template<typename MatType>
     void set_distance_matrix(MatType &m, ProbDivType measure, bool symmetrize=false) const {
         switch(measure) {
@@ -166,45 +169,45 @@ public:
     template<ProbDivType constexpr_measure>
     INLINE FT call(size_t i, size_t j) const {
         FT ret;
-        CONST_IF(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
+        if constexpr(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
             ret = discrete_total_variation_distance(row(i), row(j));
-        } else CONST_IF(constexpr_measure == L1) {
+        } else if constexpr(constexpr_measure == L1) {
             ret = l1Norm(weighted_row(i) - weighted_row(j));
-        } else CONST_IF(constexpr_measure == L2) {
+        } else if constexpr(constexpr_measure == L2) {
             ret = l2Norm(weighted_row(i) - weighted_row(j));
-        } else CONST_IF(constexpr_measure == SQRL2) {
+        } else if constexpr(constexpr_measure == SQRL2) {
             ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j));
-        } else CONST_IF(constexpr_measure == JSD) {
+        } else if constexpr(constexpr_measure == JSD) {
             ret = jsd(i, j);
-        } else CONST_IF(constexpr_measure == JSM) {
+        } else if constexpr(constexpr_measure == JSM) {
             ret = jsm(i, j);
-        } else CONST_IF(constexpr_measure == REVERSE_MKL) {
+        } else if constexpr(constexpr_measure == REVERSE_MKL) {
             ret = mkl(j, i);
-        } else CONST_IF(constexpr_measure == MKL) {
+        } else if constexpr(constexpr_measure == MKL) {
             ret = mkl(i, j);
-        } else CONST_IF(constexpr_measure == EMD) {
+        } else if constexpr(constexpr_measure == EMD) {
             ret = p_wasserstein(row(i), row(j));
-        } else CONST_IF(constexpr_measure == WEMD) {
+        } else if constexpr(constexpr_measure == WEMD) {
             ret = p_wasserstein(weighted_row(i), weighted_row(j));
-        } else CONST_IF(constexpr_measure == REVERSE_POISSON) {
+        } else if constexpr(constexpr_measure == REVERSE_POISSON) {
             ret = pkl(j, i);
-        } else CONST_IF(constexpr_measure == POISSON) {
+        } else if constexpr(constexpr_measure == POISSON) {
             ret = pkl(i, j);
-        } else CONST_IF(constexpr_measure == HELLINGER) {
+        } else if constexpr(constexpr_measure == HELLINGER) {
             ret = hellinger(i, j);
-        } else CONST_IF(constexpr_measure == BHATTACHARYYA_METRIC) {
+        } else if constexpr(constexpr_measure == BHATTACHARYYA_METRIC) {
             ret = bhattacharyya_metric(i, j);
-        } else CONST_IF(constexpr_measure == BHATTACHARYYA_DISTANCE) {
+        } else if constexpr(constexpr_measure == BHATTACHARYYA_DISTANCE) {
             ret = bhattacharyya_distance(i, j);
-        } else CONST_IF(constexpr_measure == LLR) {
+        } else if constexpr(constexpr_measure == LLR) {
             ret = llr(i, j);
-        } else CONST_IF(constexpr_measure == UWLLR) {
+        } else if constexpr(constexpr_measure == UWLLR) {
             ret = uwllr(i, j);
-        } else CONST_IF(constexpr_measure == OLLR) {
+        } else if constexpr(constexpr_measure == OLLR) {
             ret = ollr(i, j);
-        } else CONST_IF(constexpr_measure == ITAKURA_SAITO) {
+        } else if constexpr(constexpr_measure == ITAKURA_SAITO) {
             ret = itakura_saito(i, j);
-        } else CONST_IF(constexpr_measure == REVERSE_ITAKURA_SAITO) {
+        } else if constexpr(constexpr_measure == REVERSE_ITAKURA_SAITO) {
             ret = itakura_saito(j, i);
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
@@ -256,9 +259,14 @@ public:
 
     auto itakura_saito(size_t i, size_t j) const {
         FT ret;
-        CONST_IF(IsSparseMatrix_v<MatrixType>) {
+        if constexpr(IS_SPARSE) {
+            if(!prior_data_) {
+                char buf[128];
+                std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%zu\n", i, j);
+                throw std::runtime_error(buf);
+            }
             ret = -std::numeric_limits<FT>::max();
-            std::fprintf(stderr, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%zu\n", i, j);
+            throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         } else {
             auto div = row(i) / row(j);
             ret = blaze::sum(div - blaze::log(div)) - row(i).size();
@@ -270,98 +278,120 @@ public:
         return sqrdata_ ? blaze::sqrNorm(sqrtrow(i) - sqrtrow(j))
                         : blaze::sqrNorm(blz::sqrt(row(i)) - blz::sqrt(row(j)));
     }
-    auto jsd(size_t i, size_t j) const {
-        assert(i < data_.rows());
-        assert(j < data_.rows());
-        FT ret;
-        auto ri = row(i), rj = row(j);
-        //constexpr FT logp5 = -0.693147180559945; // std::log(0.5)
-        auto s = ri + rj;
-        ret = jsd_cache_->operator[](i) + jsd_cache_->operator[](j) - blz::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
+    FT jsd(size_t i, size_t j) const {
+        if(!IsSparseMatrix_v<MatrixType> || !prior_data_) {
+            assert(i < data_.rows());
+            assert(j < data_.rows());
+            FT ret;
+            auto ri = row(i), rj = row(j);
+            //constexpr FT logp5 = -0.693147180559945; // std::log(0.5)
+            auto s = ri + rj;
+            ret = jsd_cache_->operator[](i) + jsd_cache_->operator[](j) - blz::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
 #ifndef NDEBUG
-        static constexpr typename MatrixType::ElementType threshold
-            = std::is_same_v<typename MatrixType::ElementType, double>
-                                ? 0.: -1e-5;
-        assert(ret >= threshold || !std::fprintf(stderr, "ret: %g (numerical stability issues)\n", ret));
+            static constexpr typename MatrixType::ElementType threshold
+                = std::is_same_v<typename MatrixType::ElementType, double>
+                                    ? 0.: -1e-5;
+            assert(ret >= threshold || !std::fprintf(stderr, "ret: %g (numerical stability issues)\n", ret));
 #endif
-        return std::max(ret, static_cast<FT>(0.));
+            return std::max(ret, static_cast<FT>(0.));
+        } else {
+            throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+            return FT(0);
+        }
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto jsd(size_t i, const OT &o, const OT2 &olog) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto mnlog = evaluate(log(0.5 * (row(i) + o)));
         return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto jsd(size_t i, const OT &o) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto olog = evaluate(blaze::neginf2zero(blz::log(o)));
         return jsd(i, o, olog);
     }
     auto mkl(size_t i, size_t j) const {
         // Multinomial KL
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return get_jsdcache(i) - blz::dot(row(i), logrow(j));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto mkl(size_t i, const OT &o) const {
         // Multinomial KL
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return get_jsdcache(i) - blz::dot(row(i), blaze::neginf2zero(blz::log(o)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto mkl(size_t i, const OT &, const OT2 &olog) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Multinomial KL
         return blz::dot(row(i), logrow(i) - olog);
     }
     auto pkl(size_t i, size_t j) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission KL
         return get_jsdcache(i) - blz::dot(row(i), logrow(j)) + blz::sum(row(j) - row(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto pkl(size_t i, const OT &o, const OT2 &olog) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission KL
         return get_jsdcache(i) - blz::dot(row(i), olog) + blz::sum(row(i) - o);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto pkl(size_t i, const OT &o) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return pkl(i, o, neginf2zero(blz::log(o)));
     }
     auto psd(size_t i, size_t j) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + row(j))));
         return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(row(j), logrow(j) - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto psd(size_t i, const OT &o, const OT2 &olog) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + o)));
         return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto psd(size_t i, const OT &o) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return psd(i, o, neginf2zero(blz::log(o)));
     }
     auto bhattacharyya_sim(size_t i, size_t j) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return sqrdata_ ? blz::dot(sqrtrow(i), sqrtrow(j))
                         : blz::sum(blz::sqrt(row(i) * row(j)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto bhattacharyya_sim(size_t i, const OT &o, const OT2 &osqrt) const {
+        throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
         return sqrdata_ ? blz::dot(sqrtrow(i), osqrt)
                         : blz::sum(blz::sqrt(row(i) * o));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto bhattacharyya_sim(size_t i, const OT &o) const {
+        throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
         return bhattacharyya_sim(i, o, blz::sqrt(o));
     }
     template<typename...Args>
     auto bhattacharyya_distance(Args &&...args) const {
+        throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
         return -std::log(bhattacharyya_sim(std::forward<Args>(args)...));
     }
     template<typename...Args>
     auto bhattacharyya_metric(Args &&...args) const {
+        throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
         return std::sqrt(1 - bhattacharyya_sim(std::forward<Args>(args)...));
     }
     template<typename...Args>
     auto psm(Args &&...args) const {return std::sqrt(std::forward<Args>(args)...);}
     auto llr(size_t i, size_t j) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
             //blaze::dot(row(i), logrow(i)) * row_sums_[i]
             //+
             //blaze::dot(row(j), logrow(j)) * row_sums_[j]
@@ -379,11 +409,13 @@ public:
         return std::max(ret, 0.);
     }
     auto ollr(size_t i, size_t j) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto ret = get_jsdcache(i) * row_sums_[i] + get_jsdcache(j) * row_sums_[j]
             - blz::dot(weighted_row(i) + weighted_row(j), neginf2zero(blz::log((row(i) + row(j)) * .5)));
         return std::max(ret, 0.);
     }
     auto uwllr(size_t i, size_t j) const {
+        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         const auto lhn = row_sums_[i], rhn = row_sums_[j];
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
         return
@@ -397,12 +429,12 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto llr(size_t, const OT &) const {
-        throw std::runtime_error("llr is not implemented for this.");
+        throw shared::TODOError("llr is not implemented for this.");
         return 0.;
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto llr(size_t, const OT &, const OT2 &) const {
-        throw std::runtime_error("llr is not implemented for this.");
+        throw shared::TODOError("llr is not implemented for this.");
         return 0.;
     }
     template<typename...Args>
@@ -421,29 +453,38 @@ private:
             case NONE:
             break;
             case DIRICHLET:
-                CONST_IF(!IsSparseMatrix_v<MatrixType>) {
+                if constexpr(!IsSparseMatrix_v<MatrixType>) {
                     data_ += static_cast<FT>(1);
                 } else {
-                    throw std::invalid_argument("Can't use Dirichlet prior for sparse matrix");
+                    prior_data_.reset(new VecT(data_.columns()));
+                    (*prior_data_)[0] = static_cast<FT>(1);
                 }
                 break;
             case GAMMA_BETA:
                 if(c == nullptr) throw std::invalid_argument("Can't do gamma_beta with null pointer");
-                CONST_IF(!IsSparseMatrix_v<MatrixType>) {
+                if constexpr(IsSparseMatrix_v<MatrixType>) {
+                    prior_data_.reset(new VecT(data_.columns()));
+                    (*prior_data_)[0] = (*c)[0];
+                } else if constexpr(IsDenseMatrix_v<MatrixType>) {
                     data_ += (*c)[0];
-                } else {
-                    throw std::invalid_argument("Can't use gamma beta prior for sparse matrix");
                 }
             break;
             case FEATURE_SPECIFIC_PRIOR:
                 if(c == nullptr) throw std::invalid_argument("Can't do feature-specific with null pointer");
-                data_ += blz::expand(*c, data_.rows());
+                if constexpr(IsDenseMatrix_v<MatrixType>) {
+                    data_ += blz::expand(*c, data_.rows());
+                } else if constexpr(IsSparseMatrix_v<MatrixType>) {
+                    assert(c->size() == data_.columns());
+                    prior_data_.reset(new VecT(data_.columns()));
+                    *prior_data_ = *c;
+                }
+            break;
         }
         row_sums_.resize(data_.rows());
         {
             auto rowsumit = row_sums_.data();
             for(auto r: blz::rowiterator(data_)) {
-                CONST_IF(blz::IsDenseMatrix_v<MatrixType>) {
+                if constexpr(blz::IsDenseMatrix_v<MatrixType>) {
                     if(prior == NONE) {
                         r += 1e-50;
                         assert(blz::min(r) > 0.);
@@ -562,6 +603,6 @@ using jsd::make_probdiv_applicator;
 
 
 
-} // fgc
+} // minocore
 
 #endif

@@ -8,8 +8,8 @@
 #include <iostream>
 #include <cstring>
 
-namespace fgc {
-using namespace ::fgc::shared;
+namespace minocore {
+using namespace ::minocore::shared;
 
 //#define undirectedS bidirectionalS
 
@@ -103,8 +103,8 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(std::string fn) {
     std::fprintf(stderr, "num edges: %zu. num vertices: %zu\n", boost::num_edges(ret), boost::num_vertices(ret));
     return ret;
 }
-static fgc::Graph<undirectedS> dimacs_official_parse(std::string input) {
-    fgc::Graph<undirectedS> g;
+static minocore::Graph<undirectedS> dimacs_official_parse(std::string input) {
+    minocore::Graph<undirectedS> g;
     std::ifstream ifs(input);
     std::string graphtype;
     size_t nnodes = 0, nedges = 0;
@@ -149,7 +149,7 @@ static fgc::Graph<undirectedS> dimacs_official_parse(std::string input) {
     return g;
 }
 
-static fgc::Graph<undirectedS> dimacs_parse(std::string fn) {
+static minocore::Graph<undirectedS> dimacs_parse(std::string fn) {
     auto g = parse_dimacs_unweighted<boost::undirectedS>(fn);
     using Graph = decltype(g);
     boost::graph_traits<decltype(g)>::edge_iterator ei, ei_end;
@@ -168,8 +168,8 @@ static auto csv_parse(std::string fn) {
     return parse_nber<boost::undirectedS>(fn);
 }
 
-static fgc::Graph<undirectedS> parse_by_fn(std::string input) {
-    fgc::Graph<undirectedS> g;
+static minocore::Graph<undirectedS> parse_by_fn(std::string input) {
+    minocore::Graph<undirectedS> g;
     if(input.find(".csv") != std::string::npos) {
         g = csv_parse(input);
     } else if(input.find(".gr") != std::string::npos && input.find(".graph") == std::string::npos) {
@@ -187,4 +187,4 @@ using graph::dimacs_parse;
 using graph::dimacs_official_parse;
 
 
-} // fgc
+} // minocore

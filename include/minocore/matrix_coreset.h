@@ -1,7 +1,7 @@
 #pragma once
 #include "coreset.h"
 
-namespace fgc {
+namespace minocore {
 namespace coresets {
 
 template<typename MatrixType, typename FT=double>
@@ -73,4 +73,4 @@ index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
 } // index2matrix
 } // coresets
 
-} // fgc
+} // minocore

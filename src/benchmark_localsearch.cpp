@@ -1,11 +1,11 @@
-#include "fgc/graph.h"
-#include "fgc/geo.h"
-#include "fgc/parse.h"
-#include "fgc/bicriteria.h"
-#include "fgc/coreset.h"
-#include "fgc/lsearch.h"
-#include "fgc/jv.h"
-#include "fgc/timer.h"
+#include "minocore/graph.h"
+#include "minocore/geo.h"
+#include "minocore/parse.h"
+#include "minocore/bicriteria.h"
+#include "minocore/coreset.h"
+#include "minocore/lsearch.h"
+#include "minocore/jv.h"
+#include "minocore/timer.h"
 #include "blaze/util/Serialization.h"
 
 void usage(const char *x) {
@@ -13,7 +13,7 @@ void usage(const char *x) {
                  x);
     std::exit(1);
 }
-using namespace fgc;
+using namespace minocore;
 template<typename Mat, typename Con>
 void emit_sol_cost(const Mat &dm, const Con &sol, std::string label) {
     std::fprintf(stderr, "cost for %s: %0.12g\n", label.data(),
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
 
     blaze::DynamicVector<uint32_t> subset_indices;
     std::fprintf(stderr, "size of dm: %zu/%zu\n", dm.rows(), dm.columns());
-    fgc::coresets::CoresetSampler<float, uint32_t> cs;
+    minocore::coresets::CoresetSampler<float, uint32_t> cs;
     cs.read(argv[2]);
     std::fprintf(stderr, "size of coreset sampler: %zu\n", cs.size());
 #if 0
@@ -119,14 +119,14 @@ int main(int argc, char **argv) {
     if(subset_indices.size())
         std::fprintf(stderr, "size of selected indices: %zu\n", subset_indices.size());
 #endif
-    auto lsearcher = fgc::make_kmed_lsearcher(dm, k, 1e-3, 13);
+    auto lsearcher = minocore::make_kmed_lsearcher(dm, k, 1e-3, 13);
     util::Timer timer("full local search");
     std::vector<uint32_t> fullsol, thorup_sol;
     lsearcher.run();
     timer.report();
     fullsol.assign(lsearcher.sol_.begin(), lsearcher.sol_.end());
     emit_sol_cost(dm, fullsol, "Full cost");
-    auto thorup_lsearcher = fgc::make_kmed_lsearcher(thorup_dm, k, 1e-3, 13);
+    auto thorup_lsearcher = minocore::make_kmed_lsearcher(thorup_dm, k, 1e-3, 13);
     timer.restart("Thorup local search");
     thorup_lsearcher.run();
     thorup_sol.assign(thorup_lsearcher.sol_.begin(), thorup_lsearcher.sol_.end());
@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
         for(unsigned i = 0; i < coreset_dm.columns(); ++i)
             column(coreset_dm, i) *= coreset.weights_[i];
         std::fprintf(stderr, "reweighted. Optimizing\n");
-        auto lsearcher = fgc::make_kmed_lsearcher(coreset_dm, k, 1e-3, 13);
+        auto lsearcher = minocore::make_kmed_lsearcher(coreset_dm, k, 1e-3, 13);
         timer.restart(std::string("optimize over V x S") + csstr);
         lsearcher.run();
         timer.report();
@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
         auto &cd = coreset_dm;
         assert(cd.rows() == cd.columns());
         std::fprintf(stderr, "cd rows: %zu\n", cd.rows());
-        auto sxs_searcher = fgc::make_kmed_lsearcher(coreset_dm, k, 1e-3, 13);
+        auto sxs_searcher = minocore::make_kmed_lsearcher(coreset_dm, k, 1e-3, 13);
         timer.restart(std::string("optimize over S x S") + csstr);
         sxs_searcher.run();
         timer.report();

@@ -13,10 +13,10 @@
 
 #include <zlib.h>
 
-#include "fgc/distance.h"
+#include "minocore/distance.h"
 
 
-namespace fgc {
+namespace minocore {
 namespace streaming {
 
 
@@ -189,6 +189,6 @@ auto make_online_l2_clusterer(unsigned k, size_t n, bool uniform_weighting=is_un
 }
 
 } // namespace streaming
-} // namespace fgc
+} // namespace minocore
 
 #endif /* FGC_STREAMING_H__ */

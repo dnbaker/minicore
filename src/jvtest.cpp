@@ -1,5 +1,5 @@
-#include "fgc/jv.h"
-#include "fgc/distance.h"
+#include "minocore/jv.h"
+#include "minocore/distance.h"
 
 void disptime(std::chrono::time_point<std::chrono::high_resolution_clock> s, std::chrono::time_point<std::chrono::high_resolution_clock> e,
               std::string label="") {
@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     //disptime(to, eo, "JV old ufl");
     //std::fprintf(stderr, "res size: %zu\n", res.size());
     auto t = std::chrono::high_resolution_clock::now();
-    fgc::jv::JVSolver<blaze::DynamicMatrix<float>, float, uint32_t> jvs(dists, 5903.483329773);
+    minocore::jv::JVSolver<blaze::DynamicMatrix<float>, float, uint32_t> jvs(dists, 5903.483329773);
     auto t2 = std::chrono::high_resolution_clock::now();
     disptime(t, t2, "JV setup");
     jvs.run();
@@ -59,6 +59,6 @@ int main(int argc, char *argv[]) {
     t2 = std::chrono::high_resolution_clock::now();
     disptime(t, t2, "JV k-median calculation");
     assert(kmedcenters.size() == k);
-    fgc::jv::JVSolver<blaze::DynamicMatrix<float>, float, uint32_t> jvs2(jvs, 14000);
+    minocore::jv::JVSolver<blaze::DynamicMatrix<float>, float, uint32_t> jvs2(jvs, 14000);
     auto jvs2sol = jvs2.run();
 }

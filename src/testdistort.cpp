@@ -1,14 +1,14 @@
-#include "fgc/graph.h"
-#include "fgc/parse.h"
-#include "fgc/bicriteria.h"
-#include "fgc/coreset.h"
-#include "fgc/lsearch.h"
-#include "fgc/jv.h"
+#include "minocore/graph.h"
+#include "minocore/parse.h"
+#include "minocore/bicriteria.h"
+#include "minocore/coreset.h"
+#include "minocore/lsearch.h"
+#include "minocore/jv.h"
 #include <ctime>
 #include <getopt.h>
 #include "blaze/util/Serialization.h"
 
-using namespace fgc;
+using namespace minocore;
 using namespace boost;
 
 
@@ -73,7 +73,7 @@ max_component(GraphT &g) {
             }
         }
         GraphT newg(counts[maxcomp]);
-        typename boost::property_map <fgc::Graph<undirectedS>,
+        typename boost::property_map <minocore::Graph<undirectedS>,
                              boost::edge_weight_t >::type EdgeWeightMap = get(boost::edge_weight, g);
         using MapIt = typename flat_hash_map<uint64_t, uint64_t>::const_iterator;
         MapIt lit, rit;
@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "Reading from file: %s\n", input.data());
 
     // Parse the graph
-    fgc::Graph<undirectedS, float> g = parse_by_fn(input);
+    minocore::Graph<undirectedS, float> g = parse_by_fn(input);
     std::fprintf(stderr, "nv: %zu. ne: %zu\n", boost::num_vertices(g), boost::num_edges(g));
     // Select only the component with the most edges.
     max_component(g);

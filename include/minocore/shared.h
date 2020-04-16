@@ -11,7 +11,7 @@
 #  include <execution>
 #endif
 
-namespace fgc {
+namespace minocore {
 
 #if !NDEBUG
 template<typename T> class TD; // Debugging only
@@ -44,6 +44,11 @@ INLINE auto checked_posix_write(int fd, const void *buf, ssize_t count) {
     return ret;
 }
 
+struct TODOError: public std::runtime_error {
+    template<typename...A>
+    TODOError(A &&...a): std::runtime_error(std::forward<A>(a)...) {}
+};
+
 struct Deleter {
     void operator()(const void *x) const {
         std::free(const_cast<void *>(x));
@@ -67,4 +72,4 @@ inline dumbrange<T> make_dumbrange(T beg, T end) {return dumbrange<T>(beg, end);
 
 
 } // shared
-} // fgc
+} // minocore

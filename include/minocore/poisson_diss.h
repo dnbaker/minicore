@@ -1,12 +1,12 @@
 #ifndef FGC_PSD_H__
 #define FGC_PSD_H__
-#include "fgc/distance.h"
+#include "minocore/distance.h"
 #include "distmat/distmat.h"
-#include "fgc/kmeans.h"
-#include "fgc/coreset.h"
-#include "fgc/Inf2Zero.h"
+#include "minocore/kmeans.h"
+#include "minocore/coreset.h"
+#include "minocore/Inf2Zero.h"
 
-namespace fgc {
+namespace minocore {
 
 namespace pd {
 using namespace blz;

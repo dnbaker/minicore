@@ -10,11 +10,11 @@
 #ifdef _OPENMP
 #  include <omp.h>
 #endif
-#include "fgc/distance.h"
+#include "minocore/distance.h"
 #include "blaze_adaptor.h"
 
 
-namespace fgc {
+namespace minocore {
 namespace coresets {
 #ifndef SMALLARRAY_DEFAULT_N
 #define SMALLARRAY_DEFAULT_N 16
@@ -533,8 +533,8 @@ struct CoresetSampler {
 
 }//coresets
 
-}// namespace fgc
+}// namespace minocore
 
-namespace cs = fgc::coresets;
+namespace cs = minocore::coresets;
 
 #endif /* FGC_CORESETS_H__ */

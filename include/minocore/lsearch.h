@@ -1,9 +1,9 @@
 #pragma once
 #ifndef FGC_LOCAL_SEARCH_H__
 #define FGC_LOCAL_SEARCH_H__
-#include "fgc/graph.h"
-#include "fgc/diskmat.h"
-#include "fgc/kcenter.h"
+#include "minocore/graph.h"
+#include "minocore/diskmat.h"
+#include "minocore/kcenter.h"
 #include "pdqsort/pdqsort.h"
 #include <atomic>
 
@@ -14,7 +14,7 @@
  * (http://theory.stanford.edu/~kamesh/lsearch.pdf)
  */
 
-namespace fgc {
+namespace minocore {
 
 namespace graph {
 
@@ -538,6 +538,6 @@ using graph::graph2diskmat;
 using graph::graph2rammat;
 
 
-} // fgc
+} // minocore
 
 #endif /* FGC_LOCAL_SEARCH_H__ */

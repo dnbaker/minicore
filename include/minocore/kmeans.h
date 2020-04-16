@@ -8,7 +8,7 @@
 #include "timer.h"
 #include "div.h"
 
-namespace fgc {
+namespace minocore {
 using blz::rowiterator;
 
 
@@ -606,5 +606,5 @@ auto kmeans_matrix_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng,
 
 
 } // namespace coresets
-} // namespace fgc
+} // namespace minocore
 #endif // FGC_KMEANS_H__

@@ -1,4 +1,4 @@
-#include "fgc/coreset.h"
+#include "minocore/coreset.h"
 
 using FT = float;
 using namespace cs;

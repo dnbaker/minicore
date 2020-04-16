@@ -15,8 +15,8 @@
 #endif
 
 
-using namespace fgc;
-using namespace fgc::coresets;
+using namespace minocore;
+using namespace minocore::coresets;
 
 template<typename Mat, typename RNG>
 void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {

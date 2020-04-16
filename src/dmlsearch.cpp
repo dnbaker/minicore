@@ -1,9 +1,9 @@
 //#define VERBOSE_AF 1
-#include "fgc/lsearch.h"
-#include "fgc/diskmat.h"
+#include "minocore/lsearch.h"
+#include "minocore/diskmat.h"
 #include <iostream>
 
-using namespace fgc;
+using namespace minocore;
 
 int main(int argc, char *argv[]) {
     unsigned n = argc == 1 ? 100: std::atoi(argv[1]);

@@ -7,7 +7,7 @@
 #include <mutex>
 #include <thread>
 
-namespace fgc {
+namespace minocore {
 
 namespace jv {
 
@@ -898,6 +898,6 @@ public:
 
 } // namespace jv
 
-} // namespace fgc
+} // namespace minocore
 
 #endif

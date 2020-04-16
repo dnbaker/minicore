@@ -1,15 +1,15 @@
 #if defined(USE_BOOST_PARALLEL) && USE_BOOST_PARALLEL
 #include "boost/graph/use_mpi.hpp"
 #include "boost/graph/distributed/depth_first_search.hpp"
-#include "fgc/relaxed_heap.hpp"
+#include "minocore/relaxed_heap.hpp"
 #endif
-#include "fgc/graph.h"
-#include "fgc/parse.h"
-#include "fgc/bicriteria.h"
-#include "fgc/coreset.h"
-#include "fgc/lsearch.h"
-#include "fgc/jv.h"
-#include "fgc/timer.h"
+#include "minocore/graph.h"
+#include "minocore/parse.h"
+#include "minocore/bicriteria.h"
+#include "minocore/coreset.h"
+#include "minocore/lsearch.h"
+#include "minocore/jv.h"
+#include "minocore/timer.h"
 #include <ctime>
 #include <getopt.h>
 #include "blaze/util/Serialization.h"
@@ -17,7 +17,7 @@
 template<typename T> class TD;
 
 
-using namespace fgc;
+using namespace minocore;
 using namespace boost;
 
 
@@ -85,7 +85,7 @@ max_component(GraphT &g) {
                 remapper[i] = id++;
         }
         GraphT newg(counts[maxcomp]);
-        typename boost::property_map <fgc::Graph<undirectedS>,
+        typename boost::property_map <minocore::Graph<undirectedS>,
                              boost::edge_weight_t >::type EdgeWeightMap = get(boost::edge_weight, g);
         using MapIt = typename flat_hash_map<uint64_t, uint64_t>::const_iterator;
         MapIt lit, rit;
@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
 
     // Parse the graph
     util::Timer timer("parse time:");
-    fgc::Graph<undirectedS, float> g = parse_by_fn(input);
+    minocore::Graph<undirectedS, float> g = parse_by_fn(input);
     timer.stop();
     timer.display();
     std::fprintf(stderr, "nv: %zu. ne: %zu\n", boost::num_vertices(g), boost::num_edges(g));

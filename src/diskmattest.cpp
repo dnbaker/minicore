@@ -1,8 +1,8 @@
-#include "fgc/distance.h"
-#include "fgc/diskmat.h"
-#include "fgc/applicator.h"
+#include "minocore/distance.h"
+#include "minocore/diskmat.h"
+#include "minocore/applicator.h"
 
-using namespace fgc;
+using namespace minocore;
 using namespace blz;
 
 int main() {

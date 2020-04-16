@@ -10,7 +10,7 @@
 #include <boost/accumulators/statistics/median.hpp>
 #include <boost/accumulators/statistics/weighted_median.hpp>
 
-namespace fgc {
+namespace minocore {
 namespace coresets {
 using namespace blz;
 using namespace boost::accumulators;
@@ -145,5 +145,5 @@ void l1_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &r
 
 
 } // namespace coresets
-} // namespace fgc
+} // namespace minocore
 #endif /* FGC_KMEDIAN_H__ */

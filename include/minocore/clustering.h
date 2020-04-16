@@ -1,9 +1,9 @@
 #ifndef FGC_CLUSTERING_H__
 #define FGC_CLUSTERING_H__
-#include "fgc/distance.h"
-#include "fgc/applicator.h"
+#include "minocore/distance.h"
+#include "minocore/applicator.h"
 
-namespace fgc {
+namespace minocore {
 
 namespace clustering {
 
@@ -14,6 +14,6 @@ enum ClusteringAssignmentType: size_t {
 
 }
 
-} // namespace fgc
+} // namespace minocore
 
 #endif /* FGC_CLUSTERING_H__ */

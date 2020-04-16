@@ -4,7 +4,7 @@
 #include "alias_sampler/div.h"
 #include <queue>
 
-namespace fgc {
+namespace minocore {
 namespace coresets {
 using std::partial_sum;
 using blz::L2Norm;
@@ -365,4 +365,4 @@ kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double
 }// namespace outliers
 
 } // coresets
-} // fgc
+} // minocore

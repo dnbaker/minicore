@@ -10,7 +10,7 @@
 #include "boost/property_map/property_map.hpp"
 #include "shared.h"
 
-namespace fgc {
+namespace minocore {
 
 // May replace with robin_hood if they implement this.
 
@@ -230,10 +230,10 @@ inline void assert_connected__(const Graph &x, const char *filename, const char 
     auto ncomp = boost::connected_components(x, ccomp.get());
     assert(ncomp == 1 || !std::fprintf(stderr, "Failure: graph at %p [%s:%s:%d] is not connected (%u comp)\n", (void *)&x, filename, func, line, unsigned(ncomp)));
 }
-#define assert_connected(x) ::fgc::assert_connected__(x, __FILE__, __PRETTY_FUNCTION__, __LINE__)
+#define assert_connected(x) ::minocore::assert_connected__(x, __FILE__, __PRETTY_FUNCTION__, __LINE__)
 #else
 #define assert_connected(x)
 #endif
 
 
-} // fgc
+} // minocore

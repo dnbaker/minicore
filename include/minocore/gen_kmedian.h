@@ -1,8 +1,8 @@
 #ifndef FGC_GENERALIZED_K_MEDIAN_H
 #define FGC_GENERALIZED_K_MEDIAN_H
-#include "fgc/applicator.h"
+#include "minocore/applicator.h"
 
-namespace fgc {
+namespace minocore {
 
 #if 0
 namespace jsd {
@@ -46,6 +46,6 @@ void optimize_parameters_hard() {
 } // namespace jsd
 #endif
 
-} // namespace fgc
+} // namespace minocore
 
 #endif /* FGC_GENERALIZED_K_MEDIAN_H */

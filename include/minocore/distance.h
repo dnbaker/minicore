@@ -544,7 +544,7 @@ network_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &
     using namespace lemon;
     using Digraph = lemon::FullBipartiteDigraph;
     Digraph di(nl, nr);
-    NetworkSimplexSimple<Digraph, FT, FT, unsigned, fgc::shared::flat_hash_map> net(di, true, nl + nr, nl * nr);
+    NetworkSimplexSimple<Digraph, FT, FT, unsigned, minocore::shared::flat_hash_map> net(di, true, nl + nr, nl * nr);
     DV<FT> weights(nl + nr);
     DV<unsigned> indices(nl + nr);
     size_t i = 0;

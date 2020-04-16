@@ -1,12 +1,12 @@
 #ifndef CSC_H__
 #define CSC_H__
-#include "fgc/shared.h"
-#include "fgc/timer.h"
-#include "fgc/blaze_adaptor.h"
+#include "minocore/shared.h"
+#include "minocore/timer.h"
+#include "minocore/blaze_adaptor.h"
 #include "mio/single_include/mio/mio.hpp"
 #include <fstream>
 
-namespace fgc {
+namespace minocore {
 
 struct CSCMatrixView {
     const uint64_t *const indptr_, *const indices_;
@@ -112,6 +112,6 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix)
     return ret;
 }
 
-} // namespace fgc
+} // namespace minocore
 
 #endif /* CSC_H__ */

@@ -1,5 +1,8 @@
 #ifndef FGC_PACKED_H__
 #define FGC_PACKED_H__
+#include <initializer_list>
+#include <utility>
+#include <tuple>
 
 
 #ifndef FGC_PACKED

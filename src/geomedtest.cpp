@@ -1,4 +1,4 @@
-#include "fgc/kmedian.h"
+#include "minocore/kmedian.h"
 #include <chrono>
 
 auto t() {return std::chrono::high_resolution_clock::now();}
@@ -45,9 +45,9 @@ int main(int c, char **a) {
     randomize(m);
     m = pow(abs(m), -1.2);
     blaze::DynamicVector<float, blaze::rowVector> v, v2(dim), v3(dim);
-    fgc::coresets::geomedian(m, v);
+    minocore::coresets::geomedian(m, v);
     auto l1_start = t();
-    fgc::coresets::l1_median(m, v2);
+    minocore::coresets::l1_median(m, v2);
     auto l1_stop = t();
     //std::cout << subvector(v2, 0, nr / 2) << '\n';
     //std::cout << subvector(blaze::mean<blaze::columnwise>(m), 0, 50) << '\n';
@@ -66,7 +66,7 @@ int main(int c, char **a) {
     manstop = t();
     std::fprintf(stderr, "Manual l1 distances time: %zu/%g. reduction-based: %zu/%g\n", size_t((stop - start).count() / 1000), cwmed, size_t((manstop - manstart).count() / 1000), cwmed2);
     auto l1_approx_start = t();
-    fgc::coresets::l1_median(m, v3, static_cast<const float *>(nullptr), true);
+    minocore::coresets::l1_median(m, v3, static_cast<const float *>(nullptr), true);
     auto l1_approx_stop = t();
     std::fprintf(stderr, "Time to compute exact l1 median: %gms. Approx: %gms.\n", (l1_stop - l1_start).count() * 1.e-6, (l1_approx_stop - l1_approx_start).count() * 1.e-6);
     std::cout << "L1 dist under geomedian: " << l1dist(m, v) << '\n';

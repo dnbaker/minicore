@@ -1,8 +1,8 @@
 #ifndef JV_UTIL_H__
 #define JV_UTIL_H__
-#include "fgc/packed.h"
+#include "minocore/packed.h"
 
-namespace fgc {
+namespace minocore {
 
 namespace shared {
 

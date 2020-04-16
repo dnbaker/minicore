@@ -7,7 +7,7 @@
 #include <system_error>
 #include "blaze_adaptor.h"
 
-namespace fgc {
+namespace minocore {
 
 template<typename VT, bool SO=blaze::rowMajor, bool isPadded=blaze::padded, bool isAligned=blaze::aligned>
 struct DiskMat {
@@ -152,6 +152,6 @@ public:
     const CMType &operator~() const {return cm_;}
 };
 
-} // fgc
+} // minocore
 
 #endif

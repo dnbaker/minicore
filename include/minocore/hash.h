@@ -9,7 +9,7 @@
 #  include <mutex>
 #endif
 
-namespace fgc {
+namespace minocore {
 
 namespace hash {
 

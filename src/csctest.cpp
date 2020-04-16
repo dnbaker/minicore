@@ -1,6 +1,6 @@
-#include "fgc/csc.h"
+#include "minocore/csc.h"
 
-using namespace fgc;
+using namespace minocore;
 int main(int argc, char *argv[]) {
     std::string inpath;
     if(argc > 1) inpath = argv[1];

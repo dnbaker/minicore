@@ -2,22 +2,23 @@
 #include "boost/graph/use_mpi.hpp"
 #include "boost/graph/distributed/depth_first_search.hpp"
 #define USE3 0
-#include "fgc/relaxed_heap.hpp"
+#include "minocore/relaxed_heap.hpp"
 #endif
-#include "fgc/graph.h"
-#include "fgc/geo.h"
-#include "fgc/parse.h"
-#include "fgc/bicriteria.h"
-#include "fgc/coreset.h"
-#include "fgc/lsearch.h"
-#include "fgc/jv.h"
-#include "fgc/timer.h"
+#include "minocore/graph.h"
+#include "minocore/geo.h"
+#include "minocore/parse.h"
+#include "minocore/bicriteria.h"
+#include "minocore/coreset.h"
+#include "minocore/lsearch.h"
+#include "minocore/jv.h"
+#include "minocore/timer.h"
 #include <ctime>
 #include <getopt.h>
 #include "blaze/util/Serialization.h"
 
 
-using namespace fgc;
+using namespace minocore;
+using namespace boost;
 
 static size_t str2nbytes(const char *s) {
     if(!s) return 0;
@@ -85,7 +86,7 @@ void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Grap
         for(unsigned csidx = 0; csidx < csz; ++csidx) {
             auto idx = bbox_vertices_ptr ? bbox_vertices_ptr->operator[](cs.indices_[csidx])
                                          : cs.indices_[csidx];
-            boost::dijkstra_shortest_paths(g, idx, distance_map(&distances(csidx, 0)));
+            boost::dijkstra_shortest_paths(g, idx, boost::distance_map(&distances(csidx, 0)));
             assert(boost::num_vertices(g) == row(distances, csidx).size());
         }
 #if !NDEBUG
@@ -266,7 +267,7 @@ max_component(GraphT &g, std::vector<latlon_t> &coordinates) {
             std::swap(newcoordinates, coordinates);
         }
         GraphT newg(counts[maxcomp]);
-        typename boost::property_map <fgc::Graph<undirectedS>,
+        typename boost::property_map <minocore::Graph<boost::undirectedS>,
                              boost::edge_weight_t >::type EdgeWeightMap = get(boost::edge_weight, g);
         using MapIt = typename flat_hash_map<uint64_t, uint64_t>::const_iterator;
         MapIt lit, rit;
@@ -467,7 +468,7 @@ int main(int argc, char **argv) {
 
     // Parse the graph
     util::Timer timer("parse time:");
-    fgc::Graph<undirectedS, float> g = parse_by_fn(input);
+    minocore::Graph<undirectedS, float> g = parse_by_fn(input);
     timer.stop();
     timer.display();
     using Vertex = typename boost::graph_traits<decltype(g)>::vertex_descriptor;
@@ -605,7 +606,7 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "dm size: %zu rows, %zu columns\n", dm.rows(), dm.columns());
     {
         if(cache_prefix.size()) {
-            fgc::util::Timer newtimer("full distance matrix serialization");
+            minocore::util::Timer newtimer("full distance matrix serialization");
             blaze::Archive<std::ofstream> distances(cache_prefix + ".blaze");
             distances << dm;
             if(bbox.set()) {
@@ -637,7 +638,7 @@ int main(int argc, char **argv) {
     lsearcher.run();
     timer.report();
     if(dm.rows() < 100 && k < 6) {
-        fgc::util::Timer newtimer("exhaustive search");
+        minocore::util::Timer newtimer("exhaustive search");
         auto esearcher = make_kmed_esearcher(dm, k);
         esearcher.run();
     }

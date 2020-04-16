@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <iostream>
 
-namespace fgc {
+namespace minocore {
 using std::uint32_t;
 
 namespace util {
@@ -59,6 +59,6 @@ struct Timer {
 
 } // util
 
-} // fgc
+} // minocore
 
 #endif /*TIMER_H__ */
