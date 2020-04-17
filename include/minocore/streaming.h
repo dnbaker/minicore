@@ -97,6 +97,8 @@ public:
         mutable_stack() {}
         auto &getc() {return this->c;}
         const auto &getc() const {return this->c;}
+        auto  operator[](size_t index) const {return this->c[index];}
+        auto &operator[](size_t index)       {return this->c[index];}
     };
     mutable_stack mstack_;
     typename mutable_stack::container_type readingstack_;
@@ -118,14 +120,13 @@ public:
     std::pair<unsigned, WT> assign(const AItem &item) const {
         if(mstack_.empty()) return {-1, std::numeric_limits<WT>::max()};
         unsigned i = 0;
-        WT mindist = func(mstack_[0], item), dist;
+        WT mindist = func_(mstack_[0], item), dist;
         for(unsigned j = 1; j < mstack_.size(); ++j)
-            if((dist = func(mstack_[j])) < mindist) mindist = dist, i = j;
+            if((dist = func_(mstack_[j])) < mindist) mindist = dist, i = j;
         return {i, mindist};
     }
     template<typename AItem>
     void add(const AItem &item, WT weight=1.) {
-        auto rv = urd_(rng_);
         auto [asn, mincost] = assign(item);
         auto cost = weight * mincost;
         auto gam = get_gamma();

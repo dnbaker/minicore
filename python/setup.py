@@ -38,7 +38,7 @@ include_dirs=[
     get_pybind_include(user=True),
    "../",
    "../include",
-   "../include/fgc",
+   "../include/minocore",
    "../blaze",
    "../pybind11/include"
 ]

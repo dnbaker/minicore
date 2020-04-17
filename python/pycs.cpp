@@ -1,5 +1,5 @@
 #include "pyfgc.h"
-#include "fgc/matrix_coreset.h"
+#include "minocore/matrix_coreset.h"
 
 using CSType = coresets::CoresetSampler<float, uint32_t>;
 using FNA =  py::array_t<float, py::array::c_style | py::array::forcecast>;
