@@ -7,6 +7,8 @@ These methods allow for fast and accurate summarization of and clustering of dat
 
 Minocore both stands for "mini" and "core", as it builds *concise representations* via *core*-sets, and as a portmanteau of Manticore and Minotaur.
 
+![Minocore](https://raw.githubusercontent.com/dnbaker/minocore/master/media/Tondo_Minotaur_London.processed.jpg "The Minocore")
+
 ### Dependencies
 
 1. Boost, specifically the Boost Graph Library.
