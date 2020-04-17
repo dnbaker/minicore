@@ -1,4 +1,4 @@
-## Fast Generic Coresets [![Build Status](https://travis-ci.com/dnbaker/fgc.svg?token=nzWL3kpck4ymqu9SdesD&branch=master)](https://travis-ci.com/dnbaker/fgc
+## Fast Generic Coresets [![Build Status](https://travis-ci.com/dnbaker/fgc.svg?token=nzWL3kpck4ymqu9SdesD&branch=master)](https://travis-ci.com/dnbaker/fgc)
 
 fgc is a library for generic coresets on graphs and other metric spaces.
 It includes methods for approximate, bicriteria solutions as well as sampling algorithms.
