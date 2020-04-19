@@ -43,6 +43,10 @@ enum ProbDivType {
     OLLR,       // Old LLR, deprecated (included for compatibility/comparisons)
     ITAKURA_SAITO, // \sum_{i=1}^D[\frac{a_i}{b_i} - \log{\frac{a_i}{b_i}} - 1]
     REVERSE_ITAKURA_SAITO, // Reverse I-S
+    COSINE_DISTANCE,             // Cosine distance
+    PROBABILITY_COSINE_DISTANCE, // Probability distribution cosine distance
+    COSINE_SIMILARITY,
+    PROBABILITY_COSINE_SIMILARITY,
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
@@ -50,8 +54,9 @@ enum ProbDivType {
     PSM = JSM,
     IS=ITAKURA_SAITO
 };
+
 namespace detail {
-static constexpr INLINE bool  needs_logs(ProbDivType d)  {
+static constexpr INLINE bool needs_logs(ProbDivType d)  {
     switch(d) {
         case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: case REVERSE_ITAKURA_SAITO: return true;
@@ -60,6 +65,13 @@ static constexpr INLINE bool  needs_logs(ProbDivType d)  {
     return false;
 }
 
+static constexpr INLINE bool needs_l2_cache(ProbDivType d) {
+    return d == COSINE_DISTANCE;
+}
+
+static constexpr INLINE bool needs_probability_l2_cache(ProbDivType d) {
+    return d == PROBABILITY_COSINE_DISTANCE;
+}
 
 static constexpr INLINE bool  needs_sqrt(ProbDivType d) {
     return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
@@ -69,6 +81,8 @@ static constexpr INLINE bool is_symmetric(ProbDivType d) {
     switch(d) {
         case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
         case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
+        case COSINE_DISTANCE: case COSINE_SIMILARITY:
+        case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
             return true;
         default: ;
     }
@@ -96,6 +110,10 @@ static constexpr INLINE const char *prob2str(ProbDivType d) {
         case REVERSE_ITAKURA_SAITO: return "REVERSE_ITAKURA_SAITO";
         case SQRL2: return "SQRL2";
         case TOTAL_VARIATION_DISTANCE: return "TOTAL_VARIATION_DISTANCE";
+        case COSINE_DISTANCE: return "COSINE_DISTANCE";
+        case PROBABILITY_COSINE_DISTANCE: return "PROBABILITY_COSINE_DISTANCE";
+        case COSINE_SIMILARITY: return "COSINE_SIMILARITY";
+        case PROBABILITY_COSINE_SIMILARITY: return "PROBABILITY_COSINE_SIMILARITY";
         default: return "INVALID TYPE";
     }
 }
@@ -120,6 +138,10 @@ static constexpr INLINE const char *prob2desc(ProbDivType d) {
         case TOTAL_VARIATION_DISTANCE: return "Total Variation Distance: 1/2 sum_{i in D}(|x_i - y_i|)";
         case ITAKURA_SAITO: return "Itakura-Saito divergence, a Bregman divergence [sum((a / b) - log(a / b) - 1 for a, b in zip(A, B))]";
         case REVERSE_ITAKURA_SAITO: return "Reversed Itakura-Saito divergence, a Bregman divergence";
+        case COSINE_DISTANCE: return "Cosine distance: arccos(\\frac{A \\cdot B}{|A|_2 |B|_2}) / pi";
+        case PROBABILITY_COSINE_DISTANCE: return "Cosine distance of the probability vectors: arccos(\\frac{A \cdot B}{|A|_2 |B|_2}) / pi";
+        case COSINE_SIMILARITY: return "Cosine similarity: \\frac{A \\cdot B}{|A|_2 |B|_2}";
+        case PROBABILITY_COSINE_SIMILARITY: return "Cosine similarity of the probability vectors: \\frac{A \cdot B}{|A|_2 |B|_2}";
         default: return "INVALID TYPE";
     }
 }
@@ -146,7 +168,12 @@ static void print_measures() {
         WASSERSTEIN,
         PSD,
         PSM,
-        ITAKURA_SAITO
+        ITAKURA_SAITO,
+        REVERSE_ITAKURA_SAITO,
+        COSINE_DISTANCE,
+        COSINE_SIMILARITY,
+        PROBABILITY_COSINE_DISTANCE,
+        PROBABILITY_COSINE_SIMILARITY,
     };
     for(const auto measure: measures) {
         std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));

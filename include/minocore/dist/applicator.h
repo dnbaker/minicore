@@ -26,6 +26,8 @@ class ProbDivApplicator {
     std::unique_ptr<MatrixType> sqrdata_;
     std::unique_ptr<VecT> jsd_cache_;
     std::unique_ptr<VecT> prior_data_;
+    std::unique_ptr<VecT> l2norm_cache_;
+    std::unique_ptr<VecT> pl2norm_cache_;
     typename MatrixType::ElementType lambda_ = 0.5;
     static constexpr bool IS_SPARSE      = IsSparseMatrix_v<MatrixType>;
     static constexpr bool IS_DENSE_BLAZE = IsDenseMatrix_v<MatrixType>;
@@ -60,18 +62,20 @@ public:
         const size_t nr = m.rows();
         assert(nr == m.columns());
         assert(nr == data_.rows());
-        static constexpr ProbDivType actual_measure = measure == JSM ? JSD: measure;
+        static constexpr ProbDivType actual_measure =
+            measure == JSM ? JSD
+                : measure == COSINE_DISTANCE ? COSINE_SIMILARITY
+                : measure == PROBABILITY_COSINE_DISTANCE ? PROBABILITY_COSINE_SIMILARITY
+                : measure;
         for(size_t i = 0; i < nr; ++i) {
             if constexpr((blaze::IsDenseMatrix_v<MatrixType>)) {
                 for(size_t j = i + 1; j < nr; ++j) {
-                    auto v = this->call<actual_measure>(i, j);
-                    m(i, j) = v;
+                    m(i, j) = this->call<actual_measure>(i, j);
                 }
             } else {
                 OMP_PFOR
                 for(size_t j = i + 1; j < nr; ++j) {
-                    auto v = this->call<actual_measure>(i, j);
-                    m(i, j) = v;
+                    m(i, j) = this->call<actual_measure>(i, j);
                 }
             }
         }
@@ -83,6 +87,15 @@ public:
                 cv = blz::sqrt(cv);
             } else {
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
+            }
+        } else if constexpr(measure == COSINE_DISTANCE || measure == PROBABILITY_COSINE_DISTANCE) {
+            if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
+                m = blz::acos(m) * PI_INV;
+            } else if constexpr(dm::is_distance_matrix_v<MatType>) {
+                blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> cv(const_cast<FT *>(m.data()), m.size());
+                cv = blz::acos(cv) * PI_INV;
+            } else {
+                std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::acos(x) * PI_INV;});
             }
         }
         if constexpr(detail::is_symmetric(measure)) {
@@ -137,6 +150,12 @@ public:
             case OLLR:                     set_distance_matrix<MatType, OLLR>(m, symmetrize); break;
             case ITAKURA_SAITO:            set_distance_matrix<MatType, ITAKURA_SAITO>(m, symmetrize); break;
             case REVERSE_ITAKURA_SAITO:    set_distance_matrix<MatType, REVERSE_ITAKURA_SAITO>(m, symmetrize); break;
+            case COSINE_DISTANCE:          set_distance_matrix<MatType, COSINE_DISTANCE>(m, symmetrize); break;
+            case PROBABILITY_COSINE_DISTANCE:
+                                           set_distance_matrix<MatType, PROBABILITY_COSINE_DISTANCE>(m, symmetrize); break;
+            case COSINE_SIMILARITY:        set_distance_matrix<MatType, COSINE_SIMILARITY>(m, symmetrize); break;
+            case PROBABILITY_COSINE_SIMILARITY:
+                                           set_distance_matrix<MatType, PROBABILITY_COSINE_SIMILARITY>(m, symmetrize); break;
             default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + blz::detail::prob2str(measure));
         }
     }
@@ -149,6 +168,21 @@ public:
         blaze::DynamicMatrix<OFT> ret(data_.rows(), data_.rows());
         set_distance_matrix(ret, measure, symmetrize);
         return ret;
+    }
+    auto cosine_similarity(size_t i, size_t j) const {
+        return blz::dot(weighted_row(i), weighted_row(j)) * l2norm_cache_->operator[](i) * l2norm_cache_->operator[](j);
+    }
+    auto pcosine_similarity(size_t i, size_t j) const {
+        return blz::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
+    }
+
+    static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
+
+    auto cosine_distance(size_t i, size_t j) const {
+        return std::acos(cosine_similarity(i, j)) * PI_INV;
+    }
+    auto pcosine_distance(size_t i, size_t j) const {
+        return std::acos(cosine_similarity(i, j)) * PI_INV;
     }
 
     // Accessors
@@ -209,6 +243,14 @@ public:
             ret = itakura_saito(i, j);
         } else if constexpr(constexpr_measure == REVERSE_ITAKURA_SAITO) {
             ret = itakura_saito(j, i);
+        } else if constexpr(constexpr_measure == COSINE_DISTANCE) {
+            ret = cosine_distance(j, i);
+        } else if constexpr(constexpr_measure == PROBABILITY_COSINE_DISTANCE) {
+            ret = pcosine_distance(j, i);
+        } else if constexpr(constexpr_measure == COSINE_SIMILARITY) {
+            ret = cosine_similarity(j, i);
+        } else if constexpr(constexpr_measure == PROBABILITY_COSINE_SIMILARITY) {
+            ret = pcosine_similarity(j, i);
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
         }
@@ -240,6 +282,10 @@ public:
             case UWLLR: ret = call<UWLLR>(i, j); break;
             case OLLR: ret = call<OLLR>(i, j); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, j); break;
+            case COSINE_DISTANCE: ret = call<COSINE_DISTANCE>(i, j); break;
+            case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(i, j); break;
+            case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(i, j); break;
+            case PROBABILITY_COSINE_SIMILARITY: ret = call<PROBABILITY_COSINE_SIMILARITY>(i, j); break;
             default: __builtin_unreachable();
         }
         return ret;
@@ -501,6 +547,20 @@ private:
         }
         if(blz::detail::needs_sqrt(measure_)) {
             sqrdata_.reset(new MatrixType(blz::sqrt(data_)));
+        }
+        if(blz::detail::needs_l2_cache(measure_)) {
+            l2norm_cache_.reset(new VecT(data_.rows()));
+            OMP_PFOR
+            for(size_t i = 0; i < data_.rows(); ++i) {
+                l2norm_cache_->operator[](i)  = 1. / blz::l2Norm(weighted_row(i));
+            }
+        }
+        if(blz::detail::needs_probability_l2_cache(measure_)) {
+            pl2norm_cache_.reset(new VecT(data_.rows()));
+            OMP_PFOR
+            for(size_t i = 0; i < data_.rows(); ++i) {
+                pl2norm_cache_->operator[](i) = 1. / blz::l2Norm(row(i));
+            }
         }
         if(logdata_) {
             jsd_cache_.reset(new VecT(data_.rows()));
