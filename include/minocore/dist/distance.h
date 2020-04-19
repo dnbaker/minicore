@@ -532,7 +532,7 @@ inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &
 
 template<typename VT, bool SO, typename VT2>
 CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
-network_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1., size_t maxiter=10000)
+network_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1.)
 {
     std::fprintf(stderr, "Warning: network_p_wasserstein seems to have a bug. Do not use.\n");
     auto &xref = ~x;
