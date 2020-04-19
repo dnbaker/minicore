@@ -1,7 +1,8 @@
 #pragma once
 #ifndef FGC_HASH_H__
 #define FGC_HASH_H__
-#include "blaze_adaptor.h"
+#include "minocore/util/blaze_adaptor.h"
+#include "minocore/util/macros.h"
 #include <random>
 #include "xxHash/xxh3.h"
 #include "xxHash/xxhash.h"

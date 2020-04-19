@@ -1,9 +1,9 @@
 #pragma once
 #ifndef FGC_LOCAL_SEARCH_H__
 #define FGC_LOCAL_SEARCH_H__
-#include "minocore/graph.h"
-#include "minocore/diskmat.h"
-#include "minocore/kcenter.h"
+#include "minocore/util/graph.h"
+#include "minocore/util/diskmat.h"
+#include "minocore/optim/kcenter.h"
 #include "pdqsort/pdqsort.h"
 #include <atomic>
 

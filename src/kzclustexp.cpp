@@ -4,14 +4,8 @@
 #define USE3 0
 #include "minocore/relaxed_heap.hpp"
 #endif
-#include "minocore/graph.h"
-#include "minocore/geo.h"
-#include "minocore/parse.h"
-#include "minocore/bicriteria.h"
-#include "minocore/coreset.h"
-#include "minocore/lsearch.h"
-#include "minocore/jv.h"
-#include "minocore/timer.h"
+#include "minocore/utility.h"
+#include "minocore/optim.h"
 #include <ctime>
 #include <getopt.h>
 #include "blaze/util/Serialization.h"

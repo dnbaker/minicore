@@ -28,7 +28,7 @@
 #include <vector>
 #include <cinttypes>
 
-#include "minocore/graph.h"
+#include "minocore/util/graph.h"
 
 // The type of index used. This must match the include file above
 using index_type = osmium::index::map::FlexMem<osmium::unsigned_object_id_type, osmium::Location>;

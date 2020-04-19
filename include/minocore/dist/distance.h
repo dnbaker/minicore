@@ -5,7 +5,7 @@
 #include <set>
 
 
-#include "blaze_adaptor.h"
+#include "minocore/util/blaze_adaptor.h"
 
 #ifndef BOOST_NO_AUTO_PTR
 #define BOOST_NO_AUTO_PTR 1

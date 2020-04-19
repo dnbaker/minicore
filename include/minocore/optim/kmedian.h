@@ -1,7 +1,7 @@
 #pragma once
 #ifndef FGC_KMEDIAN_H__
 #define FGC_KMEDIAN_H__
-#include "kmeans.h"
+#include "minocore/optim/kmeans.h"
 #include <algorithm>
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/p_square_cumul_dist.hpp>
@@ -22,12 +22,7 @@ auto &geomedian(const blz::DenseMatrix<MT, SO> &mat, blz::DenseVector<VT, !SO> &
     //
     using FT = typename std::decay_t<decltype(~mat)>::ElementType;
     const auto &_mat = ~mat;
-#if 1
     ~dv = blz::mean<blz::columnwise>(_mat);
-#else
-    (~dv).resize((~mat).columns());
-    randomize(~dv);
-#endif
     FT prevcost = std::numeric_limits<FT>::max();
     blz::DV<FT, !SO> costs(_mat.rows(), FT(0));
     size_t iternum = 0;
@@ -47,7 +42,6 @@ auto &geomedian(const blz::DenseMatrix<MT, SO> &mat, blz::DenseVector<VT, !SO> &
         for(size_t i = 1; i < nr; newcost += l1Dist(row(_mat, i++ BLAZE_CHECK_DEBUG), ~dv));
         if(std::abs(newcost - prevcost) <= eps) break;
         prevcost = newcost;
-        std::fprintf(stderr, "Cost at iteration %zu: %g\n", iternum, newcost);
     }
     return dv;
 }
@@ -60,6 +54,7 @@ void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector
     const bool odd = dr.rows() % 2;
     const size_t hlf = dr.rows() / 2;
     if(approx_med) {
+        std::fprintf(stderr, "note: Boost approximate median takes more time and is less accurate than exact calculation via sorting.\nNot recommended.\n");
         //using acc_tag = boost::accumulators::stats<boost::accumulators::tag::median(boost::accumulators::tag::with_p_square_cumulative_distribution)>;
         using acc_tag = boost::accumulators::stats<boost::accumulators::tag::median(with_p_square_quantile)>;
         using FT = ElementType_t<MT>;
@@ -99,7 +94,8 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVe
             (~ret)[i] = boost::accumulators::median(acc);
         }
     } else {
-        if(sizeof(IT) == 4 && (~data).columns() > 0xFFFFFFFFuLL) throw std::runtime_error("Use a different index type");
+        if(unlikely((~data).columns() > ((uint64_t(1) << (sizeof(IT) * CHAR_BIT)) - 1)))
+            throw std::runtime_error("Use a different index type, there are more features than fit in IT");
         const size_t nr = (~data).rows();
         auto pairs = std::make_unique<std::pair<ElementType_t<MT>, IT>[]>(nr);
         std::unique_ptr<FT[]> cw(new FT[nr]); //
@@ -121,17 +117,14 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVe
                 continue;
             }
             FT mid = wsum * .5;
-            auto func = [](std::pair<ElementType_t<MT>, IT> x, FT y)-> bool {return x.first < y;};
-            auto it = std::lower_bound(pairs.get(), pairs.get() + nr, mid, func);
+            auto it = std::lower_bound(pairs.get(), pairs.get() + nr, mid,
+                 [](std::pair<ElementType_t<MT>, IT> x, FT y)
+            {
+                return x.first < y;
+            });
             (~ret)[i] = it->first == mid ? FT(.5 * (it->first + it[1].first)): FT(it[1].first);
         }
     }
-#if 0
-    blz::DynamicVector<FT> midpoints = blz::sum<blz::columnwise>(~data) * .5;
-    shared::flat_hash_set<IT> indices;
-    indices.reserve(nc);
-    for(size_t i = 0; i < nc;indices.insert(i++));
-#endif
 }
 
 

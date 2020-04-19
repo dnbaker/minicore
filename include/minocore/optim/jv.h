@@ -4,9 +4,9 @@
 #include <queue>
 #include <vector>
 #include <iostream>
-#include "graph.h"
-#include "blaze_adaptor.h"
-#include "jv_solver.h"
+#include "minocore/util/graph.h"
+#include "minocore/util/blaze_adaptor.h"
+#include "minocore/optim/jv_solver.h"
 
 /*
  * Implementation of method of Jain-Vazirani for Metric k-median clustering

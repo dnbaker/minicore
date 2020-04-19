@@ -13,7 +13,7 @@
 
 #include <zlib.h>
 
-#include "minocore/distance.h"
+#include "minocore/dist/distance.h"
 
 
 namespace minocore {

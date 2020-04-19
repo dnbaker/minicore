@@ -1,7 +1,4 @@
 #pragma once
-#ifndef BOOST_NO_AUTO_PTR
-#define BOOST_NO_AUTO_PTR 1
-#endif
 #include "boost/graph/adjacency_list.hpp"
 #include "boost/graph/topological_sort.hpp"
 #include "boost/graph/graph_traits.hpp"

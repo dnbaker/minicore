@@ -2,10 +2,15 @@
 #include "robin-hood-hashing/src/include/robin_hood.h"
 #include "pdqsort/pdqsort.h"
 #include "aesctr/wy.h"
-#include "macros.h"
+#include "./macros.h"
 #include <system_error>
 #include <cassert>
 #include <unistd.h>
+
+
+#ifndef BOOST_NO_AUTO_PTR
+#define BOOST_NO_AUTO_PTR 1
+#endif
 
 #if defined(USE_TBB)
 #  include <execution>

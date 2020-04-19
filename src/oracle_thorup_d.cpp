@@ -1,4 +1,4 @@
-#include "minocore/bicriteria.h"
+#include "minocore/optim/bicriteria.h"
 #include <iostream>
 
 int main(int argc, char **argv) {

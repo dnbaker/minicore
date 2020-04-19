@@ -1,9 +1,9 @@
-#include "minocore/applicator.h"
-#include "minocore/csc.h"
-#include "minocore/timer.h"
+#include "minocore/dist/applicator.h"
+#include "minocore/util/csc.h"
+#include "minocore/util/timer.h"
 #include <getopt.h>
 #include "blaze/util/Serialization.h"
-#include "minocore/gen_kmedian.h"
+#include "minocore/wip/gen_kmedian.h"
 
 #ifndef FT
 #define FT double

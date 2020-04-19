@@ -1,6 +1,6 @@
 #ifndef FGC_GENERALIZED_K_MEDIAN_H
 #define FGC_GENERALIZED_K_MEDIAN_H
-#include "minocore/applicator.h"
+#include "minocore/dist/applicator.h"
 
 namespace minocore {
 

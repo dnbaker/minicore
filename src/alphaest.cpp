@@ -1,5 +1,5 @@
-#include "minocore/csc.h"
-#include "minocore/applicator.h"
+#include "minocore/utility.h"
+#include "minocore/dist.h"
 
 #ifndef DENSESUB
 #define SUBMAT CompressedMatrix

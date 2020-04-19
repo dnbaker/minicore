@@ -1,8 +1,8 @@
-#include "minocore/applicator.h"
-#include "minocore/csc.h"
-#include "minocore/gen_kmedian.h"
-#include "minocore/timer.h"
+#include "minocore/dist/applicator.h"
+#include "minocore/utility.h"
+#include "minocore/wip/gen_kmedian.h"
 using namespace minocore;
+using namespace blz;
 
 #ifndef FLOAT_TYPE
 #define FLOAT_TYPE double
@@ -108,5 +108,6 @@ int main(int argc, char *argv[]) {
     ofs << "Hicks-Dyjack LLR \n";
     ofs << jsd_bnj << '\n';
     ofs.flush();
+    timer.reset();
     std::fprintf(stderr, "\n\nNumber of cells: %zu\n", nonemptyrows.size());
 }

@@ -1,9 +1,9 @@
 #ifndef FGC_JSD_H__
 #define FGC_JSD_H__
-#include "minocore/distance.h"
-#include "distmat/distmat.h"
-#include "minocore/kmeans.h"
 #include "minocore/coreset.h"
+#include "minocore/dist/distance.h"
+#include "distmat/distmat.h"
+#include "minocore/optim/kmeans.h"
 #include <boost/math/special_functions/digamma.hpp>
 #include <boost/math/special_functions/polygamma.hpp>
 #include <set>

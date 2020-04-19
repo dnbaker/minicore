@@ -1,8 +1,8 @@
 #ifndef CSC_H__
 #define CSC_H__
-#include "minocore/shared.h"
-#include "minocore/timer.h"
-#include "minocore/blaze_adaptor.h"
+#include "./shared.h"
+#include "./timer.h"
+#include "./blaze_adaptor.h"
 #include "mio/single_include/mio/mio.hpp"
 #include <fstream>
 

@@ -1,7 +1,7 @@
 #pragma once
-#include "kmeans.h"
-#include "matrix_coreset.h"
-#include "alias_sampler/div.h"
+#include "minocore/optim/kmeans.h"
+#include "minocore/coreset/matrix_coreset.h"
+#include "minocore/util/div.h"
 #include <queue>
 
 namespace minocore {

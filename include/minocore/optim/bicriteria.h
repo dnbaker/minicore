@@ -2,11 +2,11 @@
 #include <cmath>
 #include <random>
 #include <thread>
-#include "graph.h"
-#include "blaze_adaptor.h"
+#include "minocore/util/graph.h"
+#include "minocore/util/blaze_adaptor.h"
 #include <cassert>
 #include "fastiota/fastiota_ho.h"
-#include "minocore/oracle.h"
+#include "minocore/util/oracle.h"
 
 
 namespace minocore {

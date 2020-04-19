@@ -1,4 +1,4 @@
-#include "minocore/kmedian.h"
+#include "minocore/optim/kmedian.h"
 #include <chrono>
 
 auto t() {return std::chrono::high_resolution_clock::now();}
