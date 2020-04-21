@@ -2,7 +2,7 @@
 #include <cmath>
 #include <random>
 #include <thread>
-#include "minocore/util/graph.h"
+#include "minocore/graph/graph.h"
 #include "minocore/util/blaze_adaptor.h"
 #include <cassert>
 

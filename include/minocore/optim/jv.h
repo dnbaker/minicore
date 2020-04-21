@@ -4,7 +4,7 @@
 #include <queue>
 #include <vector>
 #include <iostream>
-#include "minocore/util/graph.h"
+#include "minocore/graph/graph.h"
 #include "minocore/util/blaze_adaptor.h"
 #include "minocore/optim/jv_solver.h"
 
@@ -36,22 +36,6 @@
  */
 
 namespace minocore {
-
-struct FacilityInfo {
-    size_t ncities_ = 0; // number of cities contributing
-    size_t t_ = std::numeric_limits<size_t>::max();       // expected time
-    size_t id_; //
-    INLINE bool operator<(FacilityInfo o) const {
-        return t_ < o.t_;
-    }
-};
-struct FacPQ: std::priority_queue<FacilityInfo, std::vector<FacilityInfo>> {
-    using super = std::priority_queue<FacilityInfo, std::vector<FacilityInfo>>;
-    template<typename...Args>
-    FacPQ(Args &&...args): super(std::forward<Args>(args)...) {}
-    auto       &getc()       {return this->c;}
-    const auto &getc() const {return this->c;}
-};
 
 template<typename Graph, typename Mat>
 void fill_cand_distance_mat(const Graph &x, Mat &mat, const std::vector<typename Graph::vertex_descriptor> &candidates) {
