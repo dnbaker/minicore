@@ -2,7 +2,6 @@
 #include <cmath>
 #include <random>
 #include <thread>
-#include "minocore/util/graph.h"
 #include "minocore/util/blaze_adaptor.h"
 #include <cassert>
 #include "fastiota/fastiota_ho.h"
