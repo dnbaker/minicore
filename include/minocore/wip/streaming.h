@@ -19,16 +19,40 @@
 namespace minocore {
 namespace streaming {
 
+template<typename FT, bool arith_override=false, typename=std::enable_if_t<arith_override || std::is_arithmetic_v<FT>>>
+struct UniformWeightIterator {
+    //size_t nsteps_ = 0;
+    FT operator*() const {
+        return static_cast<FT>(1);
+    }
+    UniformWeightIterator &operator++() {
+        //++nsteps_;
+        return *this;
+    }
+    UniformWeightIterator operator++(int) {
+        UniformWeightIterator ret(*this);
+        //++nsteps_;
+        return ret;
+    }
+};
+
+
+template<typename Iter=double>
+struct IterW {
+    Iter data_;
+    IterW(Iter data): data_(data) {}
+    decltype(auto) operator()() {
+        return *data_++;
+    }
+};
 
 template<typename FT=double>
-struct UniformW {
-    FT operator()() const {return FT(1.);};
+struct PointerW: public IterW<const FT *> {
+    PointerW(const FT *ptr): IterW<const FT *>(ptr) {}
 };
 template<typename FT=double>
-struct PointerW {
-    const FT *data_;
-    PointerW(const FT *data): data_(data) {}
-    FT operator()() {return *data_++;}
+struct UniformW: public IterW<UniformWeightIterator<FT>> {
+    UniformW(): IterW<UniformWeightIterator<FT>>(UniformWeightIterator<FT>()) {}
 };
 
 template<typename FT=double>
@@ -169,7 +193,7 @@ public:
 
 template<typename Item, typename Func, template<typename> class WeightGen=UniformW, typename FT=double>
 auto make_kservice_clusterer(Func func, unsigned k, size_t n, double alpha, bool uniform_weighting=is_uniform_weighting<WeightGen<FT>>::value) {
-    std::fprintf(stderr, "Is uniform ? %d\n", uniform_weighting);
+    if(uniform_weighting) std::fprintf(stderr, "Uniform weighting\n");
     return KServiceClusterer<Item, Func, FT>(func, k, n, alpha);
 }
 

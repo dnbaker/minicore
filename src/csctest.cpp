@@ -1,4 +1,4 @@
-#include "minocore/csc.h"
+#include "minocore/util/csc.h"
 
 using namespace minocore;
 int main(int argc, char *argv[]) {

@@ -7,7 +7,8 @@
 #include <optim/kmedian.h>
 
 // Discrete solvers
-#include <optim/bicriteria.h>
+#include <optim/graph_thorup.h>
+#include <optim/oracle_thorup.h>
 #include <optim/jv_solver.h>
 #include <optim/jv.h>
 #include <optim/lsearch.h>

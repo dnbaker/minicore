@@ -3,13 +3,9 @@
 #include "boost/graph/distributed/depth_first_search.hpp"
 #include "minocore/relaxed_heap.hpp"
 #endif
-#include "minocore/graph.h"
-#include "minocore/parse.h"
-#include "minocore/bicriteria.h"
+#include "minocore/utility.h"
 #include "minocore/coreset.h"
-#include "minocore/lsearch.h"
-#include "minocore/jv.h"
-#include "minocore/timer.h"
+#include "minocore/optim.h"
 #include <ctime>
 #include <getopt.h>
 #include "blaze/util/Serialization.h"

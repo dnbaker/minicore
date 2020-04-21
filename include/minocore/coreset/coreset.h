@@ -26,7 +26,7 @@ using WVec = blaze::SmallArray<FT, N, Alloc>;
 using namespace shared;
 
 enum SensitivityMethod: int {
-    BRAVERMAN_FELDMAN_LANG, // 2016, New Frameowkrs
+    BRAVERMAN_FELDMAN_LANG, // 2016, New Frameworks
     FELDMAN_LANGBERG,       // 2011, Unified Framework
     LUCIC_FAULKNER_KRAUSE_FELDMAN, // 2017, Training Gaussian Mixture Models at Scale
     VARADARAJAN_XIAO,              // 2012, On the Sensitivity of Shape-Fitting Problems

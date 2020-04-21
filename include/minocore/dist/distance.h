@@ -31,8 +31,6 @@ enum ProbDivType {
     BHATTACHARYYA_DISTANCE,
     TOTAL_VARIATION_DISTANCE,
     LLR,
-    EMD,
-    WEMD, // Weighted Earth-mover's distance
     REVERSE_MKL,
     REVERSE_POISSON,
     UWLLR, /* Unweighted Log-likelihood Ratio.
@@ -47,6 +45,10 @@ enum ProbDivType {
     PROBABILITY_COSINE_DISTANCE, // Probability distribution cosine distance
     COSINE_SIMILARITY,
     PROBABILITY_COSINE_SIMILARITY,
+    DOT_PRODUCT_SIMILARITY,
+    PROBABILITY_DOT_PRODUCT_SIMILARITY,
+    EMD,
+    WEMD, // Weighted Earth-mover's distance
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
@@ -56,6 +58,74 @@ enum ProbDivType {
 };
 
 namespace detail {
+/*
+ *
+ * Traits for each divergence, whether they need:
+ * 1. Cached data
+ *     1. Logs  (needs_logs)
+ *     2. Sqrts (needs_sqrt)
+ *     3. L2 norms (needs_l2_cache)
+ *     4. PL2 norms (needs_probability_l2_cache)
+ * 2. Whether the measure satisfies:
+ *     1. Being a Bregman divergence (is_bregman)
+ *     2. Being a distance metric (satisfies_metric)
+ *     3. Being a rho-approximate distance metric (satisfies_rho_metric)
+ *     4. D^2 sampling requirements
+ *
+ * Generating an approximate solution is fastest/easiest for those satisfying d2,
+ * where d^2 sampling can provide an approximate solution in linear time.
+ * If that is unavailable, then Jain-Vazirani/local search, optionally with
+ * Thorup-based facility location sampling, should be used for an initial approximation.
+ *
+ * After an approximate solution is generated, a coreset sampler can be built.
+ * This should be VARADARAJAN_XIAO for constant factor approximations under metrics,
+ * LUCIC_BACHEM_KRAUSE for Bregman divergences,
+ * and BRAVERMAN_FELDMAN_LANG or FELDMAN_LANGBERG for bicriteria approximations.
+ *
+ * After generating a coreset, it should be optimized.
+ * For Bregman divergences (soft or hard) and SQRL2, this is done with EM in a loop of Lloyd's.
+ * For LLR/UWLLR, this should be done in the same fashion.
+ * For L1, EM should be run, but the mean should be the componentwise median instead.
+ * For TOTAL_VARIATION_DISTANCE, it the L1 algorithm should be run on the normalized values.
+ * For all other distance measures, Jain-Vazirani and/or local search should be run.
+ *
+ */
+static constexpr INLINE bool is_bregman(ProbDivType d)  {
+    switch(d) {
+        case JSD: case MKL: case POISSON: case ITAKURA_SAITO:
+        case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO: return true;
+        default: ;
+    }
+    return false;
+}
+static constexpr INLINE bool satisfies_d2(ProbDivType d) {
+    return d == LLR || is_bregman(d) || d == SQRL2;
+}
+static constexpr INLINE bool satisfies_metric(ProbDivType d) {
+    switch(d) {
+        case L1:
+        case L2:
+        case JSM:
+        case BHATTACHARYYA_METRIC:
+        case TOTAL_VARIATION_DISTANCE:
+        case HELLINGER:
+            return true;
+        default: ;
+    }
+    return false;
+}
+static constexpr INLINE bool satisfies_rho_metric(ProbDivType d) {
+    if(satisfies_metric(d)) return true;
+    switch(d) {
+        case SQRL2: // rho = 2
+        // These three don't, technically, but using a prior can force it to follow it on real data
+        case LLR: case UWLLR: case OLLR:
+            return true;
+        default:;
+    }
+    return false;
+}
+
 static constexpr INLINE bool needs_logs(ProbDivType d)  {
     switch(d) {
         case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
@@ -139,9 +209,9 @@ static constexpr INLINE const char *prob2desc(ProbDivType d) {
         case ITAKURA_SAITO: return "Itakura-Saito divergence, a Bregman divergence [sum((a / b) - log(a / b) - 1 for a, b in zip(A, B))]";
         case REVERSE_ITAKURA_SAITO: return "Reversed Itakura-Saito divergence, a Bregman divergence";
         case COSINE_DISTANCE: return "Cosine distance: arccos(\\frac{A \\cdot B}{|A|_2 |B|_2}) / pi";
-        case PROBABILITY_COSINE_DISTANCE: return "Cosine distance of the probability vectors: arccos(\\frac{A \cdot B}{|A|_2 |B|_2}) / pi";
+        case PROBABILITY_COSINE_DISTANCE: return "Cosine distance of the probability vectors: arccos(\\frac{A \\cdot B}{|A|_2 |B|_2}) / pi";
         case COSINE_SIMILARITY: return "Cosine similarity: \\frac{A \\cdot B}{|A|_2 |B|_2}";
-        case PROBABILITY_COSINE_SIMILARITY: return "Cosine similarity of the probability vectors: \\frac{A \cdot B}{|A|_2 |B|_2}";
+        case PROBABILITY_COSINE_SIMILARITY: return "Cosine similarity of the probability vectors: \\frac{A \\cdot B}{|A|_2 |B|_2}";
         default: return "INVALID TYPE";
     }
 }

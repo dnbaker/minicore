@@ -7,6 +7,8 @@
 
 #include <minocore/optim.h>
 
+#include <minocore/hash.h>
+
 #include <minocore/wip.h>
 
 #endif

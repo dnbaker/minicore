@@ -184,6 +184,13 @@ public:
     auto pcosine_distance(size_t i, size_t j) const {
         return std::acos(cosine_similarity(i, j)) * PI_INV;
     }
+    auto dotproduct_distance(size_t i, size_t j) const {
+        return blz::dot(weighted_row(i), weighted_row(j)) * l2norm_cache_->operator[](i) * l2norm_cache_->operator[](j);
+    }
+    auto pdotproduct_distance(size_t i, size_t j) const {
+        return blz::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
+    }
+
 
     // Accessors
     decltype(auto) weighted_row(size_t ind) const {
@@ -415,18 +422,18 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto bhattacharyya_sim(size_t i, const OT &o, const OT2 &osqrt) const {
-        throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
         return sqrdata_ ? blz::dot(sqrtrow(i), osqrt)
                         : blz::sum(blz::sqrt(row(i) * o));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto bhattacharyya_sim(size_t i, const OT &o) const {
-        throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
         return bhattacharyya_sim(i, o, blz::sqrt(o));
     }
     template<typename...Args>
     auto bhattacharyya_distance(Args &&...args) const {
-        throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
         return -std::log(bhattacharyya_sim(std::forward<Args>(args)...));
     }
     template<typename...Args>
