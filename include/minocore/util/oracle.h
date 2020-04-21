@@ -78,14 +78,14 @@ struct CachingOracleWrapper {
     using output_type = std::decay_t<decltype(std::declval<Oracle>()(0,0))>;
     using KeyType = PairKeyType<IT>;
     const Oracle &oracle_;
-    Map<typename KeyType::Type, output_type> map_;
+    mutable Map<typename KeyType::Type, output_type> map_;
 private:
-    std::shared_mutex mut_;
+    mutable std::shared_mutex mut_;
     using iterator_type = decltype(map_.find(std::declval<typename KeyType::Type>()));
     // TODO: use two kinds of locks
 public:
     CachingOracleWrapper(const Oracle &oracle): oracle_(oracle) {}
-    output_type operator()(IT lh, IT rh) {
+    output_type operator()(IT lh, IT rh) const {
         if constexpr(symmetric) {
             if(lh > rh) std::swap(lh, rh);
         }

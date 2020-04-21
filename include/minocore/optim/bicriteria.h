@@ -1,3 +1,3 @@
 #pragma once
-#include "minocore/oracle_thorup.h"
-#include "minocore/graph_thorup.h"
+#include "minocore/optim/oracle_thorup.h"
+#include "minocore/optim/graph_thorup.h"
