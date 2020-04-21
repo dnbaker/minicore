@@ -1,13 +1,14 @@
 #pragma once
-#include "kmeans.h"
-#include "matrix_coreset.h"
-#include "alias_sampler/div.h"
+#include "minocore/coreset/matrix_coreset.h"
+#include "minocore/util/div.h"
+#include "minocore/util/blaze_adaptor.h"
 #include <queue>
 
 namespace minocore {
 namespace coresets {
 using std::partial_sum;
 using blz::L2Norm;
+using blz::sqrL2Norm;
 using blz::push_back;
 
 
@@ -16,7 +17,7 @@ using blz::push_back;
  * Greedy, provable 2-approximate solution
  * T. F. Gonzalez. Clustering to minimize the maximum intercluster distance. Theoretical Computer Science, 38:293-306, 1985.
  */
-template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 std::vector<IT>
 kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), size_t maxdest=0)
@@ -109,7 +110,7 @@ struct bicriteria_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<st
 // \gamma = z / n
 */
 
-template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 bicriteria_result_t<IT>
 kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
@@ -262,7 +263,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t k, double eps,
 // \gamma = z / n
 */
 
-template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 std::vector<IT>
 kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double eps,
@@ -312,7 +313,7 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
     return ret;
 }// kcenter_greedy_2approx_outliers
 // Algorithm 3 (coreset construction)
-template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 coresets::IndexCoreset<IT, FT>
 kcenter_coreset(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double mu=.5,

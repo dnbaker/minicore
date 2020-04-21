@@ -4,119 +4,22 @@
 #include <cassert>
 #include <mutex>
 #include <numeric>
-#include "matrix_coreset.h"
-#include "timer.h"
-#include "div.h"
+#include "minocore/coreset/matrix_coreset.h"
+#include "minocore/util/oracle.h"
+#include "minocore/util/timer.h"
+#include "minocore/util/div.h"
 
 namespace minocore {
-using blz::rowiterator;
 
 
 
-struct MatrixLookup {};
-
-template<typename Mat>
-struct MatrixMetric {
-    /*
-     *  This calculate the distance between item i and item j in this problem
-     *  by simply indexing the given array.
-     *  This requires precalculation of the array (and space) but saves computation.
-     *  By convention, use row index = facility, column index = point
-     */
-    const Mat &mat_;
-    MatrixMetric(const Mat &mat): mat_(mat) {}
-    auto operator()(size_t i, size_t j) const {
-        return mat_(i, j);
-    }
-};
-
-template<typename Mat, typename Dist>
-struct MatrixDistMetric {
-    /*
-     *  This calculate the distance between item i and item j in this problem
-     *  by calculating the distances between row i and row j under the given distance metric.
-     *  This requires precalculation of the array (and space) but saves computation.
-     *
-     */
-    const Mat &mat_;
-    const Dist dist_;
-
-    MatrixDistMetric(const Mat &mat, Dist dist): mat_(mat), dist_(std::move(dist)) {}
-
-    auto operator()(size_t i, size_t j) const {
-        return dist_(row(mat_, i, blaze::unchecked), row(mat_, j, blaze::unchecked));
-    }
-};
-template<typename Iter, typename Dist>
-struct IndexDistMetric {
-    /*
-     * Adapts random access iterator to use norms between dereferenced quantities.
-     */
-    const Iter iter_;
-    const Dist &dist_;
-
-    IndexDistMetric(const Iter iter, const Dist &dist): iter_(iter), dist_(std::move(dist)) {}
-
-    auto operator()(size_t i, size_t j) const {
-        return dist_(iter_[i], iter_[j]);
-    }
-};
-
-template<typename Iter>
-struct BaseOperand {
-    using DerefType = decltype((*std::declval<Iter>()));
-    using TwiceDerefedType = std::remove_reference_t<decltype(std::declval<DerefType>().operand())>;
-    using type = TwiceDerefedType;
-};
-
-
-template<typename Iter>
-struct IndexDistMetric<Iter, MatrixLookup> {
-    using Operand = typename BaseOperand<Iter>::type;
-    using ET = typename Operand::ElementType;
-    /* Specialization of above for MatrixLookup
-     *
-     *
-     */
-    using Dist = MatrixLookup;
-    const Operand &mat_;
-    const Dist dist_;
-    //TD<Operand> to2;
-
-    IndexDistMetric(const Iter iter, Dist dist): mat_((*iter).operand()), dist_(std::move(dist)) {}
-
-    ET operator()(size_t i, size_t j) const {
-        assert(i < mat_.rows());
-        assert(j < mat_.columns());
-        return mat_(i, j);
-        //return iter_[i][j];
-    }
-};
-
-
-
-template<typename Iter, typename Dist>
-auto make_index_dm(const Iter iter, const Dist &dist) {
-    return IndexDistMetric<Iter, Dist>(iter, dist);
-}
-template<typename Mat, typename Dist>
-auto make_matrix_dm(const Mat &mat, const Dist &dist) {
-    return MatrixDistMetric<Mat, Dist>(mat, dist);
-}
-template<typename Mat>
-auto make_matrix_m(const Mat &mat) {
-    return MatrixMetric<Mat>(mat);
-}
 
 namespace coresets {
-
 
 
 using std::partial_sum;
 using blz::distance::sqrL2Norm;
 
-template<typename C>
-using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
 
 
 /*
@@ -191,7 +94,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
 }
 
-template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr) {
@@ -236,11 +139,11 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
 {
     if(m == 0) throw std::invalid_argument("m must be nonzero");
     schism::Schismatic<IT> div(np);
-    flat_hash_set<IT> centers{div.mod(IT(rng()))};
+    shared::flat_hash_set<IT> centers{div.mod(IT(rng()))};
     if(*centers.begin() > np) throw std::runtime_error("ZOMGSDFD");
     // Helper function for minimum distance
     auto mindist = [&centers,&oracle](auto newind) {
-        typename flat_hash_set<IT>::const_iterator it = centers.begin(), end = centers.end();
+        typename shared::flat_hash_set<IT>::const_iterator it = centers.begin(), end = centers.end();
         assert(centers.size());
         auto dist = oracle(*it, newind);
         while(++it != end) {
@@ -277,7 +180,7 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
     }
     return std::vector<IT>(centers.begin(), centers.end());
 }
-template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 std::vector<IT>
 kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm=Norm()) {
@@ -325,13 +228,12 @@ kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
     return ret;
 }
 
-#define DUMBAVE 1
-
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double, typename Functor=blz::sqrL2Norm>
 double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
                        CMatrixType &centers, MatrixType &data,
                        const Functor &func=Functor(),
-                       const WFT *weights=nullptr)
+                       const WFT *weights=nullptr,
+                       bool use_moving_average=false)
 {
     static_assert(std::is_floating_point_v<WFT>, "WTF must be floating point for weighted kmeans");
     // make sure this is only rowwise/rowMajor
@@ -344,38 +246,63 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     };
     OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes = std::make_unique<std::mutex[]>(centers.rows());)
     centers = static_cast<typename CMatrixType::ElementType>(0.);
-    std::memset(counts.data(), 0, counts.size() * sizeof(counts[0]));
+    std::fill(counts.data(), counts.data() + counts.size(), WFT(0.));
     assert(blz::sum(centers) == 0.);
     bool centers_reassigned;
     std::unique_ptr<typename MatrixType::ElementType[]> costs;
     get_assignment_counts:
     centers_reassigned = false;
-
-    OMP_PRAGMA("omp parallel for schedule(dynamic)")
-    for(size_t i = 0; i < nr; ++i) {
-        assert(assignments[i] < centers.rows());
-        auto asn = assignments[i];
-        auto dr = row(data, i BLAZE_CHECK_DEBUG);
-        auto cr = row(centers, asn BLAZE_CHECK_DEBUG);
-        const auto w = getw(i);
-        {
-            OMP_ONLY(std::lock_guard<std::mutex> lg(mutexes[asn]);)
-            if(w == 1.) {
-                blz::serial(cr.operator+=(dr));
+    /*
+     *
+     * The moving average is supposed to be 
+     */
+    if(!use_moving_average) {
+        OMP_PRAGMA("omp parallel for schedule(dynamic)")
+        for(size_t i = 0; i < nr; ++i) {
+            assert(assignments[i] < centers.rows());
+            auto asn = assignments[i];
+            auto dr = row(data, i BLAZE_CHECK_DEBUG);
+            auto cr = row(centers, asn BLAZE_CHECK_DEBUG);
+            const auto w = getw(i);
+            {
+                OMP_ONLY(std::lock_guard<std::mutex> lg(mutexes[asn]);)
+                if(w == 1.) {
+                    blz::serial(cr.operator+=(dr));
+                }
+                else blz::serial(cr.operator+=(dr * w));
             }
-            else blz::serial(cr.operator+=(dr * w));
+            OMP_ATOMIC
+            counts[asn] += w;
         }
-        OMP_ATOMIC
-        counts[asn] += w;
+        OMP_PFOR
+        for(size_t i = 0; i < centers.rows(); ++i)
+            row(centers, i BLAZE_CHECK_DEBUG) *= (1. / counts[i]);
+    } else {
+        OMP_PRAGMA("omp parallel for schedule(dynamic)")
+        for(size_t i = 0; i < nr; ++i) {
+            assert(assignments[i] < centers.rows());
+            auto asn = assignments[i];
+            auto dr = row(data, i BLAZE_CHECK_DEBUG);
+            auto cr = row(centers, asn BLAZE_CHECK_DEBUG);
+            const auto w = getw(i);
+            {
+                OMP_ONLY(std::lock_guard<std::mutex> lg(mutexes[asn]);)
+                auto oldw = counts[asn];
+                if(!oldw) {
+                    cr = dr;
+                } else {
+                    cr += (dr - cr) * (w / (oldw + w));
+                }
+                counts[asn] = oldw + w;
+            }
+        }
     }
+#ifndef NDEBUG
     std::fprintf(stderr, "Assigned cluster centers\n");
+#endif
     for(size_t i = 0; i < centers.rows(); ++i) {
         VERBOSE_ONLY(std::fprintf(stderr, "center %zu has count %g\n", i, counts[i]);)
-        if(counts[i]) {
-#ifdef DUMBAVE
-            row(centers, i BLAZE_CHECK_DEBUG) *= (1. / counts[i]);
-#endif
-        } else {
+        if(!counts[i]) {
             if(!costs) {
                 std::srand(std::time(nullptr));
                 costs.reset(new typename MatrixType::ElementType[nr]);
@@ -400,12 +327,10 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     }
     if(centers_reassigned)
         goto get_assignment_counts;
-    std::fprintf(stderr, "Assigning to centers\n");
     // 2. Assign centers
     double total_loss = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:total_loss)")
     for(size_t i = 0; i < nr; ++i) {
-        DBG_ONLY(const auto tid = OMP_ELSE(omp_get_thread_num(), 1);)
         auto dr = row(data, i BLAZE_CHECK_DEBUG);
         auto lhr = row(centers, 0 BLAZE_CHECK_DEBUG);
         auto dist = blz::serial(func(dr, lhr));
@@ -420,7 +345,6 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         }
         assignments[i] = label;
         total_loss += getw(i) * dist;
-        DBG_ONLY(if(i % (nr / 10) == 0) std::fprintf(stderr, "tid %d at i = %zu/%zu\n", tid, i, nr);)
     }
     std::fprintf(stderr, "total loss: %g\n", total_loss);
     if(std::isnan(total_loss)) total_loss = std::numeric_limits<decltype(total_loss)>::infinity();
@@ -433,14 +357,15 @@ double lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
                 CMatrixType &centers, MatrixType &data,
                 double tolerance=0., size_t maxiter=-1,
                 const Functor &func=Functor(),
-                const WFT *weights=nullptr)
+                const WFT *weights=nullptr,
+                bool use_moving_average=false)
 {
     if(tolerance < 0.) throw 1;
     size_t iternum = 0;
     double oldloss = std::numeric_limits<double>::max(), newloss;
     for(;;) {
         std::fprintf(stderr, "Starting iter %zu\n", iternum);
-        newloss = lloyd_iteration(assignments, counts, centers, data, func, weights);
+        newloss = lloyd_iteration(assignments, counts, centers, data, func, weights, use_moving_average);
         double change_in_cost = std::abs(oldloss - newloss) / std::min(oldloss, newloss);
         if(iternum++ == maxiter || change_in_cost <= tolerance) {
             std::fprintf(stderr, "Change in cost from %g to %g is %g\n", oldloss, newloss, change_in_cost);
@@ -548,7 +473,7 @@ double mb_lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
 
 template<typename Iter,
          typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>,
-         typename FT=ContainedTypeFromIterator<Iter>, typename Distance=sqrL2Norm>
+         typename FT=shared::ContainedTypeFromIterator<Iter>, typename Distance=sqrL2Norm>
 auto kmeans_coreset(Iter start, Iter end,
                     size_t k, RNG &rng,
                     size_t cs_size,

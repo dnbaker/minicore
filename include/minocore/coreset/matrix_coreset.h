@@ -1,5 +1,5 @@
 #pragma once
-#include "coreset.h"
+#include "minocore/coreset/coreset.h"
 
 namespace minocore {
 namespace coresets {

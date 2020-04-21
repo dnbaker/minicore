@@ -1,16 +1,17 @@
 #ifndef FGC_CLUSTERING_H__
 #define FGC_CLUSTERING_H__
-#include "minocore/distance.h"
-#include "minocore/applicator.h"
+#include "minocore/dist.h"
 
 namespace minocore {
 
 namespace clustering {
 
+#if 0
 enum ClusteringAssignmentType: size_t {
     HARD
     SOFT
 };
+#endif
 
 }
 

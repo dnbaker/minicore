@@ -1,4 +1,4 @@
-#include "minocore/streaming.h"
+#include "minocore/wip/streaming.h"
 
 struct exfunc {
     template<typename...A>

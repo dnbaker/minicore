@@ -1,8 +1,8 @@
 #ifndef CSC_H__
 #define CSC_H__
-#include "minocore/shared.h"
-#include "minocore/timer.h"
-#include "minocore/blaze_adaptor.h"
+#include "./shared.h"
+#include "./timer.h"
+#include "./blaze_adaptor.h"
 #include "mio/single_include/mio/mio.hpp"
 #include <fstream>
 
@@ -61,7 +61,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
     std::string shape    = prefix + "shape.file";
     std::FILE *ifp = std::fopen(shape.data(), "rb");
     uint32_t dims[2];
-    std::fread(dims, sizeof(uint32_t), 2, ifp);
+    if(std::fread(dims, sizeof(uint32_t), 2, ifp) != 2) throw std::runtime_error("Failed to read dims from file");
     uint32_t nfeat = dims[0], nsamples = dims[1];
     std::fprintf(stderr, "nfeat: %u. nsample: %u\n", nfeat, nsamples);
     std::fclose(ifp);

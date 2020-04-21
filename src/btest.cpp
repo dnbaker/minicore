@@ -1,5 +1,5 @@
-#include "blaze_adaptor.h"
-#include "gmm.h"
+#include "minocore/util/blaze_adaptor.h"
+#include "minocore/coreset/gmm.h"
 #include <iostream>
 
 int main() {

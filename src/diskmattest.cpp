@@ -1,11 +1,11 @@
-#include "minocore/distance.h"
-#include "minocore/diskmat.h"
-#include "minocore/applicator.h"
+#include "minocore/dist.h"
+#include "minocore/util/diskmat.h"
 
 using namespace minocore;
 using namespace blz;
 
 int main() {
+    std::srand(0);
     unsigned nrows = 50, ncol = 200;
     const char *fn = "./zomg.dat";
     {
@@ -19,11 +19,12 @@ int main() {
     ~dm = 0;
     assert(dm(1, 4) == 0.);
     assert(blaze::sum(~dm) == 0);
-    randomize(~dm);
-    ~dm = abs(~dm + 1e-15);
+    ~dm = blaze::generate((~dm).rows(), (~dm).columns(), [](auto x, auto y) {
+        wy::WyRand<uint64_t, 2> rng((uint64_t(x) << 32) | y);
+        std::uniform_real_distribution<float> urd;
+        return urd(rng);
+     });
     auto r1 = row(dm, 1), r0 = row(dm, 0);
-    randomize(r1);
-    randomize(r0);
     r1[0] = 0.;
     r0[0] = 0.;
     r1[4] = 0.;
@@ -57,6 +58,7 @@ int main() {
     std::cout << r1;
     std::cout << r0;
     std::fprintf(stderr, "Wasserstein distance between rows 1 and 2: %g\n", distance::p_wasserstein(r1, r0));
+    std::fprintf(stderr, "Wasserstein distance between rows 1 and 2: %g\n", distance::network_p_wasserstein(r1, r0));
 #if 0
     std::fprintf(stderr, "multinomial jsd: %f\n", distance::multinomial_jsd(r1, r0));
     std::fprintf(stderr, "multinomial jsd: %f\n", distance::multinomial_jsd(c1, c0));

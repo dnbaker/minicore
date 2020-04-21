@@ -1,6 +1,6 @@
 #ifndef CARATHEODORY_CORESET_H__
 #define CARATHEODORY_CORESET_H__
-#include "blaze_adaptor.h"
+#include "minocore/util/blaze_adaptor.h"
 
 #if 0
 

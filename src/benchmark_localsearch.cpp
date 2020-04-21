@@ -1,11 +1,6 @@
-#include "minocore/graph.h"
-#include "minocore/geo.h"
-#include "minocore/parse.h"
-#include "minocore/bicriteria.h"
+#include "minocore/utility.h"
 #include "minocore/coreset.h"
-#include "minocore/lsearch.h"
-#include "minocore/jv.h"
-#include "minocore/timer.h"
+#include "minocore/optim.h"
 #include "blaze/util/Serialization.h"
 
 void usage(const char *x) {

@@ -5,7 +5,7 @@
 #include <set>
 
 
-#include "blaze_adaptor.h"
+#include "minocore/util/blaze_adaptor.h"
 
 #ifndef BOOST_NO_AUTO_PTR
 #define BOOST_NO_AUTO_PTR 1
@@ -31,8 +31,6 @@ enum ProbDivType {
     BHATTACHARYYA_DISTANCE,
     TOTAL_VARIATION_DISTANCE,
     LLR,
-    EMD,
-    WEMD, // Weighted Earth-mover's distance
     REVERSE_MKL,
     REVERSE_POISSON,
     UWLLR, /* Unweighted Log-likelihood Ratio.
@@ -43,6 +41,14 @@ enum ProbDivType {
     OLLR,       // Old LLR, deprecated (included for compatibility/comparisons)
     ITAKURA_SAITO, // \sum_{i=1}^D[\frac{a_i}{b_i} - \log{\frac{a_i}{b_i}} - 1]
     REVERSE_ITAKURA_SAITO, // Reverse I-S
+    COSINE_DISTANCE,             // Cosine distance
+    PROBABILITY_COSINE_DISTANCE, // Probability distribution cosine distance
+    COSINE_SIMILARITY,
+    PROBABILITY_COSINE_SIMILARITY,
+    DOT_PRODUCT_SIMILARITY,
+    PROBABILITY_DOT_PRODUCT_SIMILARITY,
+    EMD,
+    WEMD, // Weighted Earth-mover's distance
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
@@ -50,8 +56,77 @@ enum ProbDivType {
     PSM = JSM,
     IS=ITAKURA_SAITO
 };
+
 namespace detail {
-static constexpr INLINE bool  needs_logs(ProbDivType d)  {
+/*
+ *
+ * Traits for each divergence, whether they need:
+ * 1. Cached data
+ *     1. Logs  (needs_logs)
+ *     2. Sqrts (needs_sqrt)
+ *     3. L2 norms (needs_l2_cache)
+ *     4. PL2 norms (needs_probability_l2_cache)
+ * 2. Whether the measure satisfies:
+ *     1. Being a Bregman divergence (is_bregman)
+ *     2. Being a distance metric (satisfies_metric)
+ *     3. Being a rho-approximate distance metric (satisfies_rho_metric)
+ *     4. D^2 sampling requirements
+ *
+ * Generating an approximate solution is fastest/easiest for those satisfying d2,
+ * where d^2 sampling can provide an approximate solution in linear time.
+ * If that is unavailable, then Jain-Vazirani/local search, optionally with
+ * Thorup-based facility location sampling, should be used for an initial approximation.
+ *
+ * After an approximate solution is generated, a coreset sampler can be built.
+ * This should be VARADARAJAN_XIAO for constant factor approximations under metrics,
+ * LUCIC_BACHEM_KRAUSE for Bregman divergences,
+ * and BRAVERMAN_FELDMAN_LANG or FELDMAN_LANGBERG for bicriteria approximations.
+ *
+ * After generating a coreset, it should be optimized.
+ * For Bregman divergences (soft or hard) and SQRL2, this is done with EM in a loop of Lloyd's.
+ * For LLR/UWLLR, this should be done in the same fashion.
+ * For L1, EM should be run, but the mean should be the componentwise median instead.
+ * For TOTAL_VARIATION_DISTANCE, it the L1 algorithm should be run on the normalized values.
+ * For all other distance measures, Jain-Vazirani and/or local search should be run.
+ *
+ */
+static constexpr INLINE bool is_bregman(ProbDivType d)  {
+    switch(d) {
+        case JSD: case MKL: case POISSON: case ITAKURA_SAITO:
+        case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO: return true;
+        default: ;
+    }
+    return false;
+}
+static constexpr INLINE bool satisfies_d2(ProbDivType d) {
+    return d == LLR || is_bregman(d) || d == SQRL2;
+}
+static constexpr INLINE bool satisfies_metric(ProbDivType d) {
+    switch(d) {
+        case L1:
+        case L2:
+        case JSM:
+        case BHATTACHARYYA_METRIC:
+        case TOTAL_VARIATION_DISTANCE:
+        case HELLINGER:
+            return true;
+        default: ;
+    }
+    return false;
+}
+static constexpr INLINE bool satisfies_rho_metric(ProbDivType d) {
+    if(satisfies_metric(d)) return true;
+    switch(d) {
+        case SQRL2: // rho = 2
+        // These three don't, technically, but using a prior can force it to follow it on real data
+        case LLR: case UWLLR: case OLLR:
+            return true;
+        default:;
+    }
+    return false;
+}
+
+static constexpr INLINE bool needs_logs(ProbDivType d)  {
     switch(d) {
         case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: case REVERSE_ITAKURA_SAITO: return true;
@@ -60,6 +135,13 @@ static constexpr INLINE bool  needs_logs(ProbDivType d)  {
     return false;
 }
 
+static constexpr INLINE bool needs_l2_cache(ProbDivType d) {
+    return d == COSINE_DISTANCE;
+}
+
+static constexpr INLINE bool needs_probability_l2_cache(ProbDivType d) {
+    return d == PROBABILITY_COSINE_DISTANCE;
+}
 
 static constexpr INLINE bool  needs_sqrt(ProbDivType d) {
     return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
@@ -69,6 +151,8 @@ static constexpr INLINE bool is_symmetric(ProbDivType d) {
     switch(d) {
         case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
         case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
+        case COSINE_DISTANCE: case COSINE_SIMILARITY:
+        case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
             return true;
         default: ;
     }
@@ -96,6 +180,10 @@ static constexpr INLINE const char *prob2str(ProbDivType d) {
         case REVERSE_ITAKURA_SAITO: return "REVERSE_ITAKURA_SAITO";
         case SQRL2: return "SQRL2";
         case TOTAL_VARIATION_DISTANCE: return "TOTAL_VARIATION_DISTANCE";
+        case COSINE_DISTANCE: return "COSINE_DISTANCE";
+        case PROBABILITY_COSINE_DISTANCE: return "PROBABILITY_COSINE_DISTANCE";
+        case COSINE_SIMILARITY: return "COSINE_SIMILARITY";
+        case PROBABILITY_COSINE_SIMILARITY: return "PROBABILITY_COSINE_SIMILARITY";
         default: return "INVALID TYPE";
     }
 }
@@ -120,6 +208,10 @@ static constexpr INLINE const char *prob2desc(ProbDivType d) {
         case TOTAL_VARIATION_DISTANCE: return "Total Variation Distance: 1/2 sum_{i in D}(|x_i - y_i|)";
         case ITAKURA_SAITO: return "Itakura-Saito divergence, a Bregman divergence [sum((a / b) - log(a / b) - 1 for a, b in zip(A, B))]";
         case REVERSE_ITAKURA_SAITO: return "Reversed Itakura-Saito divergence, a Bregman divergence";
+        case COSINE_DISTANCE: return "Cosine distance: arccos(\\frac{A \\cdot B}{|A|_2 |B|_2}) / pi";
+        case PROBABILITY_COSINE_DISTANCE: return "Cosine distance of the probability vectors: arccos(\\frac{A \\cdot B}{|A|_2 |B|_2}) / pi";
+        case COSINE_SIMILARITY: return "Cosine similarity: \\frac{A \\cdot B}{|A|_2 |B|_2}";
+        case PROBABILITY_COSINE_SIMILARITY: return "Cosine similarity of the probability vectors: \\frac{A \\cdot B}{|A|_2 |B|_2}";
         default: return "INVALID TYPE";
     }
 }
@@ -146,7 +238,12 @@ static void print_measures() {
         WASSERSTEIN,
         PSD,
         PSM,
-        ITAKURA_SAITO
+        ITAKURA_SAITO,
+        REVERSE_ITAKURA_SAITO,
+        COSINE_DISTANCE,
+        COSINE_SIMILARITY,
+        PROBABILITY_COSINE_DISTANCE,
+        PROBABILITY_COSINE_SIMILARITY,
     };
     for(const auto measure: measures) {
         std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
@@ -154,153 +251,6 @@ static void print_measures() {
 }
 } // detail
 
-
-#define DECL_DIST(norm) \
-template<typename FT, bool SO>\
-INLINE auto norm##Dist(const blaze::DynamicVector<FT, SO> &lhs, const blaze::DynamicVector<FT, SO> &rhs) {\
-    return norm##Norm(rhs - lhs);\
-}\
-template<typename VT, typename VT2, bool SO>\
-INLINE auto norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, SO> &rhs) {\
-    return norm##Norm(~rhs - ~lhs);\
-}\
-\
-template<typename VT, typename VT2, bool SO>\
-INLINE auto norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, !SO> &rhs) {\
-    return norm##Norm(~rhs - trans(~lhs));\
-}\
-\
-template<typename VT, typename VT2, bool SO>\
-INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, SO> &rhs) {\
-    return norm##Norm(~rhs - ~lhs);\
-}\
-\
-template<typename VT, typename VT2, bool SO>\
-INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, !SO> &rhs) {\
-    return norm##Norm(~rhs - trans(~lhs));\
-}\
-
-
-DECL_DIST(l1)
-DECL_DIST(l2)
-DECL_DIST(sqr)
-DECL_DIST(l3)
-DECL_DIST(l4)
-DECL_DIST(max)
-DECL_DIST(inf)
-#undef DECL_DIST
-template<typename FT, typename A, typename OA>
-inline auto l2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
-    return l2Dist(CustomVector<const FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
-                  CustomVector<const FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
-}
-
-template<typename FT, typename FT2, bool SO>
-inline auto sqrL2Dist(const blz::Vector<FT, SO> &v1, const blz::Vector<FT2, SO> &v2) {
-    return sqrDist(~v1, ~v2);
-}
-template<typename FT, blaze::AlignmentFlag AF, blaze::PaddingFlag PF, bool SO, blaze::AlignmentFlag OAF, blaze::PaddingFlag OPF, bool OSO>
-inline auto sqrL2Dist(const blz::CustomVector<FT, AF, PF, SO> &v1, const blz::CustomVector<FT, OAF, OPF, OSO> &v2) {
-    return sqrDist(v1, v2);
-}
-
-template<typename FT, typename A, typename OA>
-inline auto sqrL2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
-    return sqrL2Dist(CustomVector<const FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
-                     CustomVector<const FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
-}
-
-template<typename FT, typename A, typename OA>
-INLINE auto sqrDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
-    return sqrL2Dist(lhs, rhs);
-}
-
-template<typename FT, typename A, typename OA>
-inline auto l1Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
-    return l1Dist(CustomVector<const FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
-                  CustomVector<const FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
-}
-template<typename FT, typename A, typename OA>
-inline auto l3Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
-    return l3Dist(CustomVector<const FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
-                  CustomVector<const FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
-}
-
-template<typename FT, typename A, typename OA>
-inline auto l4Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
-    return l4Dist(CustomVector<FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
-                  CustomVector<FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
-}
-template<typename FT, typename A, typename OA>
-inline auto maxDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {
-    return maxDist(CustomVector<FT, blaze::unaligned, blaze::unpadded>(lhs.data(), lhs.size()),
-                  CustomVector<FT, blaze::unaligned, blaze::unpadded>(rhs.data(), rhs.size()));
-}
-template<typename FT, typename A, typename OA>
-inline auto infDist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs) {return maxDist(lhs, rhs);}
-
-template<typename Base>
-struct sqrBaseNorm: public Base {
-    template<typename C1, typename C2>
-    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
-        return std::pow(Base::operator()(lhs, rhs), 2);
-    }
-};
-struct L1Norm {
-    template<typename C1, typename C2>
-    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
-        return l1Dist(lhs, rhs);
-    }
-};
-struct L2Norm {
-    template<typename C1, typename C2>
-    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
-        return l2Dist(lhs, rhs);
-    }
-};
-struct sqrL2Norm {
-    template<typename C1, typename C2>
-    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
-        return sqrDist(lhs, rhs);
-    }
-};
-struct L3Norm {
-    template<typename C1, typename C2>
-    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
-        return l3Dist(lhs, rhs);
-    }
-};
-struct L4Norm {
-    template<typename C1, typename C2>
-    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
-        return l4Dist(lhs, rhs);
-    }
-};
-struct maxNormFunctor {
-    template<typename C1, typename C2>
-    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
-        return maxDist(lhs, rhs);
-    }
-};
-struct infNormFunction: maxNormFunctor{};
-struct sqrL1Norm: sqrBaseNorm<L1Norm> {};
-struct sqrL3Norm: sqrBaseNorm<L3Norm> {};
-struct sqrL4Norm: sqrBaseNorm<L4Norm> {};
-struct sqrMaxNorm: sqrBaseNorm<maxNormFunctor> {};
-
-
-// For D^2 sampling.
-template<typename BaseDist>
-struct SqrNormFunctor: public BaseDist {
-    template<typename...Args> SqrNormFunctor(Args &&...args): BaseDist(std::forward<Args>(args)...) {}
-    template<typename C1, typename C2>
-    INLINE constexpr auto operator()(const C1 &lhs, const C2 &rhs) const {
-        auto basedist = BaseDist::operator()(lhs, rhs);
-        return basedist * basedist;
-    }
-};
-template<>
-struct SqrNormFunctor<L2Norm>: public sqrL2Norm {};
 
 /*
  *
@@ -532,7 +482,7 @@ inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &
 
 template<typename VT, bool SO, typename VT2>
 CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
-network_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1., size_t maxiter=10000)
+network_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1.)
 {
     std::fprintf(stderr, "Warning: network_p_wasserstein seems to have a bug. Do not use.\n");
     auto &xref = ~x;

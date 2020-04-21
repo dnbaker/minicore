@@ -2,10 +2,15 @@
 #include "robin-hood-hashing/src/include/robin_hood.h"
 #include "pdqsort/pdqsort.h"
 #include "aesctr/wy.h"
-#include "macros.h"
+#include "./macros.h"
 #include <system_error>
 #include <cassert>
 #include <unistd.h>
+
+
+#ifndef BOOST_NO_AUTO_PTR
+#define BOOST_NO_AUTO_PTR 1
+#endif
 
 #if defined(USE_TBB)
 #  include <execution>
@@ -70,6 +75,8 @@ struct dumbrange {
 template<typename T>
 inline dumbrange<T> make_dumbrange(T beg, T end) {return dumbrange<T>(beg, end);}
 
+template<typename C>
+using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
 
 } // shared
 } // minocore

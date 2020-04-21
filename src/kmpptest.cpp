@@ -1,6 +1,6 @@
-#include "kmeans.h"
-#include "kcenter.h"
-#include "applicator.h"
+#include "minocore/optim/kmeans.h"
+#include "minocore/optim/kcenter.h"
+#include "minocore/dist/applicator.h"
 #include <new>
 #include <chrono>
 #include <thread>
@@ -30,11 +30,11 @@ void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {
     auto maxv = *std::max_element(cs.indices_.begin(), cs.indices_.end());
     std::fprintf(stderr, "max index: %u\n", unsigned(maxv));
     auto stop = t();
-    std::fprintf(stderr, "kcenter coreset took %gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "kcenter coreset took %0.12gs\n", double((stop - start).count()) / 1e9);
     start = t();
     auto csmat = index2matrix(cs, mat);
     stop = t();
-    std::fprintf(stderr, "kcenter compacting to coreset took %gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "kcenter compacting to coreset took %0.12gs\n", double((stop - start).count()) / 1e9);
 }
 
 int main(int argc, char *argv[]) {
@@ -74,14 +74,14 @@ int main(int argc, char *argv[]) {
     auto start = t();
     auto centers = kmeanspp(ptr, ptr + n, gen, npoints);
     auto stop = t();
-    std::fprintf(stderr, "Time for kmeans++: %gs\n", double((stop - start).count()) / 1e9);
-    std::fprintf(stderr, "cost for kmeans++: %g\n", std::accumulate(std::get<2>(centers).begin(), std::get<2>(centers).end(), 0.));
+    std::fprintf(stderr, "Time for kmeans++: %0.12gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "cost for kmeans++: %0.12g\n", std::accumulate(std::get<2>(centers).begin(), std::get<2>(centers).end(), 0.));
 
     // centers contains [centers, assignments, distances]
     start = t();
     auto kmc2_centers = kmc2(ptr, ptr + n, gen, npoints, 200);
     stop = t();
-    std::fprintf(stderr, "Time for kmc^2: %gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "Time for kmc^2: %0.12gs\n", double((stop - start).count()) / 1e9);
     auto kmccosts = get_oracle_costs([&](size_t i, size_t j) {
         return blz::sqrL2Dist(ptr[i], ptr[j]);
     }, n, kmc2_centers);
@@ -89,24 +89,24 @@ int main(int argc, char *argv[]) {
     start = t();
     auto kc = kcenter_greedy_2approx(ptr, ptr + n, gen, npoints);
     stop = t();
-    std::fprintf(stderr, "Time for kcenter_greedy_2approx: %gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "Time for kcenter_greedy_2approx: %0.12gs\n", double((stop - start).count()) / 1e9);
     start = t();
     auto centers2 = kmeanspp(mat, gen, npoints, blz::L1Norm());
     stop = t();
-    std::fprintf(stderr, "Time for kmeans++ on L1 norm on matrix: %gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "Time for kmeans++ on L1 norm on matrix: %0.12gs\n", double((stop - start).count()) / 1e9);
     test_kccs(mat, gen, npoints, eps);
     //for(const auto v: centers) std::fprintf(stderr, "Woo: %u\n", v);
     start = t();
     auto kmppmcs = kmeans_matrix_coreset(mat, npoints, gen, std::min(size_t(npoints * 10), mat.rows() / 2));
     stop = t();
-    std::fprintf(stderr, "Time for kmeans++ matrix coreset: %gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "Time for kmeans++ matrix coreset: %0.12gs\n", double((stop - start).count()) / 1e9);
     OMP_ONLY(omp_set_num_threads(1);)
     blaze::DynamicMatrix<FLOAT_TYPE> sqmat(20, 20);
     randomize(sqmat);
     sqmat = map(sqmat, [](auto x) {return x * x + 1e-15;});
     assert(min(sqmat) > 0.);
     {
-        auto greedy_metric = kcenter_greedy_2approx(rowiterator(sqmat).begin(), rowiterator(sqmat).end(),
+        auto greedy_metric = kcenter_greedy_2approx(blz::rowiterator(sqmat).begin(), blz::rowiterator(sqmat).end(),
                                                     gen, /*k=*/3, MatrixLookup{});
     }
     auto kmpp_asn = std::move(std::get<1>(centers));
@@ -115,9 +115,14 @@ int main(int argc, char *argv[]) {
     for(unsigned i = 0; i < std::get<0>(centers).size(); ++i) {
         row(centermatrix, i) = row(mat, std::get<0>(centers)[i]);
     }
-    double tolerance = 1e-4;
+    double tolerance = 0;
     decltype(centermatrix) copy_mat(centermatrix);
-    double fulldata_cost = lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, 100);
+    const unsigned maxrounds = 10000;
+    double fulldata_cost = lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, maxrounds);
+    double fulldata_cost_ma = lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, maxrounds, sqrL2Norm(), (FLOAT_TYPE *)nullptr, true);
+    double fulldata_cost_vanilla = lloyd_loop(kmpp_asn, counts, centermatrix, mat, tolerance, maxrounds, sqrL2Norm(), (FLOAT_TYPE *)nullptr, false);
+    std::fprintf(stderr, "Cost for fulldata (normal lloyd) %0.12g vs moving average %0.12g for a difference of %0.12g (and with vanilla on top of ma %0.12g/%0.12g less than the minima of the others)\n",
+                 fulldata_cost, fulldata_cost_ma, fulldata_cost - fulldata_cost_ma, fulldata_cost_vanilla, std::min(fulldata_cost_ma, fulldata_cost) - fulldata_cost_vanilla);
     if(npoints > kmppmcs.mat_.rows()) npoints = kmppmcs.mat_.rows();
     auto [wcenteridx, wasn, wcosts] = kmeanspp(kmppmcs.mat_, gen, npoints, blz::sqrL2Norm(), true, kmppmcs.weights_.data());
     blaze::DynamicMatrix<FLOAT_TYPE> weight_kmppcenters = blz::rows(kmppmcs.mat_, wcenteridx.data(), wcenteridx.size());
@@ -125,10 +130,10 @@ int main(int argc, char *argv[]) {
     double cost = 0.;
     for(size_t i = 0; i < mat.rows(); ++i) {
         auto mr = row(mat, i);
-        double rc = blz::sqrL2Dist(mr, row(weight_kmppcenters, 0));
+        FLOAT_TYPE rc = blz::sqrL2Dist(mr, row(weight_kmppcenters, 0));
         for(unsigned j = 1; j < weight_kmppcenters.rows(); ++j)
             rc = std::min(rc, blz::sqrL2Dist(mr, row(weight_kmppcenters, j)));
         cost += rc;
     }
-    std::fprintf(stderr, "Cost of coreset solution: %g. Cost of solution on full dataset: %g\n", cost, fulldata_cost);
+    std::fprintf(stderr, "Cost of coreset solution: %0.12g. Cost of solution on full dataset: %0.12g\n", cost, fulldata_cost);
 }

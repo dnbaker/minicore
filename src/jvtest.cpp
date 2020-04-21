@@ -1,5 +1,5 @@
-#include "minocore/jv.h"
-#include "minocore/distance.h"
+#include "minocore/optim/jv.h"
+#include "minocore/dist/distance.h"
 
 void disptime(std::chrono::time_point<std::chrono::high_resolution_clock> s, std::chrono::time_point<std::chrono::high_resolution_clock> e,
               std::string label="") {

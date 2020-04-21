@@ -84,7 +84,9 @@ namespace lemon {
 		SparseValueVector(Args &&...)   // parameter n for compatibility with standard vectors
 		{
 		}
-		void resize(size_t n = 0) {};
+    
+		template<typename...Args>
+		void resize(Args &&...) {/* does nothing */}
 		T operator[](const size_t id) const
 		{
 			auto it = data.find(id);
@@ -214,9 +216,7 @@ namespace lemon {
 		/// but it is usually slower. Therefore it is disabled by default.
 		NetworkSimplexSimple(const GR& graph, bool arc_mixing, int nbnodes, ArcsType nb_arcs, size_t maxiters = 0) :
 			_graph(graph),  //_arc_id(graph),
-			_arc_mixing(arc_mixing), _init_nb_nodes(nbnodes), _init_nb_arcs(nb_arcs),
-			INF(std::numeric_limits<Value>::has_infinity ?
-				std::numeric_limits<Value>::infinity() : MAX_VAL)
+			_arc_mixing(arc_mixing), _init_nb_nodes(nbnodes), _init_nb_arcs(nb_arcs)
 		{
 			// Reset data structures
 			reset();
@@ -350,7 +350,7 @@ namespace lemon {
 		/// Constant for infinite upper bounds (capacities).
 		/// It is \c std::numeric_limits<Value>::infinity() if available,
 		/// \c std::numeric_limits<Value>::max() otherwise.
-		const Value INF;
+        static constexpr Value INF = std::numeric_limits<Value>::has_infinity ? std::numeric_limits<Value>::infinity() : MAX_VAL;
 
 	private:
 
@@ -455,12 +455,12 @@ namespace lemon {
 				ArcsType N = omp_get_max_threads();
 				std::vector<Cost> minArray(N, 0);
 				std::vector<ArcsType> arcId(N);
+				ArcsType bs = (ArcsType)ceil(_block_size / (double)N);
 #else
 				static constexpr ArcsType N = 1;
 				std::array<Cost, 1> minArray{Cost(0)};
 				std::array<ArcsType, 1> arcId{0};
 #endif
-				ArcsType bs = (ArcsType)ceil(_block_size / (double)N);
 
 				for (ArcsType i = 0; i < _search_arc_num; i += _block_size) {
 
@@ -1221,7 +1221,7 @@ namespace lemon {
 			ArcsType e;
 
 			// Search the cycle along the path form the first node to the root
-			for (int u = first; u != join; u = _parent[u]) {
+			for (auto u = first; u != join; u = _parent[u]) {
 				e = _pred[u];
 				d = _forward[u] ? _flow[e] : INF;
 				if (d < delta) {
@@ -1257,10 +1257,10 @@ namespace lemon {
 			if (delta > 0) {
 				Value val = _state[in_arc] * delta;
 				_flow[in_arc] += val;
-				for (int u = _source[in_arc]; u != join; u = _parent[u]) {
+				for (auto u = _source[in_arc]; u != join; u = _parent[u]) {
 					_flow[_pred[u]] += _forward[u] ? -val : val;
 				}
-				for (int u = _target[in_arc]; u != join; u = _parent[u]) {
+				for (auto u = _target[in_arc]; u != join; u = _parent[u]) {
 					_flow[_pred[u]] += _forward[u] ? val : -val;
 				}
 			}
@@ -1549,20 +1549,20 @@ namespace lemon {
 			if (_sum_supply == 0) {
 				if (_stype == GEQ) {
 					Cost max_pot = -std::numeric_limits<Cost>::max();
-					for (ArcsType i = 0; i != _node_num; ++i) {
+					for (ArcsType i = 0; i != static_cast<ArcsType>(_node_num); ++i) {
 						if (_pi[i] > max_pot) max_pot = _pi[i];
 					}
 					if (max_pot > 0) {
-						for (ArcsType i = 0; i != _node_num; ++i)
+						for (ArcsType i = 0; i != static_cast<ArcsType>(_node_num); ++i)
 							_pi[i] -= max_pot;
 					}
 				} else {
 					Cost min_pot = std::numeric_limits<Cost>::max();
-					for (ArcsType i = 0; i != _node_num; ++i) {
+					for (ArcsType i = 0; i != static_cast<ArcsType>(_node_num); ++i) {
 						if (_pi[i] < min_pot) min_pot = _pi[i];
 					}
 					if (min_pot < 0) {
-						for (ArcsType i = 0; i != _node_num; ++i)
+						for (ArcsType i = 0; i != static_cast<ArcsType>(_node_num); ++i)
 							_pi[i] -= min_pot;
 					}
 				}

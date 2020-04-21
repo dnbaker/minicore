@@ -1,9 +1,7 @@
+#include "minocore/utility.h"
 #include "minocore/graph.h"
-#include "minocore/parse.h"
-#include "minocore/bicriteria.h"
 #include "minocore/coreset.h"
-#include "minocore/lsearch.h"
-#include "minocore/jv.h"
+#include "minocore/optim.h"
 #include <ctime>
 #include <getopt.h>
 #include "blaze/util/Serialization.h"

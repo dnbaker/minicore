@@ -1,6 +1,7 @@
 //#define VERBOSE_AF 1
-#include "minocore/lsearch.h"
-#include "minocore/diskmat.h"
+#include "minocore/graph/graphdist.h"
+#include "minocore/optim/lsearch.h"
+#include "minocore/util/diskmat.h"
 #include <iostream>
 
 using namespace minocore;
