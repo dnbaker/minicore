@@ -3,6 +3,7 @@
 #define FGC_GRAPH_DIST_H__
 #include "minocore/graph/graph.h"
 #include "minocore/util/diskmat.h"
+#include <atomic>
 
 namespace minocore {
 
