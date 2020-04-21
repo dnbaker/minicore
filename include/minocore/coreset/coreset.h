@@ -4,12 +4,13 @@
 #include <vector>
 #include <map>
 #include "alias_sampler/alias_sampler.h"
+#include "minocore/util/blaze_adaptor.h"
 #include "minocore/util/shared.h"
 #include <zlib.h>
 #ifdef _OPENMP
 #  include <omp.h>
 #endif
-#include "minocore/dist/distance.h"
+//#include "minocore/dist/distance.h"
 
 
 namespace minocore {

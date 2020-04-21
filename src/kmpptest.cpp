@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
     sqmat = map(sqmat, [](auto x) {return x * x + 1e-15;});
     assert(min(sqmat) > 0.);
     {
-        auto greedy_metric = kcenter_greedy_2approx(rowiterator(sqmat).begin(), rowiterator(sqmat).end(),
+        auto greedy_metric = kcenter_greedy_2approx(blz::rowiterator(sqmat).begin(), blz::rowiterator(sqmat).end(),
                                                     gen, /*k=*/3, MatrixLookup{});
     }
     auto kmpp_asn = std::move(std::get<1>(centers));

@@ -5,118 +5,21 @@
 #include <mutex>
 #include <numeric>
 #include "minocore/coreset/matrix_coreset.h"
+#include "minocore/util/oracle.h"
 #include "minocore/util/timer.h"
 #include "minocore/util/div.h"
 
 namespace minocore {
-using blz::rowiterator;
 
 
 
-struct MatrixLookup {};
-
-template<typename Mat>
-struct MatrixMetric {
-    /*
-     *  This calculate the distance between item i and item j in this problem
-     *  by simply indexing the given array.
-     *  This requires precalculation of the array (and space) but saves computation.
-     *  By convention, use row index = facility, column index = point
-     */
-    const Mat &mat_;
-    MatrixMetric(const Mat &mat): mat_(mat) {}
-    auto operator()(size_t i, size_t j) const {
-        return mat_(i, j);
-    }
-};
-
-template<typename Mat, typename Dist>
-struct MatrixDistMetric {
-    /*
-     *  This calculate the distance between item i and item j in this problem
-     *  by calculating the distances between row i and row j under the given distance metric.
-     *  This requires precalculation of the array (and space) but saves computation.
-     *
-     */
-    const Mat &mat_;
-    const Dist dist_;
-
-    MatrixDistMetric(const Mat &mat, Dist dist): mat_(mat), dist_(std::move(dist)) {}
-
-    auto operator()(size_t i, size_t j) const {
-        return dist_(row(mat_, i, blaze::unchecked), row(mat_, j, blaze::unchecked));
-    }
-};
-template<typename Iter, typename Dist>
-struct IndexDistMetric {
-    /*
-     * Adapts random access iterator to use norms between dereferenced quantities.
-     */
-    const Iter iter_;
-    const Dist &dist_;
-
-    IndexDistMetric(const Iter iter, const Dist &dist): iter_(iter), dist_(std::move(dist)) {}
-
-    auto operator()(size_t i, size_t j) const {
-        return dist_(iter_[i], iter_[j]);
-    }
-};
-
-template<typename Iter>
-struct BaseOperand {
-    using DerefType = decltype((*std::declval<Iter>()));
-    using TwiceDerefedType = std::remove_reference_t<decltype(std::declval<DerefType>().operand())>;
-    using type = TwiceDerefedType;
-};
-
-
-template<typename Iter>
-struct IndexDistMetric<Iter, MatrixLookup> {
-    using Operand = typename BaseOperand<Iter>::type;
-    using ET = typename Operand::ElementType;
-    /* Specialization of above for MatrixLookup
-     *
-     *
-     */
-    using Dist = MatrixLookup;
-    const Operand &mat_;
-    const Dist dist_;
-    //TD<Operand> to2;
-
-    IndexDistMetric(const Iter iter, Dist dist): mat_((*iter).operand()), dist_(std::move(dist)) {}
-
-    ET operator()(size_t i, size_t j) const {
-        assert(i < mat_.rows());
-        assert(j < mat_.columns());
-        return mat_(i, j);
-        //return iter_[i][j];
-    }
-};
-
-
-
-template<typename Iter, typename Dist>
-auto make_index_dm(const Iter iter, const Dist &dist) {
-    return IndexDistMetric<Iter, Dist>(iter, dist);
-}
-template<typename Mat, typename Dist>
-auto make_matrix_dm(const Mat &mat, const Dist &dist) {
-    return MatrixDistMetric<Mat, Dist>(mat, dist);
-}
-template<typename Mat>
-auto make_matrix_m(const Mat &mat) {
-    return MatrixMetric<Mat>(mat);
-}
 
 namespace coresets {
-
 
 
 using std::partial_sum;
 using blz::distance::sqrL2Norm;
 
-template<typename C>
-using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
 
 
 /*
@@ -191,7 +94,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
 }
 
-template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr) {
@@ -277,7 +180,7 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
     }
     return std::vector<IT>(centers.begin(), centers.end());
 }
-template<typename Iter, typename FT=ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 std::vector<IT>
 kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm=Norm()) {
@@ -570,7 +473,7 @@ double mb_lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
 
 template<typename Iter,
          typename IT=std::uint32_t, typename RNG=wy::WyRand<uint32_t, 2>,
-         typename FT=ContainedTypeFromIterator<Iter>, typename Distance=sqrL2Norm>
+         typename FT=shared::ContainedTypeFromIterator<Iter>, typename Distance=sqrL2Norm>
 auto kmeans_coreset(Iter start, Iter end,
                     size_t k, RNG &rng,
                     size_t cs_size,

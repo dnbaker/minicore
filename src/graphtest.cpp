@@ -1,4 +1,5 @@
 #include "minocore/utility.h"
+#include "minocore/graph.h"
 #include "minocore/coreset.h"
 #include "minocore/optim.h"
 #include <ctime>

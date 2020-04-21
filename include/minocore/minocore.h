@@ -9,6 +9,8 @@
 
 #include <minocore/hash.h>
 
+#include <minocore/graph.h>
+
 #include <minocore/wip.h>
 
 #endif

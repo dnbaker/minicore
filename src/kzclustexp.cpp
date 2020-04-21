@@ -5,6 +5,7 @@
 #include "minocore/relaxed_heap.hpp"
 #endif
 #include "minocore/utility.h"
+#include "minocore/graph.h"
 #include "minocore/optim.h"
 #include <ctime>
 #include <getopt.h>

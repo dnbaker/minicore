@@ -127,6 +127,99 @@ auto make_caching_oracle_wrapper(const Oracle &oracle) {
     return CachingOracleWrapper<Oracle, Map, symmetric, threadsafe, IT>(oracle);
 }
 
+struct MatrixLookup {};
+
+template<typename Mat>
+struct MatrixMetric {
+    /*
+     *  This calculate the distance between item i and item j in this problem
+     *  by simply indexing the given array.
+     *  This requires precalculation of the array (and space) but saves computation.
+     *  By convention, use row index = facility, column index = point
+     */
+    const Mat &mat_;
+    MatrixMetric(const Mat &mat): mat_(mat) {}
+    auto operator()(size_t i, size_t j) const {
+        return mat_(i, j);
+    }
+};
+
+template<typename Mat, typename Dist>
+struct MatrixDistMetric {
+    /*
+     *  This calculate the distance between item i and item j in this problem
+     *  by calculating the distances between row i and row j under the given distance metric.
+     *  This requires precalculation of the array (and space) but saves computation.
+     *
+     */
+    const Mat &mat_;
+    const Dist dist_;
+
+    MatrixDistMetric(const Mat &mat, Dist dist): mat_(mat), dist_(std::move(dist)) {}
+
+    auto operator()(size_t i, size_t j) const {
+        return dist_(row(mat_, i, blaze::unchecked), row(mat_, j, blaze::unchecked));
+    }
+};
+
+template<typename Iter, typename Dist>
+struct IndexDistMetric {
+    /*
+     * Adapts random access iterator to use norms between dereferenced quantities.
+     */
+    const Iter iter_;
+    const Dist &dist_;
+
+    IndexDistMetric(const Iter iter, const Dist &dist): iter_(iter), dist_(std::move(dist)) {}
+
+    auto operator()(size_t i, size_t j) const {
+        return dist_(iter_[i], iter_[j]);
+    }
+};
+
+template<typename Iter>
+struct BaseOperand {
+    using DerefType = decltype((*std::declval<Iter>()));
+    using TwiceDerefedType = std::remove_reference_t<decltype(std::declval<DerefType>().operand())>;
+    using type = TwiceDerefedType;
+};
+
+
+template<typename Iter>
+struct IndexDistMetric<Iter, MatrixLookup> {
+    using Operand = typename BaseOperand<Iter>::type;
+    using ET = typename Operand::ElementType;
+    /* Specialization of above for MatrixLookup
+     *
+     *
+     */
+    using Dist = MatrixLookup;
+    const Operand &mat_;
+    const Dist dist_;
+
+    IndexDistMetric(const Iter iter, Dist dist): mat_((*iter).operand()), dist_(std::move(dist)) {}
+
+    ET operator()(size_t i, size_t j) const {
+        assert(i < mat_.rows());
+        assert(j < mat_.columns());
+        return mat_(i, j);
+    }
+};
+
+template<typename Iter, typename Dist>
+auto make_index_dm(const Iter iter, const Dist &dist) {
+    return IndexDistMetric<Iter, Dist>(iter, dist);
+}
+template<typename Mat, typename Dist>
+auto make_matrix_dm(const Mat &mat, const Dist &dist) {
+    return MatrixDistMetric<Mat, Dist>(mat, dist);
+}
+template<typename Mat>
+auto make_matrix_m(const Mat &mat) {
+    return MatrixMetric<Mat>(mat);
+}
+
+
 } // namespace minocore
 
 #endif /* FGC_ORACLE_H__ */

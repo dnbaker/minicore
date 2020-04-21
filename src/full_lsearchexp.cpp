@@ -4,6 +4,7 @@
 #include "minocore/relaxed_heap.hpp"
 #endif
 #include "minocore/utility.h"
+#include "minocore/graph.h"
 #include "minocore/coreset.h"
 #include "minocore/optim.h"
 #include <ctime>

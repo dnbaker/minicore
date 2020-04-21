@@ -75,6 +75,8 @@ struct dumbrange {
 template<typename T>
 inline dumbrange<T> make_dumbrange(T beg, T end) {return dumbrange<T>(beg, end);}
 
+template<typename C>
+using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
 
 } // shared
 } // minocore

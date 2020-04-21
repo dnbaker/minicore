@@ -2,6 +2,7 @@
 #ifndef FGC_LOCAL_SEARCH_H__
 #define FGC_LOCAL_SEARCH_H__
 #include "minocore/util/diskmat.h"
+#include "minocore/util/oracle.h"
 #include "minocore/optim/kcenter.h"
 #include "pdqsort/pdqsort.h"
 #include <atomic>
@@ -137,7 +138,7 @@ struct LocalKMedSearcher {
                 sol_.insert(i);
         } else if(do_kcenter && mat_.rows() == mat_.columns()) {
             std::fprintf(stderr, "Using kcenter\n");
-            auto rowits = rowiterator(mat_);
+            auto rowits = blz::rowiterator(mat_);
             auto approx = coresets::kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k_, MatrixLookup(), std::min(mat_.rows(), mat_.columns()));
             for(const auto c: approx) sol_.insert(c);
 #ifndef NDEBUG
