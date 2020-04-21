@@ -110,6 +110,16 @@ public:
         }
         return ret;
     }
+    typename Map<typename KeyType::Type, output_type>::iterator
+    find(IT lh, IT rh) const {
+        return map_.find(is_symmetric || lh < rh ? KeyType::make_key(lh, rh): KeyType::make_key(lh, rh));
+    }
+    bool contains(IT lh, IT rh) const {
+        if constexpr(symmetric) if(lh > rh) std::swap(lh, rh);
+        auto key = KeyType::make_key(lh, rh);
+        std::shared_lock<decltype(mut_)> shared(mut_);
+        return map_.find(key) != map_.end();
+    }
 };
 
 template<template<typename...> class Map=std::unordered_map,  bool symmetric=true, bool threadsafe=false, typename IT=std::uint32_t, typename Oracle>
