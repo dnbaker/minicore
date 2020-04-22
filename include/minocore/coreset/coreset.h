@@ -178,6 +178,11 @@ struct CoresetSampler {
                         std::equal(weights_.get(), weights_.get() + np_, o.weights_.get())); // They're both the same
     }
 
+    std::string to_string() const {
+        char buf[256];
+        return std::string(buf, std::sprintf(buf, "CoresetSampler<>[np=%zu|k=%zu|b=%zu|SM=%s\n", np_, k_, b_, sm2str(sens_)));
+    }
+
     CoresetSampler(CoresetSampler &&o)      = default;
     CoresetSampler(const CoresetSampler &o) = delete;
     CoresetSampler(std::string s) {
