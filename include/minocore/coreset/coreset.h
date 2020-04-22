@@ -200,6 +200,7 @@ struct CoresetSampler {
         gzclose(fp);
     }
     void write(gzFile fp) const {
+        if(fl_asn_ || fl_bicriteria_points_) throw std::runtime_error("Not implemented: serialization for FL coreset samplers");
         uint64_t n = np_;
         gzwrite(fp, &n, sizeof(n));
 #if VERBOSE_AF
