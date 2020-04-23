@@ -80,13 +80,16 @@ struct LocalKMedSearcher {
     const MatType &mat_;
     shared::flat_hash_set<IType> sol_;
     blz::DV<IType> assignments_;
+    blz::DV<typename MatType::ElementType, blaze::rowVector> current_costs_;
     double current_cost_;
     double eps_, initial_cost_, init_cost_div_;
     IType k_;
     const size_t nr_, nc_;
     bool best_improvement_;
+    double diffthresh_;
     blz::DV<IType> ordering_;
-    bool shuffle_;
+    uint32_t shuffle_:1;
+    uint32_t lazy_eval_:1;
 
     // Constructors
 
@@ -106,7 +109,7 @@ struct LocalKMedSearcher {
         current_cost_(std::numeric_limits<value_type>::max()),
         eps_(eps),
         k_(k), nr_(mat.rows()), nc_(mat.columns()), best_improvement_(best_improvement),
-        ordering_(mat.rows()), shuffle_(true)
+        ordering_(mat.rows()), shuffle_(true), lazy_eval_(false)
     {
         std::iota(ordering_.begin(), ordering_.end(), 0);
         static_assert(std::is_integral_v<std::decay_t<decltype(wc->operator[](0))>>, "index container must contain integral values");
@@ -209,7 +212,10 @@ struct LocalKMedSearcher {
                      mat_.rows(), mat_.columns(), sol_.size(), k_);
         assert(sol_.size() == k_ || sol_.size() == mat_.rows());
         DBG_ONLY(std::fprintf(stderr, "Initialized assignments at size %zu\n", assignments_.size());)
-        for(const auto center: sol_) {
+        auto it = sol_.begin();
+        assignments_ = *it;
+        for(const auto eit = sol_.end(); ++it != eit;) {
+            auto center = *it;
             auto r = row(mat_, center BLAZE_CHECK_DEBUG);
             OMP_PFOR
             for(size_t ci = 0; ci < nc_; ++ci) {
@@ -234,46 +240,79 @@ struct LocalKMedSearcher {
             cost = blaze::serial(blz::sum(blz::serial(blz::min<blz::columnwise>(rows(mat_, as)))));
         } else cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
         return current_cost_ - cost;
-#if 0
-        //std::fprintf(stderr, "[%s] function starting: %u/%u\n", __PRETTY_FUNCTION__, newcenter, oldcenter);
-        assert(newcenter < mat_.rows());
-        assert(oldcenter < mat_.rows());
-        //std::fprintf(stderr, "Passed asserts\n");
-        auto newr = row(mat_, newcenter BLAZE_CHECK_DEBUG);
-        //std::fprintf(stderr, "Got row: %zu\n", newr.size());
-        assert(nc_ == newr.size());
-        assert(assignments_.size() == mat_.columns());
-        double potential_gain = 0.;
-#define LOOP_CORE(ind) \
-        do {\
-            const auto asn = assignments_[ind];\
-            assert(asn < nr_);\
-            const auto old_cost = mat_(asn, ind);\
-            if(asn == oldcenter) {\
-                value_type newcost = newr[ind];\
-                for(const auto ctr: sol_) {\
-                    if(ctr != oldcenter)\
-                        newcost = std::min(mat_(ctr, ind), newcost);\
-                }\
-                potential_gain += old_cost - newcost;\
-            } else if(double nv = newr[ind]; nv < old_cost) {\
-                potential_gain += old_cost - nv;\
-            }\
-        } while(0)
+    }
 
-        if(single_threaded) {
-            for(size_t i = 0; i < nc_; ++i) {
-                LOOP_CORE(i);
+    double lazy_evaluate_swap(IType newcenter, IType oldcenter) {
+        std::vector<IType> tmp(sol_.begin(), sol_.end());
+        tmp.erase(std::find(tmp.begin(), tmp.end(), oldcenter));
+        std::sort(tmp.begin(), tmp.end());
+        // Instead of performing the full recalculation, do lazy calculation.
+        if(current_costs_.size() != nc_) { // If not calculated, calculate
+            auto it = sol_.begin();
+            OMP_CRITICAL
+            {
+                current_costs_ = row(mat_, *it BLAZE_CHECK_DEBUG);
             }
-        } else {
-            OMP_PRAGMA("omp parallel for reduction(+:potential_gain)")
-            for(size_t i = 0; i < nc_; ++i) {
-                LOOP_CORE(i);
+            while(++it != sol_.end()) {
+                current_costs_ = blz::min(current_costs_, row(mat_, *it BLAZE_CHECK_DEBUG));
             }
         }
-#undef LOOP_CORE
-        return potential_gain;
+        auto newptr = row(mat_, newcenter);
+        auto oldptr = row(mat_, oldcenter);
+        double diff = 0.;
+#ifdef _OPENMP
+        _Pragma("omp parallel for reduction(+:diff)")
 #endif
+        for(size_t i = 0; i < nc_; ++i) {
+            auto ccost = current_costs_[i];
+            if(newptr[i] < ccost) {
+                auto sub = ccost - newptr[i];
+                diff += sub;
+            } else if(ccost == oldptr[i]) {
+                auto oldbest = blz::min(blz::elements(blz::column(mat_, i), tmp.data(), tmp.size()));
+                auto sub = ccost - std::min(oldbest, newptr[i]);
+                diff += sub;
+            }
+        }
+        return diff;
+    }
+    template<size_t N>
+    double lazy_evaluate_multiswap(const IType *newcenters, const IType *oldcenters) const {
+        // Instead of performing the full recalculation, do lazy calculation.
+        //
+        std::vector<IType> tmp(sol_.begin(), sol_.end());
+        for(unsigned i = 0; i < N; ++i)
+            tmp.erase(std::find(tmp.begin(), tmp.end(), oldcenters[i]));
+        std::sort(tmp.begin(), tmp.end());
+        // Instead of performing the full recalculation, do lazy calculation.
+        if(current_costs_.size() != nc_) { // If not calculated, calculate
+            auto it = sol_.begin();
+            OMP_CRITICAL
+            {
+                current_costs_ = row(mat_, *it BLAZE_CHECK_DEBUG);
+            }
+            while(++it != sol_.end()) {
+                current_costs_ = blz::min(current_costs_, row(mat_, *it BLAZE_CHECK_DEBUG));
+            }
+        }
+        blz::DV<typename MatType::ElementType, blz::rowVector> newptr = blz::min<blz::rowwise>(rows(mat_, newcenters, N));
+        blz::DV<typename MatType::ElementType, blz::rowVector> oldptr = blz::min<blz::rowwise>(rows(mat_, oldcenters, N));
+        double diff = 0.;
+#ifdef _OPENMP
+        _Pragma("omp parallel for reduction(+:diff)")
+#endif
+        for(size_t i = 0; i < nc_; ++i) {
+            auto ccost = current_costs_[i];
+            if(newptr[i] < ccost) {
+                auto sub = ccost - newptr[i];
+                diff += sub;
+            } else if(ccost == oldptr[i]) {
+                auto oldbest = blz::min(blz::elements(blz::column(mat_, i), tmp.data(), tmp.size()));
+                auto sub = ccost - std::min(oldbest, newptr[i]);
+                diff += sub;
+            }
+        }
+        return diff;
     }
 
     // Getters
@@ -285,6 +324,7 @@ struct LocalKMedSearcher {
         if(mat_.rows() < k_) return;
         //const double diffthresh = 0.;
         const double diffthresh = initial_cost_ / k_ * eps_;
+        diffthresh_ = diffthresh;
         std::fprintf(stderr, "diffthresh: %f\n", diffthresh);
         size_t total = 0;
         {
@@ -327,10 +367,38 @@ struct LocalKMedSearcher {
                         wy::WyRand<uint64_t, 2> rng(total);
                         std::shuffle(ordering_.begin(), ordering_.end(), rng);
                     }
+                    std::vector<IType> newindices(sol_.begin(), sol_.end());
                     for(size_t pi = 0; pi < nr_; ++pi) {
                         size_t potential_index = ordering_[pi];
-                        if(sol_.find(potential_index) == sol_.end()) {
-                            if(const auto val = evaluate_swap(potential_index, oldcenter);
+                        if(sol_.find(potential_index) != sol_.end()) continue;
+                        if(lazy_eval_) {
+                            const auto val = lazy_evaluate_swap(potential_index, oldcenter);
+                            if(val > diffthresh) {
+                                sol_.erase(oldcenter);
+                                sol_.insert(potential_index);
+                                *std::find(newindices.begin(), newindices.end(), oldcenter) = potential_index;
+                                std::sort(newindices.begin(), newindices.end());
+                                auto newptr = row(mat_, potential_index);
+                                auto oldptr = row(mat_, oldcenter);
+                                OMP_PFOR
+                                for(size_t i = 0; i < nc_; ++i) {
+                                    auto &ccost = current_costs_[i];
+                                    if(newptr[i] < ccost)
+                                        ccost = newptr[i];
+                                    else if(ccost == oldptr[i]) {
+                                        auto mincost = mat_(newindices.front(), i);
+                                        IType asn = newindices.front();
+                                        for(unsigned ni = 1; ni < newindices.size(); ++ni) {
+                                            if(mat_(ni, i) < mincost)
+                                                asn = newindices[ni], mincost = mat_(ni, i);
+                                        }
+                                        ccost = mincost;
+                                        assignments_[i] = asn;
+                                    }
+                                }
+                            }
+                        } else {
+                            if(const auto val = evaluate_swap(potential_index, oldcenter, true);
                                val > diffthresh) {
 #ifndef NDEBUG
                                 std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g. Threshold: %g.\n", potential_index, oldcenter, total + 1, current_cost_, val, diffthresh);

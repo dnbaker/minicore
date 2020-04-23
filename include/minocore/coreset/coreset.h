@@ -52,6 +52,7 @@ static const char *sm2str(SensitivityMethod sm) {
     }
     return "UNKNOWN";
 }
+using namespace std::literals;
 
 template<typename IT, typename FT>
 struct IndexCoreset {
@@ -65,6 +66,34 @@ struct IndexCoreset {
     size_t size() const {return indices_.size();}
     IndexCoreset(IndexCoreset &&o) = default;
     IndexCoreset(const IndexCoreset &o) = default;
+    void write(gzFile fp) const {
+        uint64_t n = size();
+        if(gzwrite(fp, &n, sizeof(n)) != sizeof(n)) goto fail;
+        if(gzwrite(fp, indices_.data(), indices_.size() * sizeof(IT)) != int64_t(indices_.size() * sizeof(IT)))
+            goto fail;
+        if(gzwrite(fp, weights_.data(), weights_.size() * sizeof(FT)) != int64_t(weights_.size() * sizeof(FT)))
+            goto fail;
+        return;
+        fail:
+            throw std::runtime_error("Failed to write in "s + __PRETTY_FUNCTION__);
+    }
+    void write(std::FILE *fp) const {
+        uint64_t n = size();
+        if(std::fwrite(&n, sizeof(n), 1, fp) != 1) goto fail;
+        if(std::fwrite(indices_.data(), sizeof(IT), indices_.size(), fp) != int64_t(indices_.size()))
+            goto fail;
+        if(std::fwrite(weights_.data(), sizeof(FT), weights_.size(), fp) != int64_t(weights_.size()))
+            goto fail;
+        return;
+        fail:
+            throw std::runtime_error("Failed to write in "s + __PRETTY_FUNCTION__);
+    }
+    void write(std::string path) const {
+        gzFile fp = gzopen(path.data(), "rb");
+        if(!fp) throw std::runtime_error("Failed to open file in "s + __PRETTY_FUNCTION__);
+        write(fp);
+        gzclose(fp);
+    }
     void compact(bool shrink_to_fit=true) {
         // TODO: replace with hash map and compact
         std::map<std::pair<IT, FT>, uint32_t> m;
