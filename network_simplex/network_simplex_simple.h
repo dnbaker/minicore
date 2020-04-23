@@ -1302,7 +1302,7 @@ namespace lemon {
 			} else {
 				// Handle the case when old_rev_thread equals to v_in
 				// (it also means that join and v_out coincide)
-				int thread_continue = old_rev_thread == v_in ?
+				int thread_continue = old_rev_thread == static_cast<int>(v_in) ?
 					_thread[old_last_succ] : _thread[v_in];
 
 				// Update _thread and _parent along the stem nodes (i.e. the nodes
@@ -1315,7 +1315,7 @@ namespace lemon {
 				_thread[v_in] = u_in;
 				_dirty_revs.clear();
 				_dirty_revs.push_back(v_in);
-				while (stem != u_out) {
+				while (stem != static_cast<int>(u_out)) {
 					// Insert the next stem node into the thread list
 					next_stem = _parent[stem];
 					_thread[last] = next_stem;
@@ -1357,7 +1357,7 @@ namespace lemon {
 				// Update _pred, _pred_dir, _last_succ and _succ_num for the
 				// stem nodes from u_out to u_in
 				int tmp_sc = 0, tmp_ls = _last_succ[u_out];
-				for (int u = u_out, p = _parent[u]; u != u_in; u = p, p = _parent[u]) {
+				for (int u = u_out, p = _parent[u]; u != static_cast<int>(u_in); u = p, p = _parent[u]) {
 					_pred[u] = _pred[p];
 					_forward[u] = !_forward[p];
 					tmp_sc += _succ_num[u] - _succ_num[p];
@@ -1365,19 +1365,19 @@ namespace lemon {
 					_last_succ[p] = tmp_ls;
 				}
 				_pred[u_in] = in_arc;
-				_forward[u_in] = (u_in == _source[in_arc]);
+				_forward[u_in] = (static_cast<int>(u_in) == _source[in_arc]);
 				_succ_num[u_in] = old_succ_num;
 			}
 
 			// Update _last_succ from v_in towards the root
-			int up_limit_out = _last_succ[join] == v_in ? join : -1;
+			int up_limit_out = static_cast<ArcsType>(_last_succ[join]) == v_in ? join : -1;
 			int last_succ_out = _last_succ[u_out];
 			for (int u = v_in; u != -1 && _last_succ[u] == v_in; u = _parent[u]) {
 				_last_succ[u] = last_succ_out;
 			}
 
 			// Update _last_succ from v_out towards the root
-			if (join != old_rev_thread && v_in != old_rev_thread) {
+			if (static_cast<int>(join) != old_rev_thread && static_cast<int>(v_in) != old_rev_thread) {
 				for (int u = v_out; u != up_limit_out && _last_succ[u] == old_last_succ;
 					u = _parent[u]) {
 					_last_succ[u] = old_rev_thread;
@@ -1390,11 +1390,11 @@ namespace lemon {
 			}
 
 			// Update _succ_num from v_in to join
-			for (int u = v_in; u != join; u = _parent[u]) {
+			for (int u = v_in; u != static_cast<int>(join); u = _parent[u]) {
 				_succ_num[u] += old_succ_num;
 			}
 			// Update _succ_num from v_out to join
-			for (int u = v_out; u != join; u = _parent[u]) {
+			for (int u = v_out; u != static_cast<int>(join); u = _parent[u]) {
 				_succ_num[u] -= old_succ_num;
 			}
 		}
