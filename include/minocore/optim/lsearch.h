@@ -85,6 +85,8 @@ struct LocalKMedSearcher {
     IType k_;
     const size_t nr_, nc_;
     bool best_improvement_;
+    blz::DV<IType> ordering_;
+    bool shuffle_;
 
     // Constructors
 
@@ -103,8 +105,10 @@ struct LocalKMedSearcher {
         //counts_(k),
         current_cost_(std::numeric_limits<value_type>::max()),
         eps_(eps),
-        k_(k), nr_(mat.rows()), nc_(mat.columns()), best_improvement_(best_improvement)
+        k_(k), nr_(mat.rows()), nc_(mat.columns()), best_improvement_(best_improvement),
+        ordering_(mat.rows()), shuffle_(true)
     {
+        std::iota(ordering_.begin(), ordering_.end(), 0);
         static_assert(std::is_integral_v<std::decay_t<decltype(wc->operator[](0))>>, "index container must contain integral values");
         sol_.reserve(k);
         init_cost_div_ = initdiv ? initdiv: double(mat.columns());
@@ -125,14 +129,6 @@ struct LocalKMedSearcher {
         current_cost_ = std::numeric_limits<value_type>::max();
         wy::WyRand<IType, 2> rng(seed);
         sol_.clear();
-#if 0
-        if(wc) {
-            // Reweight
-            for(unsigned i = 0; i < wc->size(); ++i) {
-                column(mat_, i BLAZE_CHECK_DEBUG) *= wc->operator[](col);
-            }
-        }
-#endif
         if(mat_.rows() <= k_) {
             for(unsigned i = 0; i < mat_.rows(); ++i)
                 sol_.insert(i);
@@ -324,19 +320,23 @@ struct LocalKMedSearcher {
                     sol_.insert(current_best_index);
                     ++total;
                     goto next;
-                    //diffthresh = current_cost_ / k_ * eps_;
                 }
             } else {
                 for(const auto oldcenter: sol_) {
+                    if(shuffle_) {
+                        wy::WyRand<uint64_t, 2> rng(total);
+                        std::shuffle(ordering_.begin(), ordering_.end(), rng);
+                    }
                     for(size_t pi = 0; pi < nr_; ++pi) {
-                        if(sol_.find(pi) == sol_.end()) {
-                            if(const auto val = evaluate_swap(pi, oldcenter);
+                        size_t potential_index = ordering_[pi];
+                        if(sol_.find(potential_index) == sol_.end()) {
+                            if(const auto val = evaluate_swap(potential_index, oldcenter);
                                val > diffthresh) {
 #ifndef NDEBUG
-                                std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g. Threshold: %g.\n", pi, oldcenter, total + 1, current_cost_, val, diffthresh);
+                                std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g. Threshold: %g.\n", potential_index, oldcenter, total + 1, current_cost_, val, diffthresh);
 #endif
                                 sol_.erase(oldcenter);
-                                sol_.insert(pi);
+                                sol_.insert(potential_index);
                                 ++total;
                                 current_cost_ -= val;
                                 std::fprintf(stderr, "Swap number %zu with cost %0.12g\n", total, current_cost_);
