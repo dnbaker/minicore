@@ -90,7 +90,7 @@ struct LocalKMedSearcher {
     blz::DV<IType> ordering_;
     uint32_t shuffle_:1;
     uint32_t lazy_eval_:1;
-    uint32_t max_swap_n_:16 = 1;
+    uint32_t max_swap_n_:16;
     // TODO: enable searches for multiswaps.
 
     // Constructors
@@ -111,7 +111,7 @@ struct LocalKMedSearcher {
         current_cost_(std::numeric_limits<value_type>::max()),
         eps_(eps),
         k_(k), nr_(mat.rows()), nc_(mat.columns()),
-        ordering_(mat.rows()), shuffle_(true), lazy_eval_(true)
+        ordering_(mat.rows()), shuffle_(true), lazy_eval_(true), max_swap_n_(1)
     {
         std::iota(ordering_.begin(), ordering_.end(), 0);
         static_assert(std::is_integral_v<std::decay_t<decltype(wc->operator[](0))>>, "index container must contain integral values");
@@ -259,7 +259,8 @@ struct LocalKMedSearcher {
             cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
         return current_cost_ - cost;
     }
-    double evaluate_multiswap_rt(const IType *newcenter, const IType *oldcenter, size_t N, bool single_threaded=false) const {
+    template<typename IndexType>
+    double evaluate_multiswap_rt(const IndexType *newcenter, const IndexType *oldcenter, size_t N, bool single_threaded=false) const {
         blz::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
         for(size_t i = 0; i < N; ++i) {
             *std::find(as.begin(), as.end(), oldcenter[i]) = newcenter[i];
@@ -355,7 +356,7 @@ struct LocalKMedSearcher {
                         val += diff;
                     }
                 }
-#if NDEBUG
+#ifndef NDEBUG
                 auto v = evaluate_swap(potential_index, oldcenter);
                 assert(std::abs(v - val) <= .5 * std::abs(std::max(v, val)) || !std::fprintf(stderr, "Manual: %g. Lazy: %g\n", v, val));
                 assert(sol_.size() == k_);
@@ -390,7 +391,8 @@ struct LocalKMedSearcher {
         diffthresh_ = diffthresh;
         next:
         {
-            blz::DV<IType> csol(sol_.begin(), sol_.end());
+            blz::DV<IType> csol(sol_.size());
+            std::copy(sol_.begin(), sol_.end(), csol.data());
             blz::DV<IType> swap_in(nc_ - sol_.size());
             blz::DV<IType> inargs(nswap), outargs(nswap);
             for(auto &&swap_out_comb: discreture::combinations(csol.size(), nswap)) {
@@ -487,9 +489,9 @@ struct LocalKMedSearcher {
 };
 
 template<typename Mat, typename IType=std::uint32_t, typename IndexContainer=std::vector<uint32_t>>
-auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, uint64_t seed=0, bool best_improvement=false,
+auto make_kmed_lsearcher(const Mat &mat, unsigned k, double eps=0.01, uint64_t seed=0,
                          const IndexContainer *wc=nullptr, double initdiv=0.) {
-    return LocalKMedSearcher<Mat, IType>(mat, k, eps, seed, best_improvement, wc, initdiv);
+    return LocalKMedSearcher<Mat, IType>(mat, k, eps, seed, wc, initdiv);
 }
 
 } // graph

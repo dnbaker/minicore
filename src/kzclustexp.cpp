@@ -132,7 +132,7 @@ void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Grap
         };
         t.start();
         if(!skip_vxs) {
-            auto vxs_lsearcher = make_kmed_lsearcher(distances, k, 1e-2, rng(), false, &cs.indices_, blaze::sum(cs.weights_));
+            auto vxs_lsearcher = make_kmed_lsearcher(distances, k, 1e-2, rng(), &cs.indices_, blaze::sum(cs.weights_));
             vxs_lsearcher.run();
             std::fprintf(stderr, "optimizing over vxs: %zu/%zu. cs weight size: %zu\n", distances.rows(), distances.columns(), cs.weights_.size());
             std::vector<size_t> solution(vxs_lsearcher.sol_.begin(), vxs_lsearcher.sol_.end());
@@ -151,7 +151,7 @@ void emit_coreset_optimization_runtime(Samp &sampler, unsigned k, double z, Grap
         t.reset(); t.start();
         sqdistances = blaze::rows(distances, cs.indices_.data(), cs.indices_.size());
         //sqdistances = blaze::rows(distances, cs.indices_.data(), cs.indices_.size());
-        auto sxs_lsearcher = make_kmed_lsearcher(sqdistances, k, 1e-2, rng(), false, static_cast<std::vector<unsigned> *>(nullptr), blaze::sum(cs.weights_));
+        auto sxs_lsearcher = make_kmed_lsearcher(sqdistances, k, 1e-2, rng(), static_cast<std::vector<unsigned> *>(nullptr), blaze::sum(cs.weights_));
         sxs_lsearcher.run();
         std::vector<size_t> solution(sxs_lsearcher.sol_.begin(), sxs_lsearcher.sol_.end());
         for(auto &i: solution) {
@@ -392,7 +392,6 @@ int main(int argc, char **argv) {
     bool use_thorup_d = true, use_thorup_iterative = false;
     unsigned testing_num_centersets = 500;
     size_t rammax = 16uLL << 30;
-    bool best_improvement = false;
     bool local_search_all_vertices = false;
     unsigned coreset_testing_num_iters = 5;
     uint64_t seed = std::accumulate(argv, argv + argc, uint64_t(0),
@@ -422,7 +421,7 @@ int main(int argc, char **argv) {
             case 'z': z = std::atof(optarg); break;
             case 'L': local_search_all_vertices = true; break;
             case 'r': rectangular = true; break;
-            case 'b': best_improvement = true; break;
+            case 'b': std::cerr << "best improvement has been removed.\n"; break;
             case 'R': seed = std::strtoull(optarg, nullptr, 10); break;
             case 'M': rammax = str2nbytes(optarg); break;
             case 'D': use_thorup_d = false; break;
@@ -629,7 +628,7 @@ int main(int argc, char **argv) {
 
     // Perform Thorup sample before JV method.
     timer.restart("local search:");
-    auto lsearcher = make_kmed_lsearcher(dm, k, eps, seed * seed + seed, best_improvement, bbox_vertices_ptr, x_size);
+    auto lsearcher = make_kmed_lsearcher(dm, k, eps, seed * seed + seed, bbox_vertices_ptr, x_size);
     lsearcher.run();
     timer.report();
     if(dm.rows() < 100 && k < 6) {
