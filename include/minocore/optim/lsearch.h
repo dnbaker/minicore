@@ -89,7 +89,8 @@ struct LocalKMedSearcher {
     double diffthresh_;
     blz::DV<IType> ordering_;
     uint32_t shuffle_:1;
-    uint32_t lazy_eval_:1;
+    uint32_t lazy_eval_:2;
+    // Set to 0 to avoid lazy search, 1 to only do local search, and 2 to do lazy search and then use exhaustive
     uint32_t max_swap_n_:16;
     // TODO: enable searches for multiswaps.
 
@@ -111,7 +112,7 @@ struct LocalKMedSearcher {
         current_cost_(std::numeric_limits<value_type>::max()),
         eps_(eps),
         k_(k), nr_(mat.rows()), nc_(mat.columns()),
-        ordering_(mat.rows()), shuffle_(true), lazy_eval_(true), max_swap_n_(1)
+        ordering_(mat.rows()), shuffle_(true), lazy_eval_(false), max_swap_n_(1)
     {
         std::iota(ordering_.begin(), ordering_.end(), 0);
         static_assert(std::is_integral_v<std::decay_t<decltype(wc->operator[](0))>>, "index container must contain integral values");
@@ -358,7 +359,7 @@ struct LocalKMedSearcher {
                 }
 #ifndef NDEBUG
                 auto v = evaluate_swap(potential_index, oldcenter);
-                assert(std::abs(v - val) <= .5 * std::abs(std::max(v, val)) || !std::fprintf(stderr, "Manual: %g. Lazy: %g\n", v, val));
+                //assert(std::abs(v - val) <= .5 * std::abs(std::max(v, val)) || !std::fprintf(stderr, "Manual: %g. Lazy: %g\n", v, val));
                 assert(sol_.size() == k_);
 #endif
                 // Only calculate exhaustively if the lazy form returns yes.
@@ -415,11 +416,9 @@ struct LocalKMedSearcher {
         if(mat_.rows() <= k_) return;
         if(lazy_eval_) {
             run_lazy();
-            return;
-        }
-        if(max_swap_n_ > 1) {
-            run_multi(max_swap_n_);
-            return;
+            if(lazy_eval_ == 2)
+                return;
+            // Otherwise, running exhaustive local search after to be sure.
         }
         //const double diffthresh = 0.;
         std::fprintf(stderr, "diffthresh: %f\n", diffthresh);
@@ -450,6 +449,10 @@ struct LocalKMedSearcher {
        }
         std::fprintf(stderr, "Finished in %zu swaps by exhausting all potential improvements. Final cost: %f\n",
                      total, current_cost_);
+        if(max_swap_n_ > 1) {
+            std::fprintf(stderr, "max_swap_n_ %u set. Searching multiswaps\n", max_swap_n_);
+            run_multi(max_swap_n_);
+        }
     }
     void exhaustive_manual_check() {
         const std::vector<IType> csol(sol_.begin(), sol_.end());
