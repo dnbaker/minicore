@@ -21,17 +21,14 @@ namespace streaming {
 
 template<typename FT, bool arith_override=false, typename=std::enable_if_t<arith_override || std::is_arithmetic_v<FT>>>
 struct UniformWeightIterator {
-    //size_t nsteps_ = 0;
     FT operator*() const {
         return static_cast<FT>(1);
     }
     UniformWeightIterator &operator++() {
-        //++nsteps_;
         return *this;
     }
     UniformWeightIterator operator++(int) {
         UniformWeightIterator ret(*this);
-        //++nsteps_;
         return ret;
     }
 };

@@ -13,7 +13,7 @@ using hrc = std::chrono::high_resolution_clock;
 template<typename Clock>
 static inline uint32_t timediff2ms(std::chrono::time_point<Clock> start, std::chrono::time_point<Clock> stop) {
     if(stop < start) std::swap(stop, start);
-    return static_cast<uint32_t>(static_cast<uint64_t>((stop - start).count()) / 1000000);
+    return std::chrono::duration<double, std::milli>(stop - start).count();
 }
 
 struct Timer {
