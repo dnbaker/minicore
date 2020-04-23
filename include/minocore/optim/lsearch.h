@@ -19,27 +19,6 @@ namespace minocore {
 
 namespace graph {
 
-namespace detail {
-
-template<typename T, typename Functor>
-void recursive_combinatorial_for_each(size_t nitems, unsigned r, T &ret, size_t npicks, const Functor &func) {
-    for(unsigned i = nitems; i >= r; i--) {
-        ret[r - 1] = i - 1;
-        if(r > 1) {
-            recursive_combinatorial_for_each(i - 1, r - 1, ret, npicks, func);
-        } else {
-            func(ret);
-        }
-    }
-}
-
-}
-
-#if 0
-std::vector<uint32_t> kcenter_matrix(const Mat &mat, RNG &rng, unsigned k) {
-}
-                auto approx = kcenter_matrix(mat_, rng, k_);
-#endif
 
 template<typename MatType, typename IType=std::uint32_t, size_t N=16>
 struct ExhaustiveSearcher {
@@ -53,17 +32,17 @@ struct ExhaustiveSearcher {
         blaze::SmallArray<IType, N> csol(k_);
         const size_t nr = mat_.rows();
         size_t nchecked = 0;
-        detail::recursive_combinatorial_for_each(nr, k_, csol, k_, [&](const auto &sol) {
-            const double cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, sol BLAZE_CHECK_DEBUG)));
+        for(auto &&comb: discreture::combinations(nr, k_)) {
+            const double cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, comb.data(), comb.size())));
             ++nchecked;
             if((nchecked & (nchecked - 1)) == 0)
                 std::fprintf(stderr, "iteration %zu completed\n", nchecked);
             if(cost < current_cost_) {
                 std::fprintf(stderr, "Swapping to new center set with new cost = %g on iteration %zu\n", cost, nchecked);
                 current_cost_ = cost;
-                bestsol_ = sol;
+                std::copy(comb.data(), comb.data() + comb.size(), bestsol_.data());
             }
-        });
+        }
         std::fprintf(stderr, "Best result: %g. Total number of combinations checked: %zu\n", current_cost_, nchecked);
     }
 };
