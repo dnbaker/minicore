@@ -43,3 +43,6 @@
 [submodule "code/fastiota"]
 	path = fastiota
 	url = https://github.com/dnbaker/fastiota
+[submodule "discreture"]
+	path = discreture
+	url = https://github.com/mraggi/discreture/

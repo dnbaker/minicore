@@ -5,6 +5,7 @@
 #include "minocore/util/oracle.h"
 #include "minocore/optim/kcenter.h"
 #include "pdqsort/pdqsort.h"
+#include "discreture/include/discreture.hpp"
 #include <atomic>
 
 /*
@@ -258,6 +259,19 @@ struct LocalKMedSearcher {
             cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
         return current_cost_ - cost;
     }
+    double evaluate_multiswap_rt(const IType *newcenter, const IType *oldcenter, size_t N, bool single_threaded=false) const {
+        blz::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
+        for(size_t i = 0; i < N; ++i) {
+            *std::find(as.begin(), as.end(), oldcenter[i]) = newcenter[i];
+        }
+        shared::sort(as.begin(), as.end());
+        double cost;
+        if(single_threaded) {
+            cost = blaze::serial(blz::sum(blz::serial(blz::min<blz::columnwise>(rows(mat_, as)))));
+        } else
+            cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
+        return current_cost_ - cost;
+    }
 
     template<size_t N>
     double lazy_evaluate_multiswap(const IType *newcenters, const IType *oldcenters) const {
@@ -364,6 +378,34 @@ struct LocalKMedSearcher {
                      total, current_cost_);
     }
 
+    void run_multi(unsigned nswap=1) {
+        if(mat_.rows() <= k_) return;
+        if(nswap == 1) {
+            run();
+            return;
+        }
+        if(nswap >= k_) throw std::runtime_error("nswap >= k_");
+        assign();
+        const double diffthresh = initial_cost_ / k_ * eps_;
+        diffthresh_ = diffthresh;
+        next:
+        {
+            blz::DV<IType> csol(sol_.begin(), sol_.end());
+            blz::DV<IType> swap_in(nc_ - sol_.size());
+            blz::DV<IType> inargs(nswap), outargs(nswap);
+            for(auto &&swap_out_comb: discreture::combinations(csol.size(), nswap)) {
+                for(auto &&swap_in_comb: discreture::combinations(swap_in.size(), nswap)) {
+                    auto v = evaluate_multiswap_rt(swap_in_comb.data(), swap_out_comb.data(), nswap);
+                    if(v >= diffthresh_) {
+                        for(auto v: swap_out_comb) sol_.erase(v);
+                        sol_.insert(swap_in_comb.begin(), swap_in_comb.end());
+                        current_cost_ -= v;
+                        goto next;
+                    }
+                }
+            }
+        }
+    }
     void run() {
         assign();
         const double diffthresh = initial_cost_ / k_ * eps_;
@@ -371,6 +413,10 @@ struct LocalKMedSearcher {
         if(mat_.rows() <= k_) return;
         if(lazy_eval_) {
             run_lazy();
+            return;
+        }
+        if(max_swap_n_ > 1) {
+            run_multi(max_swap_n_);
             return;
         }
         //const double diffthresh = 0.;
