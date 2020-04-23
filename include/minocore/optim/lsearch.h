@@ -68,9 +68,10 @@ struct LocalKMedSearcher {
     double diffthresh_;
     blz::DV<IType> ordering_;
     uint32_t shuffle_:1;
-    uint32_t lazy_eval_:2;
     // Set to 0 to avoid lazy search, 1 to only do local search, and 2 to do lazy search and then use exhaustive
+    uint32_t lazy_eval_:15;
     uint32_t max_swap_n_:16;
+    // if(max_swap_n_ > 1), after exhaustive single-swap optimization, enables multiswap search.
     // TODO: enable searches for multiswaps.
 
     // Constructors
@@ -91,7 +92,7 @@ struct LocalKMedSearcher {
         current_cost_(std::numeric_limits<value_type>::max()),
         eps_(eps),
         k_(k), nr_(mat.rows()), nc_(mat.columns()),
-        ordering_(mat.rows()), shuffle_(true), lazy_eval_(false), max_swap_n_(1)
+        ordering_(mat.rows()), shuffle_(true), lazy_eval_(1), max_swap_n_(1)
     {
         std::iota(ordering_.begin(), ordering_.end(), 0);
         static_assert(std::is_integral_v<std::decay_t<decltype(wc->operator[](0))>>, "index container must contain integral values");
@@ -226,9 +227,10 @@ struct LocalKMedSearcher {
         return current_cost_ - cost;
     }
 
-    template<size_t N>
-    double evaluate_multiswap(const IType *newcenter, const IType *oldcenter, bool single_threaded=false) const {
+    template<size_t N, typename IndexType>
+    double evaluate_multiswap(const IndexType *newcenter, const IndexType *oldcenter, bool single_threaded=false) const {
         blz::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
+        shared::sort(as.begin(), as.end());
         for(size_t i = 0; i < N; ++i) {
             *std::find(as.begin(), as.end(), oldcenter[i]) = newcenter[i];
         }
@@ -241,6 +243,10 @@ struct LocalKMedSearcher {
     }
     template<typename IndexType>
     double evaluate_multiswap_rt(const IndexType *newcenter, const IndexType *oldcenter, size_t N, bool single_threaded=false) const {
+        switch(N) {
+           case 2: return evaluate_multiswap<2>(newcenter, oldcenter, single_threaded);
+           case 3: return evaluate_multiswap<3>(newcenter, oldcenter, single_threaded);
+        }
         blz::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
         for(size_t i = 0; i < N; ++i) {
             *std::find(as.begin(), as.end(), oldcenter[i]) = newcenter[i];
@@ -337,7 +343,7 @@ struct LocalKMedSearcher {
                     }
                 }
 #ifndef NDEBUG
-                auto v = evaluate_swap(potential_index, oldcenter);
+                //auto v = evaluate_swap(potential_index, oldcenter);
                 //assert(std::abs(v - val) <= .5 * std::abs(std::max(v, val)) || !std::fprintf(stderr, "Manual: %g. Lazy: %g\n", v, val));
                 assert(sol_.size() == k_);
 #endif
@@ -395,9 +401,8 @@ struct LocalKMedSearcher {
         if(mat_.rows() <= k_) return;
         if(lazy_eval_) {
             run_lazy();
-            if(lazy_eval_ == 2)
+            if(lazy_eval_ > 1)
                 return;
-            // Otherwise, running exhaustive local search after to be sure.
         }
         //const double diffthresh = 0.;
         std::fprintf(stderr, "diffthresh: %f\n", diffthresh);

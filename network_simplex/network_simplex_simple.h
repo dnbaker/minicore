@@ -457,7 +457,6 @@ namespace lemon {
 				std::vector<ArcsType> arcId(N);
 				ArcsType bs = (ArcsType)ceil(_block_size / (double)N);
 #else
-				static constexpr ArcsType N = 1;
 				std::array<Cost, 1> minArray{Cost(0)};
 				std::array<ArcsType, 1> arcId{0};
 #endif
@@ -1231,7 +1230,7 @@ namespace lemon {
 				}
 			}
 			// Search the cycle along the path form the second node to the root
-			for (int u = second; u != join; u = _parent[u]) {
+			for (int u = second; u != static_cast<int>(join); u = _parent[u]) {
 				e = _pred[u];
 				d = _forward[u] ? INF : _flow[e];
 				if (d <= delta) {
@@ -1257,10 +1256,10 @@ namespace lemon {
 			if (delta > 0) {
 				Value val = _state[in_arc] * delta;
 				_flow[in_arc] += val;
-				for (auto u = _source[in_arc]; u != join; u = _parent[u]) {
+				for (auto u = _source[in_arc]; u != static_cast<int>(join); u = _parent[u]) {
 					_flow[_pred[u]] += _forward[u] ? -val : val;
 				}
-				for (auto u = _target[in_arc]; u != join; u = _parent[u]) {
+				for (auto u = _target[in_arc]; u != static_cast<int>(join); u = _parent[u]) {
 					_flow[_pred[u]] += _forward[u] ? val : -val;
 				}
 			}
@@ -1289,7 +1288,7 @@ namespace lemon {
 				_forward[u_in] = (u_in == _source[in_arc]);
 
 				// Update _thread and _rev_thread
-				if (_thread[v_in] != u_out) {
+				if (_thread[v_in] != static_cast<int>(u_out)) {
 					ArcsType after = _thread[old_last_succ];
 					_thread[old_rev_thread] = after;
 					_rev_thread[after] = old_rev_thread;
@@ -1343,7 +1342,7 @@ namespace lemon {
 
 				// Remove the subtree of u_out from the thread list except for
 				// the case when old_rev_thread equals to v_in
-				if (old_rev_thread != v_in) {
+				if (old_rev_thread != static_cast<int>(v_in)) {
 					_thread[old_rev_thread] = after;
 					_rev_thread[after] = old_rev_thread;
 				}
@@ -1372,7 +1371,7 @@ namespace lemon {
 			// Update _last_succ from v_in towards the root
 			int up_limit_out = static_cast<ArcsType>(_last_succ[join]) == v_in ? join : -1;
 			int last_succ_out = _last_succ[u_out];
-			for (int u = v_in; u != -1 && _last_succ[u] == v_in; u = _parent[u]) {
+			for (int u = v_in; u != -1 && _last_succ[u] == static_cast<int>(v_in); u = _parent[u]) {
 				_last_succ[u] = last_succ_out;
 			}
 

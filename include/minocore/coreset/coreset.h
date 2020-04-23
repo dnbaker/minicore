@@ -3,6 +3,7 @@
 #define FGC_CORESETS_H__
 #include <vector>
 #include <map>
+#include <queue>
 #include "alias_sampler/alias_sampler.h"
 #include "minocore/util/blaze_adaptor.h"
 #include "minocore/util/shared.h"
@@ -534,6 +535,45 @@ struct CoresetSampler {
     }
     auto getweight(size_t ind) const {
         return weights_ ? weights_->operator[](ind): static_cast<FT>(1.);
+    }
+    struct importance_compare {
+        bool operator()(const std::pair<IT, FT> lh, const std::pair<IT, FT> rh) const {
+            return lh.second > rh.second;
+        }
+    };
+    struct importance_queue: public std::priority_queue<std::pair<IT, FT>,
+                                                        std::vector<std::pair<IT, FT>>,
+                                                        importance_compare>
+    {
+        auto &getc() {return this->c;}
+        const auto &getc() const {return this->c;}
+    };
+    IndexCoreset<IT, FT> top_outliers(const size_t n) {
+        importance_queue topk;
+        std::pair<IT, FT> cpoint;
+        for(size_t i = 0; i < size(); ++i) {
+            FT pi = probs_[i];
+            if(topk.size() < n) {
+                cpoint = {IT(i), pi};
+                topk.push(cpoint);
+                continue;
+            }
+            if(topk.top().second < pi) {
+                topk.pop();
+                cpoint = {IT(i), pi};
+                topk.push(cpoint);
+            }
+        }
+        auto container = std::move(topk.getc());
+        // Put the most expensive items in front.
+        shared::sort(container.begin(), container.end(), importance_compare());
+        IndexCoreset<IT, FT> ret(n);
+        const double dn = n;
+        for(unsigned i = 0; i < n; ++i) {
+            auto ind = container[i].first;
+            ret.indices_[i] = ind;
+            ret.weights_[i] = getweight(ind) / (dn * container[i].second);
+        }
     }
     IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0, double eps=0.1) {
         if(unlikely(!sampler_.get())) throw std::runtime_error("Sampler not constructed");
