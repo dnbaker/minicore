@@ -1285,7 +1285,7 @@ namespace lemon {
 				// Update _parent, _pred, _pred_dir
 				_parent[u_in] = v_in;
 				_pred[u_in] = in_arc;
-				_forward[u_in] = (static_cas<int>(u_in) == _source[in_arc]);
+				_forward[u_in] = (static_cast<int>(u_in) == _source[in_arc]);
 
 				// Update _thread and _rev_thread
 				if (_thread[v_in] != static_cast<int>(u_out)) {

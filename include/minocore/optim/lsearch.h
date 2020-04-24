@@ -315,6 +315,7 @@ struct LocalKMedSearcher {
         std::vector<IType> newindices(sol_.begin(), sol_.end());
         next:
         for(const auto oldcenter: sol_) {
+            newindices.assign(sol_.begin(), sol_.end());
             std::swap(*std::find(newindices.begin(), newindices.end(), oldcenter), newindices.back());
             if(shuffle_) {
                 wy::WyRand<uint64_t, 2> rng(total);

@@ -30,36 +30,54 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
     if(maxdest == 0) maxdest = np;
     std::vector<IT> centers(k);
     std::vector<FT> distances(np, 0.);
+    static constexpr FT startval =  std::is_floating_point<FT>::value ? -std::numeric_limits<FT>::max(): std::numeric_limits<FT>::min();
+    std::pair<FT, IT> maxdist(startval, 0);
     VERBOSE_ONLY(std::fprintf(stderr, "[%s] Starting kcenter_greedy_2approx\n", __PRETTY_FUNCTION__);)
     {
         auto fc = rng() % maxdest;
         centers[0] = fc;
         distances[fc] = 0.;
-        OMP_ELSE(OMP_PFOR, SK_UNROLL_8)
-        for(size_t i = 0; i < maxdest; ++i) {
-            if(unlikely(i == fc)) continue;
-            distances[i] = dm(fc, i);
+#ifdef _OPENMP
+        #pragma omp declare reduction (max : std::pair<FT, IT> : std::max(omp_in, omp_out) )
+        #pragma omp parallel for reduction(max: maxdist)
+#else
+        SK_UNROLL_8
+#endif
+        for(IT i = 0; i < maxdest; ++i) {
+            if(likely(i != fc)) {
+                auto v = dm(fc, i);
+                distances[i] = v;
+                maxdist = std::max(maxdist, std::make_pair(v, i));
+            }
         }
         assert(distances[fc] == 0.);
     }
+    if(k == 1) return centers;
+    centers[1] = maxdist.second;
 
-    for(size_t ci = 1; ci < k; ++ci) {
-        auto it = std::max_element(distances.begin(), distances.end());
-        VERBOSE_ONLY(std::fprintf(stderr, "maxelement is %zd from start\n", std::distance(distances.begin(), it));)
-        uint64_t newc = it - distances.begin();
-        centers[ci] = newc;
-        distances[newc] = 0.;
-        OMP_PFOR
+    for(size_t ci = 2; ci < k; ++ci) {
+        auto newc = centers[ci - 1];
+        //auto it = std::max_element(distances.begin(), distances.end());
+        //VERBOSE_ONLY(std::fprintf(stderr, "maxelement is %zd from start\n", std::distance(distances.begin(), it));)
+        maxdist = std::pair<FT, IT>(startval, 0);
+#ifdef _OPENMP
+        #pragma omp declare reduction (max : std::pair<FT, IT> : std::max(omp_in, omp_out) )
+        #pragma omp parallel for reduction(max: maxdist)
+#else
+        SK_UNROLL_8
+#endif
         for(IT i = 0; i < maxdest; ++i) {
             if(unlikely(i == newc)) continue;
             auto &ldist = distances[i];
+            if(!ldist) continue;
             const auto dist = dm(newc, i);
             if(dist < ldist) {
                 ldist = dist;
             }
+            maxdist = std::max(maxdist, std::make_pair(ldist, i));
         }
-        assert(std::find_if(distances.begin(), distances.end(), [](auto x) {return std::isnan(x) || std::isinf(x);})
-               == distances.end());
+        centers[ci] = maxdist.second;
+        distances[maxdist.second] = 0.;
     }
     return centers;
 } // kcenter_greedy_2approx
