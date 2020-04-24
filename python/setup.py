@@ -23,10 +23,13 @@ class get_pybind_include(object):
         return pybind11.get_include(self.user)
 
 
+libgomp = "libgomp.a" # -lgomp
+
+
 extra_compile_args = ['-march=native',
                       '-Wno-char-subscripts', '-Wno-unused-function',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
-                      '-lz', '-fopenmp', '-lgomp']
+                      '-lz', '-fopenmp', libgomp]
 
 if 'BOOST_DIR' in environ:
     extra_compile_args.append("-I%s" % environ['BOOST_DIR'])
@@ -83,7 +86,7 @@ def cpp_flag(compiler):
                        'is needed!')
 
 
-extra_link_opts = ["-lgomp", "-lz"]
+extra_link_opts = [libgomp, "-lz"]
 
 class BuildExt(build_ext):
     """A custom build extension for adding compiler-specific options."""
@@ -125,7 +128,7 @@ setup(
     author='Daniel Baker',
     author_email='dnb@cs.jhu.edu',
     url='https://github.com/dnbaker/pyfgc',
-    description='A python module for constructing and comparing HyperLogLogs',
+    description='A python module for stuff',
     long_description='',
     ext_modules=ext_modules,
     install_requires=['pybind11>=2.4'],
