@@ -33,30 +33,28 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
     static constexpr FT startval =  std::is_floating_point<FT>::value ? -std::numeric_limits<FT>::max(): std::numeric_limits<FT>::min();
     std::pair<FT, IT> maxdist(startval, 0);
     VERBOSE_ONLY(std::fprintf(stderr, "[%s] Starting kcenter_greedy_2approx\n", __PRETTY_FUNCTION__);)
-    {
-        auto fc = rng() % maxdest;
-        centers[0] = fc;
-        distances[fc] = 0.;
+    auto newc = rng() % maxdest;
+    centers[0] = newc;
+    distances[newc] = 0.;
 #ifdef _OPENMP
-        #pragma omp declare reduction (max : std::pair<FT, IT> : std::max(omp_in, omp_out) )
-        #pragma omp parallel for reduction(max: maxdist)
+    #pragma omp declare reduction (max : std::pair<FT, IT> : std::max(omp_in, omp_out) )
+    #pragma omp parallel for reduction(max: maxdist)
 #else
-        SK_UNROLL_8
+    SK_UNROLL_8
 #endif
-        for(IT i = 0; i < maxdest; ++i) {
-            if(likely(i != fc)) {
-                auto v = dm(fc, i);
-                distances[i] = v;
-                maxdist = std::max(maxdist, std::make_pair(v, i));
-            }
+    for(IT i = 0; i < maxdest; ++i) {
+        if(likely(i != newc)) {
+            auto v = dm(newc, i);
+            distances[i] = v;
+            maxdist = std::max(maxdist, std::make_pair(v, i));
         }
-        assert(distances[fc] == 0.);
     }
+    assert(distances[newc] == 0.);
     if(k == 1) return centers;
-    centers[1] = maxdist.second;
+    centers[1] = newc = maxdist.second;
+    distances[newc] = 0.;
 
     for(size_t ci = 2; ci < k; ++ci) {
-        auto newc = centers[ci - 1];
         //auto it = std::max_element(distances.begin(), distances.end());
         //VERBOSE_ONLY(std::fprintf(stderr, "maxelement is %zd from start\n", std::distance(distances.begin(), it));)
         maxdist = std::pair<FT, IT>(startval, 0);
@@ -76,8 +74,8 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
             }
             maxdist = std::max(maxdist, std::make_pair(ldist, i));
         }
-        centers[ci] = maxdist.second;
-        distances[maxdist.second] = 0.;
+        centers[ci] = newc = maxdist.second;
+        distances[newc] = 0.;
     }
     return centers;
 } // kcenter_greedy_2approx

@@ -23,7 +23,7 @@ template<typename Mat, typename RNG>
 void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {
     auto matrowit = blz::rowiterator(mat);
     auto start = t();
-    double gamma = 100. / mat.rows();
+    double gamma = 500. / mat.rows();
     if(gamma >= 0.5)
         gamma = 0.05;
     auto cs = kcenter_coreset_outliers(matrowit.begin(), matrowit.end(), rng, npoints, eps,
