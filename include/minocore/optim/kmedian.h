@@ -24,7 +24,7 @@ auto &geomedian(const blz::DenseMatrix<MT, SO> &mat, blz::DenseVector<VT, !SO> &
     const auto &_mat = ~mat;
     ~dv = blz::mean<blz::columnwise>(_mat);
     FT prevcost = std::numeric_limits<FT>::max();
-    blz::DV<FT, !SO> costs(_mat.rows(), FT(0));
+    blaze::DynamicVector<FT, !SO> costs(_mat.rows(), FT(0));
     size_t iternum = 0;
     const size_t nr = _mat.rows();
     assert((~dv).size() == (~mat).columns());

@@ -11,7 +11,7 @@ namespace util {
 using hrc = std::chrono::high_resolution_clock;
 
 template<typename Clock>
-static inline uint32_t timediff2ms(std::chrono::time_point<Clock> start, std::chrono::time_point<Clock> stop) {
+static inline double timediff2ms(std::chrono::time_point<Clock> start, std::chrono::time_point<Clock> stop) {
     if(stop < start) std::swap(stop, start);
     return std::chrono::duration<double, std::milli>(stop - start).count();
 }

@@ -8,6 +8,7 @@
 #include "minocore/util/oracle.h"
 #include "minocore/util/timer.h"
 #include "minocore/util/div.h"
+#include "minocore/util/blaze_adaptor.h"
 
 namespace minocore {
 
@@ -104,10 +105,10 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT 
 }
 
 template<typename Oracle, typename Sol, typename FT=float, typename IT=uint32_t>
-std::pair<blz::DV<IT>, blz::DV<FT>> get_oracle_costs(const Oracle &oracle, size_t np, const Sol &sol)
+std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(const Oracle &oracle, size_t np, const Sol &sol)
 {
-    blz::DV<IT> assignments(np);
-    blz::DV<FT> costs(np, std::numeric_limits<FT>::max());
+    blaze::DynamicVector<IT> assignments(np);
+    blaze::DynamicVector<FT> costs(np, std::numeric_limits<FT>::max());
     util::Timer t("get oracle costs");
     OMP_PFOR
     for(size_t i = 0; i < np; ++i) {
@@ -175,7 +176,6 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
                 }
             }
         }
-        std::fprintf(stderr, "[kmc2]: %zu/%zu\n", centers.size(), size_t(k));
         centers.insert(x);
     }
     return std::vector<IT>(centers.begin(), centers.end());

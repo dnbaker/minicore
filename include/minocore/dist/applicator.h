@@ -81,19 +81,19 @@ public:
         }
         if constexpr(measure == JSM) {
             if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
-                m = blz::sqrt(m);
+                m = blaze::sqrt(m);
             } else if constexpr(dm::is_distance_matrix_v<MatType>) {
                 blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> cv(const_cast<FT *>(m.data()), m.size());
-                cv = blz::sqrt(cv);
+                cv = blaze::sqrt(cv);
             } else {
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
             }
         } else if constexpr(measure == COSINE_DISTANCE || measure == PROBABILITY_COSINE_DISTANCE) {
             if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
-                m = blz::acos(m) * PI_INV;
+                m = blaze::acos(m) * PI_INV;
             } else if constexpr(dm::is_distance_matrix_v<MatType>) {
                 blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> cv(const_cast<FT *>(m.data()), m.size());
-                cv = blz::acos(cv) * PI_INV;
+                cv = blaze::acos(cv) * PI_INV;
             } else {
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::acos(x) * PI_INV;});
             }
@@ -170,10 +170,10 @@ public:
         return ret;
     }
     auto cosine_similarity(size_t i, size_t j) const {
-        return blz::dot(weighted_row(i), weighted_row(j)) * l2norm_cache_->operator[](i) * l2norm_cache_->operator[](j);
+        return blaze::dot(weighted_row(i), weighted_row(j)) * l2norm_cache_->operator[](i) * l2norm_cache_->operator[](j);
     }
     auto pcosine_similarity(size_t i, size_t j) const {
-        return blz::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
+        return blaze::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
     }
 
     static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
@@ -185,20 +185,20 @@ public:
         return std::acos(cosine_similarity(i, j)) * PI_INV;
     }
     auto dotproduct_distance(size_t i, size_t j) const {
-        return blz::dot(weighted_row(i), weighted_row(j)) * l2norm_cache_->operator[](i) * l2norm_cache_->operator[](j);
+        return blaze::dot(weighted_row(i), weighted_row(j)) * l2norm_cache_->operator[](i) * l2norm_cache_->operator[](j);
     }
     auto pdotproduct_distance(size_t i, size_t j) const {
-        return blz::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
+        return blaze::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
     }
 
 
     // Accessors
     decltype(auto) weighted_row(size_t ind) const {
-        return blz::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_[ind];
+        return blaze::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_[ind];
     }
-    auto row(size_t ind) const {return blz::row(data_, ind BLAZE_CHECK_DEBUG);}
-    auto logrow(size_t ind) const {return blz::row(*logdata_, ind BLAZE_CHECK_DEBUG);}
-    auto sqrtrow(size_t ind) const {return blz::row(*sqrdata_, ind BLAZE_CHECK_DEBUG);}
+    auto row(size_t ind) const {return blaze::row(data_, ind BLAZE_CHECK_DEBUG);}
+    auto logrow(size_t ind) const {return blaze::row(*logdata_, ind BLAZE_CHECK_DEBUG);}
+    auto sqrtrow(size_t ind) const {return blaze::row(*sqrdata_, ind BLAZE_CHECK_DEBUG);}
 
 
     /*
@@ -329,7 +329,7 @@ public:
 
     auto hellinger(size_t i, size_t j) const {
         return sqrdata_ ? blaze::sqrNorm(sqrtrow(i) - sqrtrow(j))
-                        : blaze::sqrNorm(blz::sqrt(row(i)) - blz::sqrt(row(j)));
+                        : blaze::sqrNorm(blaze::sqrt(row(i)) - blaze::sqrt(row(j)));
     }
     FT jsd(size_t i, size_t j) const {
         if(!IsSparseMatrix_v<MatrixType> || !prior_data_) {
@@ -339,7 +339,7 @@ public:
             auto ri = row(i), rj = row(j);
             //constexpr FT logp5 = -0.693147180559945; // std::log(0.5)
             auto s = ri + rj;
-            ret = jsd_cache_->operator[](i) + jsd_cache_->operator[](j) - blz::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
+            ret = jsd_cache_->operator[](i) + jsd_cache_->operator[](j) - blaze::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
 #ifndef NDEBUG
             static constexpr typename MatrixType::ElementType threshold
                 = std::is_same_v<typename MatrixType::ElementType, double>
@@ -356,80 +356,80 @@ public:
     auto jsd(size_t i, const OT &o, const OT2 &olog) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto mnlog = evaluate(log(0.5 * (row(i) + o)));
-        return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
+        return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto jsd(size_t i, const OT &o) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        auto olog = evaluate(blaze::neginf2zero(blz::log(o)));
+        auto olog = evaluate(blaze::neginf2zero(blaze::log(o)));
         return jsd(i, o, olog);
     }
     auto mkl(size_t i, size_t j) const {
         // Multinomial KL
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return get_jsdcache(i) - blz::dot(row(i), logrow(j));
+        return get_jsdcache(i) - blaze::dot(row(i), logrow(j));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto mkl(size_t i, const OT &o) const {
         // Multinomial KL
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return get_jsdcache(i) - blz::dot(row(i), blaze::neginf2zero(blz::log(o)));
+        return get_jsdcache(i) - blaze::dot(row(i), blaze::neginf2zero(blaze::log(o)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto mkl(size_t i, const OT &, const OT2 &olog) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Multinomial KL
-        return blz::dot(row(i), logrow(i) - olog);
+        return blaze::dot(row(i), logrow(i) - olog);
     }
     auto pkl(size_t i, size_t j) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission KL
-        return get_jsdcache(i) - blz::dot(row(i), logrow(j)) + blz::sum(row(j) - row(i));
+        return get_jsdcache(i) - blaze::dot(row(i), logrow(j)) + blaze::sum(row(j) - row(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto pkl(size_t i, const OT &o, const OT2 &olog) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission KL
-        return get_jsdcache(i) - blz::dot(row(i), olog) + blz::sum(row(i) - o);
+        return get_jsdcache(i) - blaze::dot(row(i), olog) + blaze::sum(row(i) - o);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto pkl(size_t i, const OT &o) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return pkl(i, o, neginf2zero(blz::log(o)));
+        return pkl(i, o, neginf2zero(blaze::log(o)));
     }
     auto psd(size_t i, size_t j) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + row(j))));
-        return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(row(j), logrow(j) - mnlog));
+        return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(row(j), logrow(j) - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto psd(size_t i, const OT &o, const OT2 &olog) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + o)));
-        return (blz::dot(row(i), logrow(i) - mnlog) + blz::dot(o, olog - mnlog));
+        return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto psd(size_t i, const OT &o) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return psd(i, o, neginf2zero(blz::log(o)));
+        return psd(i, o, neginf2zero(blaze::log(o)));
     }
     auto bhattacharyya_sim(size_t i, size_t j) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return sqrdata_ ? blz::dot(sqrtrow(i), sqrtrow(j))
-                        : blz::sum(blz::sqrt(row(i) * row(j)));
+        return sqrdata_ ? blaze::dot(sqrtrow(i), sqrtrow(j))
+                        : blaze::sum(blaze::sqrt(row(i) * row(j)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto bhattacharyya_sim(size_t i, const OT &o, const OT2 &osqrt) const {
         if(IS_SPARSE && prior_data_) throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return sqrdata_ ? blz::dot(sqrtrow(i), osqrt)
-                        : blz::sum(blz::sqrt(row(i) * o));
+        return sqrdata_ ? blaze::dot(sqrtrow(i), osqrt)
+                        : blaze::sum(blaze::sqrt(row(i) * o));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto bhattacharyya_sim(size_t i, const OT &o) const {
         if(IS_SPARSE && prior_data_) throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return bhattacharyya_sim(i, o, blz::sqrt(o));
+        return bhattacharyya_sim(i, o, blaze::sqrt(o));
     }
     template<typename...Args>
     auto bhattacharyya_distance(Args &&...args) const {
@@ -455,8 +455,8 @@ public:
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
         auto ret = lhn * get_jsdcache(i) + rhn * get_jsdcache(j)
             -
-            blz::dot(weighted_row(i) + weighted_row(j),
-                neginf2zero(blz::log(lambda * row(i) + m1l * row(j)))
+            blaze::dot(weighted_row(i) + weighted_row(j),
+                neginf2zero(blaze::log(lambda * row(i) + m1l * row(j)))
             );
         assert(ret >= -1e-2 * (row_sums_[i] + row_sums_[j]) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, 0.);
@@ -464,7 +464,7 @@ public:
     auto ollr(size_t i, size_t j) const {
         if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto ret = get_jsdcache(i) * row_sums_[i] + get_jsdcache(j) * row_sums_[j]
-            - blz::dot(weighted_row(i) + weighted_row(j), neginf2zero(blz::log((row(i) + row(j)) * .5)));
+            - blaze::dot(weighted_row(i) + weighted_row(j), neginf2zero(blaze::log((row(i) + row(j)) * .5)));
         return std::max(ret, 0.);
     }
     auto uwllr(size_t i, size_t j) const {
@@ -475,8 +475,8 @@ public:
           std::max(
             lambda * get_jsdcache(i) +
                   m1l * get_jsdcache(j) -
-               blz::dot(lambda * row(i) + m1l * row(j),
-                        neginf2zero(blz::log(
+               blaze::dot(lambda * row(i) + m1l * row(j),
+                        neginf2zero(blaze::log(
                             lambda * row(i) + m1l * row(j)))),
           0.);
     }
@@ -525,7 +525,7 @@ private:
             case FEATURE_SPECIFIC_PRIOR:
                 if(c == nullptr) throw std::invalid_argument("Can't do feature-specific with null pointer");
                 if constexpr(IsDenseMatrix_v<MatrixType>) {
-                    data_ += blz::expand(*c, data_.rows());
+                    data_ += blaze::expand(*c, data_.rows());
                 } else if constexpr(IsSparseMatrix_v<MatrixType>) {
                     assert(c->size() == data_.columns());
                     prior_data_.reset(new VecT(data_.columns()));
@@ -537,13 +537,13 @@ private:
         {
             auto rowsumit = row_sums_.data();
             for(auto r: blz::rowiterator(data_)) {
-                if constexpr(blz::IsDenseMatrix_v<MatrixType>) {
+                if constexpr(blaze::IsDenseMatrix_v<MatrixType>) {
                     if(prior == NONE) {
                         r += 1e-50;
-                        assert(blz::min(r) > 0.);
+                        assert(blaze::min(r) > 0.);
                     }
                 }
-                const auto countsum = blz::sum(r);
+                const auto countsum = blaze::sum(r);
                 r /= countsum;
                 *rowsumit++ = countsum;
             }

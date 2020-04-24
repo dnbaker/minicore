@@ -284,7 +284,7 @@ private:
         if(early_terminate && early_terminate->load()) return;
         // Assign all unassigned
         if(open_facilities.empty()) {
-            blz::DV<FT> fac_costs = blaze::sum<blz::rowwise>(distmat);
+            blaze::DynamicVector<FT> fac_costs = blaze::sum<blaze::rowwise>(distmat);
             open_facilities.push_back(std::min_element(fac_costs.begin(), fac_costs.end()) - fac_costs.begin());
         }
         for(const IT cid: unassigned_clients) {
@@ -428,7 +428,7 @@ public:
     JVSolver(const MatrixType &mat, const CostType &cost): JVSolver() {
         setup(mat, cost);
     }
-    JVSolver(const MatrixType &mat): JVSolver(mat, blz::max(mat)) {
+    JVSolver(const MatrixType &mat): JVSolver(mat, blaze::max(mat)) {
     }
 
     template<typename CostType>
@@ -890,7 +890,7 @@ public:
         return std::make_pair(final_open_facilities_, final_open_facility_assignments_);
     }
     IT local_best_to_add() const {
-        blz::DV<FT,blaze::rowVector> current_costs = blz::min<blz::columnwise>(blz::rows(*distmatp_, final_open_facilities_.data(), final_open_facilities_.size()));
+        blaze::DynamicVector<FT,blaze::rowVector> current_costs = blaze::min<blaze::columnwise>(blaze::rows(*distmatp_, final_open_facilities_.data(), final_open_facilities_.size()));
         FT max_improvement = -std::numeric_limits<FT>::max();
         IT bestind = -1;
         for(size_t i = 0; i < nfac_; ++i) {
@@ -908,7 +908,7 @@ public:
         return bestind;
     }
     IT local_best_to_rm() const {
-        blz::DV<FT, blaze::rowVector> current_costs = blz::min<blz::columnwise>(blz::rows(*distmatp_, final_open_facilities_.data(), final_open_facilities_.size()));
+        blaze::DynamicVector<FT, blaze::rowVector> current_costs = blaze::min<blaze::columnwise>(blaze::rows(*distmatp_, final_open_facilities_.data(), final_open_facilities_.size()));
         FT min_loss = std::numeric_limits<FT>::max();
         IT bestind = -1;
         std::unique_ptr<IT[]> min_counters(new IT[ncities_]());

@@ -7,7 +7,7 @@ namespace coresets {
 template<typename MatrixType, typename FT=double>
 struct MatrixCoreset {
     MatrixType mat_;
-    blz::DynamicVector<FT> weights_;
+    blaze::DynamicVector<FT> weights_;
     bool rowwise_;
     MatrixCoreset &merge(const MatrixCoreset &o) {
         if(rowwise_ != o.rowwise_) throw std::runtime_error("Can't merge coresets of differing rowwiseness");

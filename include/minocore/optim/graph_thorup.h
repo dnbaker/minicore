@@ -265,7 +265,7 @@ std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
 }
 
 template<typename Graph, typename Container>
-std::pair<blz::DV<std::decay_t<decltype(get(boost::edge_weight_t(), std::declval<Graph>(), std::declval<Graph>()))>>,
+std::pair<blaze::DynamicVector<std::decay_t<decltype(get(boost::edge_weight_t(), std::declval<Graph>(), std::declval<Graph>()))>>,
           std::vector<uint32_t>>
 get_costs(Graph &x, const Container &container) {
     using edge_cost = std::decay_t<decltype(get(boost::edge_weight_t(), x, std::declval<Graph>()))>;
@@ -274,7 +274,7 @@ get_costs(Graph &x, const Container &container) {
 
     util::ScopedSyntheticVertex<Graph> vx(x);
     std::vector<uint32_t> assignments(boost::num_vertices(x));
-    blz::DV<edge_cost> costs(boost::num_vertices(x));
+    blaze::DynamicVector<edge_cost> costs(boost::num_vertices(x));
     std::vector<Vertex> p(boost::num_vertices(x));
 
     auto synthetic_vertex = vx.get();
@@ -360,9 +360,9 @@ thorup_sample_mincost(Graph &x, unsigned k, uint64_t seed, unsigned num_iter,
 }
 
 template<typename Con, typename IType=std::uint32_t, typename VertexContainer>
-blz::DV<IType> histogram_assignments(const Con &c, unsigned ncenters, const VertexContainer &vtces) {
+blaze::DynamicVector<IType> histogram_assignments(const Con &c, unsigned ncenters, const VertexContainer &vtces) {
     const size_t n = std::size(vtces);
-    blz::DV<IType>ret(ncenters, static_cast<IType>(0));
+    blaze::DynamicVector<IType>ret(ncenters, static_cast<IType>(0));
     OMP_PFOR
     for(size_t i = 0; i < n; ++i) {
         OMP_ATOMIC

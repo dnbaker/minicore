@@ -9,9 +9,9 @@ template<typename FT=float, bool SO=blaze::rowMajor>
 struct GMM {
     // Related: Laplacian
     unsigned                    k_;
-    blz::DynamicMatrix<FT, SO> mu_;
-    blz::DynamicMatrix<FT, SO> pi_;
-    blz::DynamicMatrix<FT, SO> pm_; // precision matrix
+    blaze::DynamicMatrix<FT, SO> mu_;
+    blaze::DynamicMatrix<FT, SO> pi_;
+    blaze::DynamicMatrix<FT, SO> pm_; // precision matrix
     std::vector<FT>    cached_det_;
     static constexpr double m_pi = 3.14159265358979323846;
 

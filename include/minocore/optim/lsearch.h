@@ -33,7 +33,7 @@ struct ExhaustiveSearcher {
         const size_t nr = mat_.rows();
         size_t nchecked = 0;
         for(auto &&comb: discreture::combinations(nr, k_)) {
-            const double cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, comb.data(), comb.size())));
+            const double cost = blaze::sum(blaze::min<blaze::columnwise>(rows(mat_, comb.data(), comb.size())));
             ++nchecked;
             if((nchecked & (nchecked - 1)) == 0)
                 std::fprintf(stderr, "iteration %zu completed\n", nchecked);
@@ -59,14 +59,14 @@ struct LocalKMedSearcher {
 
     const MatType &mat_;
     shared::flat_hash_set<IType> sol_;
-    blz::DV<IType> assignments_;
-    blz::DV<typename MatType::ElementType, blaze::rowVector> current_costs_;
+    blaze::DynamicVector<IType> assignments_;
+    blaze::DynamicVector<typename MatType::ElementType, blaze::rowVector> current_costs_;
     double current_cost_;
     double eps_, initial_cost_, init_cost_div_;
     IType k_;
     const size_t nr_, nc_;
     double diffthresh_;
-    blz::DV<IType> ordering_;
+    blaze::DynamicVector<IType> ordering_;
     uint32_t shuffle_:1;
     // Set to 0 to avoid lazy search, 1 to only do local search, and 2 to do lazy search and then use exhaustive
     uint32_t lazy_eval_:15;
@@ -138,7 +138,7 @@ struct LocalKMedSearcher {
                 //std::fprintf(stderr, "subm rows: %zu\n", subm.rows());
                 std::vector<uint32_t> approx{uint32_t(rng() % subm.rows())};
                 auto first = approx.front();
-                blz::DV<value_type, blaze::rowVector> mincosts = row(subm, first);
+                blaze::DynamicVector<value_type, blaze::rowVector> mincosts = row(subm, first);
                 std::vector<uint32_t> remaining(subm.rows());
                 std::iota(remaining.begin(), remaining.end(), 0u);
                 while(approx.size() < std::min(subm.rows(), size_t(k_))) {
@@ -218,27 +218,27 @@ struct LocalKMedSearcher {
     }
 
     double evaluate_swap(IType newcenter, IType oldcenter, bool single_threaded=false) const {
-        blz::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
+        blaze::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
         *std::find(as.begin(), as.end(), oldcenter) = newcenter;
         double cost;
         if(single_threaded) {
-            cost = blaze::serial(blz::sum(blz::serial(blz::min<blz::columnwise>(rows(mat_, as)))));
-        } else cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
+            cost = blaze::serial(blaze::sum(blaze::serial(blaze::min<blaze::columnwise>(rows(mat_, as)))));
+        } else cost = blaze::sum(blaze::min<blaze::columnwise>(rows(mat_, as)));
         return current_cost_ - cost;
     }
 
     template<size_t N, typename IndexType>
     double evaluate_multiswap(const IndexType *newcenter, const IndexType *oldcenter, bool single_threaded=false) const {
-        blz::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
+        blaze::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
         shared::sort(as.begin(), as.end());
         for(size_t i = 0; i < N; ++i) {
             *std::find(as.begin(), as.end(), oldcenter[i]) = newcenter[i];
         }
         double cost;
         if(single_threaded) {
-            cost = blaze::serial(blz::sum(blz::serial(blz::min<blz::columnwise>(rows(mat_, as)))));
+            cost = blaze::serial(blaze::sum(blaze::serial(blaze::min<blaze::columnwise>(rows(mat_, as)))));
         } else
-            cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
+            cost = blaze::sum(blaze::min<blaze::columnwise>(rows(mat_, as)));
         return current_cost_ - cost;
     }
     template<typename IndexType>
@@ -247,16 +247,16 @@ struct LocalKMedSearcher {
            case 2: return evaluate_multiswap<2>(newcenter, oldcenter, single_threaded);
            case 3: return evaluate_multiswap<3>(newcenter, oldcenter, single_threaded);
         }
-        blz::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
+        blaze::SmallArray<IType, 16> as(sol_.begin(), sol_.end());
         for(size_t i = 0; i < N; ++i) {
             *std::find(as.begin(), as.end(), oldcenter[i]) = newcenter[i];
         }
         shared::sort(as.begin(), as.end());
         double cost;
         if(single_threaded) {
-            cost = blaze::serial(blz::sum(blz::serial(blz::min<blz::columnwise>(rows(mat_, as)))));
+            cost = blaze::serial(blaze::sum(blaze::serial(blaze::min<blaze::columnwise>(rows(mat_, as)))));
         } else
-            cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, as)));
+            cost = blaze::sum(blaze::min<blaze::columnwise>(rows(mat_, as)));
         return current_cost_ - cost;
     }
 
@@ -276,11 +276,11 @@ struct LocalKMedSearcher {
                 current_costs_ = row(mat_, *it BLAZE_CHECK_DEBUG);
             }
             while(++it != sol_.end()) {
-                current_costs_ = blz::min(current_costs_, row(mat_, *it BLAZE_CHECK_DEBUG));
+                current_costs_ = blaze::min(current_costs_, row(mat_, *it BLAZE_CHECK_DEBUG));
             }
         }
-        blz::DV<typename MatType::ElementType, blz::rowVector> newptr = blz::min<blz::rowwise>(rows(mat_, newcenters, N));
-        blz::DV<typename MatType::ElementType, blz::rowVector> oldptr = blz::min<blz::rowwise>(rows(mat_, oldcenters, N));
+        blaze::DynamicVector<typename MatType::ElementType, blaze::rowVector> newptr = blaze::min<blaze::rowwise>(rows(mat_, newcenters, N));
+        blaze::DynamicVector<typename MatType::ElementType, blaze::rowVector> oldptr = blaze::min<blaze::rowwise>(rows(mat_, oldcenters, N));
         double diff = 0.;
 #ifdef _OPENMP
         _Pragma("omp parallel for reduction(+:diff)")
@@ -291,7 +291,7 @@ struct LocalKMedSearcher {
                 auto sub = ccost - newptr[i];
                 diff += sub;
             } else if(ccost == oldptr[i]) {
-                auto oldbest = blz::min(blz::elements(blz::column(mat_, i), tmp.data(), tmp.size()));
+                auto oldbest = blaze::min(blaze::elements(blaze::column(mat_, i), tmp.data(), tmp.size()));
                 auto sub = ccost - std::min(oldbest, newptr[i]);
                 diff += sub;
             }
@@ -337,7 +337,7 @@ struct LocalKMedSearcher {
                         auto diff = oldcost - newptr[i];
                         val += diff;
                     } else if(assignments_[i] == oldcenter) {
-                        auto mincost = blz::min(blz::elements(blz::column(mat_, i), newindices.data(), newindices.size()));
+                        auto mincost = blaze::min(blaze::elements(blaze::column(mat_, i), newindices.data(), newindices.size()));
                         auto diff = oldcost - mincost;
                         val += diff;
                     }
@@ -354,7 +354,7 @@ struct LocalKMedSearcher {
                     sol_.insert(potential_index);
                     assert(sol_.size() == k_);
                     assign();
-                    //current_cost_ = blz::sum(current_costs_);
+                    //current_cost_ = blaze::sum(current_costs_);
                     ++total;
                     std::fprintf(stderr, "Swap number %zu updated with delta %g to new cost with cost %0.12g\n", total, val, current_cost_);
                     goto next;
@@ -377,10 +377,10 @@ struct LocalKMedSearcher {
         diffthresh_ = diffthresh;
         next:
         {
-            blz::DV<IType> csol(sol_.size());
+            blaze::DynamicVector<IType> csol(sol_.size());
             std::copy(sol_.begin(), sol_.end(), csol.data());
-            blz::DV<IType> swap_in(nc_ - sol_.size());
-            blz::DV<IType> inargs(nswap), outargs(nswap);
+            blaze::DynamicVector<IType> swap_in(nc_ - sol_.size());
+            blaze::DynamicVector<IType> inargs(nswap), outargs(nswap);
             for(auto &&swap_out_comb: discreture::combinations(csol.size(), nswap)) {
                 for(auto &&swap_in_comb: discreture::combinations(swap_in.size(), nswap)) {
                     auto v = evaluate_multiswap_rt(swap_in_comb.data(), swap_out_comb.data(), nswap);
@@ -453,7 +453,7 @@ struct LocalKMedSearcher {
             for(size_t ci = 0; ci < nr_; ++ci) {
                 if(std::find(wsol.begin(), wsol.end(), ci) != wsol.end()) continue;
                 wsol[si] = ci;
-                const double cost = blz::sum(blz::min<blz::columnwise>(rows(mat_, wsol)));
+                const double cost = blaze::sum(blaze::min<blaze::columnwise>(rows(mat_, wsol)));
                 if(cost < ccost) {
                     std::fprintf(stderr, "Found a better one: %g vs %g (%g)\n", cost, ccost, ccost - cost);
                     ccost = cost;

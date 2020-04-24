@@ -2,7 +2,7 @@
 #include "pybind11/pybind11.h"
 #include "pybind11/numpy.h"
 #include "aesctr/wy.h"
-#include "minocore/matrix_coreset.h"
+#include "minocore/coreset/matrix_coreset.h"
 using namespace minocore;
 namespace py = pybind11;
 void init_ex1(py::module &);

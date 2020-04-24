@@ -5,8 +5,9 @@
 #include <map>
 #include <queue>
 #include "alias_sampler/alias_sampler.h"
-#include "minocore/util/blaze_adaptor.h"
 #include "minocore/util/shared.h"
+#include "blaze/math/CustomVector.h"
+#include "blaze/math/DynamicVector.h"
 #include <zlib.h>
 #ifdef _OPENMP
 #  include <omp.h>
@@ -189,8 +190,8 @@ struct CoresetSampler {
     using CoresetType = IndexCoreset<IT, FT>;
     std::unique_ptr<Sampler>     sampler_;
     std::unique_ptr<FT []>         probs_;
-    std::unique_ptr<blz::DV<FT>> weights_;
-    std::unique_ptr<blz::DV<IT>> fl_bicriteria_points_; // Used only by FL
+    std::unique_ptr<blaze::DynamicVector<FT>> weights_;
+    std::unique_ptr<blaze::DynamicVector<IT>> fl_bicriteria_points_; // Used only by FL
     std::unique_ptr<IT []>        fl_asn_;
     size_t                            np_;
     size_t                             k_;
@@ -273,7 +274,7 @@ struct CoresetSampler {
         gzread(fp, &weights_present, sizeof(weights_present));
         if(weights_present) {
             assert(weights_present == 137);
-            weights_.reset(new blz::DV<FT>(n));
+            weights_.reset(new blaze::DynamicVector<FT>(n));
             gzread(fp, weights_->data(), sizeof(FT) * n);
         }
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + n, seed_));
@@ -289,7 +290,7 @@ struct CoresetSampler {
         ::read(fd, &weights_present, sizeof(weights_present));
         if(weights_present) {
             assert(weights_present == 137);
-            weights_.reset(new blz::DV<FT>(n));
+            weights_.reset(new blaze::DynamicVector<FT>(n));
             ::read(fd, weights_->data(), sizeof(FT) * n);
         }
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + n, seed_));
@@ -365,7 +366,7 @@ struct CoresetSampler {
         if(!k) k = ncenters;
         k_ = k;
         if(weights) {
-            weights_.reset(new blz::DV<FT>(np_));
+            weights_.reset(new blaze::DynamicVector<FT>(np_));
             std::memcpy(weights_->data(), weights, sizeof(FT) * np_);
         } else weights_.release();
         if(sens == LUCIC_FAULKNER_KRAUSE_FELDMAN) {
@@ -395,7 +396,7 @@ struct CoresetSampler {
             weights_ ? blaze::dot(*weights_, cv)
                      : blaze::sum(cv);
         probs_.reset(new FT[np_]);
-        blz::CustomVector<FT, blaze::unaligned, blaze::unpadded> sensitivies(probs_.get(), np_);
+        blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> sensitivies(probs_.get(), np_);
         std::vector<IT> center_counts(ncenters);
         OMP_PFOR
         for(size_t i = 0; i < np_; ++i) {
@@ -408,7 +409,7 @@ struct CoresetSampler {
             sensitivies = cv * (1. / total_cost);
         }
         // sensitivities = weights * costs / total_cost
-        blz::DV<FT> ccinv(ncenters);
+        blaze::DynamicVector<FT> ccinv(ncenters);
         for(unsigned i = 0; i < ncenters; ++i)
             ccinv[i] = 1. / center_counts[i];
         OMP_PFOR
@@ -431,7 +432,7 @@ struct CoresetSampler {
         blaze::CustomVector<IT, blaze::unaligned, blaze::unpadded>(fl_asn_.get(), np_) =
             blaze::CustomVector<const IT, blaze::unaligned, blaze::unpadded>(asn, np_);
         if(bicriteria_centers) {
-            if(!fl_bicriteria_points_) fl_bicriteria_points_.reset(new blz::DV<IT>(b_));
+            if(!fl_bicriteria_points_) fl_bicriteria_points_.reset(new blaze::DynamicVector<IT>(b_));
             else fl_bicriteria_points_->resize(b_);
             *fl_bicriteria_points_ = blaze::CustomVector<const IT, blaze::unaligned, blaze::unpadded>(bicriteria_centers, b_);
         }
@@ -449,7 +450,7 @@ struct CoresetSampler {
             }
         } else {
             blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded> probv(const_cast<CFT *>(probs_.get()), np_);
-            probv = blz::ceil(CFT(np_) * total_cost_inv * cv) + 1.;
+            probv = blaze::ceil(CFT(np_) * total_cost_inv * cv) + 1.;
         }
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
@@ -461,8 +462,8 @@ struct CoresetSampler {
         const double alpha = 16 * std::log(k_) + 32., alpha2 = 2. * alpha;
 
         //auto center_counts = std::make_unique<IT[]>(ncenters);
-        blz::DV<FT> weight_sums(ncenters, FT(0));
-        blz::DV<FT> cost_sums(ncenters, FT(0));
+        blaze::DynamicVector<FT> weight_sums(ncenters, FT(0));
+        blaze::DynamicVector<FT> cost_sums(ncenters, FT(0));
 
         double total_costs(0.);
         OMP_PRAGMA("omp parallel for reduction(+:total_costs)")
@@ -481,10 +482,10 @@ struct CoresetSampler {
             cost_sums[asn] += pointcost;
             total_costs += w * costs[i];
         }
-        double weight_sum = blz::sum(weight_sums);
+        double weight_sum = blaze::sum(weight_sums);
         total_costs /= weight_sum;
         const double tcinv = alpha / total_costs;
-        blz::DV<FT> sens(np_);
+        blaze::DynamicVector<FT> sens(np_);
         for(size_t i = 0; i < ncenters; ++i) {
             cost_sums[i] = alpha2 * cost_sums[i] / (weight_sums[i] * total_costs) + 4 * weight_sum / weight_sums[i];
         }

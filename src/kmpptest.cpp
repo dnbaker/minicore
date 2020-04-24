@@ -1,5 +1,6 @@
 #include "minocore/optim/kmeans.h"
 #include "minocore/optim/kcenter.h"
+#include "minocore/coreset/kcenter.h"
 #include "minocore/dist/applicator.h"
 #include <new>
 #include <chrono>
@@ -8,7 +9,7 @@
 #include <omp.h>
 #endif
 
-#define t std::chrono::high_resolution_clock::now
+auto t() {return std::chrono::high_resolution_clock::now();}
 
 #ifndef FLOAT_TYPE
 #define FLOAT_TYPE double
@@ -25,16 +26,16 @@ void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {
     double gamma = 100. / mat.rows();
     if(gamma >= 0.5)
         gamma = 0.05;
-    auto cs = outliers::kcenter_coreset(matrowit.begin(), matrowit.end(), rng, npoints, eps,
+    auto cs = kcenter_coreset_outliers(matrowit.begin(), matrowit.end(), rng, npoints, eps,
                 /*mu=*/0.5, 1.5, gamma);
     auto maxv = *std::max_element(cs.indices_.begin(), cs.indices_.end());
     std::fprintf(stderr, "max index: %u\n", unsigned(maxv));
     auto stop = t();
-    std::fprintf(stderr, "kcenter coreset took %0.12gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "kcenter coreset took %0.12gms\n", util::timediff2ms(stop, start));
     start = t();
     auto csmat = index2matrix(cs, mat);
     stop = t();
-    std::fprintf(stderr, "kcenter compacting to coreset took %0.12gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "kcenter compacting to coreset took %0.12gs\n", util::timediff2ms(stop, start));
 }
 
 int main(int argc, char *argv[]) {
@@ -48,7 +49,6 @@ int main(int argc, char *argv[]) {
         nt = std::atoi(env);
     }
     OMP_ONLY(omp_set_num_threads(nt);)
-    std::fprintf(stderr, "%d threads used\n", nt);
 #endif
     std::srand(0);
     size_t n = argc == 1 ? 250000: std::atoi(argv[1]);
@@ -107,7 +107,8 @@ int main(int argc, char *argv[]) {
     assert(min(sqmat) > 0.);
     {
         auto greedy_metric = kcenter_greedy_2approx(blz::rowiterator(sqmat).begin(), blz::rowiterator(sqmat).end(),
-                                                    gen, /*k=*/3, MatrixLookup{});
+                                                    gen, /*k=*/npoints, MatrixLookup{});
+        kcenter_greedy_2approx_outliers(blz::rowiterator(sqmat).begin(), blz::rowiterator(sqmat).end(), gen, /*k=*/npoints, eps, .001, MatrixLookup{});
     }
     auto kmpp_asn = std::move(std::get<1>(centers));
     std::vector<FLOAT_TYPE> counts(npoints);
