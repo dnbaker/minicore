@@ -18,31 +18,33 @@ struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
     // priority queue providing access to underlying constainer with getc()
     // , a reserve function and that defaults to std::greater<> for farthest points.
     using super = std::priority_queue<std::pair<double, IT>, Container, Cmp>;
+    using value_type = std::pair<double, IT>;
 
-#if 1
     IT size_;
     fpq(IT size=0): size_(size) {reserve(size);}
-#endif
     fpq(const fpq &o) = default;
     void reserve(size_t n) {this->c.reserve(n);}
     auto &getc() {return this->c;}
     const auto &getc() const {return this->c;}
-#if 0
     void update(const fpq &o) {
-        for(const auto v: o.getc()) this->push(v);
+        for(const auto v: o.getc())
+            add(v);
     }
-#else
-    void update(const fpq &o) {
-        for(const auto v: o.getc()) {
-            if(this->size() < size_) {
-                this->push(v);
-            } else if(v > this->top()) {
-                this->pop();
-                this->push(v);
-            }
+    void add(const value_type v) {
+        if(this->size() < size_) this->push(v);
+        else if(v > this->top()) {
+            this->pop();
+            this->push(v);
         }
     }
-#endif
+    void add(FT val, IT index) {
+        if(this->size() < size_) {
+            this->push(value_type(val, index));
+        } else if(val > this->top().first) {
+            this->pop();
+            this->push(value_type(val, index));
+        }
+    }
 };
 
 
@@ -104,7 +106,6 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
         farthestchunksize = samplechunksize + z;
     }
     fpq<IT, FT> pq(farthestchunksize);
-    //pq.reserve(farthestchunksize + 1);
     const auto fv = ret[0];
     labels[fv] = fv;
     distances[fv] = 0.;
@@ -125,11 +126,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
         }
         distances[i] = dist;
         labels[i] = ret[label];
-        if(pq.empty() || dist > pq.top().first) {
-            pq.push(std::make_pair(dist, i));
-            if(pq.size() > farthestchunksize)
-                pq.pop();
-        }
+        pq.add(dist, i);
     }
     IVec<IT> random_samples(samplechunksize);
     // modulo without a div/mod instruction, much faster
@@ -158,16 +155,12 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
         // random_samples now contains indexes *into original dataset*
 
         // Insert into solution
-#if 0
-        ret.insert(ret.end(), rsp, rsp + rsi);
-#else
         for(auto it = rsp, e = rsp + rsi; it < e;++it) {
             if(std::find(ret.begin(), ret.end(), *it) != ret.end()) continue;
             distances[*it] = 0.;
             labels[*it] = *it;
             ret.pushBack(*it);
         }
-#endif
 
         // compare each point against all of the new points
         pq.getc().clear(); // empty priority queue
@@ -187,13 +180,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
             }
             distances[i] = dist;
             labels[i] = label;
-            if(pq.empty() || dist > pq.top().first) {
-                const auto p = std::make_pair(dist, i);
-                pq.push(p);
-                if(pq.size() > farthestchunksize)
-                // TODO: avoid filling it all the way by checking size but it's probably not worth it
-                    pq.pop();
-            }
+            pq.add(dist, i);
         }
     }
     const double minmaxdist = pq.top().first;
@@ -246,10 +233,7 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
             if((newdist = dm(i, newc)) < dist)
                 dist = newdist;
             distances[i] = dist;
-            if(pq.empty() || dist > pq.top().first) {
-                pq.push(std::make_pair(dist, i));
-                if(pq.size() > farthestchunksize) pq.pop();
-            }
+            pq.add(dist, i);
         }
 
         // Sample point

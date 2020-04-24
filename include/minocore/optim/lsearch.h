@@ -323,7 +323,7 @@ struct LocalKMedSearcher {
             // Make a vector with the original solution, but replace the old value with the new value
             for(size_t pi = 0; pi < nr_; ++pi) {
                 auto potential_index = ordering_[pi];
-                if(sol_.find(potential_index) != sol_.end()) continue;
+                if(sol_.find(potential_index) != sol_.end() || potential_index == oldcenter) continue;
                 newindices.back() = potential_index;
                 assert(std::find(newindices.begin(), newindices.end(), oldcenter) == newindices.end());
                 double val = 0.;
@@ -342,11 +342,7 @@ struct LocalKMedSearcher {
                         val += diff;
                     }
                 }
-#ifndef NDEBUG
-                //auto v = evaluate_swap(potential_index, oldcenter);
-                //assert(std::abs(v - val) <= .5 * std::abs(std::max(v, val)) || !std::fprintf(stderr, "Manual: %g. Lazy: %g\n", v, val));
                 assert(sol_.size() == k_);
-#endif
                 // Only calculate exhaustively if the lazy form returns yes.
                 if(val > diffthresh_ && (val = evaluate_swap(potential_index, oldcenter) > diffthresh_)) {
                     assert(sol_.size() == k_);
