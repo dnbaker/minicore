@@ -23,13 +23,10 @@ class get_pybind_include(object):
         return pybind11.get_include(self.user)
 
 
-libgomp = "libgomp.a" # -lgomp
-
-
 extra_compile_args = ['-march=native',
                       '-Wno-char-subscripts', '-Wno-unused-function',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
-                      '-lz', '-fopenmp', libgomp]
+                      '-lz', '-fopenmp', "-lgomp"]
 
 if 'BOOST_DIR' in environ:
     extra_compile_args.append("-I%s" % environ['BOOST_DIR'])
@@ -86,7 +83,7 @@ def cpp_flag(compiler):
                        'is needed!')
 
 
-extra_link_opts = [libgomp, "-lz"]
+extra_link_opts = ["-fopenmp", "-lgomp", "-lz"]
 
 class BuildExt(build_ext):
     """A custom build extension for adding compiler-specific options."""
