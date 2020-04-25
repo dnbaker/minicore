@@ -449,8 +449,8 @@ struct CoresetSampler {
                 probs_[i] = getweight(i) * (costs[i]) * total_cost_inv;
             }
         } else {
-            blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded> probv(const_cast<CFT *>(probs_.get()), np_);
-            probv = blaze::ceil(CFT(np_) * total_cost_inv * cv) + 1.;
+            blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> probv(const_cast<FT *>(probs_.get()), np_);
+            probv = blaze::ceil(FT(np_) * total_cost_inv * cv) + 1.;
         }
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
