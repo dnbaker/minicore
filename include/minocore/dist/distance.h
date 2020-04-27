@@ -11,7 +11,6 @@
 #define BOOST_NO_AUTO_PTR 1
 #endif
 
-#include "network_simplex/network_simplex_simple.h"
 #include "boost/iterator/transform_iterator.hpp"
 
 namespace blz {
@@ -479,117 +478,6 @@ inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &
     return std::sqrt(blz::sum(blz::pow(~lhs - ~rhs, 2) / (~lhs + ~rhs)) * ElementType_t<VT>(0.5));
 }
 
-
-template<typename VT, bool SO, typename VT2>
-CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
-network_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1.)
-{
-    std::fprintf(stderr, "Warning: network_p_wasserstein seems to have a bug. Do not use.\n");
-    auto &xref = ~x;
-    auto &yref = ~y;
-    const size_t sz = xref.size();
-    size_t nl = nonZeros(xref), nr = nonZeros(~y);
-    using FT = CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>;
-
-    using namespace lemon;
-    using Digraph = lemon::FullBipartiteDigraph;
-    Digraph di(nl, nr);
-    NetworkSimplexSimple<Digraph, FT, FT, unsigned, minocore::shared::flat_hash_map> net(di, true, nl + nr, nl * nr);
-    DV<FT> weights(nl + nr);
-    DV<unsigned> indices(nl + nr);
-    size_t i = 0;
-    for(size_t ii = 0; ii < sz; ++ii) {
-        if(xref[ii] > 0)
-            weights[i] = xref[ii], indices[i] = xref[ii], ++i;
-    }
-    for(size_t ii = 0; ii < sz; ++ii) {
-        if(yref[ii] > 0)
-            weights[i] = -yref[ii], indices[i] = yref[ii], ++i;
-    }
-    auto func = [p](auto x, auto y) {
-        auto ret = x - y;
-        if(p == 1) ret = std::abs(ret);
-        else if(p == 2.) ret = ret * ret;
-        else ret = std::pow(ret, p);
-        return ret;
-    };
-    net.supplyMap(weights.data(), nl, weights.data() + nl, nr);
-    {
-        const auto jptr = &weights[nl];
-        for(unsigned i = 0; i < nl; ++i) {
-            auto arcid = i * nl;
-            for(unsigned j = 0; j < nl; ++j) {
-                net.setCost(di.arcFromId(arcid++), func(weights[i], jptr[j]));
-            }
-        }
-    }
-    int rc = net.run();
-    if(rc != (int)net.OPTIMAL) {
-        std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex. Error code: [%s]\n", __PRETTY_FUNCTION__, __FILE__, __LINE__,
-            rc == (int)net.INFEASIBLE ? "infeasible" : (int)net.UNBOUNDED ? "unbounded" : "unknown");
-    }
-
-    FT ret(0);
-    //OMP_PRAGMA("omp parallel for reduction(+:ret)")
-    for(size_t i = 0; i < nl; ++i) {
-        for(size_t j = 0; j < nr; ++j)
-           ret += net.flow(i * nr + j) * func(weights[i], weights[sz + j]);
-    }
-    return ret;
-}
-
-#if 0
-template<typename VT, bool SO, typename VT2>
-CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
-network_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1., size_t maxiter=100)
-{
-    auto &xref = ~x;
-    const size_t sz = xref.size();
-    size_t nl = nonZeros(xref), nr = nonZeros(~y);
-    using FT = CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>;
-
-    using namespace lemon;
-	typedef lemon::FullBipartiteDigraph Digraph;
-    Digraph di(nl, nr);
-    NetworkSimplexSimple<Digraph, FT, FT, unsigned> net(di, true, nl + nr, nl * nr, maxiter);
-    DV<FT> weights(nl + nr);
-    DV<unsigned> indices(nl + nr);
-    size_t i = 0;
-    for(const auto &pair: xref)
-        weights[i] = pair.value(), indices[i] = pair.index(), ++i;
-    for(const auto &pair: ~y)
-        weights[i] = -pair.value(), indices[i] = pair.index(), ++i; // negative weight
-    auto func = [p](auto x, auto y) {
-        auto ret = x - y;
-        if(p == 1) ret = std::abs(ret);
-        else if(p == 2.) ret = ret * ret;
-        else ret = std::pow(ret, p);
-        return ret;
-    };
-    net.supplyMap(weights.data(), nl, weights.data() + nl, nr);
-    {
-        const auto jptr = &weights[nl];
-        for(unsigned i = 0; i < nl; ++i) {
-            auto arcid = i * nl;
-            for(unsigned j = 0; j < nl; ++j) {
-                net.setCost(di.arcFromId(arcid++), func(weights[i], jptr[j]));
-            }
-        }
-    }
-    int rc = net.run();
-    if(rc != (int)net.OPTIMAL) {
-        std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex. Error code: [%s]\n", __PRETTY_FUNCTION__, __FILE__, __LINE__,
-            rc == (int)net.INFEASIBLE ? "infeasible" : (int)net.UNBOUNDED ? "unbounded" : "unknown");
-    }
-    FT ret(0);
-    //OMP_PRAGMA("omp parallel for reduction(+:ret)")
-    for(size_t i = 0; i < nl; ++i) {
-        for(size_t j = 0; j < nr; ++j)
-           ret += net.flow(i * nr + j) * func(weights[i], weights[sz + j]);
-    }
-    return ret;
-}
-#endif
 
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
 CT scipy_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {

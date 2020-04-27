@@ -34,6 +34,7 @@ using ce_t = ClusteringEnumType;
  * Black box: plugging into CPLEX or Gurobi
  */
 
+
 enum Assignment: ce_t {
     HARD = 0,
     /* Assignment(x) = argmin_{c \in C}[d(c, x)]
@@ -50,6 +51,7 @@ enum CenterOrigination: ce_t {
     INTRINSIC = 0,
     EXTRINSIC = 1,
 };
+
 enum ApproximateSolutionType: ce_t {
     BICRITERIA      = 0,
     CONSTANT_FACTOR = 1,
@@ -71,15 +73,19 @@ enum OptimizationMethod: ce_t {
     EXHAUSTIVE_SEARCH,
 };
 
+
 enum ClusteringBitfields: ce_t {
     ASN_BF_OFFSET = 3,
+    ASN_BF_BITMASK = (1 << 3) - 1,
     HARD_BF = 1 << HARD,
     SOFT_BF = 1 << SOFT,
     SOFTMAX_BF = 1 << SOFTMAX,
-    CO_BF_OFFSET = ASN_BF_OFFSET + 2
+    CO_BF_OFFSET = ASN_BF_OFFSET + 2,
+    CO_BF_BITMASK = ((1 << (CO_BF_OFFSET - ASN_BF_OFFSET)) - 1) << ASN_BF_OFFSET,
     INTRINSIC_BF = 1 << ASN_BF_OFFSET,
     EXTRINSIC_BF = 1 << (EXTRINSIC + ASN_BF_OFFSET),
-    AS_BF_OFFSET = CO_BF_OFFSET + 4
+    AS_BF_OFFSET = CO_BF_OFFSET + 4,
+    AS_BF_BITMASK = ((1 << (AS_BF_OFFSET - CO_BF_OFFSET)) - 1) << CO_BF_OFFSET,
     BICRITERIA_BF      = 1ull << (BICRITERIA + CO_BF_OFFSET),
     CONSTANT_FACTOR_BF = 1ull << (CONSTANT_FACTOR + CO_BF_OFFSET),
     HEURISTIC_BF       = 1ull << (HEURISTIC + CO_BF_OFFSET),
@@ -88,16 +94,109 @@ enum ClusteringBitfields: ce_t {
     D2_SAMPLING_BF = 1ull << (D2_SAMPLING + AS_BF_OFFSET),
     UNIFORM_SAMPLING_BF = 1ull << (UNIFORM_SAMPLING + AS_BF_OFFSET),
     GREEDY_SAMPLING_BF = 1ull << (GREEDY_SAMPLING + AS_BF_OFFSET),
-    CS_BF_OFFSET = AS_BF_OFFSET + 4
+    CS_BF_OFFSET = AS_BF_OFFSET + 4,
+    CS_BF_BITMASK = ((1 << (CS_BF_OFFSET - AS_BF_OFFSET)) - 1) << AS_BF_OFFSET,
     METRIC_KMEDIAN_BF = 1ull << (METRIC_KMEDIAN + CS_BF_OFFSET),
     EXPECTATION_MAXIMIZATION_BF = 1ull << (EXPECTATION_MAXIMIZATION + CS_BF_OFFSET),
     BLACK_BOX_BF = 1ull << (BLACK_BOX + CS_BF_OFFSET),
     GRADIENT_DESCENT_BF = 1ull << (GRADIENT_DESCENT + CS_BF_OFFSET),
     EXHAUSTIVE_SEARCH_BF = 1ull << (EXHAUSTIVE_SEARCH + CS_BF_OFFSET),
-    OM_BF_OFFSET = CS_BF_OFFSET + 5
+    OM_BF_OFFSET = CS_BF_OFFSET + 5,
+    OM_BF_BITMASK = ((1 << ((OM_BF_OFFSET - CS_BF_OFFSET))) - 1) << CS_BF_OFFSET
 };
+static constexpr ce_t to_bitfield(Assignment asn) {
+    return ce_t(1) << asn;
+}
+static constexpr ce_t to_bitfield(CenterOrigination co) {
+    return ce_t(1) << (co + ASN_BF_OFFSET);
+}
+static constexpr ce_t to_bitfield(ApproximateSolutionType as) {
+    return ce_t(1) << (as + CO_BF_OFFSET);
+}
+static constexpr ce_t to_bitfield(CenterSamplingType sampling) {
+    return ce_t(1) << (sampling + AS_BF_OFFSET);
+}
+static constexpr ce_t to_bitfield(OptimizationMethod opt) {
+    return ce_t(1) << (opt + CS_BF_OFFSET);
+}
+
+static constexpr ce_t
+    to_bitfield(Assignment asn, CenterOrigination co, ApproximateSolutionType as,
+                CenterSamplingType sampling, OptimizationMethod opt) {
+    return to_bitfield(asn) | to_bitfield(co) | to_bitfield(as) | to_bitfield(sampling) | to_bitfield(opt);
+}
+
+namespace detail {
+constexpr size_t cl2(const size_t n) {
+    switch(n) {
+        case 0: return size_t(-1);
+        case 1: return 0;
+        default: return 1 + cl2(n / 2);
+    }
+}
+
+}
+template<typename T>
+T from_integer(ce_t v) {
+    throw std::runtime_error("Illegal type T");
+}
+template<> Assignment from_integer(ce_t v) {
+    return static_cast<Assignment>(detail::cl2((v & ASN_BF_BITMASK) >> 0));
+}
+template<> CenterOrigination from_integer(ce_t v) {
+    return static_cast<CenterOrigination>(detail::cl2((v & CO_BF_BITMASK) >> ASN_BF_OFFSET));
+}
+template<> ApproximateSolutionType from_integer(ce_t v) {
+    return static_cast<ApproximateSolutionType>(detail::cl2((v & AS_BF_BITMASK) >> CO_BF_OFFSET));
+}
+template<> CenterSamplingType from_integer(ce_t v) {
+    return static_cast<CenterSamplingType>(detail::cl2((v & CS_BF_BITMASK) >> AS_BF_OFFSET));
+}
+template<> OptimizationMethod from_integer(ce_t v) {
+    return static_cast<OptimizationMethod>(detail::cl2((v & OM_BF_BITMASK) >> CS_BF_OFFSET));
+}
+#undef FROM_INT
 
 static_assert(OM_BF_OFFSET < 32, "must be < 32");
+
+template<typename FT, typename IT, ce_t bf>
+struct ClusteringMetadata {
+    static constexpr Assignment asn_method = from_integer<Assignment>(bf);
+    static constexpr CenterOrigination center_origin =
+        from_integer<CenterOrigination>(bf);
+    static constexpr ApproximateSolutionType approx =
+        from_integer<ApproximateSolutionType>(bf);
+    static constexpr CenterSamplingType sampling_method = from_integer<CenterSamplingType>(bf);
+    static constexpr OptimizationMethod approx_sol = from_integer<OptimizationMethod>(bf);
+    static_assert(std::is_floating_point_v<FT>, "FT must be floating");
+    static_assert(std::is_floating_point_v<IT>, "FT must be integral and support required index ranges");
+    using cost_t = FT;
+    using index_t = IT;
+
+    // If hard, one cost per point
+    // If soft, one cost per point per center
+    // Assignment fractions are generated as-needed (for the case of softmax)
+    // For this reason, matrix forms are stored as
+    // row = point, column = center
+    using costs_t = std::conditional_t<asn_method == HARD,
+                                       blz::DV<cost_t>,
+                                       blaze::DynamicMatrix<cost_t>>;
+    // If hard assignment, then assignments are managed
+    using assignments_t = std::conditional_t<asn_method == HARD,
+                                             std::vector<blz::DV<index_t>>,
+                                             blaze::DynamicMatrix<cost_t>
+                                            >;
+    using centers_t = std::conditional_t<center_origin == INTRINSIC,
+                                         blaze::DV<index_t>,
+                                         std::vector<blaze::DynamicVector<FT, blaze::rowVector>>
+                                        >;
+};
+
+
+
+template<typename FT, typename IT, Assignment asn=HARD, CenterOrigination co=EXTRINSIC, ApproximateSolutionType approx=METRIC_KMEDIAN,
+         CenterSamplingType sampling=THORUP_SAMPLING, OptimizationMethod opt=METRIC_KMEDIAN>
+struct Meta: public ClusteringMetadata<FT, IT, to_bitfield(asn, co, approx, sampling, opt)> {};
 
 
 } // clustering
