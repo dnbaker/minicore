@@ -1,6 +1,7 @@
 #ifndef FGC_CLUSTERING_H__
 #define FGC_CLUSTERING_H__
 #include "minocore/dist.h"
+#include "minocore/util/exception.h"
 #include <cstdint>
 
 namespace minocore {
@@ -137,22 +138,22 @@ constexpr size_t cl2(const size_t n) {
 
 }
 template<typename T>
-T from_integer(ce_t v) {
+constexpr T from_integer(ce_t v) {
     throw std::runtime_error("Illegal type T");
 }
-template<> Assignment from_integer(ce_t v) {
+template<> constexpr Assignment from_integer(ce_t v) {
     return static_cast<Assignment>(detail::cl2((v & ASN_BF_BITMASK) >> 0));
 }
-template<> CenterOrigination from_integer(ce_t v) {
+template<> constexpr CenterOrigination from_integer(ce_t v) {
     return static_cast<CenterOrigination>(detail::cl2((v & CO_BF_BITMASK) >> ASN_BF_OFFSET));
 }
-template<> ApproximateSolutionType from_integer(ce_t v) {
+template<> constexpr ApproximateSolutionType from_integer(ce_t v) {
     return static_cast<ApproximateSolutionType>(detail::cl2((v & AS_BF_BITMASK) >> CO_BF_OFFSET));
 }
-template<> CenterSamplingType from_integer(ce_t v) {
+template<> constexpr CenterSamplingType from_integer(ce_t v) {
     return static_cast<CenterSamplingType>(detail::cl2((v & CS_BF_BITMASK) >> AS_BF_OFFSET));
 }
-template<> OptimizationMethod from_integer(ce_t v) {
+template<> constexpr OptimizationMethod from_integer(ce_t v) {
     return static_cast<OptimizationMethod>(detail::cl2((v & OM_BF_BITMASK) >> CS_BF_OFFSET));
 }
 #undef FROM_INT
@@ -160,16 +161,16 @@ template<> OptimizationMethod from_integer(ce_t v) {
 static_assert(OM_BF_OFFSET < 32, "must be < 32");
 
 template<typename FT, typename IT, ce_t bf>
-struct ClusteringMetadata {
+struct ClusteringTraits {
     static constexpr Assignment asn_method = from_integer<Assignment>(bf);
     static constexpr CenterOrigination center_origin =
         from_integer<CenterOrigination>(bf);
     static constexpr ApproximateSolutionType approx =
         from_integer<ApproximateSolutionType>(bf);
     static constexpr CenterSamplingType sampling_method = from_integer<CenterSamplingType>(bf);
-    static constexpr OptimizationMethod approx_sol = from_integer<OptimizationMethod>(bf);
+    static constexpr OptimizationMethod opt = from_integer<OptimizationMethod>(bf);
     static_assert(std::is_floating_point_v<FT>, "FT must be floating");
-    static_assert(std::is_floating_point_v<IT>, "FT must be integral and support required index ranges");
+    static_assert(std::is_integral_v<IT>, "FT must be integral and support required index ranges");
     using cost_t = FT;
     using index_t = IT;
 
@@ -183,20 +184,151 @@ struct ClusteringMetadata {
                                        blaze::DynamicMatrix<cost_t>>;
     // If hard assignment, then assignments are managed
     using assignments_t = std::conditional_t<asn_method == HARD,
-                                             std::vector<blz::DV<index_t>>,
+                                             blz::DV<index_t>,
                                              blaze::DynamicMatrix<cost_t>
                                             >;
     using centers_t = std::conditional_t<center_origin == INTRINSIC,
-                                         blaze::DV<index_t>,
+                                         blz::DV<index_t>,
                                          std::vector<blaze::DynamicVector<FT, blaze::rowVector>>
                                         >;
 };
 
+template<typename T>
+struct is_clustering_traits: public std::false_type {};
+
+template<typename FT, typename IT, ce_t bf>
+struct is_clustering_traits<ClusteringTraits<FT, IT, bf>>: public std::true_type {};
+
+template<typename T>
+static constexpr bool is_clustering_traits_v = is_clustering_traits<T>::value;
 
 
-template<typename FT, typename IT, Assignment asn=HARD, CenterOrigination co=EXTRINSIC, ApproximateSolutionType approx=METRIC_KMEDIAN,
+template<typename FT=float, typename IT=uint32_t, Assignment asn=HARD, CenterOrigination co=EXTRINSIC, ApproximateSolutionType approx=CONSTANT_FACTOR,
          CenterSamplingType sampling=THORUP_SAMPLING, OptimizationMethod opt=METRIC_KMEDIAN>
-struct Meta: public ClusteringMetadata<FT, IT, to_bitfield(asn, co, approx, sampling, opt)> {};
+struct Meta: public ClusteringTraits<FT, IT, to_bitfield(asn, co, approx, sampling, opt)> {};
+
+
+template<typename Mat>
+class LookupMatrixOracle {
+    const Mat &mat_;
+public:
+    LookupMatrixOracle(const Mat &mat): mat_(mat) {}
+    size_t size() const {return mat_.rows();}
+    template<typename Sol>
+    auto compute_distance(const Sol &x, size_t center_index, size_t point_index) const {
+        assert(center_index < mat_.rows());
+        assert(point_index < mat_.columns());
+        return mat_(x[center_index], point_index);
+    }
+};
+
+template<typename Mat>
+auto make_lookup_data_oracle(const Mat &mat) {
+    return LookupMatrixOracle<Mat>(mat);
+}
+
+
+template<typename DataOracle, typename MyClusteringTraits>
+struct ClusteringSolverBase: public MyClusteringTraits {
+
+    using centers_t     = typename MyClusteringTraits::centers_t;
+    using costs_t       = typename MyClusteringTraits::costs_t;
+    using assignments_t = typename MyClusteringTraits::assignments_t;
+    using cost_t        = typename MyClusteringTraits::cost_t;
+    using index_t       = typename MyClusteringTraits::index_t;
+    using MyClusteringTraits::asn_method;
+    using MyClusteringTraits::center_origin;
+    using MyClusteringTraits::approx;
+    using MyClusteringTraits::sampling_method;
+    using MyClusteringTraits::opt;
+
+    using FT = typename MyClusteringTraits::cost_t;
+private:
+    const DataOracle &data_oracle_;
+    /*
+     * DataOracle is the key for interfacing with the data.
+     * It must provide:
+     * 1. size() const method listing the number of points.
+     * 2. compute_distance(const centers_t &centers, unsigned center_index, unsigned point_index)
+     *
+     *    For pre-computed matrices (e.g., metric distance matrix) with rows corresponding to centers,
+     *    and columns corresponding to data points,
+     *    DataOracle might have a mat_ field for the matrix and return
+     *    `mat_(center_index, point_index)`.
+     *    LookupMatrixOracle satisfies this, for instance.
+     *
+     *    For Applicator-supported functions, this might be
+     *    `applicator_(point_index, centers_[center_index])`
+     *    or have an alternate form that caches logs or sqrts.
+     */
+    size_t np_;
+    size_t k_;
+
+    std::unique_ptr<centers_t>     complete_sol_;
+    std::unique_ptr<assignments_t> complete_assignments_;
+    std::unique_ptr<costs_t>       complete_costs_;
+
+public:
+    void set_assignments_and_costs() {
+        PREC_REQ(complete_sol_.get(), "Complete sol must already have been computed.");
+        if constexpr(asn_method == HARD) {
+            if(!complete_assignments_)
+                complete_assignments_.reset(new assignments_t(data_oracle_.size()));
+            else if(complete_assignments_->size() != data_oracle_.size())
+                complete_assignments_->resize(data_oracle_.size());
+            if(!complete_costs_)
+                complete_costs_.reset(new costs_t(data_oracle_.size()));
+            else if(complete_costs_->size() != data_oracle_.size())
+                complete_costs_->resize(data_oracle_.size());
+            OMP_PFOR
+            for(size_t i = 0; i < data_oracle_.size(); ++i) {
+                auto mincost = data_oracle_.compute_distance(*complete_sol_, 0, i);
+                unsigned bestind = 0;
+                for(size_t j = 1; j < complete_sol_->size(); ++j) {
+                    if(auto newcost = data_oracle_.compute_distance(*complete_sol_, j, i); newcost < mincost)
+                        mincost = newcost, bestind = j;
+                }
+                complete_assignments_->operator[](i) = bestind;
+                complete_costs_->operator[](i) = mincost;
+            }
+        } else {
+            assert(complete_sol_->size() == k_);
+            if(!complete_costs_) {
+                complete_costs_.reset(new costs_t(np_, k_));
+            } else if(complete_costs_->rows() != np_ || complete_costs_->columns() != k_) {
+                complete_costs_->resize(np_, k_);
+            }
+            if(!complete_assignments_) complete_assignments_.reset(new assignments_t(*complete_costs_));
+            if(complete_assignments_->size() != data_oracle_.size())
+                complete_assignments_->resize(data_oracle_.size());
+            OMP_PFOR
+            for(size_t i = 0; i < data_oracle_.size(); ++i) {
+                auto cost_row = row(*complete_costs_, i, blaze::unchecked);
+                cost_row[0] = data_oracle_.compute_distance(*complete_sol_, 0, i);
+                for(size_t j = 1; j < complete_sol_->size(); ++j) {
+                    cost_row[j] = data_oracle_.compute_distance(*complete_sol_, j, i);
+                }
+                if constexpr(MyClusteringTraits::asn_method == SOFT) {
+                    cost_row /= blz::sum(cost_row);
+                } else {
+                    cost_row = blz::exp(cost_row - blz::max(cost_row));
+                    cost_row /= blz::sum(cost_row);
+                }
+            }
+        }
+    }
+    void set_centers(centers_t &&newcenters) {
+        this->complete_sol_.reset(new centers_t(std::move(newcenters)));
+    }
+    ClusteringSolverBase(const DataOracle &data, size_t npoints, unsigned k): data_oracle_(data), np_(npoints), k_(k) {}
+    double calculate_cost(const centers_t &centers) {
+        throw NotImplementedError();
+    }
+    const assignments_t &get_assignments(bool recalc=true) {
+        if(!complete_assignments_ || recalc) set_assignments_and_costs();
+        return *complete_assignments_;
+    }
+};
 
 
 } // clustering

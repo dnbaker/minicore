@@ -141,10 +141,25 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     struct const_row_iterator: public row_iterator_t<const this_type> {};
     struct column_iterator: public column_iterator_t<this_type> {};
     struct const_column_iterator: public column_iterator_t<const this_type> {};
+    decltype(auto) operator[](size_t i) const {
+        if constexpr(SO = blaze::rowMajor) {
+            return row(*this, i, blaze::unchecked);
+        } else {
+            return column(*this, i, blaze::unchecked);
+        }
+    }
+    decltype(auto) operator[](size_t i) {
+        if constexpr(SO = blaze::rowMajor) {
+            return row(*this, i, blaze::unchecked);
+        } else {
+            return column(*this, i, blaze::unchecked);
+        }
+    }
     template<typename...Args> this_type &operator=(Args &&...args) {
         ((super &)*this).operator=(std::forward<Args>(args)...);
         return *this;
     }
+    size_t size() const {return SO == blaze::rowMajor ? this->rows(): this->columns();}
     auto rowiterator()       {return RowViewer<this_type>(*this);}
     auto rowiterator() const {return ConstRowViewer<this_type>(*this);}
     auto columniterator()       {return ColumnViewer<this_type>(*this);}
@@ -166,6 +181,21 @@ struct CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
         ((super &)*this).operator=(std::forward<Args>(args)...);
         return *this;
     }
+    decltype(auto) operator[](size_t i) const {
+        if constexpr(SO = blaze::rowMajor) {
+            return row(*this, i, blaze::unchecked);
+        } else {
+            return column(*this, i, blaze::unchecked);
+        }
+    }
+    decltype(auto) operator[](size_t i) {
+        if constexpr(SO = blaze::rowMajor) {
+            return row(*this, i, blaze::unchecked);
+        } else {
+            return column(*this, i, blaze::unchecked);
+        }
+    }
+    size_t size() const {return SO == blaze::rowMajor ? this->rows(): this->columns();}
     auto rowiterator()       {return RowViewer<this_type>(*this);}
     auto rowiterator() const {return ConstRowViewer<this_type>(*this);}
     auto columniterator()       {return ColumnViewer<this_type>(*this);}

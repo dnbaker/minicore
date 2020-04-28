@@ -1,6 +1,7 @@
 #ifndef FGC_UTILITY_H__
 #define FGC_UTILITY_H__
 
+#include "minocore/util/exception.h"
 #include "minocore/util/macros.h"
 #include "minocore/util/shared.h"
 #include "minocore/util/blaze_adaptor.h"
