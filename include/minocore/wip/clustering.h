@@ -29,7 +29,7 @@ public:
     }
     auto compute_distance(nullptr_t, size_t center_index, size_t point_index) const {
         assert(point_index < mat_.rows());
-        assert(center_index < x.size());
+        assert(center_index < mat_.rows());
         return mat_(center_index, point_index);
     }
 };
@@ -59,8 +59,8 @@ public:
         return compute_distance(center_index, point_index);
     }
     auto compute_distance(size_t center_index, size_t point_index) const {
-        assert(point_index < mat_.rows());
-        assert(center_index < x.size());
+        assert(point_index < size());
+        assert(center_index < size());
         return func_(mat_[center_index], mat_[point_index]);
     }
 };
