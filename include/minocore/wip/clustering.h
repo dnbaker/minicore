@@ -2,211 +2,15 @@
 #define FGC_CLUSTERING_H__
 #include "minocore/dist.h"
 #include "minocore/util/exception.h"
+#include "minocore/wip/clustering_traits.h"
 #include <cstdint>
 
 namespace minocore {
 
 namespace clustering {
-using ClusteringEnumType = std::size_t;
-using ce_t = ClusteringEnumType;
-
-/*
- *
- * Problem classification. These are:
- * 1. Assignment
- * IE, is the assignment to cluster centers hard or soft?
- * 2. Center Origination
- * Are cluster centers Intrinsic or Extrinsic? (IE, are centers selected from input points or not?)
- * 3. Type of approximate solution.
- * If using coresets, which algorithm is used for an approximate solution?
- * BICRITERIA (for alpha-beta approximations, where a constant factor approximation with more than alpha centers is allowed)
- * CONSTANT_FACTOR (for the exact number of centers but with a constant factor approximation)
- * HEURISTIC (for a good enough solution, which we will treat as one of the above even though it isn't)
- * 4. Center sampling type.
- * When selecting centers to use as candidates in search, use:
- * Thorup sampling
- * Uniform sampling
- * D2/cost sampling
- * 5. Optimization technique
- * Metric k-median: use metric clustering techniques, such as Jain-Vazirani or local search
- * Expectation Maximization: Lloyd's algorithm or a variant
- * Gradient descent (will require autograd or similar)
- * Exhaustive search: combinatorial approximation
- * Black box: plugging into CPLEX or Gurobi
- */
 
 
-enum Assignment: ce_t {
-    HARD = 0,
-    /* Assignment(x) = argmin_{c \in C}[d(c, x)]
-     *
-     */
-    SOFT = 1,
-    // Assignment(X, c) = \frac{c}{\sum_{c' \in C}[d(c', x)]}
-    SOFTMAX = 2,
-    /* Assignment(X, c) = \frac{e^{d(c, x)}}{sum_{c' \in C}[e^d(c', x)]}
-     *                  = softmax(d(C, x))
-     */
-};
-enum CenterOrigination: ce_t {
-    INTRINSIC = 0,
-    EXTRINSIC = 1,
-};
-
-enum ApproximateSolutionType: ce_t {
-    BICRITERIA      = 0,
-    CONSTANT_FACTOR = 1,
-    HEURISTIC       = 2,
-    RSVD            = 3,
-};
-enum CenterSamplingType: ce_t {
-    THORUP_SAMPLING,
-    D2_SAMPLING,
-    UNIFORM_SAMPLING,
-    GREEDY_SAMPLING,
-    COST_SAMPLING = D2_SAMPLING,
-};
-enum OptimizationMethod: ce_t {
-    METRIC_KMEDIAN,
-    EXPECTATION_MAXIMIZATION,
-    BLACK_BOX,
-    GRADIENT_DESCENT,
-    EXHAUSTIVE_SEARCH,
-};
-
-
-enum ClusteringBitfields: ce_t {
-    ASN_BF_OFFSET = 3,
-    ASN_BF_BITMASK = (1 << 3) - 1,
-    HARD_BF = 1 << HARD,
-    SOFT_BF = 1 << SOFT,
-    SOFTMAX_BF = 1 << SOFTMAX,
-    CO_BF_OFFSET = ASN_BF_OFFSET + 2,
-    CO_BF_BITMASK = ((1 << (CO_BF_OFFSET - ASN_BF_OFFSET)) - 1) << ASN_BF_OFFSET,
-    INTRINSIC_BF = 1 << ASN_BF_OFFSET,
-    EXTRINSIC_BF = 1 << (EXTRINSIC + ASN_BF_OFFSET),
-    AS_BF_OFFSET = CO_BF_OFFSET + 4,
-    AS_BF_BITMASK = ((1 << (AS_BF_OFFSET - CO_BF_OFFSET)) - 1) << CO_BF_OFFSET,
-    BICRITERIA_BF      = 1ull << (BICRITERIA + CO_BF_OFFSET),
-    CONSTANT_FACTOR_BF = 1ull << (CONSTANT_FACTOR + CO_BF_OFFSET),
-    HEURISTIC_BF       = 1ull << (HEURISTIC + CO_BF_OFFSET),
-    RSVD_BF            = 1ull << (HEURISTIC + CO_BF_OFFSET),
-    THORUP_SAMPLING_BF = 1ull << (THORUP_SAMPLING + AS_BF_OFFSET),
-    D2_SAMPLING_BF = 1ull << (D2_SAMPLING + AS_BF_OFFSET),
-    UNIFORM_SAMPLING_BF = 1ull << (UNIFORM_SAMPLING + AS_BF_OFFSET),
-    GREEDY_SAMPLING_BF = 1ull << (GREEDY_SAMPLING + AS_BF_OFFSET),
-    CS_BF_OFFSET = AS_BF_OFFSET + 4,
-    CS_BF_BITMASK = ((1 << (CS_BF_OFFSET - AS_BF_OFFSET)) - 1) << AS_BF_OFFSET,
-    METRIC_KMEDIAN_BF = 1ull << (METRIC_KMEDIAN + CS_BF_OFFSET),
-    EXPECTATION_MAXIMIZATION_BF = 1ull << (EXPECTATION_MAXIMIZATION + CS_BF_OFFSET),
-    BLACK_BOX_BF = 1ull << (BLACK_BOX + CS_BF_OFFSET),
-    GRADIENT_DESCENT_BF = 1ull << (GRADIENT_DESCENT + CS_BF_OFFSET),
-    EXHAUSTIVE_SEARCH_BF = 1ull << (EXHAUSTIVE_SEARCH + CS_BF_OFFSET),
-    OM_BF_OFFSET = CS_BF_OFFSET + 5,
-    OM_BF_BITMASK = ((1 << ((OM_BF_OFFSET - CS_BF_OFFSET))) - 1) << CS_BF_OFFSET
-};
-static constexpr ce_t to_bitfield(Assignment asn) {
-    return ce_t(1) << asn;
-}
-static constexpr ce_t to_bitfield(CenterOrigination co) {
-    return ce_t(1) << (co + ASN_BF_OFFSET);
-}
-static constexpr ce_t to_bitfield(ApproximateSolutionType as) {
-    return ce_t(1) << (as + CO_BF_OFFSET);
-}
-static constexpr ce_t to_bitfield(CenterSamplingType sampling) {
-    return ce_t(1) << (sampling + AS_BF_OFFSET);
-}
-static constexpr ce_t to_bitfield(OptimizationMethod opt) {
-    return ce_t(1) << (opt + CS_BF_OFFSET);
-}
-
-static constexpr ce_t
-    to_bitfield(Assignment asn, CenterOrigination co, ApproximateSolutionType as,
-                CenterSamplingType sampling, OptimizationMethod opt) {
-    return to_bitfield(asn) | to_bitfield(co) | to_bitfield(as) | to_bitfield(sampling) | to_bitfield(opt);
-}
-
-namespace detail {
-constexpr size_t cl2(const size_t n) {
-    switch(n) {
-        case 0: return size_t(-1);
-        case 1: return 0;
-        default: return 1 + cl2(n / 2);
-    }
-}
-
-}
-template<typename T>
-constexpr T from_integer(ce_t v) {
-    throw std::runtime_error("Illegal type T");
-}
-template<> constexpr Assignment from_integer(ce_t v) {
-    return static_cast<Assignment>(detail::cl2((v & ASN_BF_BITMASK) >> 0));
-}
-template<> constexpr CenterOrigination from_integer(ce_t v) {
-    return static_cast<CenterOrigination>(detail::cl2((v & CO_BF_BITMASK) >> ASN_BF_OFFSET));
-}
-template<> constexpr ApproximateSolutionType from_integer(ce_t v) {
-    return static_cast<ApproximateSolutionType>(detail::cl2((v & AS_BF_BITMASK) >> CO_BF_OFFSET));
-}
-template<> constexpr CenterSamplingType from_integer(ce_t v) {
-    return static_cast<CenterSamplingType>(detail::cl2((v & CS_BF_BITMASK) >> AS_BF_OFFSET));
-}
-template<> constexpr OptimizationMethod from_integer(ce_t v) {
-    return static_cast<OptimizationMethod>(detail::cl2((v & OM_BF_BITMASK) >> CS_BF_OFFSET));
-}
-#undef FROM_INT
-
-static_assert(OM_BF_OFFSET < 32, "must be < 32");
-
-template<typename FT, typename IT, ce_t bf>
-struct ClusteringTraits {
-    static constexpr Assignment asn_method = from_integer<Assignment>(bf);
-    static constexpr CenterOrigination center_origin =
-        from_integer<CenterOrigination>(bf);
-    static constexpr ApproximateSolutionType approx =
-        from_integer<ApproximateSolutionType>(bf);
-    static constexpr CenterSamplingType sampling_method = from_integer<CenterSamplingType>(bf);
-    static constexpr OptimizationMethod opt = from_integer<OptimizationMethod>(bf);
-    static_assert(std::is_floating_point_v<FT>, "FT must be floating");
-    static_assert(std::is_integral_v<IT>, "FT must be integral and support required index ranges");
-    using cost_t = FT;
-    using index_t = IT;
-
-    // If hard, one cost per point
-    // If soft, one cost per point per center
-    // Assignment fractions are generated as-needed (for the case of softmax)
-    // For this reason, matrix forms are stored as
-    // row = point, column = center
-    using costs_t = std::conditional_t<asn_method == HARD,
-                                       blz::DV<cost_t>,
-                                       blaze::DynamicMatrix<cost_t>>;
-    // If hard assignment, then assignments are managed
-    using assignments_t = std::conditional_t<asn_method == HARD,
-                                             blz::DV<index_t>,
-                                             blaze::DynamicMatrix<cost_t>
-                                            >;
-    using centers_t = std::conditional_t<center_origin == INTRINSIC,
-                                         blz::DV<index_t>,
-                                         std::vector<blaze::DynamicVector<FT, blaze::rowVector>>
-                                        >;
-};
-
-template<typename T>
-struct is_clustering_traits: public std::false_type {};
-
-template<typename FT, typename IT, ce_t bf>
-struct is_clustering_traits<ClusteringTraits<FT, IT, bf>>: public std::true_type {};
-
-template<typename T>
-static constexpr bool is_clustering_traits_v = is_clustering_traits<T>::value;
-
-
-template<typename FT=float, typename IT=uint32_t, Assignment asn=HARD, CenterOrigination co=EXTRINSIC, ApproximateSolutionType approx=CONSTANT_FACTOR,
-         CenterSamplingType sampling=THORUP_SAMPLING, OptimizationMethod opt=METRIC_KMEDIAN>
-struct Meta: public ClusteringTraits<FT, IT, to_bitfield(asn, co, approx, sampling, opt)> {};
-
+namespace helpers {
 
 template<typename Mat>
 class LookupMatrixOracle {
@@ -220,12 +24,55 @@ public:
         assert(point_index < mat_.columns());
         return mat_(x[center_index], point_index);
     }
+    void operator[](size_t ) const {
+        throw std::runtime_error("This should never be called");
+    }
+    auto compute_distance(nullptr_t, size_t center_index, size_t point_index) const {
+        assert(point_index < mat_.rows());
+        assert(center_index < x.size());
+        return mat_(center_index, point_index);
+    }
 };
 
 template<typename Mat>
 auto make_lookup_data_oracle(const Mat &mat) {
     return LookupMatrixOracle<Mat>(mat);
 }
+
+template<typename Mat, typename Functor>
+class ExtrinsicFunctorOracle {
+    const Mat &mat_;
+    const Functor &func_;
+public:
+    ExtrinsicFunctorOracle(const Mat &mat, const Functor &func): mat_(mat), func_(func) {}
+    size_t size() const {return mat_.rows();}
+    template<typename Sol>
+    auto compute_distance(const Sol &x, size_t center_index, size_t point_index) const {
+        assert(point_index < mat_.rows());
+        assert(center_index < x.size());
+        return func_(x[center_index], mat_[point_index]);
+    }
+    decltype(auto) operator[](size_t ind) {return mat_[ind];}
+    decltype(auto) operator[](size_t ind) const {return mat_[ind];}
+    // This function computes a distance between two points
+    auto compute_distance(nullptr_t, size_t center_index, size_t point_index) const {
+        return compute_distance(center_index, point_index);
+    }
+    auto compute_distance(size_t center_index, size_t point_index) const {
+        assert(point_index < mat_.rows());
+        assert(center_index < x.size());
+        return func_(mat_[center_index], mat_[point_index]);
+    }
+};
+
+template<typename Mat, typename Func>
+auto make_exfunc_oracle(const Mat &mat, const Func &func) {
+    return ExtrinsicFunctorOracle<Mat, Func>(mat, func);
+}
+
+} // helpers
+using helpers::make_exfunc_oracle;
+using helpers::make_lookup_data_oracle;
 
 
 template<typename DataOracle, typename MyClusteringTraits>
@@ -257,76 +104,164 @@ private:
      *    `mat_(center_index, point_index)`.
      *    LookupMatrixOracle satisfies this, for instance.
      *
+     *    For distance-oracle functions,
+     *    use the ExtrinsicFunctorOracle class.
+     *
+     *    For instance, if `dm` is a dense matrix of points in row-major format:
+     *    auto oracle = clustering::make_exfunc_oracle(dm, blz::sqrL2Norm())
+     *    clustering::ClusteringSolverBase<decltype(oracle), MatrixMeta> solver(oracle, dm.rows(), k);
+     *   
+     *
      *    For Applicator-supported functions, this might be
      *    `applicator_(point_index, centers_[center_index])`
      *    or have an alternate form that caches logs or sqrts.
      */
     size_t np_;
-    size_t k_;
+    uint32_t k_, points_to_sample_;
 
-    std::unique_ptr<centers_t>     complete_sol_;
-    std::unique_ptr<assignments_t> complete_assignments_;
-    std::unique_ptr<costs_t>       complete_costs_;
+    std::unique_ptr<centers_t>     c_sol_;
+    std::unique_ptr<assignments_t> c_assignments_;
+    std::unique_ptr<costs_t>       c_costs_;
+    std::unique_ptr<cost_t>        pointwise_costs_;
+    const FT *weights_;
 
 public:
     void set_assignments_and_costs() {
-        PREC_REQ(complete_sol_.get(), "Complete sol must already have been computed.");
+        PREC_REQ(c_sol_.get(), "Complete sol must already have been computed.");
         if constexpr(asn_method == HARD) {
-            if(!complete_assignments_)
-                complete_assignments_.reset(new assignments_t(data_oracle_.size()));
-            else if(complete_assignments_->size() != data_oracle_.size())
-                complete_assignments_->resize(data_oracle_.size());
-            if(!complete_costs_)
-                complete_costs_.reset(new costs_t(data_oracle_.size()));
-            else if(complete_costs_->size() != data_oracle_.size())
-                complete_costs_->resize(data_oracle_.size());
+            if(!c_assignments_)
+                c_assignments_.reset(new assignments_t(data_oracle_.size()));
+            else if(c_assignments_->size() != data_oracle_.size())
+                c_assignments_->resize(data_oracle_.size());
+            if(!c_costs_)
+                c_costs_.reset(new costs_t(data_oracle_.size()));
+            else if(c_costs_->size() != data_oracle_.size())
+                c_costs_->resize(data_oracle_.size());
             OMP_PFOR
             for(size_t i = 0; i < data_oracle_.size(); ++i) {
-                auto mincost = data_oracle_.compute_distance(*complete_sol_, 0, i);
+                auto mincost = data_oracle_.compute_distance(*c_sol_, 0, i);
                 unsigned bestind = 0;
-                for(size_t j = 1; j < complete_sol_->size(); ++j) {
-                    if(auto newcost = data_oracle_.compute_distance(*complete_sol_, j, i); newcost < mincost)
+                for(size_t j = 1; j < c_sol_->size(); ++j) {
+                    if(auto newcost = data_oracle_.compute_distance(*c_sol_, j, i); newcost < mincost)
                         mincost = newcost, bestind = j;
                 }
-                complete_assignments_->operator[](i) = bestind;
-                complete_costs_->operator[](i) = mincost;
+                c_assignments_->operator[](i) = bestind;
+                c_costs_->operator[](i) = mincost;
             }
-        } else {
-            assert(complete_sol_->size() == k_);
-            if(!complete_costs_) {
-                complete_costs_.reset(new costs_t(np_, k_));
-            } else if(complete_costs_->rows() != np_ || complete_costs_->columns() != k_) {
-                complete_costs_->resize(np_, k_);
+        } else { // Soft or softmax assignments
+            assert(c_sol_->size() == k_);
+            if(!c_costs_) {
+                c_costs_.reset(new costs_t(np_, k_));
+            } else if(c_costs_->rows() != np_ || c_costs_->columns() != k_) {
+                c_costs_->resize(np_, k_);
             }
-            if(!complete_assignments_) complete_assignments_.reset(new assignments_t(*complete_costs_));
-            if(complete_assignments_->size() != data_oracle_.size())
-                complete_assignments_->resize(data_oracle_.size());
+            if(!c_assignments_) c_assignments_.reset(new assignments_t(*c_costs_));
+            if(c_assignments_->size() != data_oracle_.size())
+                c_assignments_->resize(data_oracle_.size());
             OMP_PFOR
             for(size_t i = 0; i < data_oracle_.size(); ++i) {
-                auto cost_row = row(*complete_costs_, i, blaze::unchecked);
-                cost_row[0] = data_oracle_.compute_distance(*complete_sol_, 0, i);
-                for(size_t j = 1; j < complete_sol_->size(); ++j) {
-                    cost_row[j] = data_oracle_.compute_distance(*complete_sol_, j, i);
+                // Compute costs
+                auto cost_row = row(*c_costs_, i, blaze::unchecked);
+                cost_row[0] = data_oracle_.compute_distance(*c_sol_, 0, i);
+                for(size_t j = 1; j < c_sol_->size(); ++j) {
+                    cost_row[j] = data_oracle_.compute_distance(*c_sol_, j, i);
                 }
-                if constexpr(MyClusteringTraits::asn_method == SOFT) {
-                    cost_row /= blz::sum(cost_row);
-                } else {
-                    cost_row = blz::exp(cost_row - blz::max(cost_row));
-                    cost_row /= blz::sum(cost_row);
-                }
+                // Use costs to make fractional assignments
+                auto asn_row = row(*c_assignments_, i, blaze::unchecked);
+                asn_row = blz::exp(cost_row - blz::max(cost_row));
+                asn_row /= blz::sum(asn_row);
             }
         }
     }
-    void set_centers(centers_t &&newcenters) {
-        this->complete_sol_.reset(new centers_t(std::move(newcenters)));
+    void approx_sol(uint64_t seed=0) {
+        if constexpr(opt == BLACK_BOX || opt == GRADIENT_DESCENT || opt == EXHAUSTIVE_SEARCH)
+            throw NotImplementedError("Optimization under black box, gd or exhaustive search not yet supported");
+        if constexpr(asn_method != HARD) 
+            throw NotImplementedError("Not completed yet: SOFT or SOFTMAX clustering");
+        else
+        {
+            // One optimization technique each for metric (JV + local search)
+            //                                 and expectation maximization.
+            if constexpr(opt == EXPECTATION_MAXIMIZATION) {
+                auto func = [&](size_t i, size_t j) {
+                    return data_oracle_.compute_distance(i, j);
+                };
+                wy::WyRand<uint64_t, 2> rng(seed);
+                auto [initcenters, initasn, initcosts] = coresets::kmeanspp(func, rng, np_, k_);
+                std::vector<blz::DV<cost_t, blz::rowVector>> centers;
+                centers.reserve(k_);
+                for(const auto id: initcenters) {
+                    centers.emplace_back(data_oracle_[id]);
+                }
+                set_centers(std::move(centers));
+                set_assignments_and_costs();
+            } else {
+                static_assert(opt == METRIC_KMEDIAN, "annotate that this is metric kmedian");
+                throw NotImplementedError("Metric K-median needs to have optimizers plugged in.");
+            }
+        }
     }
-    ClusteringSolverBase(const DataOracle &data, size_t npoints, unsigned k): data_oracle_(data), np_(npoints), k_(k) {}
+    auto make_coreset_sampler(uint64_t seed=0) {
+        PREC_REQ(this->c_costs_.get(), "Current costs must be calculated");
+        const cost_t *ptr;
+        if constexpr(asn_method == HARD) {
+            // Use the c_costs->data() method.
+            if(!weights_)
+                ptr = c_costs_->data();
+            else if(pointwise_costs_.get()) ptr = pointwise_costs_.get();
+            else {
+                pointwise_costs_.reset(new cost_t[np_]);
+                blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>
+                    pv(c_costs_->data(), np_), pc(pointwise_costs_.get(), np_);
+                const blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> wv(const_cast<FT *>(weights_), np_);
+                pc = pv * wv;
+                ptr = pointwise_costs_.get();
+            }
+        } else {
+            if(pointwise_costs_.get()) {
+                ptr = pointwise_costs_.get();
+            } else {
+                pointwise_costs_.reset(new cost_t[np_]);
+                OMP_PFOR
+                for(size_t i = 0; i < np_; ++i)
+                    pointwise_costs_[i] = blz::dot(row(*c_assignments_, i, blz::unchecked),
+                                                   row(*c_costs_, i, blz::unchecked)) * getw(i);
+                if(weights_) {
+                    blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>
+                        pv(pointwise_costs_.get(), np_);
+                    const blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> wv(const_cast<FT *>(weights_), np_);
+                    pv *= wv;
+                }
+            }
+        }
+        coresets::CoresetSampler<cost_t, index_t> sampler;
+        if constexpr(asn_method == HARD) throw NotImplementedError("Coreset sampler supporting fractional assignment not yet available.");
+        else {
+            sampler.make_sampler(np_, points_to_sample_, ptr, c_assignments_->data(), weights_, seed);
+        }
+    }
+    template<typename OT>
+    void set_centers(const OT &centers) {
+        this->c_sol_.reset(new centers_t(centers.size()));
+        std::copy(centers.begin(), centers.end(), this->c_sol_->begin());
+    }
+    void set_centers(centers_t &&newcenters) {
+        this->c_sol_.reset(new centers_t(std::move(newcenters)));
+    }
+    ClusteringSolverBase(const DataOracle &data, size_t npoints, unsigned k,
+                         unsigned points_to_sample=0, const FT *weights=nullptr):
+        data_oracle_(data), np_(npoints), k_(k),
+        points_to_sample_(points_to_sample ? points_to_sample: k_),
+        weights_(weights)
+    {
+        if(points_to_sample_ != k_) std::fprintf(stderr, "note: sampling different number of points");
+    }
     double calculate_cost(const centers_t &centers) {
         throw NotImplementedError();
     }
     const assignments_t &get_assignments(bool recalc=true) {
-        if(!complete_assignments_ || recalc) set_assignments_and_costs();
-        return *complete_assignments_;
+        if(!c_assignments_ || recalc) set_assignments_and_costs();
+        return *c_assignments_;
     }
 };
 

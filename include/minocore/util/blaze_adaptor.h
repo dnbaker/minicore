@@ -142,14 +142,14 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     struct column_iterator: public column_iterator_t<this_type> {};
     struct const_column_iterator: public column_iterator_t<const this_type> {};
     decltype(auto) operator[](size_t i) const {
-        if constexpr(SO = blaze::rowMajor) {
+        if constexpr(SO == blaze::rowMajor) {
             return row(*this, i, blaze::unchecked);
         } else {
             return column(*this, i, blaze::unchecked);
         }
     }
     decltype(auto) operator[](size_t i) {
-        if constexpr(SO = blaze::rowMajor) {
+        if constexpr(SO == blaze::rowMajor) {
             return row(*this, i, blaze::unchecked);
         } else {
             return column(*this, i, blaze::unchecked);
@@ -182,14 +182,14 @@ struct CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
         return *this;
     }
     decltype(auto) operator[](size_t i) const {
-        if constexpr(SO = blaze::rowMajor) {
+        if constexpr(SO == blaze::rowMajor) {
             return row(*this, i, blaze::unchecked);
         } else {
             return column(*this, i, blaze::unchecked);
         }
     }
     decltype(auto) operator[](size_t i) {
-        if constexpr(SO = blaze::rowMajor) {
+        if constexpr(SO == blaze::rowMajor) {
             return row(*this, i, blaze::unchecked);
         } else {
             return column(*this, i, blaze::unchecked);
