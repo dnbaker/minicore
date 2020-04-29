@@ -4,6 +4,7 @@
 
 using namespace minocore;
 
+#if 0
 int matrix_main() {
     using MatrixMeta = clustering::Meta<
         float, uint32_t,
@@ -49,10 +50,18 @@ int kmeans_main() {
     std::cerr << asn << '\n';
     return 0;
 }
+#endif
 
 int main() {
-    int ret;
+    int ret = 0;
+    if(0) {
+        blz::DM<float> dm= blaze::generate(100, 100, [](auto,auto){return 4;});
+        auto jsdapp = make_probdiv_applicator(dm, blz::SQRL2);
+        clustering::perform_clustering<clustering::HARD, clustering::EXTRINSIC>(jsdapp, 10);
+    }
+#if 0
     if((ret = matrix_main())) return ret;
     if((ret = kmeans_main())) return ret;
+#endif
     return 0;
 }

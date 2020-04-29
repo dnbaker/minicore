@@ -17,10 +17,11 @@ using namespace blz;
 using namespace blz::distance;
 
 template<typename MatrixType>
-class ProbDivApplicator {
+class DissimilarityApplicator {
     //using opposite_type = typename base_type::OppositeType;
     MatrixType &data_;
     using VecT = blaze::DynamicVector<typename MatrixType::ElementType, IsRowMajorMatrix_v<MatrixType> ? blaze::rowVector: blaze::columnVector>;
+    using matrix_type = MatrixType;
     VecT row_sums_;
     std::unique_ptr<MatrixType> logdata_;
     std::unique_ptr<MatrixType> sqrdata_;
@@ -34,15 +35,15 @@ class ProbDivApplicator {
 public:
     using FT = typename MatrixType::ElementType;
     using MT = MatrixType;
-    using This = ProbDivApplicator<MatrixType>;
-    using ConstThis = const ProbDivApplicator<MatrixType>;
+    using This = DissimilarityApplicator<MatrixType>;
+    using ConstThis = const DissimilarityApplicator<MatrixType>;
 
-    const ProbDivType measure_;
+    const DissimilarityMeasure measure_;
     const MatrixType &data() const {return data_;}
     size_t size() const {return data_.rows();}
     template<typename PriorContainer=blaze::DynamicVector<FT, blaze::rowVector>>
-    ProbDivApplicator(MatrixType &ref,
-                      ProbDivType measure=JSM,
+    DissimilarityApplicator(MatrixType &ref,
+                      DissimilarityMeasure measure=JSM,
                       Prior prior=NONE,
                       const PriorContainer *c=nullptr):
         data_(ref), logdata_(nullptr), measure_(measure)
@@ -56,13 +57,13 @@ public:
     template<typename MatType>
     void set_distance_matrix(MatType &m, bool symmetrize=false) const {set_distance_matrix(m, measure_, symmetrize);}
 
-    template<typename MatType, ProbDivType measure>
+    template<typename MatType, DissimilarityMeasure measure>
     void set_distance_matrix(MatType &m, bool symmetrize=false) const {
         using blaze::sqrt;
         const size_t nr = m.rows();
         assert(nr == m.columns());
         assert(nr == data_.rows());
-        static constexpr ProbDivType actual_measure =
+        static constexpr DissimilarityMeasure actual_measure =
             measure == JSM ? JSD
                 : measure == COSINE_DISTANCE ? COSINE_SIMILARITY
                 : measure == PROBABILITY_COSINE_DISTANCE ? PROBABILITY_COSINE_SIMILARITY
@@ -128,7 +129,7 @@ public:
         }
     } // set_distance_matrix
     template<typename MatType>
-    void set_distance_matrix(MatType &m, ProbDivType measure, bool symmetrize=false) const {
+    void set_distance_matrix(MatType &m, DissimilarityMeasure measure, bool symmetrize=false) const {
         switch(measure) {
             case TOTAL_VARIATION_DISTANCE: set_distance_matrix<MatType, TOTAL_VARIATION_DISTANCE>(m, symmetrize); break;
             case L1:                       set_distance_matrix<MatType, L1>(m, symmetrize); break;
@@ -156,6 +157,7 @@ public:
             case COSINE_SIMILARITY:        set_distance_matrix<MatType, COSINE_SIMILARITY>(m, symmetrize); break;
             case PROBABILITY_COSINE_SIMILARITY:
                                            set_distance_matrix<MatType, PROBABILITY_COSINE_SIMILARITY>(m, symmetrize); break;
+            case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); throw std::invalid_argument("Placeholders");
             default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + blz::detail::prob2str(measure));
         }
     }
@@ -164,7 +166,7 @@ public:
         return make_distance_matrix<OFT>(measure_, symmetrize);
     }
     template<typename OFT=FT>
-    blaze::DynamicMatrix<OFT> make_distance_matrix(ProbDivType measure, bool symmetrize=false) const {
+    blaze::DynamicMatrix<OFT> make_distance_matrix(DissimilarityMeasure measure, bool symmetrize=false) const {
         blaze::DynamicMatrix<OFT> ret(data_.rows(), data_.rows());
         set_distance_matrix(ret, measure, symmetrize);
         return ret;
@@ -207,7 +209,7 @@ public:
     INLINE auto operator()(size_t i, size_t j) const {
         return this->operator()(i, j, measure_);
     }
-    template<ProbDivType constexpr_measure>
+    template<DissimilarityMeasure constexpr_measure>
     INLINE FT call(size_t i, size_t j) const {
         FT ret;
         if constexpr(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
@@ -263,7 +265,7 @@ public:
         }
         return ret;
     }
-    INLINE FT operator()(size_t i, size_t j, ProbDivType measure) const {
+    INLINE FT operator()(size_t i, size_t j, DissimilarityMeasure measure) const {
         if(unlikely(i >= data_.rows() || j >= data_.rows())) {
             std::cerr << (std::string("Invalid rows selection: ") + std::to_string(i) + ", " + std::to_string(j) + '\n');
             std::exit(1);
@@ -293,12 +295,13 @@ public:
             case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(i, j); break;
             case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(i, j); break;
             case PROBABILITY_COSINE_SIMILARITY: ret = call<PROBABILITY_COSINE_SIMILARITY>(i, j); break;
+            case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); return 0.;
             default: __builtin_unreachable();
         }
         return ret;
     }
     template<typename MatType>
-    void operator()(MatType &mat, ProbDivType measure, bool symmetrize=false) {
+    void operator()(MatType &mat, DissimilarityMeasure measure, bool symmetrize=false) {
         set_distance_matrix(mat, measure, symmetrize);
     }
     template<typename MatType>
@@ -586,13 +589,13 @@ private:
         return get_jsdcache(index) * row_sums_->operator[](index);
         return (*jsd_cache_)[index] * row_sums_->operator[](index);
     }
-}; // ProbDivApplicator
+}; // DissimilarityApplicator
 
 template<typename MT1, typename MT2>
-struct PairProbDivApplicator {
-    ProbDivApplicator<MT1> &pda_;
-    ProbDivApplicator<MT2> &pdb_;
-    PairProbDivApplicator(ProbDivApplicator<MT1> &lhs, ProbDivApplicator<MT2> &rhs): pda_(lhs), pdb_(rhs) {
+struct PairDissimilarityApplicator {
+    DissimilarityApplicator<MT1> &pda_;
+    DissimilarityApplicator<MT2> &pdb_;
+    PairDissimilarityApplicator(DissimilarityApplicator<MT1> &lhs, DissimilarityApplicator<MT2> &rhs): pda_(lhs), pdb_(rhs) {
         if(lhs.measure_ != rhs.measure_) throw std::runtime_error("measures must be the same (for preprocessing reasons).");
     }
     decltype(auto) operator()(size_t i, size_t j) const {
@@ -601,22 +604,22 @@ struct PairProbDivApplicator {
 };
 
 template<typename MatrixType>
-class MultinomialJSDApplicator: public ProbDivApplicator<MatrixType> {
-    using super = ProbDivApplicator<MatrixType>;
+class MultinomialJSDApplicator: public DissimilarityApplicator<MatrixType> {
+    using super = DissimilarityApplicator<MatrixType>;
     template<typename PriorContainer=blaze::DynamicVector<typename super::FT, blaze::rowVector>>
     MultinomialJSDApplicator(MatrixType &ref,
                              Prior prior=NONE,
                              const PriorContainer *c=nullptr):
-        ProbDivApplicator<MatrixType>(ref, JSD, prior, c) {}
+        DissimilarityApplicator<MatrixType>(ref, JSD, prior, c) {}
 };
 template<typename MatrixType>
-class MultinomialLLRApplicator: public ProbDivApplicator<MatrixType> {
-    using super = ProbDivApplicator<MatrixType>;
+class MultinomialLLRApplicator: public DissimilarityApplicator<MatrixType> {
+    using super = DissimilarityApplicator<MatrixType>;
     template<typename PriorContainer=blaze::DynamicVector<typename super::FT, blaze::rowVector>>
     MultinomialLLRApplicator(MatrixType &ref,
                              Prior prior=NONE,
                              const PriorContainer *c=nullptr):
-        ProbDivApplicator<MatrixType>(ref, LLR, prior, c) {}
+        DissimilarityApplicator<MatrixType>(ref, LLR, prior, c) {}
 };
 
 template<typename MJD>
@@ -625,13 +628,13 @@ struct BaseOperand {
 };
 
 template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typename MatrixType::ElementType, blaze::rowVector>>
-auto make_probdiv_applicator(MatrixType &data, ProbDivType type=JSM, Prior prior=NONE, const PriorContainer *pc=nullptr) {
+auto make_probdiv_applicator(MatrixType &data, DissimilarityMeasure type=JSM, Prior prior=NONE, const PriorContainer *pc=nullptr) {
 #if VERBOSE_AF
     std::fprintf(stderr, "[%s:%s:%d] Making probdiv applicator with %d/%s as measure, %d/%s as prior, and %s for prior container.\n",
                  __PRETTY_FUNCTION__, __FILE__, __LINE__, int(type), blz::detail::prob2str(type), int(prior), prior == NONE ? "No prior": prior == DIRICHLET ? "Dirichlet" : prior == GAMMA_BETA ? "Gamma/Beta": "Feature-specific prior",
                 pc == nullptr ? "No prior container": (std::string("Container of size ") + std::to_string(pc->size())).data());
 #endif
-    return ProbDivApplicator<MatrixType>(data, type, prior, pc);
+    return DissimilarityApplicator<MatrixType>(data, type, prior, pc);
 }
 template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typename MatrixType::ElementType, blaze::rowVector>>
 auto make_jsm_applicator(MatrixType &data, Prior prior=NONE, const PriorContainer *pc=nullptr) {
@@ -640,19 +643,19 @@ auto make_jsm_applicator(MatrixType &data, Prior prior=NONE, const PriorContaine
 
 
 template<typename MatrixType>
-auto make_kmc2(const ProbDivApplicator<MatrixType> &app, unsigned k, size_t m=2000, uint64_t seed=13) {
+auto make_kmc2(const DissimilarityApplicator<MatrixType> &app, unsigned k, size_t m=2000, uint64_t seed=13) {
     wy::WyRand<uint64_t> gen(seed);
     return coresets::kmc2(app, gen, app.size(), k, m);
 }
 
-template<typename MatrixType>
-auto make_kmeanspp(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_t seed=13) {
+template<typename MatrixType, typename WFT=blz::ElementType_t<MatrixType>>
+auto make_kmeanspp(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr) {
     wy::WyRand<uint64_t> gen(seed);
-    return coresets::kmeanspp(app, gen, app.size(), k);
+    return coresets::kmeanspp(app, gen, app.size(), k, weights);
 }
 
 template<typename MatrixType, typename WFT=typename MatrixType::ElementType, typename IT=uint32_t>
-auto make_d2_coreset_sampler(const ProbDivApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, coresets::SensitivityMethod sens=cs::LBK) {
+auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, coresets::SensitivityMethod sens=cs::LBK) {
     auto [centers, asn, costs] = make_kmeanspp(app, k, seed);
     coresets::CoresetSampler<typename MatrixType::ElementType, IT> cs;
     cs.make_sampler(app.size(), centers.size(), costs.data(), asn.data(), weights,
@@ -661,7 +664,7 @@ auto make_d2_coreset_sampler(const ProbDivApplicator<MatrixType> &app, unsigned 
 }
 
 } // jsd
-using jsd::ProbDivApplicator;
+using jsd::DissimilarityApplicator;
 using jsd::make_d2_coreset_sampler;
 using jsd::make_kmc2;
 using jsd::make_kmeanspp;

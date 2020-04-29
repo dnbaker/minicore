@@ -307,8 +307,8 @@ void fill_helper(blaze::Matrix<MT, SO> &mat) {
     }
 }
 
-template<typename FT >
-void fill_helper(dm::DistanceMatrix<FT> &) {
+template<typename FT, size_t DV, dm::MemoryStrategy ms>
+void fill_helper(dm::DistanceMatrix<FT, DV, ms> &) {
      std::fprintf(stderr, "[%s] Warning: trying to fill_symmetric_upper_triangular on an unsupported type. Doing nothing.\n", __PRETTY_FUNCTION__);
 }
 

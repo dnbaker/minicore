@@ -40,7 +40,7 @@ enum Assignment: ce_t {
      */
     SOFT = 1,
     // Assignment(X, c) = \frac{c}{\sum_{c' \in C}[d(c', x)]}
-    SOFTMAX = 2, //Currently unused
+    SOFT_HARMONIC_MEAN = 2,
     /* Assignment(X, c) = \frac{e^{d(c, x)}}{sum_{c' \in C}[e^d(c', x)]}
      *                  = softmax(d(C, x))
      */
@@ -61,6 +61,7 @@ enum CenterSamplingType: ce_t {
     D2_SAMPLING,
     UNIFORM_SAMPLING,
     GREEDY_SAMPLING,
+    DEFAULT_SAMPLING,
     COST_SAMPLING = D2_SAMPLING,
 };
 enum OptimizationMethod: ce_t {
@@ -69,6 +70,7 @@ enum OptimizationMethod: ce_t {
     BLACK_BOX,
     GRADIENT_DESCENT,
     EXHAUSTIVE_SEARCH,
+    DEFAULT_OPT = ce_t(-1)
 };
 
 
@@ -77,7 +79,7 @@ enum ClusteringBitfields: ce_t {
     ASN_BF_BITMASK = (1 << 3) - 1,
     HARD_BF = 1 << HARD,
     SOFT_BF = 1 << SOFT,
-    SOFTMAX_BF = 1 << SOFTMAX,
+    SOFTMAX_BF = 1 << SOFT_HARMONIC_MEAN,
     CO_BF_OFFSET = ASN_BF_OFFSET + 2,
     CO_BF_BITMASK = ((1 << (CO_BF_OFFSET - ASN_BF_OFFSET)) - 1) << ASN_BF_OFFSET,
     INTRINSIC_BF = 1 << ASN_BF_OFFSET,
@@ -156,15 +158,21 @@ template<> constexpr OptimizationMethod from_integer(ce_t v) {
 
 static_assert(OM_BF_OFFSET < 32, "must be < 32");
 
-template<typename FT, typename IT, ce_t bf>
+static constexpr ce_t UNSET = ce_t(-1);
+
+template<Assignment asn_method, IT=uint32_t, typename cost_t=float>
+using assignment_fmt_t = std::conditional_t<asn_method == HARD,                                       
+                                         blz::DV<index_t>,                                         
+                                         blaze::DynamicMatrix<cost_t>                              
+                                        >;  
+
+template<typename FT=float, typename IT=uint32_t, Assignment asn=HARD, CenterOrigination co=EXTRINSIC>
 struct ClusteringTraits {
-    static constexpr Assignment asn_method = from_integer<Assignment>(bf);
-    static constexpr CenterOrigination center_origin =
-        from_integer<CenterOrigination>(bf);
-    static constexpr ApproximateSolutionType approx =
-        from_integer<ApproximateSolutionType>(bf);
-    static constexpr CenterSamplingType sampling_method = from_integer<CenterSamplingType>(bf);
-    static constexpr OptimizationMethod opt = from_integer<OptimizationMethod>(bf);
+    static constexpr Assignment asn_method = asn;
+    static constexpr CenterOrigination center_origin = co;
+    ApproximateSolutionType approx = static_cast<ApproximateSolutionType>(UNSET);
+    CenterSamplingType sampling = static_cast<CenterSamplingType>(UNSET);
+    OptimizationMethod opt = static_cast<OptimizationMethod>(UNSET);
     static_assert(std::is_floating_point_v<FT>, "FT must be floating");
     static_assert(std::is_integral_v<IT>, "FT must be integral and support required index ranges");
     using cost_t = FT;
@@ -177,31 +185,15 @@ struct ClusteringTraits {
     // row = point, column = center
     using costs_t = std::conditional_t<asn_method == HARD,
                                        blz::DV<cost_t>,
-                                       blaze::DynamicMatrix<cost_t>>;
+                                       blz::DynamicMatrix<cost_t>>;
     // If hard assignment, then assignments are managed
-    using assignments_t = std::conditional_t<asn_method == HARD,
-                                             blz::DV<index_t>,
-                                             blaze::DynamicMatrix<cost_t>
-                                            >;
+    using assignments_t = assignment_fmt_t<asn_method, index_t, cost_t>;
     using centers_t = std::conditional_t<center_origin == INTRINSIC,
                                          blz::DV<index_t>,
                                          std::vector<blaze::DynamicVector<FT, blaze::rowVector>>
                                         >;
 };
 
-template<typename T>
-struct is_clustering_traits: public std::false_type {};
-
-template<typename FT, typename IT, ce_t bf>
-struct is_clustering_traits<ClusteringTraits<FT, IT, bf>>: public std::true_type {};
-
-template<typename T>
-static constexpr bool is_clustering_traits_v = is_clustering_traits<T>::value;
-
-
-template<typename FT=float, typename IT=uint32_t, Assignment asn=HARD, CenterOrigination co=EXTRINSIC, ApproximateSolutionType approx=CONSTANT_FACTOR,
-         CenterSamplingType sampling=THORUP_SAMPLING, OptimizationMethod opt=METRIC_KMEDIAN>
-struct Meta: public ClusteringTraits<FT, IT, to_bitfield(asn, co, approx, sampling, opt)> {};
 
 } // clustering
 } // minocore

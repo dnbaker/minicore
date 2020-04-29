@@ -22,6 +22,22 @@ public:
     UnsatisfiedPreconditionError(): std::runtime_error("Unsatisfied precondition.") {}
 };
 
+static int require(bool condition, std::string s, int ec=0) {
+    if(!condition) {
+        if(ec) throw std::runtime_error(s + " Error code: " + std::to_string(ec));
+        else   throw std::runtime_error(s);
+    }
+    return ec;
+}
+
+static int validate(bool condition, std::string s, int ec=0) {
+    if(!condition) {
+        if(ec) throw std::invalid_argument(s + " Error code: " + std::to_string(ec));
+        else   throw std::invalid_argument(s);
+    }
+    return ec;
+}
+
 
 static int precondition_require(bool condition, std::string s, int ec=0) {
     if(!condition) {
@@ -62,6 +78,17 @@ static int postcondition_require(bool condition, std::string s, int ec=0) {
 
 #ifndef POST_REQ
 #define POST_REQ(condition, s) POST_REQ_EC(condition, s, 0)
+#endif
+
+
+#ifndef MINOCORE_REQUIRE
+#define MINOCORE_REQUIRE(condition, s) \
+    ::minocore::exception::require(condition, std::string(s) + '[' + __FILE__ + '|' + __PRETTY_FUNCTION__ + "|#L" + std::to_string(__LINE__) + "] Failing condition: \"" + #condition + '"')
+#endif
+
+#ifndef MINOCORE_VALIDATE
+#define MINOCORE_VALIDATE(condition) \
+    ::minocore::exception::validate(condition, '[' + __FILE__ + '|' + __PRETTY_FUNCTION__ + "|#L" + std::to_string(__LINE__) + "] Failing condition: \"" + #condition + '"')
 #endif
 
 } // inline namespace exception

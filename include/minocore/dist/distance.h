@@ -17,7 +17,7 @@ namespace blz {
 
 inline namespace distance {
 
-enum ProbDivType {
+enum DissimilarityMeasure {
     L1,
     L2,
     SQRL2,
@@ -48,6 +48,8 @@ enum ProbDivType {
     PROBABILITY_DOT_PRODUCT_SIMILARITY,
     EMD,
     WEMD, // Weighted Earth-mover's distance
+    ORACLE_METRIC,
+    ORACLE_PSEUDOMETRIC,
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
@@ -89,7 +91,7 @@ namespace detail {
  * For all other distance measures, Jain-Vazirani and/or local search should be run.
  *
  */
-static constexpr INLINE bool is_bregman(ProbDivType d)  {
+static constexpr INLINE bool is_bregman(DissimilarityMeasure d)  {
     switch(d) {
         case JSD: case MKL: case POISSON: case ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO: return true;
@@ -97,10 +99,10 @@ static constexpr INLINE bool is_bregman(ProbDivType d)  {
     }
     return false;
 }
-static constexpr INLINE bool satisfies_d2(ProbDivType d) {
+static constexpr INLINE bool satisfies_d2(DissimilarityMeasure d) {
     return d == LLR || is_bregman(d) || d == SQRL2;
 }
-static constexpr INLINE bool satisfies_metric(ProbDivType d) {
+static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
     switch(d) {
         case L1:
         case L2:
@@ -108,16 +110,18 @@ static constexpr INLINE bool satisfies_metric(ProbDivType d) {
         case BHATTACHARYYA_METRIC:
         case TOTAL_VARIATION_DISTANCE:
         case HELLINGER:
+        case ORACLE_METRIC:
             return true;
         default: ;
     }
     return false;
 }
-static constexpr INLINE bool satisfies_rho_metric(ProbDivType d) {
+static constexpr INLINE bool satisfies_rho_metric(DissimilarityMeasure d) {
     if(satisfies_metric(d)) return true;
     switch(d) {
         case SQRL2: // rho = 2
         // These three don't, technically, but using a prior can force it to follow it on real data
+        case ORACLE_PSEUDOMETRIC:
         case LLR: case UWLLR: case OLLR:
             return true;
         default:;
@@ -125,7 +129,7 @@ static constexpr INLINE bool satisfies_rho_metric(ProbDivType d) {
     return false;
 }
 
-static constexpr INLINE bool needs_logs(ProbDivType d)  {
+static constexpr INLINE bool needs_logs(DissimilarityMeasure d)  {
     switch(d) {
         case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: case REVERSE_ITAKURA_SAITO: return true;
@@ -134,19 +138,19 @@ static constexpr INLINE bool needs_logs(ProbDivType d)  {
     return false;
 }
 
-static constexpr INLINE bool needs_l2_cache(ProbDivType d) {
+static constexpr INLINE bool needs_l2_cache(DissimilarityMeasure d) {
     return d == COSINE_DISTANCE;
 }
 
-static constexpr INLINE bool needs_probability_l2_cache(ProbDivType d) {
+static constexpr INLINE bool needs_probability_l2_cache(DissimilarityMeasure d) {
     return d == PROBABILITY_COSINE_DISTANCE;
 }
 
-static constexpr INLINE bool  needs_sqrt(ProbDivType d) {
+static constexpr INLINE bool  needs_sqrt(DissimilarityMeasure d) {
     return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
 }
 
-static constexpr INLINE bool is_symmetric(ProbDivType d) {
+static constexpr INLINE bool is_symmetric(DissimilarityMeasure d) {
     switch(d) {
         case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
         case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
@@ -158,7 +162,7 @@ static constexpr INLINE bool is_symmetric(ProbDivType d) {
     return false;
 }
 
-static constexpr INLINE const char *prob2str(ProbDivType d) {
+static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "BHATTACHARYYA_DISTANCE";
         case BHATTACHARYYA_METRIC: return "BHATTACHARYYA_METRIC";
@@ -183,10 +187,12 @@ static constexpr INLINE const char *prob2str(ProbDivType d) {
         case PROBABILITY_COSINE_DISTANCE: return "PROBABILITY_COSINE_DISTANCE";
         case COSINE_SIMILARITY: return "COSINE_SIMILARITY";
         case PROBABILITY_COSINE_SIMILARITY: return "PROBABILITY_COSINE_SIMILARITY";
+        case ORACLE_METRIC: return "ORACLE_METRIC";
+        case ORACLE_PSEUDOMETRIC: return "ORACLE_PSEUDOMETRIC";
         default: return "INVALID TYPE";
     }
 }
-static constexpr INLINE const char *prob2desc(ProbDivType d) {
+static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";
         case BHATTACHARYYA_METRIC: return "Bhattacharyya metric: sqrt(1 - BhattacharyyaSimilarity(x, y))";
@@ -211,11 +217,13 @@ static constexpr INLINE const char *prob2desc(ProbDivType d) {
         case PROBABILITY_COSINE_DISTANCE: return "Cosine distance of the probability vectors: arccos(\\frac{A \\cdot B}{|A|_2 |B|_2}) / pi";
         case COSINE_SIMILARITY: return "Cosine similarity: \\frac{A \\cdot B}{|A|_2 |B|_2}";
         case PROBABILITY_COSINE_SIMILARITY: return "Cosine similarity of the probability vectors: \\frac{A \\cdot B}{|A|_2 |B|_2}";
+        case ORACLE_METRIC: return "Placeholder for oracle metrics, allowing us to use DissimilarityMeasure in other situations";
+        case ORACLE_PSEUDOMETRIC: return "Placeholder for oracle pseudometrics";
         default: return "INVALID TYPE";
     }
 }
 static void print_measures() {
-    std::set<ProbDivType> measures {
+    std::set<DissimilarityMeasure> measures {
         L1,
         L2,
         SQRL2,
@@ -229,7 +237,7 @@ static void print_measures() {
         TOTAL_VARIATION_DISTANCE,
         LLR,
         OLLR,
-        EMD,
+        //EMD,
         REVERSE_MKL,
         REVERSE_POISSON,
         UWLLR,
