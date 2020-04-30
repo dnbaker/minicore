@@ -222,7 +222,6 @@ public:
     auto logrow(size_t ind) const {return blaze::row(*logdata_, ind BLAZE_CHECK_DEBUG);}
     auto sqrtrow(size_t ind) const {return blaze::row(*sqrdata_, ind BLAZE_CHECK_DEBUG);}
 
-
     /*
      * Distances
      */
@@ -303,7 +302,7 @@ public:
     }
     template<DissimilarityMeasure constexpr_measure, typename OT, typename CacheT=OT,
              typename=std::enable_if_t<!std::is_integral_v<OT> && !std::is_integral_v<CacheT>>>
-    INLINE FT call(size_t i, OT &o, CacheT *cp=static_cast<CacheT *>(nullptr)) const {
+    INLINE FT call(size_t i, OT &o, [[maybe_unused]] CacheT *cp=static_cast<CacheT *>(nullptr)) const {
         FT ret;
         if constexpr(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
             ret = discrete_total_variation_distance(row(i), o);
@@ -344,15 +343,18 @@ public:
                 ret = blz::sqrNorm(sqrtrow(i) - blz::sqrt(o));
             }
         } else if constexpr(constexpr_measure == BHATTACHARYYA_METRIC) {
-            ret = bhattacharyya_metric(i, o);
+            ret = cp ? bhattacharyya_metric(i, o, *cp)
+                     : bhattacharyya_metric(i, o);
         } else if constexpr(constexpr_measure == BHATTACHARYYA_DISTANCE) {
-            ret = bhattacharyya_distance(i, o);
+            ret = cp ? bhattacharyya_distance(i, o, *cp)
+                     : bhattacharyya_distance(i, o);
         } else if constexpr(constexpr_measure == LLR) {
             ret = cp ? llr(i, o, *cp): llr(i, o);
         } else if constexpr(constexpr_measure == UWLLR) {
             ret = cp ? uwllr(i, o, *cp): uwllr(i, o);
         } else if constexpr(constexpr_measure == OLLR) {
-            throw 1; // Not implemented
+            ret = cp ? llr(i, o, *cp): llr(i, o);
+            std::cerr << "Note: computing LLR, not OLLR, for this case\n";
         } else if constexpr(constexpr_measure == ITAKURA_SAITO) {
             ret = itakura_saito(i, o);
         } else if constexpr(constexpr_measure == REVERSE_ITAKURA_SAITO) {
@@ -617,12 +619,6 @@ public:
             //constexpr FT logp5 = -0.693147180559945; // std::log(0.5)
             auto s = ri + rj;
             ret = jsd_cache_->operator[](i) + jsd_cache_->operator[](j) - blaze::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
-#ifndef NDEBUG
-            static constexpr typename MatrixType::ElementType threshold
-                = std::is_same_v<typename MatrixType::ElementType, double>
-                                    ? 0.: -1e-5;
-            assert(ret >= threshold || !std::fprintf(stderr, "ret: %g (numerical stability issues)\n", ret));
-#endif
             return std::max(ret, static_cast<FT>(0.));
         } else {
             throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
@@ -695,8 +691,7 @@ public:
     template<typename OT, typename OT2, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto pkl(const OT &o, size_t i, const OT2 &cache) const {
         if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        throw TODOError("Not done\n");
-        return pkl(i, o, neginf2zero(blaze::log(o)));
+        return blz::dot(o, cache - logrow(i)) + blz::sum(o - row(i));
     }
     auto psd(size_t i, size_t j) const {
         if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
@@ -770,16 +765,18 @@ public:
     }
     auto uwllr(size_t i, size_t j) const {
         if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        const auto lhn = row_sums_[i], rhn = row_sums_[j];
-        const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
-        return
-          std::max(
-            lambda * get_jsdcache(i) +
-                  m1l * get_jsdcache(j) -
-               blaze::dot(lambda * row(i) + m1l * row(j),
-                        neginf2zero(blaze::log(
-                            lambda * row(i) + m1l * row(j)))),
-          0.);
+        else {
+            const auto lhn = row_sums_[i], rhn = row_sums_[j];
+            const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+            return
+              std::max(
+                lambda * get_jsdcache(i) +
+                      m1l * get_jsdcache(j) -
+                   blaze::dot(lambda * row(i) + m1l * row(j),
+                            neginf2zero(blaze::log(
+                                lambda * row(i) + m1l * row(j)))),
+              0.);
+        }
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto llr(size_t, const OT &) const {
