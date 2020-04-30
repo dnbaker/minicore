@@ -49,10 +49,6 @@ INLINE auto checked_posix_write(int fd, const void *buf, ssize_t count) {
     return ret;
 }
 
-struct TODOError: public std::runtime_error {
-    template<typename...A>
-    TODOError(A &&...a): std::runtime_error(std::forward<A>(a)...) {}
-};
 
 struct Deleter {
     void operator()(const void *x) const {

@@ -7,6 +7,11 @@ namespace minocore {
 
 inline namespace exception {
 
+struct TODOError: public std::runtime_error {
+    template<typename...A>
+    TODOError(A &&...a): std::runtime_error(std::forward<A>(a)...) {}
+};
+
 class NotImplementedError: public std::runtime_error {
 public:
     template<typename... Args>

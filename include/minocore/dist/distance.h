@@ -17,6 +17,7 @@ namespace blz {
 
 inline namespace distance {
 
+
 enum DissimilarityMeasure {
     L1,
     L2,
@@ -91,6 +92,8 @@ namespace detail {
  * For all other distance measures, Jain-Vazirani and/or local search should be run.
  *
  */
+
+
 static constexpr INLINE bool is_bregman(DissimilarityMeasure d)  {
     switch(d) {
         case JSD: case MKL: case POISSON: case ITAKURA_SAITO:
@@ -138,6 +141,18 @@ static constexpr INLINE bool needs_logs(DissimilarityMeasure d)  {
     return false;
 }
 
+static constexpr INLINE bool is_probability(DissimilarityMeasure d)  {
+    switch(d) {
+        case TOTAL_VARIATION_DISTANCE: case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
+        case MKL: case POISSON: case REVERSE_MKL: case REVERSE_POISSON:
+        case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+        case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
+        return true;
+        default: break;
+    }
+    return false;
+}
+
 static constexpr INLINE bool needs_l2_cache(DissimilarityMeasure d) {
     return d == COSINE_DISTANCE;
 }
@@ -160,6 +175,21 @@ static constexpr INLINE bool is_symmetric(DissimilarityMeasure d) {
         default: ;
     }
     return false;
+}
+
+template<typename VT, bool TF, typename VT2>
+void set_cache(const blz::Vector<VT, TF> &src, blz::Vector<VT2, TF> &dest, DissimilarityMeasure d) {
+    if(needs_logs(d)) {
+        if(is_probability(d))
+            ~dest = neginf2zero(log(~src));
+        else
+            ~dest = neginf2zero(log(~src / blaze::sum(~src)));
+        return;
+    }
+    if(needs_sqrt(d)) {
+        ~dest = sqrt(~src);
+        return;
+    }
 }
 
 static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {

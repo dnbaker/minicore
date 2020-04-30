@@ -58,10 +58,8 @@ int main() {
         blz::DM<float> dm= blaze::generate(100, 100, [](auto,auto){return 4;});
         auto jsdapp = make_probdiv_applicator(dm, blz::SQRL2);
         clustering::perform_clustering<clustering::HARD, clustering::EXTRINSIC>(jsdapp, 10);
+        clustering::perform_clustering<clustering::SOFT, clustering::EXTRINSIC>(jsdapp, 10);
+        ret = 1;
     }
-#if 0
-    if((ret = matrix_main())) return ret;
-    if((ret = kmeans_main())) return ret;
-#endif
-    return 0;
+    return ret;
 }

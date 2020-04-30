@@ -160,7 +160,7 @@ static_assert(OM_BF_OFFSET < 32, "must be < 32");
 
 static constexpr ce_t UNSET = ce_t(-1);
 
-template<Assignment asn_method, IT=uint32_t, typename cost_t=float>
+template<Assignment asn_method, typename index_t=uint32_t, typename cost_t=float>
 using assignment_fmt_t = std::conditional_t<asn_method == HARD,                                       
                                          blz::DV<index_t>,                                         
                                          blaze::DynamicMatrix<cost_t>                              

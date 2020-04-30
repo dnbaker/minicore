@@ -1,5 +1,6 @@
 #ifndef FGC_JSD_H__
 #define FGC_JSD_H__
+#include "minocore/util/exception.h"
 #include "minocore/coreset.h"
 #include "minocore/dist/distance.h"
 #include "distmat/distmat.h"
@@ -40,6 +41,7 @@ public:
 
     const DissimilarityMeasure measure_;
     const MatrixType &data() const {return data_;}
+    const VecT &row_sums() const {return row_sums_;}
     size_t size() const {return data_.rows();}
     template<typename PriorContainer=blaze::DynamicVector<FT, blaze::rowVector>>
     DissimilarityApplicator(MatrixType &ref,
@@ -174,17 +176,35 @@ public:
     auto cosine_similarity(size_t i, size_t j) const {
         return blaze::dot(weighted_row(i), weighted_row(j)) * l2norm_cache_->operator[](i) * l2norm_cache_->operator[](j);
     }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    auto cosine_similarity(size_t j, const OT &o) const {
+        return blaze::dot(o, weighted_row(j)) / blz::l2Norm(o) * l2norm_cache_->operator[](j);
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    auto cosine_similarity(const OT &o, size_t j) const {
+        return blaze::dot(o, weighted_row(j)) / blz::l2Norm(o) * l2norm_cache_->operator[](j);
+    }
     auto pcosine_similarity(size_t i, size_t j) const {
         return blaze::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    auto pcosine_similarity(size_t j, const OT &o) const {
+        return blaze::dot(o, row(j)) / blz::l2Norm(o) * pl2norm_cache_->operator[](j);
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    auto pcosine_similarity(const OT &o, size_t j) const {
+        return blaze::dot(o, row(j)) / blz::l2Norm(o) * pl2norm_cache_->operator[](j);
     }
 
     static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
 
-    auto cosine_distance(size_t i, size_t j) const {
-        return std::acos(cosine_similarity(i, j)) * PI_INV;
+    template<typename...Args>
+    auto cosine_distance(Args &&...args) const {
+        return std::acos(cosine_similarity(std::forward<Args>(args)...)) * PI_INV;
     }
-    auto pcosine_distance(size_t i, size_t j) const {
-        return std::acos(cosine_similarity(i, j)) * PI_INV;
+    template<typename...Args>
+    auto pcosine_distance(Args &&...args) const {
+        return std::acos(pcosine_similarity(std::forward<Args>(args)...)) * PI_INV;
     }
     auto dotproduct_distance(size_t i, size_t j) const {
         return blaze::dot(weighted_row(i), weighted_row(j)) * l2norm_cache_->operator[](i) * l2norm_cache_->operator[](j);
@@ -208,6 +228,147 @@ public:
      */
     INLINE auto operator()(size_t i, size_t j) const {
         return this->operator()(i, j, measure_);
+    }
+    template<DissimilarityMeasure constexpr_measure, typename OT, typename CacheT,
+             typename=std::enable_if_t<!std::is_integral_v<OT> && !std::is_integral_v<CacheT>>>
+    INLINE FT operator()(size_t i, OT &o, CacheT *cp=static_cast<CacheT *>(nullptr)) const {
+        return this->call<constexpr_measure, OT, CacheT>(i, o, cp);
+    }
+    template<DissimilarityMeasure constexpr_measure, typename OT, typename CacheT,
+             typename=std::enable_if_t<!std::is_integral_v<OT> && !std::is_integral_v<CacheT>>>
+    INLINE FT operator()(OT &o, size_t i, CacheT *cp=static_cast<CacheT *>(nullptr)) const {
+        return this->call<constexpr_measure, OT, CacheT>(o, i, cp);
+    }
+    template<DissimilarityMeasure constexpr_measure, typename OT, typename CacheT=OT,
+             typename=std::enable_if_t<!std::is_integral_v<OT> && !std::is_integral_v<CacheT>>>
+    INLINE FT call(OT &o, size_t i, CacheT *cp=static_cast<CacheT *>(nullptr)) const {
+        FT ret;
+        if constexpr(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
+            ret = discrete_total_variation_distance(o, row(i));
+        } else if constexpr(constexpr_measure == L1) {
+            ret = l1Norm(weighted_row(i) - o);
+        } else if constexpr(constexpr_measure == L2) {
+            ret = l2Norm(weighted_row(i) - o);
+        } else if constexpr(constexpr_measure == SQRL2) {
+            ret = blaze::sqrNorm(weighted_row(i) - o);
+        } else if constexpr(constexpr_measure == JSD) {
+            if(cp) {
+                ret = jsd(i, o, *cp);
+            } else ret = jsd(i, o);
+        } else if constexpr(constexpr_measure == JSM) {
+            if(cp) {
+                ret = jsm(i, o, *cp);
+            } else ret = jsm(i, o);
+        } else if constexpr(constexpr_measure == REVERSE_MKL) {
+            ret = cp ? mkl(i, o, *cp): mkl(i, o);
+        } else if constexpr(constexpr_measure == MKL) {
+            ret = cp ? mkl(o, i, *cp): mkl(o, i);
+        } else if constexpr(constexpr_measure == EMD) {
+            ret = p_wasserstein(row(i), o);
+        } else if constexpr(constexpr_measure == WEMD) {
+            ret = p_wasserstein(weighted_row(i), o);
+        } else if constexpr(constexpr_measure == REVERSE_POISSON) {
+            ret = cp ? pkl(i, o, *cp): pkl(i, o);
+        } else if constexpr(constexpr_measure == POISSON) {
+            ret = cp ? pkl(o, i, *cp): pkl(o, i);
+        } else if constexpr(constexpr_measure == HELLINGER) {
+            ret = cp ? blz::sqrNorm(sqrtrow(i) - *cp)
+                     : blz::sqrNorm(sqrtrow(i) - blz::sqrt(o));
+        } else if constexpr(constexpr_measure == BHATTACHARYYA_METRIC) {
+            ret = bhattacharyya_metric(i, o);
+        } else if constexpr(constexpr_measure == BHATTACHARYYA_DISTANCE) {
+            ret = bhattacharyya_distance(i, o);
+        } else if constexpr(constexpr_measure == LLR) {
+            ret = cp ? llr(i, o, *cp): llr(i, o);
+        } else if constexpr(constexpr_measure == UWLLR) {
+            ret = cp ? uwllr(i, o, *cp): uwllr(i, o);
+        } else if constexpr(constexpr_measure == OLLR) {
+            throw 1; // Not implemented
+        } else if constexpr(constexpr_measure == ITAKURA_SAITO) {
+            ret = itakura_saito(o, i);
+        } else if constexpr(constexpr_measure == REVERSE_ITAKURA_SAITO) {
+            ret = itakura_saito(i, o);
+        } else if constexpr(constexpr_measure == COSINE_DISTANCE) {
+            ret = cosine_distance(i, o);
+        } else if constexpr(constexpr_measure == PROBABILITY_COSINE_DISTANCE) {
+            ret = pcosine_distance(i, o);
+        } else if constexpr(constexpr_measure == COSINE_SIMILARITY) {
+            ret = cosine_similarity(i, o);
+        } else if constexpr(constexpr_measure == PROBABILITY_COSINE_SIMILARITY) {
+            ret = pcosine_similarity(i, o);
+        } else {
+            throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
+        }
+        return ret;
+    }
+    template<DissimilarityMeasure constexpr_measure, typename OT, typename CacheT=OT,
+             typename=std::enable_if_t<!std::is_integral_v<OT> && !std::is_integral_v<CacheT>>>
+    INLINE FT call(size_t i, OT &o, CacheT *cp=static_cast<CacheT *>(nullptr)) const {
+        FT ret;
+        if constexpr(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
+            ret = discrete_total_variation_distance(row(i), o);
+        } else if constexpr(constexpr_measure == L1) {
+            ret = l1Norm(weighted_row(i) - o);
+        } else if constexpr(constexpr_measure == L2) {
+            ret = l2Norm(weighted_row(i) - o);
+        } else if constexpr(constexpr_measure == SQRL2) {
+            ret = blaze::sqrNorm(weighted_row(i) - o);
+        } else if constexpr(constexpr_measure == JSD) {
+            if(cp) {
+                ret = jsd(i, o, *cp);
+            } else ret = jsd(i, o);
+        } else if constexpr(constexpr_measure == JSM) {
+            if(cp) {
+                ret = jsm(i, o, *cp);
+            } else ret = jsm(i, o);
+        } else if constexpr(constexpr_measure == REVERSE_MKL) {
+            if(cp) {
+                ret = mkl(o, i, *cp);
+            } else ret = mkl(o, i);
+        } else if constexpr(constexpr_measure == MKL) {
+            if(cp) {
+                ret = mkl(i, o, *cp);
+            } else ret = mkl(i, o);
+        } else if constexpr(constexpr_measure == EMD) {
+            ret = p_wasserstein(row(i), o);
+        } else if constexpr(constexpr_measure == WEMD) {
+            ret = p_wasserstein(weighted_row(i), o);
+        } else if constexpr(constexpr_measure == REVERSE_POISSON) {
+            ret = cp ? pkl(o, i, *cp): pkl(o, i);
+        } else if constexpr(constexpr_measure == POISSON) {
+            ret = cp ? pkl(i, o, *cp): pkl(i, o);
+        } else if constexpr(constexpr_measure == HELLINGER) {
+            if(cp) {
+                ret = blz::sqrNorm(sqrtrow(i) - *cp);
+            } else {
+                ret = blz::sqrNorm(sqrtrow(i) - blz::sqrt(o));
+            }
+        } else if constexpr(constexpr_measure == BHATTACHARYYA_METRIC) {
+            ret = bhattacharyya_metric(i, o);
+        } else if constexpr(constexpr_measure == BHATTACHARYYA_DISTANCE) {
+            ret = bhattacharyya_distance(i, o);
+        } else if constexpr(constexpr_measure == LLR) {
+            ret = cp ? llr(i, o, *cp): llr(i, o);
+        } else if constexpr(constexpr_measure == UWLLR) {
+            ret = cp ? uwllr(i, o, *cp): uwllr(i, o);
+        } else if constexpr(constexpr_measure == OLLR) {
+            throw 1; // Not implemented
+        } else if constexpr(constexpr_measure == ITAKURA_SAITO) {
+            ret = itakura_saito(i, o);
+        } else if constexpr(constexpr_measure == REVERSE_ITAKURA_SAITO) {
+            ret = itakura_saito(o, i);
+        } else if constexpr(constexpr_measure == COSINE_DISTANCE) {
+            ret = cosine_distance(i, o);
+        } else if constexpr(constexpr_measure == PROBABILITY_COSINE_DISTANCE) {
+            ret = pcosine_distance(i, o);
+        } else if constexpr(constexpr_measure == COSINE_SIMILARITY) {
+            ret = cosine_similarity(i, o);
+        } else if constexpr(constexpr_measure == PROBABILITY_COSINE_SIMILARITY) {
+            ret = pcosine_similarity(i, o);
+        } else {
+            throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
+        }
+        return ret;
     }
     template<DissimilarityMeasure constexpr_measure>
     INLINE FT call(size_t i, size_t j) const {
@@ -265,7 +426,86 @@ public:
         }
         return ret;
     }
-    INLINE FT operator()(size_t i, size_t j, DissimilarityMeasure measure) const {
+    template<typename OT, typename CacheT=OT, typename=std::enable_if_t<!std::is_integral_v<OT> > >
+    INLINE FT operator()(const OT &o, size_t i, const CacheT *cache=static_cast<CacheT *>(nullptr), DissimilarityMeasure measure=static_cast<DissimilarityMeasure>(-1)) const noexcept {
+        if(unlikely(i >= data_.rows())) {
+            std::cerr << (std::string("Invalid rows selection: ") + std::to_string(i) + '\n');
+            std::exit(1);
+        }
+        if(unlikely(measure == static_cast<DissimilarityMeasure>(-1))) {
+            std::cerr << "Unset measure\n";
+            std::exit(1);
+        }
+        FT ret;
+        switch(measure) {
+            case TOTAL_VARIATION_DISTANCE: ret = call<TOTAL_VARIATION_DISTANCE>(o, i); break;
+            case L1: ret = call<L1>(o, i); break;
+            case L2: ret = call<L2>(o, i); break;
+            case SQRL2: ret = call<SQRL2>(o, i); break;
+            case JSD: ret = call<JSD>(o, i); break;
+            case JSM: ret = call<JSM>(o, i); break;
+            case REVERSE_MKL: ret = call<REVERSE_MKL>(o, i, cache); break;
+            case MKL: ret = call<MKL>(o, i, cache); break;
+            case EMD: ret = call<EMD>(o, i); break;
+            case WEMD: ret = call<WEMD>(o, i); break;
+            case REVERSE_POISSON: ret = call<REVERSE_POISSON>(o, i, cache); break;
+            case POISSON: ret = call<POISSON>(o, i, cache); break;
+            case HELLINGER: ret = call<HELLINGER>(o, i, cache); break;
+            case BHATTACHARYYA_METRIC: ret = call<BHATTACHARYYA_METRIC>(o, i); break;
+            case BHATTACHARYYA_DISTANCE: ret = call<BHATTACHARYYA_DISTANCE>(o, i); break;
+            case LLR: ret = call<LLR>(o, i, cache); break;
+            case UWLLR: ret = call<UWLLR>(o, i, cache); break;
+            case OLLR: ret = call<OLLR>(o, i, cache); break;
+            case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(o, i, cache); break;
+            case COSINE_DISTANCE: ret = call<COSINE_DISTANCE>(o, i); break;
+            case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(o, i); break;
+            case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(o, i); break;
+            case PROBABILITY_COSINE_SIMILARITY: ret = call<PROBABILITY_COSINE_SIMILARITY>(o, i); break;
+            case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); return 0.;
+            default: __builtin_unreachable();
+        }
+    }
+    template<typename OT, typename CacheT=OT, typename=std::enable_if_t<!std::is_integral_v<OT> > >
+    INLINE FT operator()(size_t i, const OT &o, const CacheT *cache=static_cast<CacheT *>(nullptr), DissimilarityMeasure measure=static_cast<DissimilarityMeasure>(-1)) const noexcept {
+        if(unlikely(i >= data_.rows())) {
+            std::cerr << (std::string("Invalid rows selection: ") + std::to_string(i) + '\n');
+            std::exit(1);
+        }
+        if(unlikely(measure == static_cast<DissimilarityMeasure>(-1))) {
+            std::cerr << "Unset measure\n";
+            std::exit(1);
+        }
+        FT ret;
+        switch(measure) {
+            case TOTAL_VARIATION_DISTANCE: ret = call<TOTAL_VARIATION_DISTANCE>(i, o); break;
+            case L1: ret = call<L1>(i, o); break;
+            case L2: ret = call<L2>(i, o); break;
+            case SQRL2: ret = call<SQRL2>(i, o); break;
+            case JSD: ret = call<JSD>(i, o); break;
+            case JSM: ret = call<JSM>(i, o); break;
+            case REVERSE_MKL: ret = call<REVERSE_MKL>(i, o, cache); break;
+            case MKL: ret = call<MKL>(i, o, cache); break;
+            case EMD: ret = call<EMD>(i, o); break;
+            case WEMD: ret = call<WEMD>(i, o); break;
+            case REVERSE_POISSON: ret = call<REVERSE_POISSON>(i, o, cache); break;
+            case POISSON: ret = call<POISSON>(i, o, cache); break;
+            case HELLINGER: ret = call<HELLINGER>(i, o, cache); break;
+            case BHATTACHARYYA_METRIC: ret = call<BHATTACHARYYA_METRIC>(i, o); break;
+            case BHATTACHARYYA_DISTANCE: ret = call<BHATTACHARYYA_DISTANCE>(i, o); break;
+            case LLR: ret = call<LLR>(i, o, cache); break;
+            case UWLLR: ret = call<UWLLR>(i, o, cache); break;
+            case OLLR: ret = call<OLLR>(i, o, cache); break;
+            case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, o, cache); break;
+            case COSINE_DISTANCE: ret = call<COSINE_DISTANCE>(i, o); break;
+            case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(i, o); break;
+            case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(i, o); break;
+            case PROBABILITY_COSINE_SIMILARITY: ret = call<PROBABILITY_COSINE_SIMILARITY>(i, o); break;
+            case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); return 0.;
+            default: __builtin_unreachable();
+        }
+        return ret;
+    }
+    INLINE FT operator()(size_t i, size_t j, DissimilarityMeasure measure) const noexcept {
         if(unlikely(i >= data_.rows() || j >= data_.rows())) {
             std::cerr << (std::string("Invalid rows selection: ") + std::to_string(i) + ", " + std::to_string(j) + '\n');
             std::exit(1);
@@ -322,10 +562,44 @@ public:
                 throw std::runtime_error(buf);
             }
             ret = -std::numeric_limits<FT>::max();
-            throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+            throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         } else {
             auto div = row(i) / row(j);
             ret = blaze::sum(div - blaze::log(div)) - row(i).size();
+        }
+        return ret;
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>> >
+    auto itakura_saito(size_t i, const OT &o) const {
+        FT ret;
+        if constexpr(IS_SPARSE) {
+            if(!prior_data_) {
+                char buf[128];
+                std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%p\n", i, (void *)&o);
+                throw std::runtime_error(buf);
+            }
+            ret = -std::numeric_limits<FT>::max();
+            throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        } else {
+            auto div = row(i) / o;
+            ret = blaze::sum(div - blaze::log(div)) - row(i).size();
+        }
+        return ret;
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>> >
+    auto itakura_saito(const OT &o, size_t i) const {
+        FT ret;
+        if constexpr(IS_SPARSE) {
+            if(!prior_data_) {
+                char buf[128];
+                std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%p\n", i, (void *)&o);
+                throw std::runtime_error(buf);
+            }
+            ret = -std::numeric_limits<FT>::max();
+            throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        } else {
+            auto div = o / row(i);
+            ret = blaze::sum(div - blaze::log(div)) - o.size();
         }
         return ret;
     }
@@ -351,75 +625,99 @@ public:
 #endif
             return std::max(ret, static_cast<FT>(0.));
         } else {
-            throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+            throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
             return FT(0);
         }
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto jsd(size_t i, const OT &o, const OT2 &olog) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto mnlog = evaluate(log(0.5 * (row(i) + o)));
         return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto jsd(size_t i, const OT &o) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto olog = evaluate(blaze::neginf2zero(blaze::log(o)));
         return jsd(i, o, olog);
     }
     auto mkl(size_t i, size_t j) const {
         // Multinomial KL
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return get_jsdcache(i) - blaze::dot(row(i), logrow(j));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto mkl(size_t i, const OT &o) const {
         // Multinomial KL
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return get_jsdcache(i) - blaze::dot(row(i), blaze::neginf2zero(blaze::log(o)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
+    auto mkl(const OT &o, size_t i, const OT2 &olog) const {
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        // Multinomial KL
+        return blaze::dot(o, olog - logrow(i));
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    auto mkl(const OT &o, size_t i) const {
+        // Multinomial KL
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        return blaze::dot(o, blaze::neginf2zero(blaze::log(o)) - logrow(i));
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto mkl(size_t i, const OT &, const OT2 &olog) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Multinomial KL
         return blaze::dot(row(i), logrow(i) - olog);
     }
     auto pkl(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission KL
         return get_jsdcache(i) - blaze::dot(row(i), logrow(j)) + blaze::sum(row(j) - row(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto pkl(size_t i, const OT &o, const OT2 &olog) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission KL
         return get_jsdcache(i) - blaze::dot(row(i), olog) + blaze::sum(row(i) - o);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto pkl(size_t i, const OT &o) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        return pkl(i, o, neginf2zero(blaze::log(o)));
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    auto pkl(const OT &o, size_t i) const {
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        throw TODOError("Not done\n");
+        return pkl(i, o, neginf2zero(blaze::log(o)));
+    }
+    template<typename OT, typename OT2, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    auto pkl(const OT &o, size_t i, const OT2 &cache) const {
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        throw TODOError("Not done\n");
         return pkl(i, o, neginf2zero(blaze::log(o)));
     }
     auto psd(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + row(j))));
         return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(row(j), logrow(j) - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto psd(size_t i, const OT &o, const OT2 &olog) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         // Poission JSD
         auto mnlog = evaluate(log(.5 * (row(i) + o)));
         return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto psd(size_t i, const OT &o) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return psd(i, o, neginf2zero(blaze::log(o)));
     }
     auto bhattacharyya_sim(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return sqrdata_ ? blaze::dot(sqrtrow(i), sqrtrow(j))
                         : blaze::sum(blaze::sqrt(row(i) * row(j)));
     }
@@ -441,13 +739,13 @@ public:
     }
     template<typename...Args>
     auto bhattacharyya_metric(Args &&...args) const {
-        throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
         return std::sqrt(1 - bhattacharyya_sim(std::forward<Args>(args)...));
     }
     template<typename...Args>
     auto psm(Args &&...args) const {return std::sqrt(std::forward<Args>(args)...);}
     auto llr(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
             //blaze::dot(row(i), logrow(i)) * row_sums_[i]
             //+
             //blaze::dot(row(j), logrow(j)) * row_sums_[j]
@@ -465,13 +763,13 @@ public:
         return std::max(ret, 0.);
     }
     auto ollr(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto ret = get_jsdcache(i) * row_sums_[i] + get_jsdcache(j) * row_sums_[j]
             - blaze::dot(weighted_row(i) + weighted_row(j), neginf2zero(blaze::log((row(i) + row(j)) * .5)));
         return std::max(ret, 0.);
     }
     auto uwllr(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) throw shared::TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         const auto lhn = row_sums_[i], rhn = row_sums_[j];
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
         return
@@ -485,12 +783,22 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto llr(size_t, const OT &) const {
-        throw shared::TODOError("llr is not implemented for this.");
+        throw TODOError("llr is not implemented for this.");
         return 0.;
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto llr(size_t, const OT &, const OT2 &) const {
-        throw shared::TODOError("llr is not implemented for this.");
+        throw TODOError("llr is not implemented for this.");
+        return 0.;
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
+    auto uwllr(size_t, const OT &) const {
+        throw TODOError("llr is not implemented for this.");
+        return 0.;
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
+    auto uwllr(size_t, const OT &, const OT2 &) const {
+        throw TODOError("llr is not implemented for this.");
         return 0.;
     }
     template<typename...Args>
