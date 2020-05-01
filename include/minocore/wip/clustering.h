@@ -31,40 +31,37 @@ struct CentroidPolicy {
                 coresets::l1_median(r, ret);
         }
         else if(measure == blz::L1) {
-            using cmtype = 
             std::conditional_t<blz::IsSparseMatrix_v<Range>,
                                blz::CompressedMatrix<FT, blz::StorageOrder_v<Range> >,
                                blz::DynamicMatrix<FT, blz::StorageOrder_v<Range> >
-                              >;
-            cmtype cm = r * blz::expand(rs, r.columns());
+            > cm = r * blz::expand(rs, r.columns());
             if(wc)
-                coresets::l1_median(r, ret, wc->data());
+                coresets::l1_median(cm, ret, wc->data());
             else
-                coresets::l1_median(r, ret);
-        } else if(measure == blz::LLR || measure == blz::UWLLR) {
+                coresets::l1_median(cm, ret);
+        } else if(measure == blz::LLR || measure == blz::UWLLR || measure == blz::OLLR) {
             FT total_sum_inv;
-            if(wc) total_sum_inv = 1. / blz::dot(rs, *wc);
-            else   total_sum_inv = 1. / blaze::sum(rs);
             if(wc) {
-                ~ret = blaze::sum<blz::columnwise>(r % blz::expand(rs, r.columns())) * total_sum_inv;
-            } else {
+                total_sum_inv = 1. / blz::dot(rs, *wc);
                 ~ret = blaze::sum<blz::columnwise>(r % blz::expand(*wc * rs, r.columns())) * total_sum_inv;
+            } else {
+                total_sum_inv = 1. / blaze::sum(rs);
+                ~ret = blaze::sum<blz::columnwise>(r % blz::expand(rs, r.columns())) * total_sum_inv;
             }
         } else if(wc) {
             assert((~(*wc)).size() == r.rows());
             assert(blz::expand(~(*wc), r.columns()).rows() == r.rows());
             assert(blz::expand(~(*wc), r.columns()).columns() == r.columns());
-            if(!blz::detail::is_probability(measure)) {
-                auto wsuminv = 1. / blz::dot(*wc, rs);
+            auto wsuminv = 1. / blaze::sum(*wc);
+            if(!blz::detail::is_probability(measure)) { // e.g., take mean of unscaled values
                 ~ret = blaze::sum<blz::columnwise>(r % blz::expand(~(*wc) * rs, r.columns())) * wsuminv;
-            } else {
-                auto wsuminv = 1. / blaze::sum(*wc);
+            } else {                                    // Else take mean of scaled values
                 ~ret = blaze::sum<blz::columnwise>(r % blz::expand(~(*wc), r.columns())) * wsuminv;
             }
         } else {
             if(!blz::detail::is_probability(measure)) {
-                //auto wsuminv = 1. / blaze::sum(rs);
-                ~ret = blaze::sum<blz::columnwise>(r % blz::expand(rs, r.columns()));
+                auto wsuminv = 1. / blaze::sum(rs);
+                ~ret = blaze::sum<blz::columnwise>(r % blz::expand(rs, r.columns())) * wsuminv;
             } else {
                 ~ret = blz::mean<blz::columnwise>(r);
             }
@@ -101,7 +98,7 @@ struct CentroidPolicy {
     template<typename VT, bool TF, typename RowSums, typename MatType, typename CenterCon, typename VT2=blz::DynamicVector<blz::ElementType_t<VT>> >
     static void perform_soft_assignment(const blz::DenseMatrix<VT, TF> &assignments, 
         const RowSums &rs,
-        std::mutex *mutptr,
+        OMP_ONLY(std::mutex *mutptr,)
         const MatType &data, CenterCon &newcon,
         const VT2 *wc = static_cast<const VT2 *>(nullptr),
         DissimilarityMeasure measure=static_cast<DissimilarityMeasure>(-1))
@@ -112,9 +109,9 @@ struct CentroidPolicy {
             std::exit(1);
         }
         if(measure == blz::L1 || measure == blz::TOTAL_VARIATION_DISTANCE) {
-            blz::DV<FT, blz::rowVector> newweights(data.size());
+            OMP_PFOR
             for(unsigned j = 0; j < newcon.size(); ++j) {
-                newweights = trans(column(assignments, j));
+                blz::DV<FT, blz::rowVector> newweights = trans(column(assignments, j));
                 if(wc) {
                     newweights *= *wc;
                 }
@@ -128,6 +125,7 @@ struct CentroidPolicy {
             }
         } else {
             blz::DV<FT> summed_contribs(newcon.size(), 0.);
+            OMP_PFOR
             for(size_t i = 0; i < data.rows(); ++i) {
                 auto item_weight = wc ? wc->operator[](i): static_cast<FT>(1.);
                 const auto row_sum = rs[i];
@@ -136,19 +134,15 @@ struct CentroidPolicy {
                     auto &cw = summed_contribs[j];
                     if(auto asnw = asn[j]; asnw > 0.) {
                         auto neww = item_weight * asnw;
-#ifdef _OPENMP
-                        if(mutptr) mutptr->lock();
-#endif
+                        OMP_ONLY(if(mutptr) mutptr->lock();)
                         do_inc(neww, cw, newcon[j], row(data, i, blz::unchecked), row_sum, measure);
-#ifdef _OPENMP
-                        if(mutptr) mutptr->unlock();
-#endif
+                        OMP_ONLY(if(mutptr) mutptr->unlock();)
                         OMP_ATOMIC
-                        summed_contribs[j] += neww;
+                        cw += neww;
                     }
                 }
             }
-            if(measure == blz::LLR || measure == blz::UWLLR) {
+            if(measure == blz::LLR || measure == blz::UWLLR || measure == blz::OLLR) {
                 OMP_PFOR
                 for(auto i = 0u; i < newcon.size(); ++i)
                     newcon[i] *= 1. / blz::dot(column(assignments, i), rs);
@@ -157,15 +151,18 @@ struct CentroidPolicy {
     }
 };
 
-template<typename MatrixType, typename WFT=blz::ElementType_t<MatrixType> >
-void perform_cluster_metric_kmedian(const jsd::DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=0, const WFT *weights=static_cast<WFT *>(nullptr))
+template<typename IT=uint32_t, typename MatrixType, typename WFT=blz::ElementType_t<MatrixType> >
+auto perform_cluster_metric_kmedian(const jsd::DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=0, const WFT *weights=static_cast<WFT *>(nullptr))
 {
     double v = 0.;
     for(size_t i = 0; i < k; ++i) {
         v += app(i, i) * weights[i] - seed;
     }
     std::fprintf(stderr, "Useless computation to avoid warnings\n");
+    blz::DV<IT> cc(k), asn(app.size());
+    blz::DV<blz::ElementType_t<MatrixType>> retcosts;
     throw NotImplementedError();
+    return std::make_tuple(cc, asn, retcosts);
 }
 
 enum LloydLoopResult {
@@ -174,10 +171,11 @@ enum LloydLoopResult {
     UNFINISHED
 };
 
-template<Assignment asn_method=HARD, CenterOrigination co=EXTRINSIC, typename MatrixType, typename CentersType, typename Assignments, typename WFT=ElementType_t<MatrixType>>
+template<Assignment asn_method=HARD, CenterOrigination co=EXTRINSIC, typename MatrixType, typename CentersType, typename Assignments, typename WFT=ElementType_t<MatrixType>,
+         typename CostType>
 LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignments,
     const jsd::DissimilarityApplicator<MatrixType> &app,
-    unsigned k, uint64_t seed=0, const WFT *weights=static_cast<WFT *>(nullptr),
+    unsigned k, CostType &retcost, uint64_t seed=0, const WFT *weights=static_cast<WFT *>(nullptr),
     size_t max_iter=100, double eps=1e-4)
 {
     if(co != EXTRINSIC) throw std::invalid_argument("Must be extrinsic for Lloyd's");
@@ -282,7 +280,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 }
             }
             get_center_change_distance();
-            if(ret != UNFINISHED) return ret;
+            if(ret != UNFINISHED) goto end;
         }
         // Set the returned values to be the last iteration's.
     } else {
@@ -322,25 +320,50 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             if(restart) continue;
             // Now points have been assigned, and we now perform center assignment
             CentroidPolicy::perform_soft_assignment(
-                assignments, app.row_sums(), mutexes.get(), app.data(), centers_cpy, weight_cv.get(), app.measure_
+                assignments, app.row_sums(), 
+                OMP_ONLY(mutexes.get(),)
+                app.data(), centers_cpy, weight_cv.get(), app.measure_
             );
         }
         get_center_change_distance();
-        if(ret != UNFINISHED) return ret;
+        if(ret != UNFINISHED) goto end;
         throw NotImplementedError("Not yet finished");
     }
+    end: {
+        if(centers_cache.size()) {
+            for(size_t i = 0; i < centers.size(); ++i)
+                blz::detail::set_cache(centers[i], centers_cache[i], app.measure_);
+        }
+        if constexpr(asn_method == HARD) {
+            OMP_PFOR
+            for(size_t i = 0; i < app.size(); ++i) {
+                const auto asn = assignments[i];
+                retcost[i] = app(i, centers[asn], getcache(asn));
+            }
+        } else {
+            OMP_PFOR
+            for(size_t i = 0; i < app.size(); ++i) {
+                for(size_t j = 0; j < centers.size(); ++j) {
+                    retcost(i, j) = app(i, centers[j], getcache(j));
+                }
+            }
+        }
+    }
+    return ret;
 }
 
 
 template<Assignment asn_method=HARD, CenterOrigination co=INTRINSIC, typename MatrixType, typename IT=uint32_t>
 auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, unsigned k, CenterSamplingType csample=DEFAULT_SAMPLING,
-                        const blz::ElementType_t<MatrixType> *weights=nullptr, uint64_t seed=0, OptimizationMethod opt=DEFAULT_OPT)
+                        const blz::ElementType_t<MatrixType> *weights=nullptr, uint64_t seed=0, OptimizationMethod opt=DEFAULT_OPT,
+                        size_t max_iter=100, double eps=1e-4)
 {
     using FT = typename MatrixType::ElementType;
     ClusteringTraits<FT, IT, asn_method, co> clustering_traits;
     clustering_traits.sampling = csample;
     typename ClusteringTraits<FT, IT, asn_method, co>::centers_t centers;
     typename ClusteringTraits<FT, IT, asn_method, co>::assignments_t assignments;
+    typename ClusteringTraits<FT, IT, asn_method, co>::costs_t costs;
     if constexpr(asn_method == HARD) {
         assignments.resize(app.size());
     } else {
@@ -374,13 +397,28 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, uns
         }
     }
 
-
-    if(blz::detail::satisfies_d2(measure) || measure == blz::L1 || measure == blz::TOTAL_VARIATION_DISTANCE) {
-        auto [initcenters, initasn, initcosts] = jsd::make_kmeanspp(app, k, seed, weights);
-         
-        if constexpr(co == INTRINSIC) {
-            throw std::invalid_argument("Shouldn't happen");
+    auto set_metric_return_values = [&](auto &ret) {
+        auto &[cc, asn, retcosts] = ret;
+        centers.reserve(cc.size());
+        if constexpr(co == EXTRINSIC) {
+            for(size_t i = 0; i < cc.size(); ++i) {
+                centers.emplace_back(row(app.data(), cc[i], blz::unchecked));
+            }
+        } else {
+            centers.resize(cc.size());
+            std::copy(cc.begin(), cc.end(), centers.begin());
         }
+        if constexpr(asn_method == HARD) {
+            assignments.resize(asn.size());
+            std::copy(asn.begin(), asn.end(), assignments.begin());
+            costs.resize(retcosts.size());
+            std::copy(retcosts.begin(), retcosts.end(), costs.begin());
+        } else {
+            throw NotImplementedError("Not supported: soft extrinsinc clustering");
+        }
+    };
+    if(blz::detail::satisfies_d2(measure) || measure == blz::L1 || measure == blz::TOTAL_VARIATION_DISTANCE || co == EXTRINSIC) {
+        auto [initcenters, initasn, initcosts] = jsd::make_kmeanspp(app, k, seed, weights);
         centers.reserve(k);
         for(const auto id: initcenters) {
             centers.emplace_back(row(app.data(), id));
@@ -388,19 +426,24 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, uns
         //std::copy(initasn.begin(), initasn.end(), std::back_inserter(assignments));
         if(co == INTRINSIC || opt == METRIC_KMEDIAN) {
             // Do graph metric calculation
-            perform_cluster_metric_kmedian(app, k, seed, weights);
+            MINOCORE_REQUIRE(asn_method == HARD, "Can't do soft metric k-median");
+            auto metric_ret = perform_cluster_metric_kmedian<IT>(app, k, seed, weights);
+            set_metric_return_values(metric_ret);
         } else {
             // Do Lloyd's loop (``kmeans'' algorithm)
-            perform_lloyd_loop<asn_method>(centers, assignments, app, k, seed, weights);
+            auto ret = perform_lloyd_loop<asn_method>(centers, assignments, app, k, costs, seed, weights, max_iter, eps);
+            if(ret != FINISHED) std::fprintf(stderr, "lloyd loop ret: %s\n", ret == REACHED_MAX_ROUNDS ? "max rounds": "unfinished");
         }
     } else if(blz::detail::is_symmetric(measure)) {
         throw std::runtime_error("Not implemented: symmetric measure clustering. This method should perform sampling (governed by the csample variable)"
                                   ", followed by facility location, and finished by local search.");
-        perform_cluster_metric_kmedian(app, k, seed, weights);
+        MINOCORE_REQUIRE(asn_method == HARD, "Can't do soft metric k-median");
+        auto metric_ret = perform_cluster_metric_kmedian<IT>(app, k, seed, weights);
+        set_metric_return_values(metric_ret);
     } else {
         throw NotImplementedError("Unsupported: asymmetric measures not supporting D2 sampling");
     }
-    return std::make_pair(std::move(centers), std::move(assignments));
+    return std::make_tuple(std::move(centers), std::move(assignments), std::move(costs));
 } // perform_clustering
 
 

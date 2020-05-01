@@ -47,13 +47,14 @@ auto &geomedian(const blz::DenseMatrix<MT, SO> &mat, blz::DenseVector<VT, !SO> &
 }
 
 template<typename MT, bool SO, typename VT, bool TF>
-void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, bool approx_med=false) {
+void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret) {
     assert((~ret).size() == (~data).columns());
     auto &rr(~ret);
     const auto &dr(~data);
     const bool odd = dr.rows() % 2;
     const size_t hlf = dr.rows() / 2;
-    if(approx_med) {
+    if(0) {
+#if 0
         std::fprintf(stderr, "note: Boost approximate median takes more time and is less accurate than exact calculation via sorting.\nNot recommended.\n");
         //using acc_tag = boost::accumulators::stats<boost::accumulators::tag::median(boost::accumulators::tag::with_p_square_cumulative_distribution)>;
         using acc_tag = boost::accumulators::stats<boost::accumulators::tag::median(with_p_square_quantile)>;
@@ -63,6 +64,7 @@ void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector
             for(auto v: column(dr, i)) acc(v);
             (~ret)[i] = boost::accumulators::median(acc);
         }
+#endif
     } else {
         for(size_t i = 0; i < dr.columns(); ++i) {
             blaze::DynamicVector<ElementType_t<MT>, blaze::columnVector> tmpind = column(data, i); // Should do fast copying.
@@ -75,13 +77,14 @@ void l1_unweighted_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector
 
 
 template<typename MT, bool SO, typename VT2, bool TF2, typename FT=CommonType_t<ElementType_t<MT>, ElementType_t<VT2>>, typename IT=uint32_t>
-static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT2, TF2> &ret, const FT *weights, bool approx_med=false) {
+static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT2, TF2> &ret, const FT *weights) {
     assert(weights);
     const size_t nc = (~data).columns();
     if((~ret).size() != nc) {
         (~ret).resize(nc);
     }
-    if(approx_med) {
+    if(0) {
+#if 0
         //OMP_PFOR
         for(size_t i = 0; i < nc; ++i) {
             auto &mat = ~data;
@@ -93,6 +96,7 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVe
             }
             (~ret)[i] = boost::accumulators::median(acc);
         }
+#endif
     } else {
         if(unlikely((~data).columns() > ((uint64_t(1) << (sizeof(IT) * CHAR_BIT)) - 1)))
             throw std::runtime_error("Use a different index type, there are more features than fit in IT");
@@ -129,11 +133,11 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVe
 
 
 template<typename MT, bool SO, typename VT, bool TF, typename VT3=blz::CommonType_t<ElementType_t<MT>, ElementType_t<VT>>>
-void l1_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, const VT3 *weights=static_cast<VT3 *>(nullptr), bool approx_med=false) {
+void l1_median(const blz::DenseMatrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, const VT3 *weights=static_cast<VT3 *>(nullptr)) {
     if(weights)
-        weighted_median(data, ret, weights, approx_med);
+        weighted_median(data, ret, weights);
     else
-        l1_unweighted_median(data, ret, approx_med);
+        l1_unweighted_median(data, ret);
 }
 
 
