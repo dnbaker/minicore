@@ -55,6 +55,7 @@ enum ApproximateSolutionType: ce_t {
     CONSTANT_FACTOR = 1,
     HEURISTIC       = 2,
     RSVD            = 3,
+    DEFAULT_APPROX
 };
 enum CenterSamplingType: ce_t {
     THORUP_SAMPLING,

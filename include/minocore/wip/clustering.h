@@ -151,17 +151,26 @@ struct CentroidPolicy {
     }
 };
 
-template<typename IT=uint32_t, typename MatrixType, typename WFT=blz::ElementType_t<MatrixType> >
-auto perform_cluster_metric_kmedian(const jsd::DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=0, const WFT *weights=static_cast<WFT *>(nullptr))
+template<typename IT=uint32_t, typename FT, typename WFT=FT, typename OracleType, typename Traits>
+auto perform_cluster_metric_kmedian(const OracleType &app, size_t np, unsigned k, Traits traits, uint64_t seed=0, const WFT *weights=static_cast<WFT *>(nullptr), bool compute_full=true)
 {
-    double v = 0.;
-    for(size_t i = 0; i < k; ++i) {
-        v += app(i, i) * weights[i] - seed;
-    }
     std::fprintf(stderr, "Useless computation to avoid warnings\n");
     blz::DV<IT> cc(k), asn(app.size());
-    blz::DV<blz::ElementType_t<MatrixType>> retcosts;
-    throw NotImplementedError();
+    blz::DV<FT> retcosts;
+    std::vector<IT> facilities, facility_assignments;                                            
+    blz::DV<FT> costs;                                                                              
+    blz::DM<FT> distmat;
+    if(compute_full) {
+    switch(traits.sampling) {
+        case D2_SAMPLING: {
+        }
+        case THORUP_SAMPLING: {
+        }
+        case GREEDY_SAMPLING: {
+        }
+    }
+    } else {
+    }
     return std::make_tuple(cc, asn, retcosts);
 }
 
@@ -352,10 +361,33 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     return ret;
 }
 
+template<typename MatrixType>
+struct ApplicatorAdaptor {
+    const jsd::DissimilarityApplicator<MatrixType> &mat_;
+    ApplicatorAdaptor(const jsd::DissimilarityApplicator<MatrixType> &mat): mat_(mat) {}
+    decltype(auto) operator()(size_t i, size_t j) const {
+        return mat_(i, j);
+    }
+};
+template<typename MatrixType>
+auto make_aa(const jsd::DissimilarityApplicator<MatrixType> &mat) {
+    return ApplicatorAdaptor<MatrixType>(mat);
+}
 
-template<Assignment asn_method=HARD, CenterOrigination co=INTRINSIC, typename MatrixType, typename IT=uint32_t>
-auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, unsigned k, CenterSamplingType csample=DEFAULT_SAMPLING,
-                        const blz::ElementType_t<MatrixType> *weights=nullptr, uint64_t seed=0, OptimizationMethod opt=DEFAULT_OPT,
+namespace detail {
+struct NoFunc {
+    double operator()(size_t, size_t) const {return 1.;}
+};
+}
+
+
+template<Assignment asn_method=HARD, CenterOrigination co=INTRINSIC, typename MatrixType, typename IT=uint32_t, typename OtherFunc=detail::NoFunc>
+auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, unsigned k,
+                        const blz::ElementType_t<MatrixType> *weights=nullptr,
+                        CenterSamplingType csample=DEFAULT_SAMPLING,
+                        OptimizationMethod opt=DEFAULT_OPT,
+                        ApproximateSolutionType approx=DEFAULT_APPROX,
+                        uint64_t seed=0,
                         size_t max_iter=100, double eps=1e-4)
 {
     using FT = typename MatrixType::ElementType;
@@ -378,7 +410,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, uns
             case blz::COSINE_DISTANCE:
             case blz::PROBABILITY_COSINE_DISTANCE:
             case blz::LLR: case blz::UWLLR:
-            case blz::HELLINGER: case blz::BHATTACHARYYA_DISTANCE:
+            case blz::HELLINGER: case blz::BHATTACHARYYA_DISTANCE: case blz::BHATTACHARYYA_METRIC:
                 opt = EXPECTATION_MAXIMIZATION; break;
             /*
              * Bregman Divergences, LLR, cosine distance use the (weighted) mean of each
@@ -386,7 +418,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, uns
              * TVD and L1 use the feature-wise median.
              * Scores are either calculated with softmax distance or harmonic softmax
              */
-            case blz::ORACLE_METRIC: case blz::ORACLE_PSEUDOMETRIC: case blz::BHATTACHARYYA_METRIC: case blz::WASSERSTEIN:
+            case blz::ORACLE_METRIC: case blz::ORACLE_PSEUDOMETRIC: case blz::WASSERSTEIN:
                 /* otherwise, use metric kmedian */
                 opt = METRIC_KMEDIAN; break;
             default:
@@ -396,6 +428,17 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, uns
                 }
         }
     }
+    if(approx == DEFAULT_APPROX) {
+        if(opt == EXPECTATION_MAXIMIZATION) approx = BICRITERIA;
+        else approx = CONSTANT_FACTOR;
+    } else {
+        clustering_traits.approx = approx;
+    }
+    if(csample == DEFAULT_SAMPLING) {
+        if(opt == EXPECTATION_MAXIMIZATION) clustering_traits.sampling = D2_SAMPLING;
+        else clustering_traits.sampling = THORUP_SAMPLING;
+    } else clustering_traits.sampling = csample;
+    
 
     auto set_metric_return_values = [&](auto &ret) {
         auto &[cc, asn, retcosts] = ret;
@@ -427,7 +470,8 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, uns
         if(co == INTRINSIC || opt == METRIC_KMEDIAN) {
             // Do graph metric calculation
             MINOCORE_REQUIRE(asn_method == HARD, "Can't do soft metric k-median");
-            auto metric_ret = perform_cluster_metric_kmedian<IT>(app, k, seed, weights);
+            auto aa(make_aa(app));
+            auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(aa, app.size(), k, clustering_traits, seed, weights);
             set_metric_return_values(metric_ret);
         } else {
             // Do Lloyd's loop (``kmeans'' algorithm)
@@ -438,7 +482,8 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, uns
         throw std::runtime_error("Not implemented: symmetric measure clustering. This method should perform sampling (governed by the csample variable)"
                                   ", followed by facility location, and finished by local search.");
         MINOCORE_REQUIRE(asn_method == HARD, "Can't do soft metric k-median");
-        auto metric_ret = perform_cluster_metric_kmedian<IT>(app, k, seed, weights);
+        auto aa(make_aa(app));
+        auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(aa, app.size(), k, clustering_traits, seed, weights);
         set_metric_return_values(metric_ret);
     } else {
         throw NotImplementedError("Unsupported: asymmetric measures not supporting D2 sampling");
