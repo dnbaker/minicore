@@ -1,7 +1,7 @@
 #pragma once
 #ifndef FGC_LOCAL_SEARCH_H__
 #define FGC_LOCAL_SEARCH_H__
-#include "minocore/util/diskmat.h"
+#include "diskmat/diskmat.h"
 #include "minocore/util/oracle.h"
 #include "minocore/optim/kcenter.h"
 #include "pdqsort/pdqsort.h"

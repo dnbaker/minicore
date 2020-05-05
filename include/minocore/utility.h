@@ -8,7 +8,6 @@
 #include "minocore/util/Inf2Zero.h"
 
 #include "minocore/util/csc.h"
-#include "minocore/util/diskmat.h"
 
 #include "minocore/util/div.h"
 #include "minocore/util/packed.h"

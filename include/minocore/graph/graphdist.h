@@ -2,10 +2,11 @@
 #ifndef FGC_GRAPH_DIST_H__
 #define FGC_GRAPH_DIST_H__
 #include "minocore/graph/graph.h"
-#include "minocore/util/diskmat.h"
+#include "diskmat/diskmat.h"
 #include <atomic>
 
 namespace minocore {
+using diskmat::DiskMat;
 
 namespace graph {
 template<typename Graph, typename MatType, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
@@ -91,14 +92,14 @@ graph2diskmat(const Graph &x, std::string path, const VType *sources=nullptr, bo
 
 
 template<typename Graph, typename VType=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
-blz::DynamicMatrix<typename Graph::edge_property_type::value_type>
+blaze::DynamicMatrix<typename Graph::edge_property_type::value_type>
 graph2rammat(const Graph &x, std::string, const VType *sources=nullptr, bool only_sources_as_dests=false, bool all_sources=false) {
     static_assert(std::is_arithmetic<typename Graph::edge_property_type::value_type>::value, "This should be floating point, or at least arithmetic");
     using FT = typename Graph::edge_property_type::value_type;
     size_t nv = sources && only_sources_as_dests ? sources->size(): boost::num_vertices(x);
     size_t nrows = all_sources || !sources ? boost::num_vertices(x): sources->size();
     std::fprintf(stderr, "all sources: %d. nrows: %zu\n", all_sources, nrows);
-    blz::DynamicMatrix<FT>  ret(nrows, nv);
+    blaze::DynamicMatrix<FT>  ret(nrows, nv);
     fill_graph_distmat(x, ret, sources, only_sources_as_dests, all_sources);
     return ret;
 }

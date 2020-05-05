@@ -6,7 +6,7 @@
 #include "minocore/optim/lsearch.h"
 #include "minocore/optim/oracle_thorup.h"
 #include "minocore/util/exception.h"
-#include "minocore/util/diskmat.h"
+#include "diskmat/diskmat.h"
 #include "minocore/clustering/traits.h"
 #include "minocore/clustering/sampling.h"
 #include <cstdint>

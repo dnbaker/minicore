@@ -1,8 +1,9 @@
 #include "minocore/dist.h"
-#include "minocore/util/diskmat.h"
+#include "diskmat/diskmat.h"
 
 using namespace minocore;
 using namespace blz;
+using diskmat::DiskMat;
 
 int main() {
     std::srand(0);

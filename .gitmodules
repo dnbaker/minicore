@@ -46,3 +46,6 @@
 [submodule "discreture"]
 	path = discreture
 	url = https://github.com/mraggi/discreture/
+[submodule "diskmat"]
+	path = diskmat
+	url = https://github.com/dnbaker/diskmat
