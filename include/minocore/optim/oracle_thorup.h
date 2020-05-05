@@ -6,6 +6,7 @@
 #include <cassert>
 #include "fastiota/fastiota_ho.h"
 #include "minocore/util/oracle.h"
+#include "boost/iterator/transform_iterator.hpp"
 
 
 namespace minocore {

@@ -279,7 +279,7 @@ public:
         } else {
             map_.emplace(lh, std::move(tmp));
         }
-        DBG_ONLY(if(oldsize != map_.size()) std::cerr << "New size: " << map_.size() << '\n';)
+        DBG_ONLY(if(oldsize != map_.size()) std::fprintf(stderr, "New size: %zu\n", map_.size());)
         if constexpr(threadsafe) slock.unlock();
         return ret;
     }
