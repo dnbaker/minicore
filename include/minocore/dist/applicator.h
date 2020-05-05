@@ -807,6 +807,7 @@ public:
             throw std::invalid_argument(std::string("Param for lambda ") + std::to_string(param) + " is out of range.");
         lambda_ = param;
     }
+    auto get_measure() const {return measure_;}
 private:
     template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>
     void prep(Prior prior, const Container *c=nullptr) {

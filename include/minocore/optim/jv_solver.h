@@ -44,10 +44,9 @@ struct edgetup: public packed::triple<FT, IT, IT> {
     }
 };
 
-}
+} // namespace jvutil
 
 namespace jv {
-
 
 template<typename MatrixType, typename FT=blaze::ElementType_t<MatrixType>, typename IT=uint32_t>
 struct JVSolver {
@@ -932,6 +931,12 @@ public:
         return bestind;
     }
 };
+
+template<typename MT, typename FT=blaze::ElementType_t<MT>, typename IT=uint32_t>
+auto make_jv_solver(const MT &mat) {
+    return JVSolver<MT, FT, IT>(mat);
+}
+
 
 } // namespace jv
 

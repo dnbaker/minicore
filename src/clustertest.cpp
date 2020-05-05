@@ -1,6 +1,6 @@
 #include "blaze/math/DynamicMatrix.h"
 #include "aesctr/wy.h"
-#include "minocore/wip/clustering.h"
+#include "minocore/clustering.h"
 
 using namespace minocore;
 

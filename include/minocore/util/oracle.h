@@ -65,13 +65,13 @@ struct PairKeyType {
     }
     static auto rh(Type v) {
         if constexpr(sizeof(IT) == 4) {
-            static constexpr Type bitmask = static_cast<IT>((uint64_t(1) << 32) - 1);
-            return v & bitmask;
+            return v & 0xFFFFFFFFu;
         } else {
             return v.second;
         }
     }
 };
+
 
 template<typename Oracle, template<typename...> class Map=std::unordered_map, bool symmetric=true, bool threadsafe=false, typename IT=std::uint32_t>
 struct CachingOracleWrapper {
@@ -217,6 +217,85 @@ auto make_matrix_dm(const Mat &mat, const Dist &dist) {
 template<typename Mat>
 auto make_matrix_m(const Mat &mat) {
     return MatrixMetric<Mat>(mat);
+}
+
+
+template<typename Oracle, template<typename...> class Map=std::unordered_map, bool symmetric=true, bool threadsafe=false, typename IT=std::uint32_t, typename FT=float,
+          bool use_row_vector=true>
+struct RowCachingOracleWrapper {
+    using output_type = std::decay_t<decltype(std::declval<Oracle>()(0,0))>;
+    using VType = blaze::DynamicVector<FT, use_row_vector ? blaze::rowVector: blaze::columnVector>;
+    using map_type = Map<IT, VType>;
+    const Oracle &oracle_;
+    mutable map_type map_;
+    size_t np_;
+private:
+    mutable std::shared_mutex mut_;
+    using map_iterator = typename map_type::iterator;
+    // TODO: use two kinds of locks
+public:
+    RowCachingOracleWrapper(const Oracle &oracle, size_t np, size_t rsvsz=0): oracle_(oracle), np_(np) {
+        map_.reserve(rsvsz ? rsvsz: np);
+    }
+    template<typename It>
+    void cache_range(It start, It end) const {
+        unsigned n = std::distance(start, end);
+        for(auto i = 0u; i < n; ++i) {
+            VType tmp(np_);
+            auto lhi = start[i];
+            if(map_.find(lhi) != map_.end()) continue;
+            OMP_PFOR
+            for(size_t j = 0; j < np_; ++j) {
+                auto it = map_.find(j);
+                tmp[j] = (it == map_.end()) ? oracle_(lhi, j): it->second[lhi];
+            }
+            map_.emplace(lhi, std::move(tmp));
+        }
+    }
+    output_type operator()(IT lh, IT rh) const {
+        std::shared_lock<std::shared_mutex> slock(mut_);
+        map_iterator it;
+        if((it = map_.find(lh)) != map_.end())
+            return it->second[rh];
+        if constexpr(symmetric) {
+            if((it = map_.find(rh)) != map_.end())
+                return it->second[lh];
+        }
+        VType tmp(np_);
+#ifdef _OPENMP
+#       pragma omp parallel for
+#endif
+        for(size_t i = 0; i < np_; ++i) 
+            tmp[i] = oracle_(lh, i);
+        output_type ret = tmp[rh];
+#ifndef NDEBUG
+        size_t oldsize = map_.size();
+#endif
+        if constexpr(threadsafe) {
+            slock.unlock();
+            std::unique_lock<std::shared_mutex> ulock(mut_);
+            if(map_.find(lh) != map_.end()) return ret;
+            map_.emplace(lh, std::move(tmp));
+        } else {
+            map_.emplace(lh, std::move(tmp));
+        }
+        DBG_ONLY(if(oldsize != map_.size()) std::cerr << "New size: " << map_.size() << '\n';)
+        if constexpr(threadsafe) slock.unlock();
+        return ret;
+    }
+};
+
+template<typename It, typename It2, typename T>
+void prep_range(It, It2, const T &) {}
+
+template<typename It, typename It2, typename Oracle, template<typename...> class Map, bool sym, bool ts, typename IT, typename FT, bool use_row_vector>
+void prep_range(It start, It2 end, const RowCachingOracleWrapper<Oracle, Map, sym, ts, IT, FT, use_row_vector> &x) {
+    x.cache_range(start, end);
+}
+
+template<template<typename...> class Map=std::unordered_map, bool symmetric=true, bool threadsafe=false, typename IT=std::uint32_t, typename FT=float, typename Oracle>
+auto make_row_caching_oracle_wrapper(const Oracle &oracle, size_t np, size_t rsvsz=0) {
+    return RowCachingOracleWrapper<Oracle, Map, symmetric, threadsafe, IT, FT>(oracle, np, rsvsz);
 }
 
 

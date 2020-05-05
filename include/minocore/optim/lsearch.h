@@ -92,7 +92,7 @@ struct LocalKMedSearcher {
         current_cost_(std::numeric_limits<value_type>::max()),
         eps_(eps),
         k_(k), nr_(mat.rows()), nc_(mat.columns()),
-        ordering_(mat.rows()), shuffle_(true), lazy_eval_(1), max_swap_n_(1)
+        ordering_(mat.rows()), shuffle_(true), lazy_eval_(2), max_swap_n_(1)
     {
         std::iota(ordering_.begin(), ordering_.end(), 0);
         static_assert(std::is_integral_v<std::decay_t<decltype(wc->operator[](0))>>, "index container must contain integral values");

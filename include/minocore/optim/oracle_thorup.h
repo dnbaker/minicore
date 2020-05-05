@@ -56,6 +56,10 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
         if(!weights && nr <= nperround) {
             //std::fprintf(stderr, "Adding all\n");
             F.insert(F.end(), R.get(), R.get() + nr);
+            prep_range(R.get(), R.get() + nr, oracle);
+            // This instructs caching oracles to prepare these rows
+            // and results in greater efficiency for cases
+            // where distance computations are expensive.
             for(auto it = R.get(), eit = R.get() + nr; it < eit; ++it) {
                 auto v = *it;
                 //std::fprintf(stderr, "Adding index %zd/value %u\n", it - R.get(), v);
@@ -113,10 +117,11 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
             }
             // Update F, R, and mincosts/minindices
             current_batch.assign(tmp.begin(), tmp.end());
-            tmp.clear();
-            for(const auto item: current_batch)
-                F.push_back(R[item]);
-            shared::sort(current_batch.begin(), current_batch.end(), std::greater<>());
+            auto func = [&R](auto x) {return R[x];};
+            auto clb = boost::make_transform_iterator(current_batch.begin(), func),
+                 cle = boost::make_transform_iterator(current_batch.end(), func);
+            F.insert(F.end(), clb, cle);
+            prep_range(clb, cle, oracle);
             for(const auto v: current_batch) {
                 auto actual_index = R[v];
                 minindices[actual_index] = actual_index;

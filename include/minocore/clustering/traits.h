@@ -74,6 +74,12 @@ enum OptimizationMethod: ce_t {
     DEFAULT_OPT = ce_t(-1)
 };
 
+enum MetricKMedianSolverMethod: ce_t {
+    JAIN_VAZIRANI_FL,
+    LOCAL_SEARCH,
+    JV_PLUS_LOCAL_SEARCH
+};
+
 
 enum ClusteringBitfields: ce_t {
     ASN_BF_OFFSET = 3,
@@ -174,6 +180,23 @@ struct ClusteringTraits {
     ApproximateSolutionType approx = static_cast<ApproximateSolutionType>(UNSET);
     CenterSamplingType sampling = static_cast<CenterSamplingType>(UNSET);
     OptimizationMethod opt = static_cast<OptimizationMethod>(UNSET);
+    MetricKMedianSolverMethod metric_solver = JV_PLUS_LOCAL_SEARCH;
+
+// Settings
+    FT thorup_npermult = 7;
+    FT approx_mul = 50;
+    FT eps = 1e-6;
+    unsigned thorup_iter = 4;
+    unsigned thorup_sub_iter = 10;
+    unsigned max_jv_rounds = 100;
+    unsigned max_lloyd_iter = 1000;
+    unsigned k = -1;
+
+    bool compute_full = true;
+    uint64_t seed = 13;
+
+    const FT *weights = nullptr;
+
     static_assert(std::is_floating_point_v<FT>, "FT must be floating");
     static_assert(std::is_integral_v<IT>, "FT must be integral and support required index ranges");
     using cost_t = FT;
@@ -193,6 +216,7 @@ struct ClusteringTraits {
                                          blz::DV<index_t>,
                                          std::vector<blaze::DynamicVector<FT, blaze::rowVector>>
                                         >;
+    // Thorup
 };
 
 
