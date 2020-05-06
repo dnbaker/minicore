@@ -649,4 +649,6 @@ auto witten_poisson_dissimilarity(const blz::Vector<VT, SO> &lhs, const blz::Vec
 
 } // namespace blz
 
+namespace dist = blz::distance;
+
 #endif // FGC_DISTANCE_AND_MEANING_H__

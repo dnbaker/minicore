@@ -17,6 +17,7 @@ namespace jsd {
 using namespace blz;
 using namespace blz::distance;
 
+
 template<typename MatrixType>
 class DissimilarityApplicator {
     //using opposite_type = typename base_type::OppositeType;
@@ -160,7 +161,7 @@ public:
             case PROBABILITY_COSINE_SIMILARITY:
                                            set_distance_matrix<MatType, PROBABILITY_COSINE_SIMILARITY>(m, symmetrize); break;
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); throw std::invalid_argument("Placeholders");
-            default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + blz::detail::prob2str(measure));
+            default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + dist::detail::prob2str(measure));
         }
     }
     template<typename OFT=FT>
@@ -178,22 +179,22 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto cosine_similarity(size_t j, const OT &o) const {
-        return blaze::dot(o, weighted_row(j)) / blz::l2Norm(o) * l2norm_cache_->operator[](j);
+        return blaze::dot(o, weighted_row(j)) / blaze::l2Norm(o) * l2norm_cache_->operator[](j);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto cosine_similarity(const OT &o, size_t j) const {
-        return blaze::dot(o, weighted_row(j)) / blz::l2Norm(o) * l2norm_cache_->operator[](j);
+        return blaze::dot(o, weighted_row(j)) / blaze::l2Norm(o) * l2norm_cache_->operator[](j);
     }
     auto pcosine_similarity(size_t i, size_t j) const {
         return blaze::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto pcosine_similarity(size_t j, const OT &o) const {
-        return blaze::dot(o, row(j)) / blz::l2Norm(o) * pl2norm_cache_->operator[](j);
+        return blaze::dot(o, row(j)) / blaze::l2Norm(o) * pl2norm_cache_->operator[](j);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto pcosine_similarity(const OT &o, size_t j) const {
-        return blaze::dot(o, row(j)) / blz::l2Norm(o) * pl2norm_cache_->operator[](j);
+        return blaze::dot(o, row(j)) / blaze::l2Norm(o) * pl2norm_cache_->operator[](j);
     }
 
     static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
@@ -271,8 +272,8 @@ public:
         } else if constexpr(constexpr_measure == POISSON) {
             ret = cp ? pkl(o, i, *cp): pkl(o, i);
         } else if constexpr(constexpr_measure == HELLINGER) {
-            ret = cp ? blz::sqrNorm(sqrtrow(i) - *cp)
-                     : blz::sqrNorm(sqrtrow(i) - blz::sqrt(o));
+            ret = cp ? blaze::sqrNorm(sqrtrow(i) - *cp)
+                     : blaze::sqrNorm(sqrtrow(i) - blaze::sqrt(o));
         } else if constexpr(constexpr_measure == BHATTACHARYYA_METRIC) {
             ret = bhattacharyya_metric(i, o);
         } else if constexpr(constexpr_measure == BHATTACHARYYA_DISTANCE) {
@@ -338,9 +339,9 @@ public:
             ret = cp ? pkl(i, o, *cp): pkl(i, o);
         } else if constexpr(constexpr_measure == HELLINGER) {
             if(cp) {
-                ret = blz::sqrNorm(sqrtrow(i) - *cp);
+                ret = blaze::sqrNorm(sqrtrow(i) - *cp);
             } else {
-                ret = blz::sqrNorm(sqrtrow(i) - blz::sqrt(o));
+                ret = blaze::sqrNorm(sqrtrow(i) - blaze::sqrt(o));
             }
         } else if constexpr(constexpr_measure == BHATTACHARYYA_METRIC) {
             ret = cp ? bhattacharyya_metric(i, o, *cp)
@@ -691,7 +692,7 @@ public:
     template<typename OT, typename OT2, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto pkl(const OT &o, size_t i, const OT2 &cache) const {
         if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return blz::dot(o, cache - logrow(i)) + blz::sum(o - row(i));
+        return blaze::dot(o, cache - logrow(i)) + blaze::sum(o - row(i));
     }
     auto psd(size_t i, size_t j) const {
         if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
@@ -858,24 +859,24 @@ private:
             }
         }
 
-        if(blz::detail::needs_logs(measure_)) {
+        if(dist::detail::needs_logs(measure_)) {
             logdata_.reset(new MatrixType(neginf2zero(log(data_))));
         }
-        if(blz::detail::needs_sqrt(measure_)) {
-            sqrdata_.reset(new MatrixType(blz::sqrt(data_)));
+        if(dist::detail::needs_sqrt(measure_)) {
+            sqrdata_.reset(new MatrixType(blaze::sqrt(data_)));
         }
-        if(blz::detail::needs_l2_cache(measure_)) {
+        if(dist::detail::needs_l2_cache(measure_)) {
             l2norm_cache_.reset(new VecT(data_.rows()));
             OMP_PFOR
             for(size_t i = 0; i < data_.rows(); ++i) {
-                l2norm_cache_->operator[](i)  = 1. / blz::l2Norm(weighted_row(i));
+                l2norm_cache_->operator[](i)  = 1. / blaze::l2Norm(weighted_row(i));
             }
         }
-        if(blz::detail::needs_probability_l2_cache(measure_)) {
+        if(dist::detail::needs_probability_l2_cache(measure_)) {
             pl2norm_cache_.reset(new VecT(data_.rows()));
             OMP_PFOR
             for(size_t i = 0; i < data_.rows(); ++i) {
-                pl2norm_cache_->operator[](i) = 1. / blz::l2Norm(row(i));
+                pl2norm_cache_->operator[](i) = 1. / blaze::l2Norm(row(i));
             }
         }
         if(logdata_) {
@@ -896,6 +897,13 @@ private:
         return (*jsd_cache_)[index] * row_sums_->operator[](index);
     }
 }; // DissimilarityApplicator
+
+template<typename T>
+struct is_dissimilarity_applicator: std::false_type {};
+template<typename MT>
+struct is_dissimilarity_applicator<DissimilarityApplicator<MT>>: std::true_type {};
+template<typename T>
+static constexpr bool is_dissimilarity_applicator_v = is_dissimilarity_applicator<T>::value;
 
 template<typename MT1, typename MT2>
 struct PairDissimilarityApplicator {
@@ -937,7 +945,7 @@ template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typen
 auto make_probdiv_applicator(MatrixType &data, DissimilarityMeasure type=JSM, Prior prior=NONE, const PriorContainer *pc=nullptr) {
 #if VERBOSE_AF
     std::fprintf(stderr, "[%s:%s:%d] Making probdiv applicator with %d/%s as measure, %d/%s as prior, and %s for prior container.\n",
-                 __PRETTY_FUNCTION__, __FILE__, __LINE__, int(type), blz::detail::prob2str(type), int(prior), prior == NONE ? "No prior": prior == DIRICHLET ? "Dirichlet" : prior == GAMMA_BETA ? "Gamma/Beta": "Feature-specific prior",
+                 __PRETTY_FUNCTION__, __FILE__, __LINE__, int(type), dist::detail::prob2str(type), int(prior), prior == NONE ? "No prior": prior == DIRICHLET ? "Dirichlet" : prior == GAMMA_BETA ? "Gamma/Beta": "Feature-specific prior",
                 pc == nullptr ? "No prior container": (std::string("Container of size ") + std::to_string(pc->size())).data());
 #endif
     return DissimilarityApplicator<MatrixType>(data, type, prior, pc);
@@ -954,7 +962,7 @@ auto make_kmc2(const DissimilarityApplicator<MatrixType> &app, unsigned k, size_
     return coresets::kmc2(app, gen, app.size(), k, m);
 }
 
-template<typename MatrixType, typename WFT=blz::ElementType_t<MatrixType>>
+template<typename MatrixType, typename WFT=blaze::ElementType_t<MatrixType>>
 auto make_kmeanspp(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr) {
     wy::WyRand<uint64_t> gen(seed);
     return coresets::kmeanspp(app, gen, app.size(), k, weights);

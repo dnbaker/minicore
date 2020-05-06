@@ -55,10 +55,11 @@ int kmeans_main() {
 int main() {
     int ret = 0;
     if(0) {
-        blz::DM<float> dm= blaze::generate(100, 100, [](auto,auto){return 4;});
+        blz::DM<float> dm = blaze::generate(1000, 1000, [](auto,auto){return 4;});
         auto jsdapp = make_probdiv_applicator(dm, blz::SQRL2);
         clustering::perform_clustering<clustering::HARD, clustering::EXTRINSIC>(jsdapp, 10);
         clustering::perform_clustering<clustering::SOFT, clustering::EXTRINSIC>(jsdapp, 10);
+        clustering::perform_clustering(dm, dm.rows(), 10);
         ret = 1;
     }
     return ret;
