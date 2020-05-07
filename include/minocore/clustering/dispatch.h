@@ -15,8 +15,8 @@ namespace minocore {
 
 namespace clustering {
 
-using blz::DissimilarityMeasure;
-using blz::ElementType_t;
+using dist::DissimilarityMeasure;
+using blaze::ElementType_t;
 using diskmat::PolymorphicMat;
 
 template<typename T>
@@ -197,7 +197,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 ret = LloydLoopResult::REACHED_MAX_ROUNDS;
         }
     };
-    using cv_t = blaze::CustomVector<WFT, blz::unaligned, blz::unpadded, blz::rowVector>;
+    using cv_t = blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded, blaze::rowVector>;
     std::unique_ptr<cv_t> weight_cv;
     if(weights) {
         weight_cv.reset(new cv_t(const_cast<WFT *>(weights), app.size()));
@@ -212,7 +212,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             // Do it forever
             if(centers_cache.size()) {
                 for(size_t i = 0; i < centers.size(); ++i)
-                    blz::detail::set_cache(centers[i], centers_cache[i], app.get_measure());
+                    dist::detail::set_cache(centers[i], centers_cache[i], app.get_measure());
             }
             for(auto &i: assigned) i.clear();
             OMP_PFOR
@@ -241,7 +241,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             if(centers_to_restart.size()) {
                 // Use D^2 sampling to start a new cluster
                 // And then restart the loop
-                blz::DV<FT> ccosts(assignments.size(), std::numeric_limits<FT>::max());
+                blaze::DynamicVector<FT> ccosts(assignments.size(), std::numeric_limits<FT>::max());
                 OMP_PFOR
                 for(size_t i = 0; i < app.size(); ++i) {
                     for(size_t j = 0; j < centers.size(); ++j) {
@@ -249,7 +249,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                         if(fc < ccosts[i]) ccosts[i] = fc;
                     }
                 }
-                blz::DV<FT> csum(assignments.size());
+                blaze::DynamicVector<FT> csum(assignments.size());
                 std::partial_sum(ccosts.data(), ccosts.data() + ccosts.size(), csum.data());
                 std::uniform_real_distribution<FT> urd;
                 auto nc = centers_to_restart.size();
@@ -272,19 +272,19 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 auto &assigned_ids = assigned[i];
                 shared::sort(assigned_ids.begin(), assigned_ids.end()); // Better access pattern
                 if(weight_cv) {
-                    auto wsel = blz::elements(*weight_cv, assigned_ids.data(), assigned_ids.size());
+                    auto wsel = blaze::elements(*weight_cv, assigned_ids.data(), assigned_ids.size());
                     CentroidPolicy::perform_average(
                         cref,
                         rows(mat, assigned_ids.data(), assigned_ids.size()),
-                        blz::elements(app.row_sums(), assigned_ids.data(), assigned_ids.size()),
+                        blaze::elements(app.row_sums(), assigned_ids.data(), assigned_ids.size()),
                         &wsel, app.get_measure()
                     );
                 } else {
-                    using ptr_t = std::add_pointer_t<decltype(blz::elements(*weight_cv, assigned_ids.data(), assigned_ids.size()))>;
+                    using ptr_t = std::add_pointer_t<decltype(blaze::elements(*weight_cv, assigned_ids.data(), assigned_ids.size()))>;
                     CentroidPolicy::perform_average(
                         cref,
                         rows(mat, assigned_ids.data(), assigned_ids.size()),
-                        blz::elements(app.row_sums(), assigned_ids.data(), assigned_ids.size()),
+                        blaze::elements(app.row_sums(), assigned_ids.data(), assigned_ids.size()),
                         static_cast<ptr_t>(nullptr), app.get_measure()
                     );
                 }
@@ -303,7 +303,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         for(;;) {
             if(centers_cache.size()) {
                 for(size_t i = 0; i < centers.size(); ++i)
-                    blz::detail::set_cache(centers[i], centers_cache[i], app.get_measure());
+                    dist::detail::set_cache(centers[i], centers_cache[i], app.get_measure());
             }
             for(auto &c: centers_cpy) c = static_cast<FT>(0);
             OMP_PFOR
@@ -315,8 +315,8 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 if constexpr(asn_method == SOFT_HARMONIC_MEAN) {
                     row = 1. / row;
                 } else {
-                    auto mv = blz::min(row);
-                    row = blz::exp(-row + mv) - mv;
+                    auto mv = blaze::min(row);
+                    row = blaze::exp(-row + mv) - mv;
                 }
                 row *= 1. / blaze::sum(row);
                 // And then compute its contribution to the mean of the points.
@@ -342,7 +342,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     end: {
         if(centers_cache.size()) {
             for(size_t i = 0; i < centers.size(); ++i)
-                blz::detail::set_cache(centers[i], centers_cache[i], app.get_measure());
+                dist::detail::set_cache(centers[i], centers_cache[i], app.get_measure());
         }
         if constexpr(asn_method == HARD) {
             OMP_PFOR
@@ -362,24 +362,66 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     return ret;
 }
 
-template<typename MatrixType>
-struct ApplicatorAdaptor {
-    const jsd::DissimilarityApplicator<MatrixType> &mat_;
-    ApplicatorAdaptor(const jsd::DissimilarityApplicator<MatrixType> &mat): mat_(mat) {}
-    decltype(auto) operator()(size_t i, size_t j) const {
-        return mat_(i, j);
-    }
-    auto get_measure() const {return mat_.get_measure();}
-};
-template<typename MatrixType>
-auto make_aa(const jsd::DissimilarityApplicator<MatrixType> &mat) {
-    return ApplicatorAdaptor<MatrixType>(mat);
+
+
+template<typename FT, typename IT, Assignment asn_method=HARD, CenterOrigination co=INTRINSIC>
+ClusteringTraits<FT, IT, asn_method, co> make_clustering_traits(
+    size_t npoints, unsigned k,
+    CenterSamplingType csample=DEFAULT_SAMPLING, OptimizationMethod opt=DEFAULT_OPT,
+    ApproximateSolutionType approx=DEFAULT_APPROX, const FT *weights=nullptr, uint64_t seed=0,
+    size_t max_iter=100, double eps=1e-4) {
+    ClusteringTraits<FT, IT, asn_method, co> ret;
+    ret.k = k;
+    ret.seed = seed;
+    ret.max_jv_rounds = ret.max_lloyd_iter = max_iter;
+    ret.eps = eps;
+    ret.opt = opt;
+    ret.sampling = csample;
+    ret.approx = approx;
+    ret.weights = weights;
 }
 
+template<typename FT, typename IT, Assignment asn_method=HARD, CenterOrigination co=INTRINSIC>
+void update_defaults_with_measure(ClusteringTraits<FT, IT, asn_method, co> &ct, dist::DissimilarityMeasure measure) {
+    if(ct.opt == DEFAULT_OPT) {
+        switch(measure) {
+            case dist::L2:
+            case dist::SQRL2:
+            case dist::L1: case dist::TVD:
+            case dist::COSINE_DISTANCE:
+            case dist::PROBABILITY_COSINE_DISTANCE:
+            case dist::LLR: case dist::UWLLR:
+            case dist::HELLINGER: case dist::BHATTACHARYYA_DISTANCE: case dist::BHATTACHARYYA_METRIC:
+                ct.opt = EXPECTATION_MAXIMIZATION; break;
+            /*
+             * Bregman Divergences, LLR, cosine distance use the (weighted) mean of each
+             * point, in either soft or hard clustering.
+             * TVD and L1 use the feature-wise median.
+             * Scores are either calculated with softmax distance or harmonic softmax
+             */
+            case dist::ORACLE_METRIC: case dist::ORACLE_PSEUDOMETRIC: case dist::WASSERSTEIN:
+                /* otherwise, use metric kmedian */
+                ct.opt = METRIC_KMEDIAN; break;
+            default:
+                if(dist::detail::is_bregman(measure)) {
+                    ct.opt = EXPECTATION_MAXIMIZATION;
+                    break;
+                }
+        }
+    }
+    if(ct.approx == DEFAULT_APPROX) {
+        if(ct.opt == EXPECTATION_MAXIMIZATION) ct.approx = BICRITERIA;
+        else ct.approx = CONSTANT_FACTOR;
+    }
+    if(ct.sampling == DEFAULT_SAMPLING) {
+        ct.sampling = ct.opt == EXPECTATION_MAXIMIZATION
+            ? D2_SAMPLING: THORUP_SAMPLING;
+    }
+}
 
 template<Assignment asn_method=HARD, CenterOrigination co=INTRINSIC, typename MatrixType, typename IT=uint32_t>
 auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, size_t npoints, unsigned k,
-                        const blz::ElementType_t<MatrixType> *weights=nullptr,
+                        const ElementType_t<MatrixType> *weights=nullptr,
                         CenterSamplingType csample=DEFAULT_SAMPLING,
                         OptimizationMethod opt=DEFAULT_OPT,
                         ApproximateSolutionType approx=DEFAULT_APPROX,
@@ -388,14 +430,22 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
 {
     MINOCORE_REQUIRE(npoints == app.size(), "assumption");
     using FT = typename MatrixType::ElementType;
+
+    // Setup clustering traits
     ClusteringTraits<FT, IT, asn_method, co> clustering_traits;
     clustering_traits.weights = weights;
     clustering_traits.sampling = csample;
     auto &ct = clustering_traits;
     ct.k = k;
+    ct.approx = apprx;
     ct.seed = seed;
     ct.max_jv_rounds = ct.max_lloyd_iter = max_iter;
     ct.eps = eps;
+    auto measure = app.get_measure();
+    update_defaults_with_measure(ct, measure);
+
+
+    // Setup data and helpers
     typename ClusteringTraits<FT, IT, asn_method, co>::centers_t centers;
     typename ClusteringTraits<FT, IT, asn_method, co>::assignments_t assignments;
     typename ClusteringTraits<FT, IT, asn_method, co>::costs_t costs;
@@ -404,43 +454,6 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
     } else {
         assignments.resize(app.size(), k);
     }
-    auto measure = app.get_measure();
-    if(opt == DEFAULT_OPT) {
-        switch(measure) {
-            case blz::L2:
-            case blz::SQRL2:
-            case blz::L1: case blz::TVD:
-            case blz::COSINE_DISTANCE:
-            case blz::PROBABILITY_COSINE_DISTANCE:
-            case blz::LLR: case blz::UWLLR:
-            case blz::HELLINGER: case blz::BHATTACHARYYA_DISTANCE: case blz::BHATTACHARYYA_METRIC:
-                opt = EXPECTATION_MAXIMIZATION; break;
-            /*
-             * Bregman Divergences, LLR, cosine distance use the (weighted) mean of each
-             * point, in either soft or hard clustering.
-             * TVD and L1 use the feature-wise median.
-             * Scores are either calculated with softmax distance or harmonic softmax
-             */
-            case blz::ORACLE_METRIC: case blz::ORACLE_PSEUDOMETRIC: case blz::WASSERSTEIN:
-                /* otherwise, use metric kmedian */
-                opt = METRIC_KMEDIAN; break;
-            default:
-                if(blz::detail::is_bregman(measure)) {
-                    opt = EXPECTATION_MAXIMIZATION;
-                    break;
-                }
-        }
-    }
-    if(approx == DEFAULT_APPROX) {
-        if(opt == EXPECTATION_MAXIMIZATION) approx = BICRITERIA;
-        else approx = CONSTANT_FACTOR;
-    } else {
-        clustering_traits.approx = approx;
-    }
-    if(csample == DEFAULT_SAMPLING) {
-        if(opt == EXPECTATION_MAXIMIZATION) clustering_traits.sampling = D2_SAMPLING;
-        else clustering_traits.sampling = THORUP_SAMPLING;
-    } else clustering_traits.sampling = csample;
 
 
     auto set_metric_return_values = [&](auto &ret) {
@@ -448,7 +461,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
         centers.reserve(cc.size());
         if constexpr(co == EXTRINSIC) {
             for(size_t i = 0; i < cc.size(); ++i) {
-                centers.emplace_back(row(app.data(), cc[i], blz::unchecked));
+                centers.emplace_back(row(app.data(), cc[i], blaze::unchecked));
             }
         } else {
             centers.resize(cc.size());
@@ -463,7 +476,9 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
             throw NotImplementedError("Not supported: soft extrinsic clustering");
         }
     };
-    if(blz::detail::satisfies_d2(measure) || measure == blz::L1 || measure == blz::TOTAL_VARIATION_DISTANCE || co == EXTRINSIC) {
+
+    // Delegate to solvers and set-up return values
+    if(dist::detail::satisfies_d2(measure) || measure == dist::L1 || measure == dist::TOTAL_VARIATION_DISTANCE || co == EXTRINSIC) {
         auto [initcenters, initasn, initcosts] = jsd::make_kmeanspp(app, ct.k, ct.seed, clustering_traits.weights);
         centers.reserve(k);
         for(const auto id: initcenters) {
@@ -473,18 +488,16 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
         if(co == INTRINSIC || opt == METRIC_KMEDIAN) {
             // Do graph metric calculation
             MINOCORE_REQUIRE(asn_method == HARD, "Can't do soft metric k-median");
-            auto aa(make_aa(app));
-            auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(aa, app.size(), clustering_traits);
+            auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(detail::make_aa(app), app.size(), clustering_traits);
             set_metric_return_values(metric_ret);
         } else {
             // Do Lloyd's loop (``kmeans'' algorithm)
             auto ret = perform_lloyd_loop<asn_method>(centers, assignments, app, k, costs, ct.seed, clustering_traits.weights, max_iter, eps);
             if(ret != FINISHED) std::fprintf(stderr, "lloyd loop ret: %s\n", ret == REACHED_MAX_ROUNDS ? "max rounds": "unfinished");
         }
-    } else if(blz::detail::satisfies_metric(measure) || blz::detail::satisfies_rho_metric(measure)) {
+    } else if(dist::detail::satisfies_metric(measure) || dist::detail::satisfies_rho_metric(measure)) {
         MINOCORE_REQUIRE(asn_method == HARD, "Can't do soft metric k-median");
-        auto aa(make_aa(app));
-        auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(aa, app.size(), clustering_traits);
+        auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(detail::make_aa(app), app.size(), clustering_traits);
         set_metric_return_values(metric_ret);
     } else {
         throw NotImplementedError("Unsupported: asymmetric measures not supporting D2 sampling");
@@ -495,7 +508,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
 // Make # points optional
 template<Assignment asn_method=HARD, CenterOrigination co=INTRINSIC, typename MatrixType, typename IT=uint32_t>
 auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, unsigned k,
-                        const blz::ElementType_t<MatrixType> *weights=nullptr,
+                        const ElementType_t<MatrixType> *weights=nullptr,
                         CenterSamplingType csample=DEFAULT_SAMPLING,
                         OptimizationMethod opt=DEFAULT_OPT,
                         ApproximateSolutionType approx=DEFAULT_APPROX,

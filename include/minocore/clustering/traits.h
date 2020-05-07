@@ -219,6 +219,23 @@ struct ClusteringTraits {
     // Thorup
 };
 
+namespace detail {
+
+template<typename MatrixType>
+struct ApplicatorAdaptor {
+    const jsd::DissimilarityApplicator<MatrixType> &mat_;
+    ApplicatorAdaptor(const jsd::DissimilarityApplicator<MatrixType> &mat): mat_(mat) {}
+    decltype(auto) operator()(size_t i, size_t j) const {
+        return mat_(i, j);
+    }
+    auto get_measure() const {return mat_.get_measure();}
+};
+template<typename MatrixType>
+auto make_aa(const jsd::DissimilarityApplicator<MatrixType> &mat) {
+    return ApplicatorAdaptor<MatrixType>(mat);
+}
+
+} // namespace detail
 
 } // clustering
 } // minocore
