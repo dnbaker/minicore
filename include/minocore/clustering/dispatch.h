@@ -163,10 +163,12 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     if(co != EXTRINSIC) throw std::invalid_argument("Must be extrinsic for Lloyd's");
     using FT = ElementType_t<MatrixType>;
     auto &mat = app.data();
+    const size_t npoints = app.size();
     CentersType centers_cpy(centers), centers_cache;
     MINOCORE_REQUIRE(centers.size() == k, "Must have the correct number of centers");
-    if(dist::detail::needs_logs(app.get_measure()) || dist::detail::needs_sqrt(app.get_measure()))
-        centers_cache.resize(centers.size());
+    const auto measure = app.get_measure();
+    if(dist::detail::needs_logs(measure) || dist::detail::needs_sqrt(measure))
+        centers_cache.resize(k);
     double last_distance = std::numeric_limits<double>::max(), first_distance = last_distance,
            center_distance;
     LloydLoopResult ret = UNFINISHED;
@@ -194,27 +196,27 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     using cv_t = blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded, blaze::rowVector>;
     std::unique_ptr<cv_t> weight_cv;
     if(weights) {
-        weight_cv.reset(new cv_t(const_cast<WFT *>(weights), app.size()));
+        weight_cv.reset(new cv_t(const_cast<WFT *>(weights), npoints));
     }
     auto getcache = [&] (size_t j) {
         return centers_cache.size() ? &centers_cache[j]: static_cast<decltype(&centers_cache[j])>(nullptr);
     };
     if constexpr(asn_method == HARD) {
-        std::vector<std::vector<uint32_t>> assigned(centers.size());
-        OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes(new std::mutex[centers.size()]);)
+        std::vector<std::vector<uint32_t>> assigned(k);
+        OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes(new std::mutex[k]);)
         for(;;) {
             // Do it forever
             if(centers_cache.size()) {
-                for(size_t i = 0; i < centers.size(); ++i)
-                    dist::detail::set_cache(centers[i], centers_cache[i], app.get_measure());
+                for(unsigned i = 0; i < k; ++i)
+                    dist::detail::set_cache(centers[i], centers_cache[i], measure);
             }
             for(auto &i: assigned) i.clear();
             OMP_PFOR
-            for(size_t i = 0; i < app.size(); ++i) {
-                auto dist = app(i, centers[0], getcache(0));
+            for(size_t i = 0; i < npoints; ++i) {
+                auto dist = app(i, centers[0], getcache(0), measure);
                 unsigned asn = 0;
-                for(size_t j = 1; j < centers.size(); ++j) {
-                    auto newdist = app(i, centers[j], getcache(j));
+                for(unsigned j = 1; j < k; ++j) {
+                    auto newdist = app(i, centers[j], getcache(j), measure);
                     if(newdist < dist) {
                         asn = j;
                         dist = newdist;
@@ -227,36 +229,33 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 }
             }
             std::vector<size_t> centers_to_restart;
-            for(size_t i = 0; i < assignments.size(); ++i) {
-                if(assigned[i].empty()) {
+            for(unsigned i = 0; i < k; ++i)
+                if(assigned[i].empty())
                     centers_to_restart.push_back(i);
-                }
-            }
-            if(centers_to_restart.size()) {
-                // Use D^2 sampling to start a new cluster
+            if(auto restartn = centers_to_restart.size()) {
+                // Use D^2 sampling to stayrt a new cluster
                 // And then restart the loop
-                blaze::DynamicVector<FT> ccosts(assignments.size(), std::numeric_limits<FT>::max());
+                blaze::DynamicVector<FT> ccosts(npoints, std::numeric_limits<FT>::max());
                 OMP_PFOR
-                for(size_t i = 0; i < app.size(); ++i) {
-                    for(size_t j = 0; j < centers.size(); ++j) {
-                        auto fc = app(i, centers[j], getcache(j));
+                for(size_t i = 0; i < npoints; ++i) {
+                    for(size_t j = 0; j < k; ++j) {
+                        if(assigned[j].empty()) continue;
+                        auto fc = app(i, centers[j], getcache(j), measure);
                         if(fc < ccosts[i]) ccosts[i] = fc;
                     }
                 }
-                blaze::DynamicVector<FT> csum(assignments.size());
-                std::partial_sum(ccosts.data(), ccosts.data() + ccosts.size(), csum.data());
+                blaze::DynamicVector<FT> csum(npoints);
                 std::uniform_real_distribution<FT> urd;
-                auto nc = centers_to_restart.size();
-                for(size_t i = 0; i < nc; ++i) {
-                    auto cid = centers_to_restart[i];
-                    auto newp = std::lower_bound(csum.data(), csum.data() + csum.size(), urd(rng) * csum[csum.size() - 1]) - csum.data();
-                    centers[cid] = row(app.data(), newp, blaze::unchecked);
-                    OMP_PFOR
-                    for(size_t i = 0; i < assignments.size(); ++i) {
-                        auto fc = app(i, newp);
-                        if(fc < ccosts[i]) ccosts[i] = fc;
-                    }
+                for(size_t i = 0; i < restartn;) {
                     std::partial_sum(ccosts.data(), ccosts.data() + ccosts.size(), csum.data());
+                    auto newp = std::lower_bound(csum.data(), csum.data() + csum.size(), urd(rng) * csum[csum.size() - 1])
+                                - csum.data();
+                    centers[centers_to_restart[i]] = row(app.data(), newp, blaze::unchecked);
+                    if(++i != restartn) {
+                        OMP_PFOR
+                        for(size_t i = 0; i < npoints; ++i)
+                            ccosts[i] = std::min(ccosts[i], app(i, newp));
+                    }
                 }
                 continue; // Reassign, re-center, and re-compute
             }
@@ -271,7 +270,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                         cref,
                         rows(mat, assigned_ids.data(), assigned_ids.size()),
                         blaze::elements(app.row_sums(), assigned_ids.data(), assigned_ids.size()),
-                        &wsel, app.get_measure()
+                        &wsel, measure
                     );
                 } else {
                     using ptr_t = std::add_pointer_t<decltype(blaze::elements(*weight_cv, assigned_ids.data(), assigned_ids.size()))>;
@@ -279,7 +278,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                         cref,
                         rows(mat, assigned_ids.data(), assigned_ids.size()),
                         blaze::elements(app.row_sums(), assigned_ids.data(), assigned_ids.size()),
-                        static_cast<ptr_t>(nullptr), app.get_measure()
+                        static_cast<ptr_t>(nullptr), measure
                     );
                 }
             }
@@ -288,16 +287,16 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         }
         // Set the returned values to be the last iteration's.
     } else {
-        const size_t nc = centers.size(), nr = app.size();
-        if(assignments.rows() != app.size() || assignments.columns() != centers.size()) {
-            assignments.resize(app.size(), centers.size());
+        const size_t nc = centers.size(), nr = npoints;
+        if(assignments.rows() != npoints || assignments.columns() != centers.size()) {
+            assignments.resize(npoints, centers.size());
         }
         std::unique_ptr<std::mutex[]> mutexes;
         OMP_ONLY(mutexes.reset(new std::mutex[centers.size()]);)
         for(;;) {
             if(centers_cache.size()) {
                 for(size_t i = 0; i < centers.size(); ++i)
-                    dist::detail::set_cache(centers[i], centers_cache[i], app.get_measure());
+                    dist::detail::set_cache(centers[i], centers_cache[i], measure);
             }
             for(auto &c: centers_cpy) c = static_cast<FT>(0);
             OMP_PFOR
@@ -326,7 +325,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             CentroidPolicy::perform_soft_assignment(
                 assignments, app.row_sums(),
                 OMP_ONLY(mutexes.get(),)
-                app.data(), centers_cpy, weight_cv.get(), app.get_measure()
+                app.data(), centers_cpy, weight_cv.get(), measure
             );
         }
         get_center_change_distance();
@@ -336,19 +335,19 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     end: {
         if(centers_cache.size()) {
             for(size_t i = 0; i < centers.size(); ++i)
-                dist::detail::set_cache(centers[i], centers_cache[i], app.get_measure());
+                dist::detail::set_cache(centers[i], centers_cache[i], measure);
         }
         if constexpr(asn_method == HARD) {
             OMP_PFOR
-            for(size_t i = 0; i < app.size(); ++i) {
+            for(size_t i = 0; i < npoints; ++i) {
                 const auto asn = assignments[i];
-                retcost[i] = app(i, centers[asn], getcache(asn));
+                retcost[i] = app(i, centers[asn], getcache(asn), measure);
             }
         } else {
             OMP_PFOR
-            for(size_t i = 0; i < app.size(); ++i) {
+            for(size_t i = 0; i < npoints; ++i) {
                 for(size_t j = 0; j < centers.size(); ++j) {
-                    retcost(i, j) = app(i, centers[j], getcache(j));
+                    retcost(i, j) = app(i, centers[j], getcache(j), measure);
                 }
             }
         }
@@ -409,23 +408,17 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
     using FT = typename MatrixType::ElementType;
 
     // Setup clustering traits
-    ClusteringTraits<FT, IT, asn_method, co> clustering_traits;
-    clustering_traits.weights = weights;
-    clustering_traits.sampling = csample;
-    auto &ct = clustering_traits;
-    ct.k = k;
-    ct.approx = approx;
-    ct.seed = seed;
-    ct.max_jv_rounds = ct.max_lloyd_iter = max_iter;
-    ct.eps = eps;
+    auto ct = make_clustering_traits<FT, IT, asn_method, co>(npoints, k,
+        csample, opt, approx, weights, seed, max_iter, eps);
+    using ct_t = decltype(ct);
     auto measure = app.get_measure();
     update_defaults_with_measure(ct, measure);
 
-
-    // Setup data and helpers
-    typename ClusteringTraits<FT, IT, asn_method, co>::centers_t centers;
-    typename ClusteringTraits<FT, IT, asn_method, co>::assignments_t assignments;
-    typename ClusteringTraits<FT, IT, asn_method, co>::costs_t costs;
+    // and helpers
+    typename ct_t::centers_t centers;
+    centers.reserve(k);
+    typename ct_t::assignments_t assignments;
+    typename ct_t::costs_t costs;
     if constexpr(asn_method == HARD) {
         assignments.resize(app.size());
     } else {
@@ -434,6 +427,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
 
 
     auto set_metric_return_values = [&](const auto &ret) {
+        MINOCORE_REQUIRE(asn_method == HARD, "Not supported: soft extrinsic clustering");
         auto &[cc, asn, retcosts] = ret;
         centers.resize(cc.size());
         if constexpr(co == EXTRINSIC) {
@@ -441,40 +435,33 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
             for(size_t i = 0; i < cc.size(); ++i) {
                 centers[i] = row(app.data(), cc[i], blaze::unchecked);
             }
-        } else {
-            std::copy(cc.begin(), cc.end(), centers.begin());
-        }
+        } else std::copy(cc.begin(), cc.end(), centers.begin()); // INTRINSIC
         if constexpr(asn_method == HARD) {
             assignments.resize(asn.size());
             std::copy(asn.begin(), asn.end(), assignments.begin());
             costs.resize(retcosts.size());
             std::copy(retcosts.begin(), retcosts.end(), costs.begin());
-        } else {
-            throw NotImplementedError("Not supported: soft extrinsic clustering");
         }
     };
 
     // Delegate to solvers and set-up return values
     if(dist::detail::satisfies_d2(measure) || measure == dist::L1 || measure == dist::TOTAL_VARIATION_DISTANCE || co == EXTRINSIC) {
-        auto [initcenters, initasn, initcosts] = jsd::make_kmeanspp(app, ct.k, ct.seed, clustering_traits.weights);
-        centers.reserve(k);
-        for(const auto id: initcenters) {
-            centers.emplace_back(row(app.data(), id));
-        }
-        //std::copy(initasn.begin(), initasn.end(), std::back_inserter(assignments));
+        auto [initcenters, initasn, initcosts] = jsd::make_kmeanspp(app, ct.k, ct.seed, ct.weights);
         if(co == INTRINSIC || opt == METRIC_KMEDIAN) {
             // Do graph metric calculation
             MINOCORE_REQUIRE(asn_method == HARD, "Can't do soft metric k-median");
-            auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(detail::make_aa(app), app.size(), clustering_traits);
+            auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(detail::make_aa(app), app.size(), ct);
             set_metric_return_values(metric_ret);
         } else {
-            // Do Lloyd's loop (``kmeans'' algorithm)
-            auto ret = perform_lloyd_loop<asn_method>(centers, assignments, app, k, costs, ct.seed, clustering_traits.weights, max_iter, eps);
-            if(ret != FINISHED) std::fprintf(stderr, "lloyd loop ret: %s\n", ret == REACHED_MAX_ROUNDS ? "max rounds": "unfinished");
+            for(const auto id: initcenters)
+                centers.emplace_back(row(app.data(), id));
+            // Perform EM
+            if(auto ret = perform_lloyd_loop<asn_method>(centers, assignments, app, k, costs, ct.seed, ct.weights, max_iter, eps))
+                std::fprintf(stderr, "lloyd loop ret: %s\n", ret == REACHED_MAX_ROUNDS ? "max rounds": "unfinished");
         }
     } else if(dist::detail::satisfies_metric(measure) || dist::detail::satisfies_rho_metric(measure)) {
         MINOCORE_REQUIRE(asn_method == HARD, "Can't do soft metric k-median");
-        auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(detail::make_aa(app), app.size(), clustering_traits);
+        auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(detail::make_aa(app), app.size(), ct);
         set_metric_return_values(metric_ret);
     } else {
         throw NotImplementedError("Unsupported: asymmetric measures not supporting D2 sampling");
@@ -504,24 +491,24 @@ auto perform_clustering(const OracleType &app, size_t npoints, unsigned k,
                         uint64_t seed=0,
                         size_t max_iter=100, double eps=ClusteringTraits<FT, IT, HARD, EXTRINSIC>::DEFAULT_EPS)
 {
+    // Setup
     if(opt == DEFAULT_OPT) opt = METRIC_KMEDIAN;
+    if(approx == DEFAULT_APPROX) approx = CONSTANT_FACTOR;
+    if(csample == DEFAULT_SAMPLING) csample = THORUP_SAMPLING;
     MINOCORE_REQUIRE(opt == METRIC_KMEDIAN, "No other method supported for metric clustering");
-    if(approx == DEFAULT_APPROX)
-        approx = CONSTANT_FACTOR;
-    if(csample == DEFAULT_SAMPLING) {
-        csample = THORUP_SAMPLING;
-    }
-    ClusteringTraits<FT, IT, HARD, EXTRINSIC> clustering_traits = make_clustering_traits(npoints, k,
+    auto clustering_traits = make_clustering_traits<FT, IT, HARD, EXTRINSIC>(npoints, k,
         csample, opt, approx, weights, seed, max_iter, eps);
-    typename ClusteringTraits<FT, IT, HARD, INTRINSIC>::centers_t centers;
-    typename ClusteringTraits<FT, IT, HARD, INTRINSIC>::assignments_t assignments;
-    typename ClusteringTraits<FT, IT, HARD, INTRINSIC>::costs_t costs;
+    using ct_t = decltype(clustering_traits);
+
+    // Cluster
     auto [cc, asn, retcosts] = perform_cluster_metric_kmedian<IT, FT>(app, npoints, clustering_traits);
-    centers.resize(cc.size());
+
+    // Return
+    typename ct_t::centers_t centers(cc.size());
+    typename ct_t::assignments_t assignments(asn.size());
+    typename ct_t::costs_t costs(retcosts.size());
     std::copy(cc.begin(), cc.end(), centers.begin());
-    assignments.resize(asn.size());
     std::copy(asn.begin(), asn.end(), assignments.begin());
-    costs.resize(retcosts.size());
     std::copy(retcosts.begin(), retcosts.end(), costs.begin());
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(costs));
 }

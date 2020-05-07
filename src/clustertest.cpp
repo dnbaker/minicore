@@ -4,60 +4,39 @@
 
 using namespace minocore;
 
-#if 0
-int matrix_main() {
-    using MatrixMeta = clustering::Meta<
-        float, uint32_t,
-        clustering::HARD, clustering::INTRINSIC,
-        clustering::CONSTANT_FACTOR, clustering::THORUP_SAMPLING,
-        clustering::METRIC_KMEDIAN>;
-    blz::DM<float> dm = blaze::generate(1000, 1000, [](auto, auto) {return double(std::rand()) / RAND_MAX;});
-    dm *= 10;
-    blz::DV<uint32_t> selection{1,2,3,4,5,6,7,8,9,900};
-    auto oracle = clustering::make_lookup_data_oracle(dm);
-    clustering::ClusteringSolverBase<decltype(oracle), MatrixMeta> solver(oracle, 1000, 10);
-    solver.set_centers(std::move(selection));
-    solver.set_assignments_and_costs();
-    const auto &asn = solver.get_assignments(false);
-    //std::cerr << asn << '\n';
-    return 0;
-}
-
-int kmeans_main() {
-    unsigned k = 10;
-    using MatrixMeta = clustering::Meta<
-        float, uint32_t,
-        clustering::HARD, clustering::EXTRINSIC,
-        clustering::CONSTANT_FACTOR, clustering::D2_SAMPLING,
-        clustering::EXPECTATION_MAXIMIZATION>;
-    blz::DM<float> dm = blaze::generate(1000, 1000, [](auto, auto) {return double(std::rand()) / RAND_MAX;});
-    blz::DV<uint32_t> selection{1,2,3,4,5,6,7,8,9,900};
-    auto oracle = clustering::make_exfunc_oracle(dm, blz::sqrL2Norm());
-    clustering::ClusteringSolverBase<decltype(oracle), MatrixMeta> solver(oracle, 1000, k);
-    solver.approx_sol();
-#if 0
-    wy::WyRand<uint32_t, 4> rng(10);
-    auto [centerids, ogasn, dists] = coresets::kmeanspp(dm, rng, k, blz::sqrL2Norm());
-    std::vector<blz::DV<float, blz::rowVector>> centers;
-    centers.reserve(k);
-    for(const auto cid: centerids) {
-        centers.emplace_back(row(dm, cid));
+template<typename FT>
+blaze::DynamicMatrix<FT> parse_file(std::string path, unsigned *num_clusters) {
+    std::ifstream ifs(path);
+    std::string line;
+    if(!std::getline(ifs, line)) throw 1;
+    size_t nr = std::atoi(line.data());
+    size_t nc = std::atoi(std::strchr(line.data(), '/') + 1);
+    *num_clusters = std::atoi(std::strchr(std::strchr(line.data(), '/') + 1, '/') + 1);
+    blaze::DynamicMatrix<FT> ret(nr, nc);
+    size_t row_index = 0;
+    while(std::getline(ifs, line)) {
+        auto r = row(ret, row_index++);
+        char *ptr = line.data();
+        for(size_t col_index = 0;col_index < nc;r[col_index++] = std::strtod(ptr, &ptr));
     }
-    solver.set_centers(std::move(centers));
-#endif
-    solver.set_assignments_and_costs();
-    const auto &asn = solver.get_assignments(false);
-    std::cerr << asn << '\n';
-    return 0;
+    assert(row_index == nr);
+    return ret;
 }
-#endif
 
-int main() {
+
+int main(int argc, char **argv) {
     int ret = 0;
+    unsigned k = 10;
+    auto pointmat = parse_file<float>(
+        std::string(argc == 1 ? "random.out": const_cast<const char *>(argv[1])),
+    &k);
+
+    std::cerr << "Parsed matrix of " << pointmat.rows() << " rows and "
+              << pointmat.columns() << " columns, with k = 10 clusters\n";
+    auto jsdapp = make_probdiv_applicator(pointmat, blz::SQRL2);
+    clustering::perform_clustering<clustering::HARD, clustering::EXTRINSIC>(jsdapp, k);
     if(0) {
         blz::DM<float> dm = blaze::generate(1000, 1000, [](auto,auto){return 4;});
-        auto jsdapp = make_probdiv_applicator(dm, blz::SQRL2);
-        clustering::perform_clustering<clustering::HARD, clustering::EXTRINSIC>(jsdapp, 10);
         clustering::perform_clustering<clustering::SOFT, clustering::EXTRINSIC>(jsdapp, 10);
         clustering::perform_clustering(dm, dm.rows(), 10);
         ret = 1;

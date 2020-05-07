@@ -110,6 +110,7 @@ struct ClusteringTraits {
     unsigned max_jv_rounds = 100;
     unsigned max_lloyd_iter = 1000;
     unsigned k = -1;
+    size_t npoints = 0;
 
     bool compute_full = true;
     uint64_t seed = 13;
@@ -139,7 +140,7 @@ struct ClusteringTraits {
 };
 
 
-template<typename FT, typename IT, Assignment asn_method=HARD, CenterOrigination co=INTRINSIC>
+template<typename FT, typename IT=uint32_t, Assignment asn_method=HARD, CenterOrigination co=INTRINSIC>
 ClusteringTraits<FT, IT, asn_method, co> make_clustering_traits(
     size_t npoints, unsigned k,
     CenterSamplingType csample=DEFAULT_SAMPLING, OptimizationMethod opt=DEFAULT_OPT,
@@ -154,6 +155,8 @@ ClusteringTraits<FT, IT, asn_method, co> make_clustering_traits(
     ret.sampling = csample;
     ret.approx = approx;
     ret.weights = weights;
+    ret.npoints = npoints;
+    return ret;
 }
 
 

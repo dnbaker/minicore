@@ -435,6 +435,7 @@ public:
             std::cerr << (std::string("Invalid rows selection: ") + std::to_string(i) + '\n');
             std::exit(1);
         }
+        if(measure == static_cast<DissimilarityMeasure>(-1)) measure = measure_;
         if(unlikely(measure == static_cast<DissimilarityMeasure>(-1))) {
             std::cerr << "Unset measure\n";
             std::exit(1);
