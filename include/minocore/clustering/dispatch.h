@@ -67,29 +67,26 @@ auto perform_cluster_metric_kmedian(const OracleType &app, size_t np, Traits tra
             }
         }
     };
-    switch(traits.sampling) {
+    if(traits.sampling == THORUP_SAMPLING) {
+        auto sample_and_fill = [&](const auto &x) {
+           std::tie(std::get<0>(ret), std::get<1>(ret), std::get<2>(ret))
+                = iterated_oracle_thorup_d(
+               x, np, traits.k, traits.thorup_iter, traits.thorup_sub_iter, traits.weights, traits.thorup_npermult, 3, 0.5, traits.seed);
+            fill_distance_mat(x);
+        };
+        if(distmatp) {
+            sample_and_fill(*distmatp);
+        } else if(full_distmatp) {
+            sample_and_fill(~*full_distmatp);
+        } else {
+            auto caching_app = make_row_caching_oracle_wrapper<
+                shared::flat_hash_map, /*is_symmetric=*/ true, /*is_threadsafe=*/true
+            >(app, np);
+            sample_and_fill(caching_app);
+        }
+    } else switch(traits.sampling) {
         case D2_SAMPLING: {
             ret = select_d2(app, np, traits);
-            break;
-        }
-        case THORUP_SAMPLING: {
-            decltype(auto) first_three = std::tie(std::get<0>(ret), std::get<1>(ret), std::get<2>(ret));
-            if(distmatp) {
-               first_three = iterated_oracle_thorup_d(
-                   *distmatp, np, traits.k, traits.thorup_iter, traits.thorup_sub_iter, traits.weights, traits.thorup_npermult, 3, 0.5, traits.seed);
-                fill_distance_mat(*distmatp);
-            } else if(full_distmatp) {
-                auto &dm(~(*full_distmatp));
-                first_three = iterated_oracle_thorup_d(
-                    dm, np, traits.k, traits.thorup_iter, traits.thorup_sub_iter, traits.weights, traits.thorup_npermult, 3, 0.5, traits.seed);
-                fill_distance_mat(dm);
-            } else {
-                auto caching_app = make_row_caching_oracle_wrapper<
-                    shared::flat_hash_map, /*is_symmetric=*/ true, /*is_threadsafe=*/true
-                >(app, np);
-                first_three = iterated_oracle_thorup_d(caching_app, np, traits.k, traits.thorup_iter, traits.thorup_sub_iter, traits.weights, traits.thorup_npermult, 3, 0.5, traits.seed);
-                fill_distance_mat(caching_app);
-            }
             break;
         }
         case UNIFORM_SAMPLING: {
@@ -105,9 +102,6 @@ auto perform_cluster_metric_kmedian(const OracleType &app, size_t np, Traits tra
             auto l = std::sprintf(buf, "Unrecognized sampling: %d\n", (int)DEFAULT_SAMPLING);
             throw std::invalid_argument(std::string(buf, l));
         }
-    }
-    if(traits.sampling != THORUP_SAMPLING) {
-        // Handled specially with caching version
         fill_distance_mat(app);
     }
     auto &costmat = ret.facility_cost_matrix();
@@ -365,23 +359,6 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
 
 
 template<typename FT, typename IT, Assignment asn_method=HARD, CenterOrigination co=INTRINSIC>
-ClusteringTraits<FT, IT, asn_method, co> make_clustering_traits(
-    size_t npoints, unsigned k,
-    CenterSamplingType csample=DEFAULT_SAMPLING, OptimizationMethod opt=DEFAULT_OPT,
-    ApproximateSolutionType approx=DEFAULT_APPROX, const FT *weights=nullptr, uint64_t seed=0,
-    size_t max_iter=100, double eps=1e-4) {
-    ClusteringTraits<FT, IT, asn_method, co> ret;
-    ret.k = k;
-    ret.seed = seed;
-    ret.max_jv_rounds = ret.max_lloyd_iter = max_iter;
-    ret.eps = eps;
-    ret.opt = opt;
-    ret.sampling = csample;
-    ret.approx = approx;
-    ret.weights = weights;
-}
-
-template<typename FT, typename IT, Assignment asn_method=HARD, CenterOrigination co=INTRINSIC>
 void update_defaults_with_measure(ClusteringTraits<FT, IT, asn_method, co> &ct, dist::DissimilarityMeasure measure) {
     if(ct.opt == DEFAULT_OPT) {
         switch(measure) {
@@ -437,7 +414,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
     clustering_traits.sampling = csample;
     auto &ct = clustering_traits;
     ct.k = k;
-    ct.approx = apprx;
+    ct.approx = approx;
     ct.seed = seed;
     ct.max_jv_rounds = ct.max_lloyd_iter = max_iter;
     ct.eps = eps;
@@ -456,15 +433,15 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
     }
 
 
-    auto set_metric_return_values = [&](auto &ret) {
+    auto set_metric_return_values = [&](const auto &ret) {
         auto &[cc, asn, retcosts] = ret;
-        centers.reserve(cc.size());
+        centers.resize(cc.size());
         if constexpr(co == EXTRINSIC) {
+            OMP_PFOR
             for(size_t i = 0; i < cc.size(); ++i) {
-                centers.emplace_back(row(app.data(), cc[i], blaze::unchecked));
+                centers[i] = row(app.data(), cc[i], blaze::unchecked);
             }
         } else {
-            centers.resize(cc.size());
             std::copy(cc.begin(), cc.end(), centers.begin());
         }
         if constexpr(asn_method == HARD) {
@@ -525,7 +502,7 @@ auto perform_clustering(const OracleType &app, size_t npoints, unsigned k,
                         OptimizationMethod opt=DEFAULT_OPT,
                         ApproximateSolutionType approx=DEFAULT_APPROX,
                         uint64_t seed=0,
-                        size_t max_iter=100, double eps=1e-4)
+                        size_t max_iter=100, double eps=ClusteringTraits<FT, IT, HARD, EXTRINSIC>::DEFAULT_EPS)
 {
     if(opt == DEFAULT_OPT) opt = METRIC_KMEDIAN;
     MINOCORE_REQUIRE(opt == METRIC_KMEDIAN, "No other method supported for metric clustering");
@@ -534,14 +511,8 @@ auto perform_clustering(const OracleType &app, size_t npoints, unsigned k,
     if(csample == DEFAULT_SAMPLING) {
         csample = THORUP_SAMPLING;
     }
-    ClusteringTraits<FT, IT, HARD, EXTRINSIC> clustering_traits;
-    clustering_traits.k = k;
-    clustering_traits.seed = seed;
-    clustering_traits.max_jv_rounds = clustering_traits.max_lloyd_iter = max_iter;
-    clustering_traits.eps = eps;
-    clustering_traits.sampling = csample;
-    clustering_traits.weights = weights;
-    clustering_traits.approx = approx;
+    ClusteringTraits<FT, IT, HARD, EXTRINSIC> clustering_traits = make_clustering_traits(npoints, k,
+        csample, opt, approx, weights, seed, max_iter, eps);
     typename ClusteringTraits<FT, IT, HARD, INTRINSIC>::centers_t centers;
     typename ClusteringTraits<FT, IT, HARD, INTRINSIC>::assignments_t assignments;
     typename ClusteringTraits<FT, IT, HARD, INTRINSIC>::costs_t costs;

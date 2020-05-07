@@ -32,6 +32,7 @@ using ce_t = ClusteringEnumType;
  * Black box: plugging into CPLEX or Gurobi
  */
 
+static constexpr ce_t UNSET = ce_t(-1);
 
 enum Assignment: ce_t {
     HARD = 0,
@@ -47,7 +48,7 @@ enum Assignment: ce_t {
 };
 enum CenterOrigination: ce_t {
     INTRINSIC = 0,
-    EXTRINSIC = 1,
+    EXTRINSIC = 1
 };
 
 enum ApproximateSolutionType: ce_t {
@@ -55,14 +56,14 @@ enum ApproximateSolutionType: ce_t {
     CONSTANT_FACTOR = 1,
     HEURISTIC       = 2,
     RSVD            = 3,
-    DEFAULT_APPROX
+    DEFAULT_APPROX = UNSET
 };
 enum CenterSamplingType: ce_t {
     THORUP_SAMPLING,
     D2_SAMPLING,
     UNIFORM_SAMPLING,
     GREEDY_SAMPLING,
-    DEFAULT_SAMPLING,
+    DEFAULT_SAMPLING = UNSET,
     COST_SAMPLING = D2_SAMPLING,
 };
 enum OptimizationMethod: ce_t {
@@ -71,101 +72,17 @@ enum OptimizationMethod: ce_t {
     BLACK_BOX,
     GRADIENT_DESCENT,
     EXHAUSTIVE_SEARCH,
-    DEFAULT_OPT = ce_t(-1)
+    DEFAULT_OPT = UNSET
 };
 
 enum MetricKMedianSolverMethod: ce_t {
     JAIN_VAZIRANI_FL,
     LOCAL_SEARCH,
-    JV_PLUS_LOCAL_SEARCH
+    JV_PLUS_LOCAL_SEARCH,
+    DEFAULT_SOLVER = UNSET
 };
 
 
-enum ClusteringBitfields: ce_t {
-    ASN_BF_OFFSET = 3,
-    ASN_BF_BITMASK = (1 << 3) - 1,
-    HARD_BF = 1 << HARD,
-    SOFT_BF = 1 << SOFT,
-    SOFTMAX_BF = 1 << SOFT_HARMONIC_MEAN,
-    CO_BF_OFFSET = ASN_BF_OFFSET + 2,
-    CO_BF_BITMASK = ((1 << (CO_BF_OFFSET - ASN_BF_OFFSET)) - 1) << ASN_BF_OFFSET,
-    INTRINSIC_BF = 1 << ASN_BF_OFFSET,
-    EXTRINSIC_BF = 1 << (EXTRINSIC + ASN_BF_OFFSET),
-    AS_BF_OFFSET = CO_BF_OFFSET + 4,
-    AS_BF_BITMASK = ((1 << (AS_BF_OFFSET - CO_BF_OFFSET)) - 1) << CO_BF_OFFSET,
-    BICRITERIA_BF      = 1ull << (BICRITERIA + CO_BF_OFFSET),
-    CONSTANT_FACTOR_BF = 1ull << (CONSTANT_FACTOR + CO_BF_OFFSET),
-    HEURISTIC_BF       = 1ull << (HEURISTIC + CO_BF_OFFSET),
-    RSVD_BF            = 1ull << (HEURISTIC + CO_BF_OFFSET),
-    THORUP_SAMPLING_BF = 1ull << (THORUP_SAMPLING + AS_BF_OFFSET),
-    D2_SAMPLING_BF = 1ull << (D2_SAMPLING + AS_BF_OFFSET),
-    UNIFORM_SAMPLING_BF = 1ull << (UNIFORM_SAMPLING + AS_BF_OFFSET),
-    GREEDY_SAMPLING_BF = 1ull << (GREEDY_SAMPLING + AS_BF_OFFSET),
-    CS_BF_OFFSET = AS_BF_OFFSET + 4,
-    CS_BF_BITMASK = ((1 << (CS_BF_OFFSET - AS_BF_OFFSET)) - 1) << AS_BF_OFFSET,
-    METRIC_KMEDIAN_BF = 1ull << (METRIC_KMEDIAN + CS_BF_OFFSET),
-    EXPECTATION_MAXIMIZATION_BF = 1ull << (EXPECTATION_MAXIMIZATION + CS_BF_OFFSET),
-    BLACK_BOX_BF = 1ull << (BLACK_BOX + CS_BF_OFFSET),
-    GRADIENT_DESCENT_BF = 1ull << (GRADIENT_DESCENT + CS_BF_OFFSET),
-    EXHAUSTIVE_SEARCH_BF = 1ull << (EXHAUSTIVE_SEARCH + CS_BF_OFFSET),
-    OM_BF_OFFSET = CS_BF_OFFSET + 5,
-    OM_BF_BITMASK = ((1 << ((OM_BF_OFFSET - CS_BF_OFFSET))) - 1) << CS_BF_OFFSET
-};
-static constexpr ce_t to_bitfield(Assignment asn) {
-    return ce_t(1) << asn;
-}
-static constexpr ce_t to_bitfield(CenterOrigination co) {
-    return ce_t(1) << (co + ASN_BF_OFFSET);
-}
-static constexpr ce_t to_bitfield(ApproximateSolutionType as) {
-    return ce_t(1) << (as + CO_BF_OFFSET);
-}
-static constexpr ce_t to_bitfield(CenterSamplingType sampling) {
-    return ce_t(1) << (sampling + AS_BF_OFFSET);
-}
-static constexpr ce_t to_bitfield(OptimizationMethod opt) {
-    return ce_t(1) << (opt + CS_BF_OFFSET);
-}
-
-static constexpr ce_t
-    to_bitfield(Assignment asn, CenterOrigination co, ApproximateSolutionType as,
-                CenterSamplingType sampling, OptimizationMethod opt) {
-    return to_bitfield(asn) | to_bitfield(co) | to_bitfield(as) | to_bitfield(sampling) | to_bitfield(opt);
-}
-
-namespace detail {
-constexpr size_t cl2(const size_t n) {
-    switch(n) {
-        case 0: return size_t(-1);
-        case 1: return 0;
-        default: return 1 + cl2(n / 2);
-    }
-}
-
-}
-template<typename T>
-constexpr T from_integer(ce_t v) {
-    throw std::runtime_error("Illegal type T");
-}
-template<> constexpr Assignment from_integer(ce_t v) {
-    return static_cast<Assignment>(detail::cl2((v & ASN_BF_BITMASK) >> 0));
-}
-template<> constexpr CenterOrigination from_integer(ce_t v) {
-    return static_cast<CenterOrigination>(detail::cl2((v & CO_BF_BITMASK) >> ASN_BF_OFFSET));
-}
-template<> constexpr ApproximateSolutionType from_integer(ce_t v) {
-    return static_cast<ApproximateSolutionType>(detail::cl2((v & AS_BF_BITMASK) >> CO_BF_OFFSET));
-}
-template<> constexpr CenterSamplingType from_integer(ce_t v) {
-    return static_cast<CenterSamplingType>(detail::cl2((v & CS_BF_BITMASK) >> AS_BF_OFFSET));
-}
-template<> constexpr OptimizationMethod from_integer(ce_t v) {
-    return static_cast<OptimizationMethod>(detail::cl2((v & OM_BF_BITMASK) >> CS_BF_OFFSET));
-}
-
-static_assert(OM_BF_OFFSET < 32, "must be < 32");
-
-static constexpr ce_t UNSET = ce_t(-1);
 
 template<Assignment asn_method, typename index_t=uint32_t, typename cost_t=float>
 using assignment_fmt_t = std::conditional_t<asn_method == HARD,                                       
@@ -182,10 +99,12 @@ struct ClusteringTraits {
     OptimizationMethod opt = static_cast<OptimizationMethod>(UNSET);
     MetricKMedianSolverMethod metric_solver = JV_PLUS_LOCAL_SEARCH;
 
+    static constexpr FT DEFAULT_EPS = 1e-6;
+
 // Settings
     FT thorup_npermult = 7;
     FT approx_mul = 50;
-    FT eps = 1e-6;
+    FT eps = DEFAULT_EPS;
     unsigned thorup_iter = 4;
     unsigned thorup_sub_iter = 10;
     unsigned max_jv_rounds = 100;
@@ -218,6 +137,25 @@ struct ClusteringTraits {
                                         >;
     // Thorup
 };
+
+
+template<typename FT, typename IT, Assignment asn_method=HARD, CenterOrigination co=INTRINSIC>
+ClusteringTraits<FT, IT, asn_method, co> make_clustering_traits(
+    size_t npoints, unsigned k,
+    CenterSamplingType csample=DEFAULT_SAMPLING, OptimizationMethod opt=DEFAULT_OPT,
+    ApproximateSolutionType approx=DEFAULT_APPROX, const FT *weights=nullptr, uint64_t seed=0,
+    size_t max_iter=100, double eps=ClusteringTraits<FT, IT, asn_method, co>::DEFAULT_EPS) {
+    ClusteringTraits<FT, IT, asn_method, co> ret;
+    ret.k = k;
+    ret.seed = seed;
+    ret.max_jv_rounds = ret.max_lloyd_iter = max_iter;
+    ret.eps = eps;
+    ret.opt = opt;
+    ret.sampling = csample;
+    ret.approx = approx;
+    ret.weights = weights;
+}
+
 
 namespace detail {
 
