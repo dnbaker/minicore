@@ -15,7 +15,7 @@ struct CentroidPolicy {
         using FT = blaze::ElementType_t<VT>;
         PREC_REQ(measure != static_cast<dist::DissimilarityMeasure>(-1), "Must define dissimilarity measure");
         if(measure == dist::TOTAL_VARIATION_DISTANCE) {
-            PRETTY_SAY << "TVD: performing " wc ? "weighted": "unweighted" << "L1 median on *normalized* categorical distributions.\n";
+            PRETTY_SAY << "TVD: performing " << (wc ? static_cast<const char *>("weighted"): static_cast<const char *>("unweighted")) << "L1 median on *normalized* categorical distributions.\n";
             if(wc)
                 coresets::l1_median(r, ret, wc->data());
             else
@@ -26,7 +26,7 @@ struct CentroidPolicy {
                                blaze::CompressedMatrix<FT, blaze::StorageOrder_v<Range> >,
                                blaze::DynamicMatrix<FT, blaze::StorageOrder_v<Range> >
             > cm = r * blaze::expand(rs, r.columns());
-            PRETTY_SAY << "L1: performing " wc ? "weighted": "unweighted" << "L1 median on *unnormalized* categorical distributions, IE absolute count data.\n";
+            PRETTY_SAY << "L1: performing " << (wc ? static_cast<const char *>("weighted"): static_cast<const char *>("unweighted")) << "L1 median on *unnormalized* categorical distributions, IE absolute count data.\n";
             if(wc)
                 coresets::l1_median(cm, ret, wc->data());
             else
