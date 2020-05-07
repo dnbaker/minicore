@@ -280,7 +280,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                     CentroidPolicy::perform_average(cref, rowsel, sumsel, &wsel, measure);
                 } else {
                     CentroidPolicy::perform_average(cref, rowsel, sumsel,
-                        static_cast<decltype(&blaze::elements(*weight_cv, aidptr, nid)) *>(nullptr), measure
+                        static_cast<decltype(blaze::elements(*weight_cv, aidptr, nid)) *>(nullptr), measure
                     );
                 }
             }
