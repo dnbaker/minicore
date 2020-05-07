@@ -26,14 +26,15 @@ blaze::DynamicMatrix<FT> parse_file(std::string path, unsigned *num_clusters) {
 
 int main(int argc, char **argv) {
     int ret = 0;
-    unsigned k = 10;
-    auto pointmat = parse_file<float>(
-        std::string(argc == 1 ? "random.out": const_cast<const char *>(argv[1])),
-    &k);
+    unsigned k;
+    std::string inpath = "random.out";
+    if(argc > 1) inpath = argv[1];
+    auto pointmat = parse_file<float>(inpath, &k);
 
     std::cerr << "Parsed matrix of " << pointmat.rows() << " rows and "
-              << pointmat.columns() << " columns, with k = 10 clusters\n";
+              << pointmat.columns() << " columns, with k = " << k << " clusters\n";
     auto jsdapp = make_probdiv_applicator(pointmat, blz::SQRL2);
+    std::cerr << "Made probdiv applicator\n";
     clustering::perform_clustering<clustering::HARD, clustering::EXTRINSIC>(jsdapp, k);
     if(0) {
         blz::DM<float> dm = blaze::generate(1000, 1000, [](auto,auto){return 4;});

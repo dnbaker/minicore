@@ -171,6 +171,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         centers_cache.resize(k);
     double last_distance = std::numeric_limits<double>::max(), first_distance = last_distance,
            center_distance;
+    PRETTY_SAY << "Beginning\n";
     LloydLoopResult ret = UNFINISHED;
     wy::WyRand<uint64_t> rng(seed);
     size_t iternum = 0;
@@ -181,16 +182,21 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 return value + blaze::sum(blaze::abs(center - centers[ind]));
             }
         );
+        PRETTY_SAY << "At iteration " << iternum << ", change in center distance is " << center_distance;
         std::swap(centers_cpy, centers);
         if(last_distance == std::numeric_limits<double>::max()) {
             last_distance = first_distance = center_distance;
             iternum = 1;
+            PRETTY_SAY << "First distance: " << first_distance << '\n';
         } else {
             last_distance = center_distance;
-            if(center_distance / first_distance < eps)
+            if(center_distance / first_distance < eps) {
                 ret = LloydLoopResult::FINISHED;
-            else if(++iternum > max_iter)
+                PRETTY_SAY << "Finished in " << iternum << " iterations\n";
+            } else if(++iternum >= max_iter) {
                 ret = LloydLoopResult::REACHED_MAX_ROUNDS;
+                PRETTY_SAY << "Finished in " << iternum << " iterations by reaching limit\n";
+            }
         }
     };
     using cv_t = blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded, blaze::rowVector>;
@@ -207,6 +213,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         for(;;) {
             // Do it forever
             if(centers_cache.size()) {
+                PRETTY_SAY << "Setting centers cache for measure " << dist::detail::prob2str(measure) << '\n';
                 for(unsigned i = 0; i < k; ++i)
                     dist::detail::set_cache(centers[i], centers_cache[i], measure);
             }
@@ -264,21 +271,16 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 auto &cref = centers_cpy[i];
                 auto &assigned_ids = assigned[i];
                 shared::sort(assigned_ids.begin(), assigned_ids.end()); // Better access pattern
+                auto aidptr = assigned_ids.data();
+                const size_t nid = assigned_ids.size();
+                auto rowsel = rows(mat, aidptr, nid);
+                auto sumsel = blaze::elements(app.row_sums(), aidptr, nid);
                 if(weight_cv) {
-                    auto wsel = blaze::elements(*weight_cv, assigned_ids.data(), assigned_ids.size());
-                    CentroidPolicy::perform_average(
-                        cref,
-                        rows(mat, assigned_ids.data(), assigned_ids.size()),
-                        blaze::elements(app.row_sums(), assigned_ids.data(), assigned_ids.size()),
-                        &wsel, measure
-                    );
+                    auto wsel = blaze::elements(*weight_cv, aidptr, nid);
+                    CentroidPolicy::perform_average(cref, rowsel, sumsel, &wsel, measure);
                 } else {
-                    using ptr_t = std::add_pointer_t<decltype(blaze::elements(*weight_cv, assigned_ids.data(), assigned_ids.size()))>;
-                    CentroidPolicy::perform_average(
-                        cref,
-                        rows(mat, assigned_ids.data(), assigned_ids.size()),
-                        blaze::elements(app.row_sums(), assigned_ids.data(), assigned_ids.size()),
-                        static_cast<ptr_t>(nullptr), measure
+                    CentroidPolicy::perform_average(cref, rowsel, sumsel,
+                        static_cast<decltype(&blaze::elements(*weight_cv, aidptr, nid)) *>(nullptr), measure
                     );
                 }
             }
@@ -395,6 +397,7 @@ void update_defaults_with_measure(ClusteringTraits<FT, IT, asn_method, co> &ct, 
     }
 }
 
+
 template<Assignment asn_method=HARD, CenterOrigination co=INTRINSIC, typename MatrixType, typename IT=uint32_t>
 auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, size_t npoints, unsigned k,
                         const ElementType_t<MatrixType> *weights=nullptr,
@@ -424,6 +427,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
     } else {
         assignments.resize(app.size(), k);
     }
+    PRETTY_SAY << "Assignments sized.\n";
 
 
     auto set_metric_return_values = [&](const auto &ret) {
@@ -448,13 +452,16 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
     if(dist::detail::satisfies_d2(measure) || measure == dist::L1 || measure == dist::TOTAL_VARIATION_DISTANCE || co == EXTRINSIC) {
         auto [initcenters, initasn, initcosts] = jsd::make_kmeanspp(app, ct.k, ct.seed, ct.weights);
         if(co == INTRINSIC || opt == METRIC_KMEDIAN) {
+            PRETTY_SAY << "Performing metric clustering\n";
             // Do graph metric calculation
             MINOCORE_REQUIRE(asn_method == HARD, "Can't do soft metric k-median");
             auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(detail::make_aa(app), app.size(), ct);
             set_metric_return_values(metric_ret);
         } else {
+            PRETTY_SAY << "Setting centers with D2\n";
             for(const auto id: initcenters)
                 centers.emplace_back(row(app.data(), id));
+            PRETTY_SAY << "Beginning lloyd loop\n";
             // Perform EM
             if(auto ret = perform_lloyd_loop<asn_method>(centers, assignments, app, k, costs, ct.seed, ct.weights, max_iter, eps))
                 std::fprintf(stderr, "lloyd loop ret: %s\n", ret == REACHED_MAX_ROUNDS ? "max rounds": "unfinished");
