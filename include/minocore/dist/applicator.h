@@ -852,7 +852,7 @@ private:
                     if(prior == NONE) {
                         r += 1e-50;
 #ifndef NDEBUG
-                        if(dist::detail::is_probability(measure) || measure == dist::TVD || blz::detail::is_bregman(measure))
+                        if(dist::detail::is_probability(measure_) || measure_ == dist::TVD || blz::detail::is_bregman(measure_))
                             assert(blaze::min(r) > 0.);
 #endif
                     }
