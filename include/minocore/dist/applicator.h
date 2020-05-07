@@ -851,7 +851,10 @@ private:
                 if constexpr(blaze::IsDenseMatrix_v<MatrixType>) {
                     if(prior == NONE) {
                         r += 1e-50;
-                        //assert(blaze::min(r) > 0.);
+#ifndef NDEBUG
+                        if(dist::detail::is_probability(measure) || measure == dist::TVD || blz::detail::is_bregman(measure))
+                            assert(blaze::min(r) > 0.);
+#endif
                     }
                 }
                 const auto countsum = blaze::sum(r);
