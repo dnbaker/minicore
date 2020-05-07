@@ -851,7 +851,7 @@ private:
                 if constexpr(blaze::IsDenseMatrix_v<MatrixType>) {
                     if(prior == NONE) {
                         r += 1e-50;
-                        assert(blaze::min(r) > 0.);
+                        //assert(blaze::min(r) > 0.);
                     }
                 }
                 const auto countsum = blaze::sum(r);
