@@ -312,6 +312,7 @@ public:
         } else if constexpr(constexpr_measure == L2) {
             ret = l2Norm(weighted_row(i) - o);
         } else if constexpr(constexpr_measure == SQRL2) {
+            assert(i < this->data().rows());
             ret = blaze::sqrNorm(weighted_row(i) - o);
         } else if constexpr(constexpr_measure == JSD) {
             if(cp) {
@@ -440,6 +441,7 @@ public:
             std::cerr << "Unset measure\n";
             std::exit(1);
         }
+        //PRETTY_SAY << "Performing with " << (void *)&o << " and row " << i << '\n';
         FT ret;
         switch(measure) {
             case TOTAL_VARIATION_DISTANCE: ret = call<TOTAL_VARIATION_DISTANCE>(o, i); break;
@@ -479,6 +481,12 @@ public:
             std::cerr << "Unset measure\n";
             std::exit(1);
         }
+#if 0
+        PRETTY_SAY << "Performing with " 
+            << " row " << i << " and " 
+            << (void *)&o 
+            << '\n';
+#endif
         FT ret;
         switch(measure) {
             case TOTAL_VARIATION_DISTANCE: ret = call<TOTAL_VARIATION_DISTANCE>(i, o); break;
@@ -852,8 +860,8 @@ private:
                     if(prior == NONE) {
                         r += 1e-50;
 #ifndef NDEBUG
-                        if(dist::detail::is_probability(measure_) || measure_ == dist::TVD || blz::detail::is_bregman(measure_))
-                            assert(blaze::min(r) > 0.);
+                        if(dist::detail::expects_nonnegative(measure_) && blaze::min(r) < 0.)
+                            throw std::invalid_argument(std::string("Measure ") + dist::detail::prob2str(measure_) + " expects nonnegative data");
 #endif
                     }
                 }

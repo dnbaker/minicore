@@ -202,7 +202,7 @@
 #else
   struct CHEVRONEATER {
       template<typename T>
-      const CHEVRONEATER &operator<<(const T &x) const {return *this;}
+      const CHEVRONEATER &operator<<(const T &) const {return *this;}
   };
 #  define PRETTY_SAY ::CHEVRONEATER{}
 

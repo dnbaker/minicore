@@ -18,6 +18,7 @@ namespace blz {
 inline namespace distance {
 
 
+
 enum DissimilarityMeasure {
     L1,
     L2,
@@ -156,6 +157,25 @@ static constexpr INLINE bool is_probability(DissimilarityMeasure d)  {
 static constexpr INLINE bool needs_l2_cache(DissimilarityMeasure d) {
     return d == COSINE_DISTANCE;
 }
+
+static constexpr bool expects_nonnegative(DissimilarityMeasure measure) {
+    switch(measure) {
+        case L1: case L2: case SQRL2:
+        case COSINE_DISTANCE: case COSINE_SIMILARITY:
+        case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
+        case DOT_PRODUCT_SIMILARITY:
+        case WEMD: case EMD: case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: return false;
+
+        default: // Unexpected, but will assume it's required.
+        case JSM: case JSD: case MKL: case POISSON: case HELLINGER: case BHATTACHARYYA_METRIC:
+        case BHATTACHARYYA_DISTANCE: case TOTAL_VARIATION_DISTANCE: case LLR:
+        case REVERSE_MKL: case REVERSE_POISSON: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
+        case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+        return true;
+        
+    }
+}
+
 
 static constexpr INLINE bool needs_probability_l2_cache(DissimilarityMeasure d) {
     return d == PROBABILITY_COSINE_DISTANCE;

@@ -5,11 +5,12 @@
 #include "minocore/optim/lsearch.h"
 #include "minocore/optim/oracle_thorup.h"
 #include "minocore/util/exception.h"
-#include "diskmat/diskmat.h"
 #include "minocore/clustering/traits.h"
 #include "minocore/clustering/sampling.h"
 #include "minocore/clustering/centroid.h"
-#include <cstdint>
+
+#include "boost/iterator/zip_iterator.hpp"
+#include "diskmat/diskmat.h"
 
 namespace minocore {
 
@@ -18,6 +19,7 @@ namespace clustering {
 using dist::DissimilarityMeasure;
 using blaze::ElementType_t;
 using diskmat::PolymorphicMat;
+using boost::make_zip_iterator;
 
 template<typename T>
 bool use_packed_distmat(const T &app) {
@@ -160,6 +162,13 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     unsigned k, CostType &retcost, uint64_t seed=0, const WFT *weights=static_cast<WFT *>(nullptr),
     size_t max_iter=100, double eps=1e-4)
 {
+    if constexpr(asn_method == HARD) {
+        if(retcost.size() != app.size()) retcost.resize(app.size());
+    } else {
+        // asn_method == SOFT || asn_method == SOFT_HARMONIC_MEAN
+        retcost.resize(app.size(), k);
+    }
+    assert(retcost.size() == app.size() || !std::fprintf(stderr, "retcost size: %zu. app size: %zu\n", retcost.size(), app.size()));
     if(co != EXTRINSIC) throw std::invalid_argument("Must be extrinsic for Lloyd's");
     using FT = ElementType_t<MatrixType>;
     auto &mat = app.data();
@@ -169,43 +178,60 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     const auto measure = app.get_measure();
     if(dist::detail::needs_logs(measure) || dist::detail::needs_sqrt(measure))
         centers_cache.resize(k);
-    double last_distance = std::numeric_limits<double>::max(), first_distance = last_distance,
-           center_distance;
-    PRETTY_SAY << "Beginning\n";
+    FT current_cost = std::numeric_limits<FT>::max(), first_cost = current_cost;
+    //PRETTY_SAY << "Beginning\n";
     LloydLoopResult ret = UNFINISHED;
     wy::WyRand<uint64_t> rng(seed);
     size_t iternum = 0;
-    auto get_center_change_distance = [&]() {
-        center_distance = std::accumulate(centers_cpy.begin(), centers_cpy.end(), 0.,
-            [&](double value, auto &center) {
-                auto ind = std::distance(&centers_cpy.front(), &center);
-                return value + blaze::sum(blaze::abs(center - centers[ind]));
-            }
-        );
-        PRETTY_SAY << "At iteration " << iternum << ", change in center distance is " << center_distance;
-        std::swap(centers_cpy, centers);
-        if(last_distance == std::numeric_limits<double>::max()) {
-            last_distance = first_distance = center_distance;
-            iternum = 1;
-            PRETTY_SAY << "First distance: " << first_distance << '\n';
-        } else {
-            last_distance = center_distance;
-            if(center_distance / first_distance < eps) {
-                ret = LloydLoopResult::FINISHED;
-                PRETTY_SAY << "Finished in " << iternum << " iterations\n";
-            } else if(++iternum >= max_iter) {
-                ret = LloydLoopResult::REACHED_MAX_ROUNDS;
-                PRETTY_SAY << "Finished in " << iternum << " iterations by reaching limit\n";
-            }
-        }
-    };
+    // HEY DANIEL WHEN YOU GET BACK HERE
+    // You are removing the center_distance
+    // and instead calculating the objective function
+    // and terminating when the change in objective function is less than eps * first cost.
     using cv_t = blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded, blaze::rowVector>;
     std::unique_ptr<cv_t> weight_cv;
     if(weights) {
         weight_cv.reset(new cv_t(const_cast<WFT *>(weights), npoints));
     }
     auto getcache = [&] (size_t j) {
-        return centers_cache.size() ? &centers_cache[j]: static_cast<decltype(&centers_cache[j])>(nullptr);
+        decltype(&centers_cache[j]) ret = nullptr;
+        if(centers_cache.size()) ret = &centers_cache[j];
+        return ret;
+    };
+    assert(centers_cache.empty() || getcache(0) == nullptr);
+    auto getcost = [&]() {
+        if constexpr(asn_method == HARD) {
+            return weight_cv ? blz::sum(retcost * *weight_cv): blz::sum(retcost);
+        } else {
+            if(weight_cv) {
+                auto ew = blaze::expand(*weight_cv, app.data().columns());
+                std::fprintf(stderr, "expanded weight shape: %zu/%zu. asn: %zu/%zu\n", ew.rows(), ew.columns(), assignments.rows(), assignments.columns());
+                return blaze::sum(assignments % retcost % ew);
+            } else {
+                return blaze::sum(assignments % retcost);
+            }
+        }
+    };
+    auto check = [&]() {
+        ++iternum;
+        if(first_cost == std::numeric_limits<FT>::max()) first_cost = getcost();
+        else {
+            FT itercost = getcost();
+            if(current_cost == std::numeric_limits<FT>::max()) {
+                current_cost = itercost;
+                assert(current_cost != std::numeric_limits<FT>::max());
+            } else {
+                if(std::abs(itercost - current_cost) < eps * first_cost) { // consider taking sign into account here
+                    PRETTY_SAY << "Itercost: " << itercost << " vs current " << current_cost << " with diff " << std::abs(itercost - current_cost)
+                               << "compared to first cost of " << first_cost << " with eps = " << eps << ".\n";
+                    return FINISHED;
+                }
+                if(iternum == max_iter)
+                    return REACHED_MAX_ROUNDS;
+            }
+            current_cost = itercost;
+        }
+        PRETTY_SAY << "iternum: " << iternum << '\n';
+        return UNFINISHED;
     };
     if constexpr(asn_method == HARD) {
         std::vector<std::vector<uint32_t>> assigned(k);
@@ -229,44 +255,51 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                         dist = newdist;
                     }
                 }
+                retcost[i] = dist;
                 assignments[i] = asn;
                 {
                     OMP_ONLY(std::unique_lock<std::mutex> lock(mutexes[asn]);)
                     assigned[asn].push_back(i);
                 }
             }
-            std::vector<size_t> centers_to_restart;
+            // Check termination condition
+            if(auto rc = check(); rc != UNFINISHED) {
+                ret = rc;
+                goto end;
+            }
+            blaze::SmallArray<uint32_t, 16> centers_to_restart;
             for(unsigned i = 0; i < k; ++i)
                 if(assigned[i].empty())
-                    centers_to_restart.push_back(i);
+                    centers_to_restart.pushBack(i);
             if(auto restartn = centers_to_restart.size()) {
                 // Use D^2 sampling to stayrt a new cluster
                 // And then restart the loop
-                blaze::DynamicVector<FT> ccosts(npoints, std::numeric_limits<FT>::max());
+                assert(retcost.size() == npoints);
+                retcost = std::numeric_limits<FT>::max();
                 OMP_PFOR
                 for(size_t i = 0; i < npoints; ++i) {
                     for(size_t j = 0; j < k; ++j) {
                         if(assigned[j].empty()) continue;
                         auto fc = app(i, centers[j], getcache(j), measure);
-                        if(fc < ccosts[i]) ccosts[i] = fc;
+                        if(fc < retcost[i]) retcost[i] = fc;
                     }
                 }
                 blaze::DynamicVector<FT> csum(npoints);
                 std::uniform_real_distribution<FT> urd;
                 for(size_t i = 0; i < restartn;) {
-                    std::partial_sum(ccosts.data(), ccosts.data() + ccosts.size(), csum.data());
+                    std::partial_sum(retcost.data(), retcost.data() + retcost.size(), csum.data());
                     auto newp = std::lower_bound(csum.data(), csum.data() + csum.size(), urd(rng) * csum[csum.size() - 1])
                                 - csum.data();
                     centers[centers_to_restart[i]] = row(app.data(), newp, blaze::unchecked);
                     if(++i != restartn) {
                         OMP_PFOR
                         for(size_t i = 0; i < npoints; ++i)
-                            ccosts[i] = std::min(ccosts[i], app(i, newp));
+                            retcost[i] = std::min(retcost[i], app(i, newp));
                     }
                 }
                 continue; // Reassign, re-center, and re-compute
             }
-            // Make assignments
+            // Make centers
             for(size_t i = 0; i < centers_cpy.size(); ++i) {
                 auto &cref = centers_cpy[i];
                 auto &assigned_ids = assigned[i];
@@ -282,12 +315,13 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                     CentroidPolicy::perform_average(cref, rowsel, sumsel,
                         static_cast<decltype(blaze::elements(*weight_cv, aidptr, nid)) *>(nullptr), measure
                     );
+                    //PRETTY_SAY << "Center " << i << " is " << cref << '\n';
+                    PRETTY_SAY << "Difference between previous center and new center is " << blz::sqrL2Dist(cref, centers[i]) << '\n';
                 }
             }
-            get_center_change_distance();
-            if(ret != UNFINISHED) goto end;
+            // Set the returned values to be the last iteration's.
+            centers = centers_cpy;
         }
-        // Set the returned values to be the last iteration's.
     } else {
         const size_t nc = centers.size(), nr = npoints;
         if(assignments.rows() != npoints || assignments.columns() != centers.size()) {
@@ -303,26 +337,32 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             for(auto &c: centers_cpy) c = static_cast<FT>(0);
             OMP_PFOR
             for(size_t i = 0; i < nr; ++i) {
-                auto row = blaze::row(assignments, i BLAZE_CHECK_DEBUG);
+                auto row = blaze::row(retcost, i BLAZE_CHECK_DEBUG);
                 for(unsigned j = 0; j < nc; ++j) {
                     row[j] = app(i, centers[j], getcache(j));
                 }
+                auto asnrow = blaze::row(assignments, i BLAZE_CHECK_DEBUG);
                 if constexpr(asn_method == SOFT_HARMONIC_MEAN) {
-                    row = 1. / row;
+                    asnrow = 1. / row;
                 } else {
                     auto mv = blaze::min(row);
-                    row = blaze::exp(-row + mv) - mv;
+                    asnrow = blaze::exp(-row + mv) - mv;
                 }
-                row *= 1. / blaze::sum(row);
-                // And then compute its contribution to the mean of the points.
-                // Use stable running mean calculation
+                asnrow *= 1. / blaze::sum(asnrow);
             }
             bool restart = false;
             for(size_t i = 0; i < centers.size(); ++i) {
-                if(blaze::sum(blaze::column(assignments, i)) == 0.)
+                if(blaze::sum(blaze::column(assignments, i)) == 0.) {
+                    restart = true;
                     throw TODOError("TODO: reassignment for support goes to 0");
+                }
             }
             if(restart) continue;
+            // Check termination condition
+            if(auto rc = check(); rc != UNFINISHED) {
+                ret = rc;
+                goto end;
+            }
             // Now points have been assigned, and we now perform center assignment
             CentroidPolicy::perform_soft_assignment(
                 assignments, app.row_sums(),
@@ -330,30 +370,32 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 app.data(), centers_cpy, weight_cv.get(), measure
             );
         }
-        get_center_change_distance();
-        if(ret != UNFINISHED) goto end;
-        throw NotImplementedError("Not yet finished");
+        std::swap(centers_cpy, centers);
     }
     end: {
         if(centers_cache.size()) {
             for(size_t i = 0; i < centers.size(); ++i)
                 dist::detail::set_cache(centers[i], centers_cache[i], measure);
         }
-        if constexpr(asn_method == HARD) {
+        if constexpr(asn_method != HARD) {
             OMP_PFOR
             for(size_t i = 0; i < npoints; ++i) {
-                const auto asn = assignments[i];
-                retcost[i] = app(i, centers[asn], getcache(asn), measure);
-            }
-        } else {
-            OMP_PFOR
-            for(size_t i = 0; i < npoints; ++i) {
-                for(size_t j = 0; j < centers.size(); ++j) {
-                    retcost(i, j) = app(i, centers[j], getcache(j), measure);
+                auto row = blaze::row(retcost, i BLAZE_CHECK_DEBUG);
+                for(unsigned j = 0; j < centers.size(); ++j) {
+                    row[j] = app(i, centers[j], getcache(j), measure);
                 }
+                auto asnrow = blaze::row(assignments, i BLAZE_CHECK_DEBUG);
+                if constexpr(asn_method == SOFT_HARMONIC_MEAN) {
+                    asnrow = 1. / row;
+                } else {
+                    auto mv = blaze::min(row);
+                    asnrow = blaze::exp(-row + mv) - mv;
+                }
+                asnrow *= 1. / blaze::sum(asnrow);
             }
         }
     }
+    DBG_ONLY(if(ret == FINISHED) PRETTY_SAY << "Completed Lloyd's loop in " << iternum << " iterations\n";)
     return ret;
 }
 
