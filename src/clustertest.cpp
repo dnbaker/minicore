@@ -24,7 +24,8 @@ blaze::DynamicMatrix<FT> parse_file(std::string path, unsigned *num_clusters) {
 }
 
 
-int main(int argc, char **argv) {
+template<bool is_hard>
+int metamain(int argc, char **argv) {
     int ret = 0;
     unsigned k;
     std::string inpath = "random.out";
@@ -35,7 +36,8 @@ int main(int argc, char **argv) {
               << pointmat.columns() << " columns, with k = " << k << " clusters\n";
     auto jsdapp = make_probdiv_applicator(pointmat, blz::SQRL2);
     std::cerr << "Made probdiv applicator\n";
-    auto clusterdata = clustering::perform_clustering<clustering::HARD, clustering::EXTRINSIC>(jsdapp, k);
+    auto clusterdata = clustering::perform_clustering<
+        is_hard ? clustering::HARD: clustering::SOFT, clustering::EXTRINSIC>(jsdapp, k);
     shared::flat_hash_map<uint32_t, shared::flat_hash_set<uint32_t>> labels, clabels;
     std::ifstream ifs(inpath + ".labels.txt");
     size_t lno = 0;
@@ -43,14 +45,20 @@ int main(int argc, char **argv) {
         labels[std::atoi(l.data())].insert(lno++);
     }
     auto &asn = std::get<1>(clusterdata);
-    for(size_t i = 0; i < asn.size(); ++i) {
-        clabels[asn[i]].insert(i);
+    if constexpr(is_hard) {
+        for(size_t i = 0; i < asn.size(); ++i) {
+            clabels[asn[i]].insert(i);
+        }
+        shared::flat_hash_set<uint32_t> sizes, csizes;
+        for(const auto &l: labels) sizes.insert(l.second.size());
+        for(const auto &l: clabels) csizes.insert(l.second.size());
+        std::cerr << "sizes size: " << sizes.size() << '\n';
+        std::cerr << "csizes size: " << csizes.size() << '\n';
+        assert(sizes.size() == csizes.size() && *sizes.begin() == *csizes.begin());
     }
-    shared::flat_hash_set<uint32_t> sizes, csizes;
-    for(const auto &l: labels) sizes.insert(l.second.size());
-    for(const auto &l: clabels) csizes.insert(l.second.size());
-    std::cerr << "sizes size: " << sizes.size() << '\n';
-    std::cerr << "csizes size: " << csizes.size() << '\n';
-    assert(sizes.size() == csizes.size() && *sizes.begin() == *csizes.begin());
     return ret;
+}
+
+int main(int argc, char **argv) {
+    return !(metamain<true>(argc, argv) == 0 && metamain<false>(argc, argv) == 0);
 }

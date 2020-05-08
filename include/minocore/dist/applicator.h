@@ -52,6 +52,7 @@ public:
         data_(ref), logdata_(nullptr), measure_(measure)
     {
         prep(prior, c);
+        MINOCORE_REQUIRE(dist::detail::is_valid_measure(measure_), "measure_ must be valid");
     }
     /*
      * Sets distance matrix, under measure_ (if not provided)
@@ -431,12 +432,17 @@ public:
         return ret;
     }
     template<typename OT, typename CacheT=OT, typename=std::enable_if_t<!std::is_integral_v<OT> > >
-    INLINE FT operator()(const OT &o, size_t i, const CacheT *cache=static_cast<CacheT *>(nullptr), DissimilarityMeasure measure=static_cast<DissimilarityMeasure>(-1)) const noexcept {
+    INLINE FT operator()(const OT &o, size_t i, const CacheT *cache=static_cast<CacheT *>(nullptr)) const noexcept {
+        return this->operator()(o, i, cache, measure_);
+    }
+    template<typename OT, typename CacheT=OT, typename=std::enable_if_t<!std::is_integral_v<OT> > >
+    INLINE FT operator()(const OT &o, size_t i, const CacheT *cache, DissimilarityMeasure measure) const noexcept {
+#ifndef NDEBUG
         if(unlikely(i >= data_.rows())) {
             std::cerr << (std::string("Invalid rows selection: ") + std::to_string(i) + '\n');
             std::exit(1);
         }
-        if(measure == static_cast<DissimilarityMeasure>(-1)) measure = measure_;
+#endif
         if(unlikely(measure == static_cast<DissimilarityMeasure>(-1))) {
             std::cerr << "Unset measure\n";
             std::exit(1);
@@ -472,7 +478,11 @@ public:
         }
     }
     template<typename OT, typename CacheT=OT, typename=std::enable_if_t<!std::is_integral_v<OT> > >
-    INLINE FT operator()(size_t i, const OT &o, const CacheT *cache=static_cast<CacheT *>(nullptr), DissimilarityMeasure measure=static_cast<DissimilarityMeasure>(-1)) const noexcept {
+    INLINE FT operator()(size_t i, const OT &o, const CacheT *cache=static_cast<CacheT *>(nullptr)) const {
+        return this->operator()(i, o, cache, measure_);
+    }
+    template<typename OT, typename CacheT=OT, typename=std::enable_if_t<!std::is_integral_v<OT> > >
+    INLINE FT operator()(size_t i, const OT &o, const CacheT *cache, DissimilarityMeasure measure) const noexcept {
         if(unlikely(i >= data_.rows())) {
             std::cerr << (std::string("Invalid rows selection: ") + std::to_string(i) + '\n');
             std::exit(1);
@@ -482,6 +492,7 @@ public:
             std::exit(1);
         }
 #if 0
+        PRETTY_SAY << "Computing i vs outside o with cache and " << detail::prob2str(measure) << "\n";
         PRETTY_SAY << "Performing with " 
             << " row " << i << " and " 
             << (void *)&o 

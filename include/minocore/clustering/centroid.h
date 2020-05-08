@@ -138,9 +138,9 @@ struct CentroidPolicy {
                     auto &cw = summed_contribs[j];
                     if(auto asnw = asn[j]; asnw > 0.) {
                         auto neww = item_weight * asnw;
-                        OMP_ONLY(if(mutptr) mutptr->lock();)
+                        OMP_ONLY(if(mutptr) mutptr[j].lock();)
                         __perform_increment(neww, cw, newcon[j], row(data, i, blz::unchecked), row_sum, measure);
-                        OMP_ONLY(if(mutptr) mutptr->unlock();)
+                        OMP_ONLY(if(mutptr) mutptr[j].unlock();)
                         OMP_ATOMIC
                         cw += neww;
                     }

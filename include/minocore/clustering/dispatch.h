@@ -202,6 +202,20 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         if constexpr(asn_method == HARD) {
             return weight_cv ? blz::sum(retcost * *weight_cv): blz::sum(retcost);
         } else {
+#ifndef NDEBUG
+            // Ensure that the assignments are as expected.
+            for(size_t i = 0; i < assignments.rows(); ++i) {
+                auto r(row(assignments, i));
+                auto cr(row(retcost, i));
+                auto maxi = std::max_element(r.begin(), r.end()) - r.begin();
+                auto mini = std::min_element(cr.begin(), cr.end()) - cr.begin();
+                //std::cerr << "mini: " << mini << '\n';
+                //std::cerr << "maxi: " << maxi << '\n';
+                assert(std::abs(blaze::sum(r) - 1.) < 1e-4);
+                assert(maxi == mini || r[maxi] == r[mini] || cr[mini] == cr[maxi]
+                      || &(std::cerr << r << '\n' << cr << '\n') == nullptr);
+            }
+#endif
             if(weight_cv) {
                 auto ew = blaze::expand(*weight_cv, app.data().columns());
                 std::fprintf(stderr, "expanded weight shape: %zu/%zu. asn: %zu/%zu\n", ew.rows(), ew.columns(), assignments.rows(), assignments.columns());
@@ -232,6 +246,29 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         }
         PRETTY_SAY << "iternum: " << iternum << '\n';
         return UNFINISHED;
+    };
+    auto soft_assignments = [&]() {
+        if constexpr(asn_method != HARD) {
+            OMP_PFOR
+            for(size_t i = 0; i < npoints; ++i) {
+                auto row = blaze::row(retcost, i BLAZE_CHECK_DEBUG);
+                for(unsigned j = 0; j < centers.size(); ++j) {
+                    row[j] = app(i, centers[j], getcache(j), measure);
+                }
+                auto asnrow = blaze::row(assignments, i BLAZE_CHECK_DEBUG);
+                if constexpr(asn_method == SOFT_HARMONIC_MEAN) {
+                    asnrow = 1. / row;
+                } else {
+                    auto mv = blaze::min(row);
+                    assert(mv >= 0.);
+                    asnrow = blaze::exp(-row + mv);
+                    assert(blaze::min(asnrow) >= 0.);
+                }
+                asnrow *= 1. / blaze::sum(asnrow);
+                assert(blaze::min(asnrow) >= 0.);
+                PRETTY_SAY << "row " << row << " yields " << asnrow << " with max " << blz::max(asnrow) << ", min " << blz::min(asnrow) <<'\n';
+            }
+        }
     };
     if constexpr(asn_method == HARD) {
         std::vector<std::vector<uint32_t>> assigned(k);
@@ -323,7 +360,6 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             centers = centers_cpy;
         }
     } else {
-        const size_t nc = centers.size(), nr = npoints;
         if(assignments.rows() != npoints || assignments.columns() != centers.size()) {
             assignments.resize(npoints, centers.size());
         }
@@ -335,29 +371,11 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                     dist::detail::set_cache(centers[i], centers_cache[i], measure);
             }
             for(auto &c: centers_cpy) c = static_cast<FT>(0);
-            OMP_PFOR
-            for(size_t i = 0; i < nr; ++i) {
-                auto row = blaze::row(retcost, i BLAZE_CHECK_DEBUG);
-                for(unsigned j = 0; j < nc; ++j) {
-                    row[j] = app(i, centers[j], getcache(j));
-                }
-                auto asnrow = blaze::row(assignments, i BLAZE_CHECK_DEBUG);
-                if constexpr(asn_method == SOFT_HARMONIC_MEAN) {
-                    asnrow = 1. / row;
-                } else {
-                    auto mv = blaze::min(row);
-                    asnrow = blaze::exp(-row + mv) - mv;
-                }
-                asnrow *= 1. / blaze::sum(asnrow);
-            }
-            bool restart = false;
-            for(size_t i = 0; i < centers.size(); ++i) {
-                if(blaze::sum(blaze::column(assignments, i)) == 0.) {
-                    restart = true;
+            soft_assignments();
+            assert(blz::sum(assignments) - assignments.rows() < 1e-3 * assignments.rows());
+            for(size_t i = 0; i < centers.size(); ++i)
+                if(blaze::sum(blaze::column(assignments, i)) == 0.)
                     throw TODOError("TODO: reassignment for support goes to 0");
-                }
-            }
-            if(restart) continue;
             // Check termination condition
             if(auto rc = check(); rc != UNFINISHED) {
                 ret = rc;
@@ -377,23 +395,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             for(size_t i = 0; i < centers.size(); ++i)
                 dist::detail::set_cache(centers[i], centers_cache[i], measure);
         }
-        if constexpr(asn_method != HARD) {
-            OMP_PFOR
-            for(size_t i = 0; i < npoints; ++i) {
-                auto row = blaze::row(retcost, i BLAZE_CHECK_DEBUG);
-                for(unsigned j = 0; j < centers.size(); ++j) {
-                    row[j] = app(i, centers[j], getcache(j), measure);
-                }
-                auto asnrow = blaze::row(assignments, i BLAZE_CHECK_DEBUG);
-                if constexpr(asn_method == SOFT_HARMONIC_MEAN) {
-                    asnrow = 1. / row;
-                } else {
-                    auto mv = blaze::min(row);
-                    asnrow = blaze::exp(-row + mv) - mv;
-                }
-                asnrow *= 1. / blaze::sum(asnrow);
-            }
-        }
+        soft_assignments();
     }
     DBG_ONLY(if(ret == FINISHED) PRETTY_SAY << "Completed Lloyd's loop in " << iternum << " iterations\n";)
     return ret;
@@ -493,6 +495,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
     // Delegate to solvers and set-up return values
     if(dist::detail::satisfies_d2(measure) || measure == dist::L1 || measure == dist::TOTAL_VARIATION_DISTANCE || co == EXTRINSIC) {
         auto [initcenters, initasn, initcosts] = jsd::make_kmeanspp(app, ct.k, ct.seed, ct.weights);
+        assert(initcenters.size() == k);
         if(co == INTRINSIC || opt == METRIC_KMEDIAN) {
             PRETTY_SAY << "Performing metric clustering\n";
             // Do graph metric calculation
@@ -503,6 +506,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
             PRETTY_SAY << "Setting centers with D2\n";
             for(const auto id: initcenters)
                 centers.emplace_back(row(app.data(), id));
+            assert(centers.size() == k);
             PRETTY_SAY << "Beginning lloyd loop\n";
             // Perform EM
             if(auto ret = perform_lloyd_loop<asn_method>(centers, assignments, app, k, costs, ct.seed, ct.weights, max_iter, eps))
