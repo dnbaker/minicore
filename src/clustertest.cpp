@@ -55,10 +55,24 @@ int metamain(int argc, char **argv) {
         std::cerr << "sizes size: " << sizes.size() << '\n';
         std::cerr << "csizes size: " << csizes.size() << '\n';
         assert(sizes.size() == csizes.size() && *sizes.begin() == *csizes.begin());
+        // TODO: ensure that items are correctly clustered
     }
     return ret;
 }
 
 int main(int argc, char **argv) {
-    return !(metamain<true>(argc, argv) == 0 && metamain<false>(argc, argv) == 0);
+    int rc;
+    if((rc = metamain<true>(argc, argv)))  return rc;
+    if((rc = metamain<false>(argc, argv))) return rc;
+    // Next: test Bregman clustering (HARD)
+    // Next: test Bregman clustering (SOFT)
+    // Next: test LLR (HARD)
+    // Next: test LLR (SOFT)
+    // Next: test TVD (HARD)
+    // Next: test TVD (SOFT)
+    // Next: test L1 (HARD)
+    // Next: test L1 (SOFT)
+    // Next: test metric k-median (universal dispatch)
+    throw std::runtime_error("Not completed!");
+    return rc;
 }

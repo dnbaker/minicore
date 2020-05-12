@@ -135,8 +135,10 @@
 
 #if !NDEBUG
 #  define DBG_ONLY(...) __VA_ARGS__
+#  define DBG_ELSE(x, y) x
 #else
 #  define DBG_ONLY(...)
+#  define DBG_ELSE(x, y) y
 #endif
 
 #if VERBOSE_AF

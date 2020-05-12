@@ -57,6 +57,7 @@ struct CentroidPolicy {
                 PRETTY_SAY << "PROB r dims: " << r.rows() << "/" << r.columns() << '\n';
                 PRETTY_SAY << "PROB mat2schur dims: " << mat2schur.rows() << "/" << mat2schur.columns() << '\n';
                 ~ret = blaze::sum<blz::columnwise>(r % blz::expand(~(*wc), r.columns())) * wsuminv;
+                assert(blaze::max(~ret) < 1. || !std::fprintf(stderr, "max in ret: %g for a probability distribution.", blaze::max(~ret)));
             }
         } else {
             PRETTY_SAY << "Unweighted, anything but L1 or LLR" << dist::detail::prob2str(measure) << '\n';
