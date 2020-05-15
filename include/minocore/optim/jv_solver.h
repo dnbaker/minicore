@@ -6,6 +6,7 @@
 #include <atomic>
 #include <mutex>
 #include <thread>
+#include "cpp-btree/btree/set.h"
 
 namespace minocore {
 
@@ -48,7 +49,8 @@ struct edgetup: public packed::triple<FT, IT, IT> {
 
 namespace jv {
 
-template<typename MatrixType, typename FT=blaze::ElementType_t<MatrixType>, typename IT=uint32_t>
+template<typename MatrixType, typename FT=blaze::ElementType_t<MatrixType>, typename IT=uint32_t,
+         template<typename, typename> class SortedSet=btree::set>
 struct JVSolver {
 
     static_assert(std::is_floating_point<FT>::value, "FT must be floating-point");
@@ -64,7 +66,7 @@ struct JVSolver {
             return lhs.first < rhs.first || lhs.second < rhs.second;
         }
     };
-    struct payment_queue: public std::set<payment_t, pay_compare_t> {
+    struct payment_queue: public SortedSet<payment_t, pay_compare_t> {
         void push(payment_t payment) {
             this->insert(payment);
         }
@@ -73,7 +75,7 @@ struct JVSolver {
             this->insert(start, end);
         }
         auto top() const {
-            if(this->empty()) throw std::runtime_error("Attempting to access an empty structure");
+            if(unlikely(this->empty())) throw std::runtime_error("Attempting to access an empty structure");
             return *this->begin();
         }
         void pop_top() {
@@ -586,7 +588,7 @@ public:
                 //DBG_ONLY(std::fprintf(stderr, "Trying to update by removing the next facility. Current in next_paid_ %zu\n", next_paid_.size());)
                 n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time);
                 time = next_fac.first;
-                if(current_n == next_paid_.size()) // If it wasn't removed
+                if(current_n == static_cast<size_t>(next_paid_.size())) // If it wasn't removed
                     next_paid_.pop_top();
                 //DBG_ONLY(std::fprintf(stderr, "n open: %zu. time: %0.12g. Now facilities left to pay: %zu\n", size_t(n_open_clients_), time, next_paid_.size());)
             } else {
