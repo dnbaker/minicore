@@ -24,9 +24,11 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
     std::unique_ptr<std::mutex[]> locks;
     OMP_ONLY(locks.reset(new std::mutex[np]);)
 
+    // Helper functions
+    // Update
     auto update_fwd = [&](FT d, size_t i, size_t j) {
         if(in_set[i] < k) {
-            std::lock_guard<std::mutex> lock(locks[i]);
+            OMP_ONLY(std::lock_guard<std::mutex> lock(locks[i]);)
             ret[i * k + in_set[i]] = packed::pair<FT, IT>{d, j};
             if(++in_set[i] == k) {
                 if(measure_is_dist)
@@ -35,29 +37,39 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
                     std::make_heap(ret.data() + i * k, ret.data() + (i + 1) * k, std::greater<void>());
             }
         } else {
-            if(measure_is_dist) {
-                if(ret[i * k].first > d) {
-                    std::lock_guard<std::mutex> lock(locks[i]);
-                    if(ret[i * k].first > d) {
-                        std::pop_heap(&ret[i * k], &ret[(i + 1) * k], std::less<void>());
-                        ret[(i + 1) * k - 1] = packed::pair<FT, IT>{d, j};
-                        std::push_heap(&ret[i * k], &ret[(i + 1) * k], std::less<void>());
-                    }
-                } 
-            } else {
-                if(ret[i * k].first < d) {
-                    std::lock_guard<std::mutex> lock(locks[i]);
-                    if(ret[i * k].first < d) {
-                        std::pop_heap(&ret[i * k], &ret[(i + 1) * k], std::greater<void>());
-                        ret[(i + 1) * k - 1] = packed::pair<FT, IT>{d, j};
-                        std::push_heap(&ret[i * k], &ret[(i + 1) * k], std::less<void>());
-                    }
-                } 
+            auto cmp = [&](auto d) {return measure_is_dist ? (ret[i * k].first > d) : (ret[i * k].first < d);};
+            auto pushpop = [&](auto d) {
+                auto startp = &ret[i * k];
+                auto stopp = startp + k;
+                if(measure_is_dist) std::pop_heap(startp, stopp, std::less<void>());
+                                    std::pop_heap(startp, stopp, std::greater<void>());
+                ret[(i + 1) * k - 1] = packed::pair<FT, IT>{d, j};
+                if(measure_is_dist) std::push_heap(startp, stopp, std::less<void>());
+                                    std::push_heap(startp, stopp, std::greater<void>());
+            };
+            if(cmp(d)) {
+#ifdef _OPENMP
+                std::lock_guard<std::mutex> lock(locks[i]);
+#endif
+                {
+                    OMP_ONLY(if(cmp(d)))
+                        pushpop(d);
+                }
+            
             }
         }
     };
 
-    // Helper functions
+    // Sort
+    auto perform_sort = [&](auto ptr) {
+        auto end = ptr + k;
+        if(measure_is_dist)
+            shared::sort(ptr, end, std::less<>());
+        else
+            shared::sort(ptr, end, std::greater<>());
+        ptr = end;
+    };
+    auto ptr = ret.data();
     if(measure_is_sym) {
         OMP_PFOR
         for(size_t i = 0; i < np; ++i) {
@@ -66,6 +78,8 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
                 update_fwd(d, i, j);
                 update_fwd(d, j, i);
             }
+            perform_sort(ptr);
+            std::fprintf(stderr, "[Symmetric:%s] Completed %zu/%zu\n", blz::detail::prob2str(measure), i + 1, np);
         }
     } else {
         OMP_PFOR
@@ -73,16 +87,11 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
             for(size_t j = 0; j < np; ++j) {
                 update_fwd(app(i, j), i, j);
             }
+            perform_sort(ptr);
+            std::fprintf(stderr, "[Asymmetric:%s] Completed %zu/%zu\n", blz::detail::prob2str(measure), i + 1, np);
         }
     }
-    OMP_PFOR
-    for(size_t i = 0; i < np; ++i) {
-        auto start = ret.data() + i * k, end = start + k;
-        if(measure_is_dist)
-            shared::sort(start, end, std::less<>());
-        else
-            shared::sort(start, end, std::greater<>());
-    }
+    std::fprintf(stderr, "Created knn graph for k = %u and %zu points\n", k, np);
     return ret;
 }
 
@@ -92,28 +101,12 @@ auto knns2graph(const std::vector<packed::pair<FT, IT>> &knns, size_t np, bool m
     MINOCORE_REQUIRE(knns.size(), "nonempty");
     unsigned k = knns.size() / np;
     graph::Graph<boost::undirectedS, FT> ret(np);
-    if(mutual) {
-        std::unique_ptr<FT[]> mxds(new FT[np]);
-        OMP_PFOR
-        for(size_t i = 0; i < np; ++i)
-            mxds[i] = knns[(i + 1) * k - 1].first;
-        for(size_t i = 0; i < np; ++i) {
-            auto p = &knns[i * k];
-            SK_UNROLL_8
-            for(unsigned j = 0; i < k; ++j) {
-                FT d = p[j].first;
-                IT ind = p[j].second;
-                if(d <= mxds[ind])
-                    boost::add_edge(i, static_cast<size_t>(ind), d, ret);
-            }
-        }
-    } else {
-        for(size_t i = 0; i < np; ++i) {
-            auto p = &knns[i * k];
-            SK_UNROLL_4
-            for(unsigned j = 0; i < k; ++j)
+    for(size_t i = 0; i < np; ++i) {
+        auto p = &knns[i * k];
+        SK_UNROLL_8
+        for(unsigned j = 0; j < k; ++j)
+            if(!mutual || p[j].first <= knns[(p[j].second + 1) * k - 1].first)
                 boost::add_edge(i, static_cast<size_t>(p[j].second), p[j].first, ret);
-        }
     }
     return ret;
 }
