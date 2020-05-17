@@ -7,4 +7,6 @@ int main() {
     auto app = minocore::jsd::make_probdiv_applicator(mat, blz::distance::L1);
     auto knns = minocore::make_knns(app, 10);
     auto graph = minocore::knns2graph(knns, app.size(), true);
+    auto mst = minocore::knng2mst(graph);
+    std::fprintf(stderr, "mst size: %zu edges vs %zu nodes\n", mst.size(), app.size());
 }
