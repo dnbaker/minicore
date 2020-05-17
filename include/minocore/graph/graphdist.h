@@ -37,14 +37,10 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
         }
 #endif
         blaze::DynamicMatrix<float> working_space(nt, boost::num_vertices(x));
-#ifndef USE_BOOST_PARALLEL
         OMP_PFOR
-#endif
         for(size_t i = 0; i < nrows; ++i) {
             unsigned rowid = 0;
-#if !defined(USE_BOOST_PARALLEL)
             OMP_ONLY(rowid = omp_get_thread_num();)
-#endif
             auto vtx = all_sources ? vertices[i]: (*sources)[i];
             auto wrow(row(working_space, rowid BLAZE_CHECK_DEBUG));
             boost::dijkstra_shortest_paths(x, vtx, boost::distance_map(&wrow[0]));
@@ -56,14 +52,7 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
         }
     } else {
         assert(ncol == boost::num_vertices(x));
-#ifndef NDEBUG
-        if(all_sources) {
-            assert(boost::num_vertices(x) == nrows);
-        }
-#endif
-#ifndef USE_BOOST_PARALLEL
         OMP_PFOR
-#endif
         for(size_t i = 0; i < nrows; ++i) {
             auto mr = row(~mat, i BLAZE_CHECK_DEBUG);
             auto vtx = all_sources || sources == nullptr ? vertices[i]: (*sources)[i];

@@ -95,7 +95,6 @@ namespace detail {
  *
  */
 
-
 static constexpr INLINE bool is_bregman(DissimilarityMeasure d)  {
     switch(d) {
         case JSD: case MKL: case POISSON: case ITAKURA_SAITO:
@@ -175,6 +174,16 @@ static constexpr bool expects_nonnegative(DissimilarityMeasure measure) {
         return true;
         
     }
+}
+
+static constexpr INLINE bool is_dissimilarity(DissimilarityMeasure d) {
+    switch(d) {
+        case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+        case COSINE_SIMILARITY:      case PROBABILITY_COSINE_DISTANCE:
+            return false;
+        default: ;
+    }
+    return true;
 }
 
 
