@@ -1,4 +1,5 @@
 #include "minocore/graph.h"
+#include "minocore/util/packed.h"
 #include "minocore/dist/applicator.h"
 
 namespace minocore {
@@ -15,10 +16,10 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
         k = app.size();
     }
     const size_t np = app.size();
-    const DissimilarityMeasure measure = app.get_measure();
-    std::vector<packed::pair<FT, IT>> ret(k * np, static_cast<IT>(-1));
+    const jsd::DissimilarityMeasure measure = app.get_measure();
+    std::vector<packed::pair<FT, IT>> ret(k * np);
     std::vector<unsigned> in_set(np);
-    const bool measure_is_sym = detail::is_symmetric(measure);
+    const bool measure_is_sym = blz::detail::is_symmetric(measure);
     const bool measure_is_dist = measure_is_dist;
     std::unique_ptr<std::mutex[]> locks;
     OMP_ONLY(locks.reset(new std::mutex[np]);)
@@ -90,8 +91,9 @@ auto knns2graph(const std::vector<packed::pair<FT, IT>> &knns, size_t np, bool m
     MINOCORE_REQUIRE(knns.size() % np == 0, "sanity");
     MINOCORE_REQUIRE(knns.size(), "nonempty");
     unsigned k = knns.size() / np;
-    graph::Graph<FT> ret(np);
+    graph::Graph<boost::undirectedS, FT> ret(np);
     if(mutual) {
+        std::unique_ptr<FT[]> mxds(new FT[np]);
         OMP_PFOR
         for(size_t i = 0; i < np; ++i)
             mxds[i] = knns[(i + 1) * k - 1].first;
@@ -102,7 +104,7 @@ auto knns2graph(const std::vector<packed::pair<FT, IT>> &knns, size_t np, bool m
                 FT d = p[j].first;
                 IT ind = p[j].second;
                 if(d <= mxds[ind])
-                    boost::add_edge(i, ind, d, ret);
+                    boost::add_edge(i, static_cast<size_t>(ind), d, ret);
             }
         }
     } else {
@@ -110,10 +112,15 @@ auto knns2graph(const std::vector<packed::pair<FT, IT>> &knns, size_t np, bool m
             auto p = &knns[i * k];
             SK_UNROLL_4
             for(unsigned j = 0; i < k; ++j)
-                boost::add_edge(i, p[j].second, p[j].first, ret);
+                boost::add_edge(i, static_cast<size_t>(p[j].second), p[j].first, ret);
         }
     }
     return ret;
+}
+
+template<typename IT=uint32_t, typename MatrixType>
+auto make_knn_graph(const jsd::DissimilarityApplicator<MatrixType> &app, unsigned k, bool mutual=true) {
+    return knns2graph(make_knns(app, k), app.size(), mutual);
 }
 
 
