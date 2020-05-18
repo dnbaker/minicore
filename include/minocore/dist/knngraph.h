@@ -1,6 +1,7 @@
 #include "minocore/graph.h"
 #include "minocore/util/packed.h"
 #include "minocore/dist/applicator.h"
+#include "minocore/hash/hash.h"
 #include <boost/graph/kruskal_min_spanning_tree.hpp>
 
 namespace minocore {
@@ -49,14 +50,11 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
                                     std::push_heap(startp, stopp, std::greater<void>());
             };
             if(cmp(d)) {
-#ifdef _OPENMP
-                std::lock_guard<std::mutex> lock(locks[i]);
-#endif
+                OMP_ONLY(std::lock_guard<std::mutex> lock(locks[i]);)
                 {
                     OMP_ONLY(if(cmp(d)))
                         pushpop(d);
                 }
-            
             }
         }
     };
@@ -96,8 +94,98 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
     return ret;
 }
 
+template<typename IT=uint32_t, typename MatrixType, typename Hasher, typename IT2=IT, typename KT>
+std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>>
+make_knns_by_lsh(const jsd::DissimilarityApplicator<MatrixType> &app, hash::LSHTable<Hasher, IT2, KT> &table, unsigned k, unsigned maxlshcmp=0)
+{
+    if(!maxlshcmp) maxlshcmp = 10 * k;
+    using FT = blaze::ElementType_t<MatrixType>;
+    static_assert(std::is_integral_v<IT>, "Sanity");
+    static_assert(std::is_floating_point_v<FT>, "Sanity");
+
+    MINOCORE_REQUIRE(std::numeric_limits<IT>::max() > app.size(), "sanity check");
+    if(k > app.size()) {
+        std::fprintf(stderr, "Note: make_knn_graph was provided k (%u) > # points (%zu).\n", k, app.size());
+        k = app.size();
+    }
+    const size_t np = app.size();
+    const jsd::DissimilarityMeasure measure = app.get_measure();
+    std::vector<packed::pair<FT, IT>> ret(k * np);
+    std::vector<unsigned> in_set(np);
+    const bool measure_is_sym = blz::detail::is_symmetric(measure);
+    const bool measure_is_dist = measure_is_dist;
+    std::unique_ptr<std::mutex[]> locks;
+    OMP_ONLY(locks.reset(new std::mutex[np]);)
+    table.add(app.data());
+    table.sort();
+
+
+    auto update_fwd = [&](FT d, size_t i, size_t j) {
+        if(in_set[i] < k) {
+            OMP_ONLY(std::lock_guard<std::mutex> lock(locks[i]);)
+            ret[i * k + in_set[i]] = packed::pair<FT, IT>{d, j};
+            if(++in_set[i] == k) {
+                if(measure_is_dist)
+                    std::make_heap(ret.data() + i * k, ret.data() + (i + 1) * k, std::less<void>());
+                else
+                    std::make_heap(ret.data() + i * k, ret.data() + (i + 1) * k, std::greater<void>());
+            }
+        } else {
+            auto cmp = [&](auto d) {return measure_is_dist ? (ret[i * k].first > d) : (ret[i * k].first < d);};
+            auto pushpop = [&](auto d) {
+                auto startp = &ret[i * k];
+                auto stopp = startp + k;
+                std::pop_heap(startp, stopp, std::less<void>());
+                ret[(i + 1) * k - 1] = packed::pair<FT, IT>{d, j};
+                std::push_heap(startp, stopp, std::less<void>());
+            };
+            if(cmp(d)) {
+                OMP_ONLY(std::lock_guard<std::mutex> lock(locks[i]);)
+                {
+                    OMP_ONLY(if(cmp(d)))
+                        pushpop(d);
+                }
+            }
+        }
+    };
+
+    // Sort
+    auto ptr = ret.data();
+    MINOCORE_VALIDATE(maxlshcmp <= k);
+    OMP_PFOR
+    for(size_t i = 0; i < np; ++i) {
+        auto tk = table.topk(row(app.data(), i, blaze::unchecked), maxlshcmp);
+        for(const auto &pair: tk) {
+            if(pair.first != i) {
+                auto d = app(i, pair.first);
+                update_fwd(d, i, pair.first);
+                update_fwd(d, pair.first, i);
+            }
+        }
+    }
+    size_t number_exhaustive = 0;
+    for(size_t i = 0; i < np; ++i) {
+        if(in_set[i] >= k) continue;
+        ++number_exhaustive;
+        std::fprintf(stderr, "Warning: LSH table returned < k (%d) neighbors (only %d compared). Performing exhaustive comparisons for item %zu\n",
+                     k, in_set[i], i);
+        OMP_PFOR
+        for(size_t j = (measure_is_sym ? i + 1: size_t(0)); j < np; ++j) {
+            if(unlikely(j == i)) continue;
+            auto d = app(i, j);
+            update_fwd(d, i, j);
+            update_fwd(d, j, i);
+        }
+    }
+    if(number_exhaustive)
+        std::fprintf(stderr, "Performed quadratic distance comparisons with %zu/%zu items\n",
+                     number_exhaustive, np);
+    std::fprintf(stderr, "Created knn graph for k = %u and %zu points\n", k, np);
+    return ret;
+}
+
 template<typename IT=uint32_t, typename FT=float>
-auto knns2graph(const std::vector<packed::pair<FT, IT>> &knns, size_t np, bool mutual=true) {
+auto knns2graph(const std::vector<packed::pair<FT, IT>> &knns, size_t np, bool mutual=true, bool symmetric=true) {
     MINOCORE_REQUIRE(knns.size() % np == 0, "sanity");
     MINOCORE_REQUIRE(knns.size(), "nonempty");
     unsigned k = knns.size() / np;
@@ -105,18 +193,27 @@ auto knns2graph(const std::vector<packed::pair<FT, IT>> &knns, size_t np, bool m
     for(size_t i = 0; i < np; ++i) {
         auto p = &knns[i * k];
         SK_UNROLL_8
-        for(unsigned j = 0; j < k; ++j)
-            // This assumes that the distance is symmetric. TODO: correct this assumption.
-            if(!mutual || p[j].first <= knns[(p[j].second + 1) * k - 1].first)
-                boost::add_edge(i, static_cast<size_t>(p[j].second), p[j].first, ret);
+        for(unsigned j = 0; j < k; ++j) {
+            if(mutual) {
+                if(symmetric) {
+                    if(p[j].first > knns[k * (p[j].second + 1) * k - 1].first)
+                        continue;
+                } else {
+                    // More expensive (O(k) vs O(1)), but does not require the assumption of symmetry.
+                    auto start = knns.data() + p[j].second * k, stop = start + k;
+                    if(std::find_if(start, stop, [i](auto x) {return x.second == i;})== stop)
+                        continue;
+                }
+            }
+            boost::add_edge(i, static_cast<size_t>(p[j].second), p[j].first, ret);
+        }
     }
     return ret;
 }
 
 template<typename IT=uint32_t, typename MatrixType>
 auto make_knn_graph(const jsd::DissimilarityApplicator<MatrixType> &app, unsigned k, bool mutual=true) {
-    assert(blz::detail::is_symmetric(app.get_measure()));
-    return knns2graph(make_knns(app, k), app.size(), mutual);
+    return knns2graph(make_knns(app, k), app.size(), mutual, blz::detail::is_symmetric(app.get_measure()));
 }
 
 template<typename IT=uint32_t, typename Graph>
