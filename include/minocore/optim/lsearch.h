@@ -345,7 +345,7 @@ struct LocalKMedSearcher {
                 }
                 assert(sol_.size() == k_);
                 // Only calculate exhaustively if the lazy form returns yes.
-                if(val > diffthresh_ && (val = evaluate_swap(potential_index, oldcenter) > diffthresh_)) {
+                if(val > diffthresh_ && (val = evaluate_swap(potential_index, oldcenter)) > diffthresh_) {
                     assert(sol_.size() == k_);
                     sol_.erase(oldcenter);
                     sol_.insert(potential_index);
@@ -353,7 +353,7 @@ struct LocalKMedSearcher {
                     assign();
                     //current_cost_ = blaze::sum(current_costs_);
                     ++total;
-                    std::fprintf(stderr, "Swap number %zu updated with delta %g to new cost with cost %0.12g\n", total, val, current_cost_);
+                    std::fprintf(stderr, "Swap number %zu updated with delta %.12g to new cost with cost %0.12g\n", total, val, current_cost_);
                     goto next;
                 }
             }
