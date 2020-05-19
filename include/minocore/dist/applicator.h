@@ -652,6 +652,7 @@ public:
             auto lhrsimul = lhrsi * prior_data_->operator[](0);
             auto rhrsimul = rhrsi * prior_data_->operator[](0);
             if(prior_data_->size() == 1) {
+                std::fprintf(stderr, "prior size is 1\n");
                 size_t shared_zeros = 0;
                 for(;;) {
                     if(lhit->index() == rhit->index()) {
@@ -668,21 +669,27 @@ public:
                         if(++rhit == rhe) break;
                     }
                 }
+                std::fprintf(stderr, "Finished loop. lhit is end? %d rhit is ind? %d\n", lhit == lhe, rhit == rhe);
                 while(lhit != lhe) {
+                    std::fprintf(stderr, "Handling next lhit\n");
                     size_t cind = lhit->index();
                     ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
                     size_t nextind = ++lhit == lhe ? data().columns(): lhit->index();
                     shared_zeros += nextind - cind - 1;
                 }
+                std::fprintf(stderr, "Handled all lhit\n");
                 while(rhit != rhe) {
+                    std::fprintf(stderr, "Handling next rhit\n");
                     size_t cind = rhit->index();
                     ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
                     size_t nextind = ++rhit == rhe ? data().columns(): rhit->index();
                     shared_zeros += nextind - cind - 1;
                 }
+                std::fprintf(stderr, "Handled all lhit\n");
                 FT sump = (lhrsimul + rhrsimul);
                 ret -= shared_zeros * (sump * std::log(.5 * (sump)));
             } else {
+                std::fprintf(stderr, "Fanciest\n");
                 // This could later be accelerated, but that kind of caching is more complicated.
                 auto &pd = *prior_data_;
                 for(;;) {
@@ -705,24 +712,24 @@ public:
                         }
                         if(++rhit == rhe) break;
                     }
-                    // Remaining entries
-                    while(rhit != rhe) {
-                        ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
-                        size_t nextind;
-                        if(++lhit == lhe) nextind = data().columns();
-                        else nextind = lhit->index();
-                        for(size_t i = 0; i < nextind; ++i) {
-                            auto sv = pd[i] * (lhrsi + rhrsi);
-                            ret -= sv * std::log(.5 * sv);
-                        }
+                }
+                // Remaining entries
+                while(rhit != rhe) {
+                    ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
+                    size_t nextind;
+                    if(++lhit == lhe) nextind = data().columns();
+                    else nextind = lhit->index();
+                    for(size_t i = 0; i < nextind; ++i) {
+                        auto sv = pd[i] * (lhrsi + rhrsi);
+                        ret -= sv * std::log(.5 * sv);
                     }
-                    while(rhit != rhe) {
-                        ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
-                        const size_t nextind = (++rhit == rhe) ? data().columns(): rhit->index();
-                        for(size_t i = 0; i < nextind; ++i) {
-                            auto sv = pd[i] * (rhrsi + lhrsi);
-                            ret -= sv * std::log(.5 * sv);
-                        }
+                }
+                while(rhit != rhe) {
+                    ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
+                    const size_t nextind = (++rhit == rhe) ? data().columns(): rhit->index();
+                    for(size_t i = 0; i < nextind; ++i) {
+                        auto sv = pd[i] * (rhrsi + lhrsi);
+                        ret -= sv * std::log(.5 * sv);
                     }
                 }
             }
@@ -943,15 +950,13 @@ private:
                 if constexpr(!IsSparseMatrix_v<MatrixType>) {
                     data_ += static_cast<FT>(1);
                 } else {
-                    prior_data_.reset(new VecT(data_.columns()));
-                    (*prior_data_)[0] = static_cast<FT>(1);
+                    prior_data_.reset(new VecT({FT(1)}));
                 }
                 break;
             case GAMMA_BETA:
                 if(c == nullptr) throw std::invalid_argument("Can't do gamma_beta with null pointer");
                 if constexpr(IsSparseMatrix_v<MatrixType>) {
-                    prior_data_.reset(new VecT(data_.columns()));
-                    (*prior_data_)[0] = (*c)[0];
+                    prior_data_.reset(new VecT({(*c)[0]}));
                 } else if constexpr(IsDenseMatrix_v<MatrixType>) {
                     data_ += (*c)[0];
                 }
