@@ -87,12 +87,10 @@ int main(int argc, char *argv[]) {
     timer.restart("1ksparsekl");
     jsd2.set_distance_matrix(jsd_bnj, minocore::jsd::MKL, true);
     timer.report();
-    std::cout << "Multinomial KL\n" << '\n';
     //std::cout << jsd_bnj << '\n';
     timer.restart("1ksparseL1");
-    jsd2.set_distance_matrix(jsd_bnj, minocore::jsd::EMD, true);
+    jsd2.set_distance_matrix(jsd_bnj, minocore::jsd::L1, true);
     timer.report();
-    std::cout << "EMD: " << jsd_bnj << '\n';
 #if 0
     timer.restart("1ldensejsd");
     blz::DM<FLOAT_TYPE> densefirst25 = first25;
@@ -103,8 +101,8 @@ int main(int argc, char *argv[]) {
     //ofs << jsd_bnj << '\n';
     ofs.flush();
     std::fprintf(stderr, "Starting jsm\n");
-    timer.restart("1ksparsejsm");
-    jsd2.set_distance_matrix(jsd_bnj, minocore::jsd::L1);
+    timer.restart("1ksparsetvd");
+    jsd2.set_distance_matrix(jsd_bnj, minocore::jsd::TVD);
     timer.report();
     timer.reset();
     ofs << "JS Metric: \n";
