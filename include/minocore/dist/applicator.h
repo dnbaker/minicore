@@ -1011,6 +1011,7 @@ public:
 private:
     template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>
     void prep(Prior prior, const Container *c=nullptr) {
+        std::fprintf(stderr, "beginning prep.\n");
         switch(prior) {
             case NONE:
             break;
@@ -1042,8 +1043,8 @@ private:
         }
         row_sums_.resize(data_.rows());
         {
-            auto rowsumit = row_sums_.data();
-            for(auto r: blz::rowiterator(data_)) {
+            for(size_t i = 0; i < data_.rows(); ++i) {
+                auto r(row(data_, i));
                 FT countsum = blaze::sum(r);
                 if constexpr(blaze::IsDenseMatrix_v<MatrixType>) {
                     if(prior == NONE) {
@@ -1054,20 +1055,22 @@ private:
 #endif
                     }
                 } else if constexpr(blaze::IsSparseMatrix_v<MatrixType>) {
-                    bool single_value = prior_data_->size() == 1;
-                    if(prior == DIRICHLET) {
-                        countsum += r.size();
-                    } else {
-                        MINOCORE_VALIDATE(prior_data_ != nullptr);
-                        countsum += single_value ? r.size() * *prior_data_->begin()
-                                                 : blaze::sum(*prior_data_);
+                    if(prior_data_) {
+                        bool single_value = prior_data_->size() == 1;
+                        if(prior == DIRICHLET) {
+                            countsum += r.size();
+                        } else {
+                            MINOCORE_VALIDATE(prior_data_ != nullptr);
+                            countsum += single_value ? r.size() * *prior_data_->begin()
+                                                     : blaze::sum(*prior_data_);
+                        }
+                        for(auto &item: r)
+                            item.value() +=
+                                (*prior_data_)[single_value ? size_t(0): item.index()];
                     }
-                    for(auto &item: r)
-                        item.value() +=
-                            (*prior_data_)[single_value ? size_t(0): item.index()];
                 }
                 r /= countsum;
-                *rowsumit++ = countsum;
+                row_sums_[i] = countsum;
             }
         }
 
