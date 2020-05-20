@@ -674,7 +674,6 @@ public:
                 //std::fprintf(stderr, "Handled all lhit\n");
                 const FT sump = (lhrsimul + rhrsimul);
                 ret -= blz::number_shared_zeros(lhr, rhr) * (sump * std::log(.5 * (sump)));
-                //ret -= (dim - nonZeros(lhr + rhr)) * (sump * std::log(.5 * (sump)));
             } else {
                 std::fprintf(stderr, "Fanciest\n");
                 // This could later be accelerated, but that kind of caching is more complicated.
@@ -1061,11 +1060,11 @@ private:
                     for(size_t i = 0; i < data_.rows(); ++i) {
                         const auto rs = row_sums_[i];
                         auto r = row(i);
-                        size_t number_zero = r.size() - blaze::nonZeros(r);
                         double contrib = 0.;
                         auto upcontrib = [&](auto x) {contrib += x * std::log(x);};
                         if(single_value) {
                             FT invp = pd[0] / rs;
+                            size_t number_zero = r.size() - nonZeros(r);
                             contrib += number_zero * (invp * std::log(invp)); // Empty
                             for(auto &pair: r) upcontrib(pair.value());       // Non-empty
                         } else {
