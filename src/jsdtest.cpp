@@ -8,6 +8,16 @@ using namespace blz;
 #define FLOAT_TYPE double
 #endif
 
+#ifndef INDICESTYPE
+#define INDICESTYPE uint64_t
+#endif
+#ifndef INDPTRTYPE
+#define INDPTRTYPE uint64_t
+#endif
+#ifndef DATATYPE
+#define DATATYPE uint32_t
+#endif
+
 int main(int argc, char *argv[]) {
     if(std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0 || std::strcmp(x, "--help") == 0;})
        != argv + argc) {
@@ -21,7 +31,7 @@ int main(int argc, char *argv[]) {
         input = argv[3];
     std::ofstream ofs("output.txt");
     auto sparsemat = input.size() ? minocore::mtx2sparse<FLOAT_TYPE>(input)
-                                  : minocore::csc2sparse<FLOAT_TYPE>("", true);
+                                  : minocore::csc2sparse<FLOAT_TYPE, INDPTRTYPE, INDICESTYPE, DATATYPE>("", true);
     std::vector<unsigned> nonemptyrows;
     size_t i = 0;
     while(nonemptyrows.size() < 25) {

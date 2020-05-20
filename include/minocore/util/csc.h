@@ -43,7 +43,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
     size_t used_rows = 0, i;
     for(i = 0; i < mat.n_; ++i) {
         auto col = mat.column(i);
-        if(mat.n_ > 1000000 && i % 1000000 == 0) std::fprintf(stderr, "%zu/%u\r", i, mat.n_);
+        if(mat.n_ > 100000 && i % 10000 == 0) std::fprintf(stderr, "%zu/%u\r", i, mat.n_);
         if(skip_empty && 0u == col.nnz()) continue;
         for(auto s = col.start_; s < col.stop_; ++s) {
             ret.append(used_rows, mat.indices_[s], mat.data_[s]);
