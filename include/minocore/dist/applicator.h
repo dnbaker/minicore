@@ -1044,7 +1044,7 @@ private:
         row_sums_.resize(data_.rows());
         {
             for(size_t i = 0; i < data_.rows(); ++i) {
-                auto r(row(data_, i));
+                auto r(row(i));
                 FT countsum = blaze::sum(r);
                 if constexpr(blaze::IsDenseMatrix_v<MatrixType>) {
                     if(prior == NONE) {
