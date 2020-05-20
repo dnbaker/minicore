@@ -66,7 +66,7 @@ int main(int c, char **a) {
     manstop = t();
     std::fprintf(stderr, "Manual l1 distances time: %zu/%g. reduction-based: %zu/%g\n", size_t((stop - start).count() / 1000), cwmed, size_t((manstop - manstart).count() / 1000), cwmed2);
     auto l1_approx_start = t();
-    minocore::coresets::l1_median(m, v3, static_cast<const float *>(nullptr), true);
+    minocore::coresets::l1_median(m, v3, static_cast<const float *>(nullptr));
     auto l1_approx_stop = t();
     std::fprintf(stderr, "Time to compute exact l1 median: %gms. Approx: %gms.\n", (l1_stop - l1_start).count() * 1.e-6, (l1_approx_stop - l1_approx_start).count() * 1.e-6);
     std::cout << "L1 dist under geomedian: " << l1dist(m, v) << '\n';

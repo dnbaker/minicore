@@ -8,6 +8,16 @@ using namespace blz;
 #define FLOAT_TYPE double
 #endif
 
+#ifndef INDICESTYPE
+#define INDICESTYPE uint64_t
+#endif
+#ifndef INDPTRTYPE
+#define INDPTRTYPE uint64_t
+#endif
+#ifndef DATATYPE
+#define DATATYPE uint32_t
+#endif
+
 int main(int argc, char *argv[]) {
     if(std::find_if(argv, argv + argc, [](auto x) {return std::strcmp(x, "-h") == 0 || std::strcmp(x, "--help") == 0;})
        != argv + argc) {
@@ -21,7 +31,7 @@ int main(int argc, char *argv[]) {
         input = argv[3];
     std::ofstream ofs("output.txt");
     auto sparsemat = input.size() ? minocore::mtx2sparse<FLOAT_TYPE>(input)
-                                  : minocore::csc2sparse<FLOAT_TYPE>("", true);
+                                  : minocore::csc2sparse<FLOAT_TYPE, INDPTRTYPE, INDICESTYPE, DATATYPE>("", true);
     std::vector<unsigned> nonemptyrows;
     size_t i = 0;
     while(nonemptyrows.size() < 25) {
@@ -30,7 +40,7 @@ int main(int argc, char *argv[]) {
         ++i;
     }
     blz::SM<FLOAT_TYPE> first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
-    auto jsd = minocore::jsd::make_jsm_applicator(first25);
+    auto jsd = minocore::jsd::make_probdiv_applicator(first25, jsd::JSM, jsd::DIRICHLET);
     //auto jsddistmat = jsd.make_distance_matrix();
     dm::DistanceMatrix<FLOAT_TYPE> utdm(first25.rows());
     jsd.set_distance_matrix(utdm);
@@ -77,12 +87,10 @@ int main(int argc, char *argv[]) {
     timer.restart("1ksparsekl");
     jsd2.set_distance_matrix(jsd_bnj, minocore::jsd::MKL, true);
     timer.report();
-    std::cout << "Multinomial KL\n" << '\n';
     //std::cout << jsd_bnj << '\n';
     timer.restart("1ksparseL1");
-    jsd2.set_distance_matrix(jsd_bnj, minocore::jsd::EMD, true);
+    jsd2.set_distance_matrix(jsd_bnj, minocore::jsd::L1, true);
     timer.report();
-    std::cout << "EMD: " << jsd_bnj << '\n';
 #if 0
     timer.restart("1ldensejsd");
     blz::DM<FLOAT_TYPE> densefirst25 = first25;
@@ -93,8 +101,8 @@ int main(int argc, char *argv[]) {
     //ofs << jsd_bnj << '\n';
     ofs.flush();
     std::fprintf(stderr, "Starting jsm\n");
-    timer.restart("1ksparsejsm");
-    jsd2.set_distance_matrix(jsd_bnj, minocore::jsd::L1);
+    timer.restart("1ksparsetvd");
+    jsd2.set_distance_matrix(jsd_bnj, minocore::jsd::TVD);
     timer.report();
     timer.reset();
     ofs << "JS Metric: \n";

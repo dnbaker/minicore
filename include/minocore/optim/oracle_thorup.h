@@ -6,6 +6,7 @@
 #include <cassert>
 #include "fastiota/fastiota_ho.h"
 #include "minocore/util/oracle.h"
+#include "boost/iterator/transform_iterator.hpp"
 
 
 namespace minocore {
@@ -24,10 +25,10 @@ template<typename Oracle,
          typename WFT=FT,
          typename IT=uint32_t
         >
-std::tuple<std::vector<IT>, blz::DV<FT>, std::vector<IT>>
+std::tuple<std::vector<IT>, blaze::DynamicVector<FT>, std::vector<IT>>
 oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *weights=static_cast<const WFT *>(nullptr), double npermult=21, double nroundmult=3, double eps=0.5, uint64_t seed=1337)
 {
-    const FT total_weight = weights ? static_cast<FT>(blz::sum(blz::CustomVector<WFT, blz::unaligned, blz::unpadded>((WFT *)weights, npoints)))
+    const FT total_weight = weights ? static_cast<FT>(blaze::sum(blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded>((WFT *)weights, npoints)))
                                     : static_cast<FT>(npoints);
     size_t nperround = npermult * k * std::log(total_weight) / eps;
 #if VERBOSE_AF
@@ -36,7 +37,7 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
 #endif
 
     wy::WyRand<IT, 2> rng(seed);
-    blz::DV<FT> mincosts(npoints, std::numeric_limits<FT>::max());   // minimum costs per point
+    blaze::DynamicVector<FT> mincosts(npoints, std::numeric_limits<FT>::max());   // minimum costs per point
     std::vector<IT> minindices(npoints, IT(-1)); // indices to which points are assigned
     size_t nr = npoints; // Manually managing count
     std::unique_ptr<IT[]> R(new IT[npoints]);
@@ -56,6 +57,10 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
         if(!weights && nr <= nperround) {
             //std::fprintf(stderr, "Adding all\n");
             F.insert(F.end(), R.get(), R.get() + nr);
+            prep_range(R.get(), R.get() + nr, oracle);
+            // This instructs caching oracles to prepare these rows
+            // and results in greater efficiency for cases
+            // where distance computations are expensive.
             for(auto it = R.get(), eit = R.get() + nr; it < eit; ++it) {
                 auto v = *it;
                 //std::fprintf(stderr, "Adding index %zd/value %u\n", it - R.get(), v);
@@ -113,10 +118,11 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
             }
             // Update F, R, and mincosts/minindices
             current_batch.assign(tmp.begin(), tmp.end());
-            tmp.clear();
-            for(const auto item: current_batch)
-                F.push_back(R[item]);
-            shared::sort(current_batch.begin(), current_batch.end(), std::greater<>());
+            auto func = [&R](auto x) {return R[x];};
+            auto clb = boost::make_transform_iterator(current_batch.begin(), func),
+                 cle = boost::make_transform_iterator(current_batch.end(), func);
+            F.insert(F.end(), clb, cle);
+            prep_range(clb, cle, oracle);
             for(const auto v: current_batch) {
                 auto actual_index = R[v];
                 minindices[actual_index] = actual_index;
@@ -178,7 +184,7 @@ template<typename Oracle,
          typename WFT=FT,
          typename IT=uint32_t
         >
-std::tuple<std::vector<IT>, blz::DV<FT>, std::vector<IT>>
+std::tuple<std::vector<IT>, blaze::DynamicVector<FT>, std::vector<IT>>
 iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsigned num_iter=3, unsigned num_sub_iter=8,
                          const WFT *weights=static_cast<const WFT *>(nullptr), double npermult=21, double nroundmult=3, double eps=0.5, uint64_t seed=1337)
 {
@@ -186,23 +192,23 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
         return weights ? weights[index]: static_cast<WFT>(1.);
     };
 #if !NDEBUG
-    const FT total_weight = weights ? blz::sum(blz::CustomVector<WFT, blz::unaligned, blz::unpadded>((WFT *)weights, npoints))
+    const FT total_weight = weights ? blaze::sum(blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded>((WFT *)weights, npoints))
                                     : WFT(npoints);
 #endif
     wy::WyHash<uint64_t, 2> rng(seed);
-    std::tuple<std::vector<IT>, blz::DV<FT>, std::vector<IT>> ret;
+    std::tuple<std::vector<IT>, blaze::DynamicVector<FT>, std::vector<IT>> ret;
     auto &[centers, costs, bestindices] = ret; // Unpack for named access
     FT best_cost;
     // For convenience: a custom vector
     //                  which is empty if weights is null and full otherwise.
     {
-        std::unique_ptr<blz::CustomVector<const WFT, blz::unaligned, blz::unpadded>> wview;
-        if(weights) wview.reset(new blz::CustomVector<const WFT, blz::unaligned, blz::unpadded>(weights, npoints));
+        std::unique_ptr<blaze::CustomVector<const WFT, blaze::unaligned, blaze::unpadded>> wview;
+        if(weights) wview.reset(new blaze::CustomVector<const WFT, blaze::unaligned, blaze::unpadded>(weights, npoints));
         auto do_thorup_sample = [&]() {
             return oracle_thorup_d(oracle, npoints, k, weights, npermult, nroundmult, eps, rng());
         };
         auto get_cost = [&](const auto &x) {
-            return wview ? blz::dot(x, *wview): blz::sum(x);
+            return wview ? blaze::dot(x, *wview): blaze::sum(x);
         };
 
         // gather first set of sampled points
@@ -233,7 +239,7 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
     }
 
     // Calculate weights for center points
-    blz::DV<FT> center_weights(centers.size(), FT(0));
+    blaze::DynamicVector<FT> center_weights(centers.size(), FT(0));
     shared::flat_hash_map<IT, IT> asn2id; asn2id.reserve(centers.size());
     for(size_t i = 0; i < centers.size(); asn2id[centers[i]] = i, ++i);
     OMP_PRAGMA("omp parallel for")
@@ -252,8 +258,8 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
             nofails = false;
         }
     }
-    assert(std::abs(blz::sum(center_weights) - total_weight) < 1e-4 ||
-           !std::fprintf(stderr, "Expected sum %g, found %g\n", total_weight, blz::sum(center_weights)));
+    assert(std::abs(blaze::sum(center_weights) - total_weight) < 1e-4 ||
+           !std::fprintf(stderr, "Expected sum %g, found %g\n", total_weight, blaze::sum(center_weights)));
     assert(nofails);
 #endif
     shared::flat_hash_map<IT, IT> sub_asn2id;
@@ -264,7 +270,7 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
             return oracle_thorup_d(wrapped_oracle, centers.size(), k, center_weights.data(), npermult, nroundmult, eps, rng());
         };
         auto get_cost = [&](const auto &x) { // Calculates the cost of a set of centers.
-            return blz::dot(x, center_weights);
+            return blaze::dot(x, center_weights);
             // Can this be easily done using the distance from the full without performing all recalculations?
         };
 
@@ -296,7 +302,7 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
         assert(sub_bestindices.size() == center_weights.size());
         sub_asn2id.clear();
         for(size_t i = 0; i < sub_centers.size(); sub_asn2id[sub_centers[i]] = i, ++i);
-        blz::DV<FT> sub_center_weights(sub_centers.size(), FT(0));
+        blaze::DynamicVector<FT> sub_center_weights(sub_centers.size(), FT(0));
         OMP_PFOR
         for(size_t i = 0; i < sub_bestindices.size(); ++i) {
             assert(sub_asn2id.find(sub_bestindices[i]) != sub_asn2id.end());
@@ -307,7 +313,7 @@ iterated_oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, unsig
         }
 
         DBG_ONLY(for(const auto w: sub_center_weights) assert(w > 0.);)
-        assert(std::abs(blz::sum(sub_center_weights) - total_weight) <= 1.e-4);
+        assert(std::abs(blaze::sum(sub_center_weights) - total_weight) <= 1.e-4);
 
         // Convert back to original coordinates
         auto transform_func = [&wrapped_oracle](auto x) {return wrapped_oracle.lookup(x);};

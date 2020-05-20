@@ -1,4 +1,4 @@
-#include "minocore/csc.h"
+#include "minocore/util/csc.h"
 #include <iostream>
 #include "blaze/util/Serialization.h"
 #include <getopt.h>

@@ -8,12 +8,14 @@
 
 namespace minocore {
 
+template<typename IndPtrType=uint64_t, typename IndicesType=uint64_t, typename DataType=uint32_t>
 struct CSCMatrixView {
-    const uint64_t *const indptr_, *const indices_;
-    const uint32_t *const data_;
+    const IndPtrType *const indptr_;
+    const IndicesType *const indices_;
+    const DataType *const data_;
     const uint64_t nnz_;
     const uint32_t nf_, n_;
-    CSCMatrixView(const uint64_t *indptr, const uint64_t *indices, const uint32_t *data,
+    CSCMatrixView(const IndPtrType *indptr, const IndicesType *indices, const DataType *data,
                   uint64_t nnz, uint32_t nfeat, uint32_t nitems):
         indptr_(indptr),
         indices_(indices),
@@ -34,14 +36,14 @@ struct CSCMatrixView {
     }
 };
 
-template<typename FT=float>
-blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool skip_empty=false) {
+template<typename FT=float, typename IndPtrType, typename IndicesType, typename DataType>
+blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesType, DataType> &mat, bool skip_empty=false) {
     blz::SM<FT, blaze::rowMajor> ret(mat.n_, mat.nf_);
     ret.reserve(mat.nnz_);
     size_t used_rows = 0, i;
     for(i = 0; i < mat.n_; ++i) {
         auto col = mat.column(i);
-        if(mat.n_ > 1000000 && i % 1000000 == 0) std::fprintf(stderr, "%zu/%u\r", i, mat.n_);
+        if(mat.n_ > 100000 && i % 10000 == 0) std::fprintf(stderr, "%zu/%u\r", i, mat.n_);
         if(skip_empty && 0u == col.nnz()) continue;
         for(auto s = col.start_; s < col.stop_; ++s) {
             ret.append(used_rows, mat.indices_[s], mat.data_[s]);
@@ -52,7 +54,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView &mat, bool skip_empt
     return ret;
 }
 
-template<typename FT=float>
+template<typename FT=float, typename IndPtrType=uint64_t, typename IndicesType=uint64_t, typename DataType=uint32_t>
 blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=false) {
     util::Timer t("csc2sparse load time");
     std::string indptrn  = prefix + "indptr.file";
@@ -67,9 +69,13 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
     std::fclose(ifp);
     using mmapper = mio::mmap_source;
     mmapper indptr(indptrn), indices(indicesn), data(datan);
-    CSCMatrixView matview((const uint64_t *)indptr.data(), (const uint64_t *)indices.data(),
-                          (const uint32_t *)data.data(), indices.size() / (sizeof(uint64_t) / sizeof(indices[0])),
-                          nfeat, nsamples);
+    CSCMatrixView<IndPtrType, IndicesType, DataType>
+        matview((const IndPtrType *)indptr.data(), (const IndicesType *)indices.data(),
+                (const DataType *)data.data(), indices.size() / sizeof(IndicesType),
+                 nfeat, nsamples);
+    std::fprintf(stderr, "indptr size: %zu\n", indptr.size() / sizeof(IndPtrType));
+    std::fprintf(stderr, "indices size: %zu\n", indices.size() / sizeof(IndicesType));
+    std::fprintf(stderr, "data size: %zu\n", data.size() / sizeof(DataType));
 #ifndef MADV_REMOVE
 #  define MADV_FLAGS (MADV_DONTNEED | MADV_FREE)
 #else
@@ -79,7 +85,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
     ::madvise((void *)indices.data(), indices.size(), MADV_FLAGS);
     ::madvise((void *)data.data(), data.size(), MADV_FLAGS);
 #undef MADV_FLAGS
-    return csc2sparse(matview, skip_empty);
+    return csc2sparse<FT>(matview, skip_empty);
 }
 
 template<typename FT=float, bool SO=blaze::rowMajor>

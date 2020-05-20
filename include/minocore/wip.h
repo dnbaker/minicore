@@ -3,7 +3,6 @@
 
 #include "./wip/caratheodory.h"
 #include "./wip/streaming.h"
-#include "./wip/clustering.h"
 #include "./wip/gen_kmedian.h"
 
 #endif

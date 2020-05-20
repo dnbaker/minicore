@@ -135,8 +135,10 @@
 
 #if !NDEBUG
 #  define DBG_ONLY(...) __VA_ARGS__
+#  define DBG_ELSE(x, y) x
 #else
 #  define DBG_ONLY(...)
+#  define DBG_ELSE(x, y) y
 #endif
 
 #if VERBOSE_AF
@@ -193,6 +195,19 @@
 #  else
 #    define BLAZE_CHECK_DEBUG , ::blaze::unchecked
 #  endif
+#endif
+
+
+#ifndef NDEBUG
+#  include <iostream>
+#  define PRETTY_SAY std::cerr << '[' << __PRETTY_FUNCTION__ << ':' << __FILE__ << ':' << __LINE__ << ']'
+#else
+  struct CHEVRONEATER {
+      template<typename T>
+      const CHEVRONEATER &operator<<(const T &) const {return *this;}
+  };
+#  define PRETTY_SAY ::CHEVRONEATER{}
+
 #endif
 
 #endif /* SKETCH_MACROS_H__ */

@@ -141,10 +141,25 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     struct const_row_iterator: public row_iterator_t<const this_type> {};
     struct column_iterator: public column_iterator_t<this_type> {};
     struct const_column_iterator: public column_iterator_t<const this_type> {};
+    decltype(auto) operator[](size_t i) const {
+        if constexpr(SO == blaze::rowMajor) {
+            return row(*this, i, blaze::unchecked);
+        } else {
+            return column(*this, i, blaze::unchecked);
+        }
+    }
+    decltype(auto) operator[](size_t i) {
+        if constexpr(SO == blaze::rowMajor) {
+            return row(*this, i, blaze::unchecked);
+        } else {
+            return column(*this, i, blaze::unchecked);
+        }
+    }
     template<typename...Args> this_type &operator=(Args &&...args) {
         ((super &)*this).operator=(std::forward<Args>(args)...);
         return *this;
     }
+    size_t size() const {return SO == blaze::rowMajor ? this->rows(): this->columns();}
     auto rowiterator()       {return RowViewer<this_type>(*this);}
     auto rowiterator() const {return ConstRowViewer<this_type>(*this);}
     auto columniterator()       {return ColumnViewer<this_type>(*this);}
@@ -166,6 +181,21 @@ struct CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
         ((super &)*this).operator=(std::forward<Args>(args)...);
         return *this;
     }
+    decltype(auto) operator[](size_t i) const {
+        if constexpr(SO == blaze::rowMajor) {
+            return row(*this, i, blaze::unchecked);
+        } else {
+            return column(*this, i, blaze::unchecked);
+        }
+    }
+    decltype(auto) operator[](size_t i) {
+        if constexpr(SO == blaze::rowMajor) {
+            return row(*this, i, blaze::unchecked);
+        } else {
+            return column(*this, i, blaze::unchecked);
+        }
+    }
+    size_t size() const {return SO == blaze::rowMajor ? this->rows(): this->columns();}
     auto rowiterator()       {return RowViewer<this_type>(*this);}
     auto rowiterator() const {return ConstRowViewer<this_type>(*this);}
     auto columniterator()       {return ColumnViewer<this_type>(*this);}
@@ -267,6 +297,38 @@ INLINE auto sum(const std::vector<FT, Alloc> &vec) {
 template<typename OT>
 INLINE decltype(auto) sum(const OT &x) {return blaze::sum(x);}
 
+template<typename VT, bool SO, typename VT2, bool SO2>
+size_t number_shared_zeros(const blaze::SparseVector<VT, SO> &_lhs, const blaze::SparseVector<VT2, SO2> &_rhs) {
+     auto &lhs = ~_lhs;
+     auto &rhs = ~_rhs;
+     assert(lhs.size() == rhs.size());
+     //const size_t sz = lhs.size();
+     auto lhit = lhs.begin();
+     auto rhit = rhs.begin();
+     auto lhe = lhs.end();
+     auto rhe = rhs.end();
+     if(lhit == lhe) return nonZeros(rhs);
+     if(rhit == rhe) return nonZeros(lhs);
+     auto getnextindex = [&]() {
+         size_t r1 = lhit == lhe ? size_t(-1): lhit->index();
+         size_t r2 = rhit == rhe ? size_t(-1): rhit->index();
+         if(r1 == r2) {
+             ++lhit;
+             ++rhit;
+         } else if(r1 < r2) ++lhit;
+         else ++rhit;
+         return std::min(r1, r2);
+     };
+     size_t current_index = getnextindex();
+     size_t ret = current_index;
+     for(size_t nv; (nv = getnextindex()) != size_t(-1);) {
+         if(nv == current_index) continue;
+         assert(nv > current_index);
+         ret += nv - current_index - 1;
+         current_index = nv;
+     }
+     return ret;
+ }
 
 template<typename MT, bool SO>
 void fill_helper(blaze::Matrix<MT, SO> &mat) {
@@ -277,8 +339,8 @@ void fill_helper(blaze::Matrix<MT, SO> &mat) {
     }
 }
 
-template<typename FT >
-void fill_helper(dm::DistanceMatrix<FT> &) {
+template<typename FT, size_t DV, dm::MemoryStrategy ms>
+void fill_helper(dm::DistanceMatrix<FT, DV, ms> &) {
      std::fprintf(stderr, "[%s] Warning: trying to fill_symmetric_upper_triangular on an unsupported type. Doing nothing.\n", __PRETTY_FUNCTION__);
 }
 

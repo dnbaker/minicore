@@ -32,7 +32,7 @@ WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attribut
 OPT?=O3
 LDFLAGS+=$(LIBS) -lz $(LINKS)
 EXTRA?=
-DEFINES+= -DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
+DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(BLAS_LINKING_FLAGS) \
     -DBOOST_NO_AUTO_PTR
 
@@ -63,7 +63,7 @@ LINKS += -ltbb
 endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
-      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg
+      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg
 
 clust: kzclustexpdbg kzclustexp kzclustexpf
 
@@ -78,7 +78,9 @@ CXXFLAGS += $(EXTRA)
 
 CXXFLAGS += $(LDFLAGS)
 
-%dbg: src/%.cpp $(wildcard include/minocore/*.h)
+HEADERS=$(shell find include -name '*.h')
+
+%dbg: src/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread
 
 printlibs:
@@ -91,7 +93,7 @@ graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
 dmlrun: src/dmlsearch.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
-%: src/%.cpp $(wildcard include/minocore/*.h)
+%: src/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
 
 alphaest: src/alphaest.cpp $(wildcard include/minocore/*.h)

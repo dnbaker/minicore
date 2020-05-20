@@ -11,14 +11,16 @@
 #define BOOST_NO_AUTO_PTR 1
 #endif
 
-#include "network_simplex/network_simplex_simple.h"
 #include "boost/iterator/transform_iterator.hpp"
 
 namespace blz {
 
 inline namespace distance {
 
-enum ProbDivType {
+
+
+
+enum DissimilarityMeasure {
     L1,
     L2,
     SQRL2,
@@ -49,6 +51,8 @@ enum ProbDivType {
     PROBABILITY_DOT_PRODUCT_SIMILARITY,
     EMD,
     WEMD, // Weighted Earth-mover's distance
+    ORACLE_METRIC,
+    ORACLE_PSEUDOMETRIC,
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
@@ -90,7 +94,8 @@ namespace detail {
  * For all other distance measures, Jain-Vazirani and/or local search should be run.
  *
  */
-static constexpr INLINE bool is_bregman(ProbDivType d)  {
+
+static constexpr INLINE bool is_bregman(DissimilarityMeasure d)  {
     switch(d) {
         case JSD: case MKL: case POISSON: case ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO: return true;
@@ -98,10 +103,10 @@ static constexpr INLINE bool is_bregman(ProbDivType d)  {
     }
     return false;
 }
-static constexpr INLINE bool satisfies_d2(ProbDivType d) {
+static constexpr INLINE bool satisfies_d2(DissimilarityMeasure d) {
     return d == LLR || is_bregman(d) || d == SQRL2;
 }
-static constexpr INLINE bool satisfies_metric(ProbDivType d) {
+static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
     switch(d) {
         case L1:
         case L2:
@@ -109,16 +114,18 @@ static constexpr INLINE bool satisfies_metric(ProbDivType d) {
         case BHATTACHARYYA_METRIC:
         case TOTAL_VARIATION_DISTANCE:
         case HELLINGER:
+        case ORACLE_METRIC:
             return true;
         default: ;
     }
     return false;
 }
-static constexpr INLINE bool satisfies_rho_metric(ProbDivType d) {
+static constexpr INLINE bool satisfies_rho_metric(DissimilarityMeasure d) {
     if(satisfies_metric(d)) return true;
     switch(d) {
         case SQRL2: // rho = 2
         // These three don't, technically, but using a prior can force it to follow it on real data
+        case ORACLE_PSEUDOMETRIC:
         case LLR: case UWLLR: case OLLR:
             return true;
         default:;
@@ -126,7 +133,7 @@ static constexpr INLINE bool satisfies_rho_metric(ProbDivType d) {
     return false;
 }
 
-static constexpr INLINE bool needs_logs(ProbDivType d)  {
+static constexpr INLINE bool needs_logs(DissimilarityMeasure d)  {
     switch(d) {
         case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: case REVERSE_ITAKURA_SAITO: return true;
@@ -135,19 +142,60 @@ static constexpr INLINE bool needs_logs(ProbDivType d)  {
     return false;
 }
 
-static constexpr INLINE bool needs_l2_cache(ProbDivType d) {
+static constexpr INLINE bool is_probability(DissimilarityMeasure d)  {
+    switch(d) {
+        case TOTAL_VARIATION_DISTANCE: case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
+        case MKL: case POISSON: case REVERSE_MKL: case REVERSE_POISSON:
+        case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+        case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
+        return true;
+        default: break;
+    }
+    return false;
+}
+
+static constexpr INLINE bool needs_l2_cache(DissimilarityMeasure d) {
     return d == COSINE_DISTANCE;
 }
 
-static constexpr INLINE bool needs_probability_l2_cache(ProbDivType d) {
+static constexpr bool expects_nonnegative(DissimilarityMeasure measure) {
+    switch(measure) {
+        case L1: case L2: case SQRL2:
+        case COSINE_DISTANCE: case COSINE_SIMILARITY:
+        case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
+        case DOT_PRODUCT_SIMILARITY:
+        case WEMD: case EMD: case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: return false;
+
+        default: // Unexpected, but will assume it's required.
+        case JSM: case JSD: case MKL: case POISSON: case HELLINGER: case BHATTACHARYYA_METRIC:
+        case BHATTACHARYYA_DISTANCE: case TOTAL_VARIATION_DISTANCE: case LLR:
+        case REVERSE_MKL: case REVERSE_POISSON: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
+        case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+        return true;
+        
+    }
+}
+
+static constexpr INLINE bool is_dissimilarity(DissimilarityMeasure d) {
+    switch(d) {
+        case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+        case COSINE_SIMILARITY:      case PROBABILITY_COSINE_DISTANCE:
+            return false;
+        default: ;
+    }
+    return true;
+}
+
+
+static constexpr INLINE bool needs_probability_l2_cache(DissimilarityMeasure d) {
     return d == PROBABILITY_COSINE_DISTANCE;
 }
 
-static constexpr INLINE bool  needs_sqrt(ProbDivType d) {
+static constexpr INLINE bool  needs_sqrt(DissimilarityMeasure d) {
     return d == HELLINGER || d == BHATTACHARYYA_METRIC || d == BHATTACHARYYA_DISTANCE;
 }
 
-static constexpr INLINE bool is_symmetric(ProbDivType d) {
+static constexpr INLINE bool is_symmetric(DissimilarityMeasure d) {
     switch(d) {
         case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
         case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
@@ -159,7 +207,22 @@ static constexpr INLINE bool is_symmetric(ProbDivType d) {
     return false;
 }
 
-static constexpr INLINE const char *prob2str(ProbDivType d) {
+template<typename VT, bool TF, typename VT2>
+void set_cache(const blz::Vector<VT, TF> &src, blz::Vector<VT2, TF> &dest, DissimilarityMeasure d) {
+    if(needs_logs(d)) {
+        if(is_probability(d))
+            ~dest = neginf2zero(log(~src));
+        else
+            ~dest = neginf2zero(log(~src / blaze::sum(~src)));
+        return;
+    }
+    if(needs_sqrt(d)) {
+        ~dest = sqrt(~src);
+        return;
+    }
+}
+
+static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "BHATTACHARYYA_DISTANCE";
         case BHATTACHARYYA_METRIC: return "BHATTACHARYYA_METRIC";
@@ -184,10 +247,12 @@ static constexpr INLINE const char *prob2str(ProbDivType d) {
         case PROBABILITY_COSINE_DISTANCE: return "PROBABILITY_COSINE_DISTANCE";
         case COSINE_SIMILARITY: return "COSINE_SIMILARITY";
         case PROBABILITY_COSINE_SIMILARITY: return "PROBABILITY_COSINE_SIMILARITY";
+        case ORACLE_METRIC: return "ORACLE_METRIC";
+        case ORACLE_PSEUDOMETRIC: return "ORACLE_PSEUDOMETRIC";
         default: return "INVALID TYPE";
     }
 }
-static constexpr INLINE const char *prob2desc(ProbDivType d) {
+static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";
         case BHATTACHARYYA_METRIC: return "Bhattacharyya metric: sqrt(1 - BhattacharyyaSimilarity(x, y))";
@@ -212,11 +277,13 @@ static constexpr INLINE const char *prob2desc(ProbDivType d) {
         case PROBABILITY_COSINE_DISTANCE: return "Cosine distance of the probability vectors: arccos(\\frac{A \\cdot B}{|A|_2 |B|_2}) / pi";
         case COSINE_SIMILARITY: return "Cosine similarity: \\frac{A \\cdot B}{|A|_2 |B|_2}";
         case PROBABILITY_COSINE_SIMILARITY: return "Cosine similarity of the probability vectors: \\frac{A \\cdot B}{|A|_2 |B|_2}";
+        case ORACLE_METRIC: return "Placeholder for oracle metrics, allowing us to use DissimilarityMeasure in other situations";
+        case ORACLE_PSEUDOMETRIC: return "Placeholder for oracle pseudometrics";
         default: return "INVALID TYPE";
     }
 }
 static void print_measures() {
-    std::set<ProbDivType> measures {
+    std::set<DissimilarityMeasure> measures {
         L1,
         L2,
         SQRL2,
@@ -230,7 +297,7 @@ static void print_measures() {
         TOTAL_VARIATION_DISTANCE,
         LLR,
         OLLR,
-        EMD,
+        //EMD,
         REVERSE_MKL,
         REVERSE_POISSON,
         UWLLR,
@@ -248,6 +315,20 @@ static void print_measures() {
     for(const auto measure: measures) {
         std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
     }
+}
+static constexpr bool is_valid_measure(DissimilarityMeasure measure) {
+    switch(measure) {
+        case L1: case L2: case SQRL2: case JSM: case JSD: case MKL:
+        case POISSON: case HELLINGER: case BHATTACHARYYA_METRIC:
+        case BHATTACHARYYA_DISTANCE: case TOTAL_VARIATION_DISTANCE:
+        case LLR: case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO:
+        case ITAKURA_SAITO: case COSINE_DISTANCE: case PROBABILITY_COSINE_DISTANCE:
+        case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+        case EMD: case WEMD: case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
+        return true;
+        default: ;
+    }
+    return false;
 }
 } // detail
 
@@ -480,117 +561,6 @@ inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &
 }
 
 
-template<typename VT, bool SO, typename VT2>
-CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
-network_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1.)
-{
-    std::fprintf(stderr, "Warning: network_p_wasserstein seems to have a bug. Do not use.\n");
-    auto &xref = ~x;
-    auto &yref = ~y;
-    const size_t sz = xref.size();
-    size_t nl = nonZeros(xref), nr = nonZeros(~y);
-    using FT = CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>;
-
-    using namespace lemon;
-    using Digraph = lemon::FullBipartiteDigraph;
-    Digraph di(nl, nr);
-    NetworkSimplexSimple<Digraph, FT, FT, unsigned, minocore::shared::flat_hash_map> net(di, true, nl + nr, nl * nr);
-    DV<FT> weights(nl + nr);
-    DV<unsigned> indices(nl + nr);
-    size_t i = 0;
-    for(size_t ii = 0; ii < sz; ++ii) {
-        if(xref[ii] > 0)
-            weights[i] = xref[ii], indices[i] = xref[ii], ++i;
-    }
-    for(size_t ii = 0; ii < sz; ++ii) {
-        if(yref[ii] > 0)
-            weights[i] = -yref[ii], indices[i] = yref[ii], ++i;
-    }
-    auto func = [p](auto x, auto y) {
-        auto ret = x - y;
-        if(p == 1) ret = std::abs(ret);
-        else if(p == 2.) ret = ret * ret;
-        else ret = std::pow(ret, p);
-        return ret;
-    };
-    net.supplyMap(weights.data(), nl, weights.data() + nl, nr);
-    {
-        const auto jptr = &weights[nl];
-        for(unsigned i = 0; i < nl; ++i) {
-            auto arcid = i * nl;
-            for(unsigned j = 0; j < nl; ++j) {
-                net.setCost(di.arcFromId(arcid++), func(weights[i], jptr[j]));
-            }
-        }
-    }
-    int rc = net.run();
-    if(rc != (int)net.OPTIMAL) {
-        std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex. Error code: [%s]\n", __PRETTY_FUNCTION__, __FILE__, __LINE__,
-            rc == (int)net.INFEASIBLE ? "infeasible" : (int)net.UNBOUNDED ? "unbounded" : "unknown");
-    }
-
-    FT ret(0);
-    //OMP_PRAGMA("omp parallel for reduction(+:ret)")
-    for(size_t i = 0; i < nl; ++i) {
-        for(size_t j = 0; j < nr; ++j)
-           ret += net.flow(i * nr + j) * func(weights[i], weights[sz + j]);
-    }
-    return ret;
-}
-
-#if 0
-template<typename VT, bool SO, typename VT2>
-CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>
-network_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1., size_t maxiter=100)
-{
-    auto &xref = ~x;
-    const size_t sz = xref.size();
-    size_t nl = nonZeros(xref), nr = nonZeros(~y);
-    using FT = CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>;
-
-    using namespace lemon;
-	typedef lemon::FullBipartiteDigraph Digraph;
-    Digraph di(nl, nr);
-    NetworkSimplexSimple<Digraph, FT, FT, unsigned> net(di, true, nl + nr, nl * nr, maxiter);
-    DV<FT> weights(nl + nr);
-    DV<unsigned> indices(nl + nr);
-    size_t i = 0;
-    for(const auto &pair: xref)
-        weights[i] = pair.value(), indices[i] = pair.index(), ++i;
-    for(const auto &pair: ~y)
-        weights[i] = -pair.value(), indices[i] = pair.index(), ++i; // negative weight
-    auto func = [p](auto x, auto y) {
-        auto ret = x - y;
-        if(p == 1) ret = std::abs(ret);
-        else if(p == 2.) ret = ret * ret;
-        else ret = std::pow(ret, p);
-        return ret;
-    };
-    net.supplyMap(weights.data(), nl, weights.data() + nl, nr);
-    {
-        const auto jptr = &weights[nl];
-        for(unsigned i = 0; i < nl; ++i) {
-            auto arcid = i * nl;
-            for(unsigned j = 0; j < nl; ++j) {
-                net.setCost(di.arcFromId(arcid++), func(weights[i], jptr[j]));
-            }
-        }
-    }
-    int rc = net.run();
-    if(rc != (int)net.OPTIMAL) {
-        std::fprintf(stderr, "[%s:%s:%d] Warning: something went wrong in network simplex. Error code: [%s]\n", __PRETTY_FUNCTION__, __FILE__, __LINE__,
-            rc == (int)net.INFEASIBLE ? "infeasible" : (int)net.UNBOUNDED ? "unbounded" : "unknown");
-    }
-    FT ret(0);
-    //OMP_PRAGMA("omp parallel for reduction(+:ret)")
-    for(size_t i = 0; i < nl; ++i) {
-        for(size_t j = 0; j < nr; ++j)
-           ret += net.flow(i * nr + j) * func(weights[i], weights[sz + j]);
-    }
-    return ret;
-}
-#endif
-
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
 CT scipy_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {
     auto &xr = ~x;
@@ -722,5 +692,7 @@ auto witten_poisson_dissimilarity(const blz::Vector<VT, SO> &lhs, const blz::Vec
 } // distance
 
 } // namespace blz
+
+namespace dist = blz::distance;
 
 #endif // FGC_DISTANCE_AND_MEANING_H__

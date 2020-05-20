@@ -11,6 +11,8 @@
 
 #include <minocore/graph.h>
 
+#include <minocore/clustering.h>
+
 #include <minocore/wip.h>
 
 #endif

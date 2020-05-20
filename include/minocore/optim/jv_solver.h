@@ -6,6 +6,7 @@
 #include <atomic>
 #include <mutex>
 #include <thread>
+#include "cpp-btree/btree/set.h"
 
 namespace minocore {
 
@@ -44,12 +45,12 @@ struct edgetup: public packed::triple<FT, IT, IT> {
     }
 };
 
-}
+} // namespace jvutil
 
 namespace jv {
 
-
-template<typename MatrixType, typename FT=blaze::ElementType_t<MatrixType>, typename IT=uint32_t>
+template<typename MatrixType, typename FT=blaze::ElementType_t<MatrixType>, typename IT=uint32_t,
+         template<typename, typename> class SortedSet=btree::set>
 struct JVSolver {
 
     static_assert(std::is_floating_point<FT>::value, "FT must be floating-point");
@@ -65,7 +66,7 @@ struct JVSolver {
             return lhs.first < rhs.first || lhs.second < rhs.second;
         }
     };
-    struct payment_queue: public std::set<payment_t, pay_compare_t> {
+    struct payment_queue: public SortedSet<payment_t, pay_compare_t> {
         void push(payment_t payment) {
             this->insert(payment);
         }
@@ -74,7 +75,7 @@ struct JVSolver {
             this->insert(start, end);
         }
         auto top() const {
-            if(this->empty()) throw std::runtime_error("Attempting to access an empty structure");
+            if(unlikely(this->empty())) throw std::runtime_error("Attempting to access an empty structure");
             return *this->begin();
         }
         void pop_top() {
@@ -284,7 +285,7 @@ private:
         if(early_terminate && early_terminate->load()) return;
         // Assign all unassigned
         if(open_facilities.empty()) {
-            blz::DV<FT> fac_costs = blaze::sum<blz::rowwise>(distmat);
+            blaze::DynamicVector<FT> fac_costs = blaze::sum<blaze::rowwise>(distmat);
             open_facilities.push_back(std::min_element(fac_costs.begin(), fac_costs.end()) - fac_costs.begin());
         }
         for(const IT cid: unassigned_clients) {
@@ -428,7 +429,7 @@ public:
     JVSolver(const MatrixType &mat, const CostType &cost): JVSolver() {
         setup(mat, cost);
     }
-    JVSolver(const MatrixType &mat): JVSolver(mat, blz::max(mat)) {
+    JVSolver(const MatrixType &mat): JVSolver(mat, blaze::max(mat)) {
     }
 
     template<typename CostType>
@@ -587,7 +588,7 @@ public:
                 //DBG_ONLY(std::fprintf(stderr, "Trying to update by removing the next facility. Current in next_paid_ %zu\n", next_paid_.size());)
                 n_open_clients_ = update_facilities(next_fac.second, working_open_facilities_[next_fac.second], time);
                 time = next_fac.first;
-                if(current_n == next_paid_.size()) // If it wasn't removed
+                if(current_n == static_cast<size_t>(next_paid_.size())) // If it wasn't removed
                     next_paid_.pop_top();
                 //DBG_ONLY(std::fprintf(stderr, "n open: %zu. time: %0.12g. Now facilities left to pay: %zu\n", size_t(n_open_clients_), time, next_paid_.size());)
             } else {
@@ -890,7 +891,7 @@ public:
         return std::make_pair(final_open_facilities_, final_open_facility_assignments_);
     }
     IT local_best_to_add() const {
-        blz::DV<FT,blaze::rowVector> current_costs = blz::min<blz::columnwise>(blz::rows(*distmatp_, final_open_facilities_.data(), final_open_facilities_.size()));
+        blaze::DynamicVector<FT,blaze::rowVector> current_costs = blaze::min<blaze::columnwise>(blaze::rows(*distmatp_, final_open_facilities_.data(), final_open_facilities_.size()));
         FT max_improvement = -std::numeric_limits<FT>::max();
         IT bestind = -1;
         for(size_t i = 0; i < nfac_; ++i) {
@@ -908,7 +909,7 @@ public:
         return bestind;
     }
     IT local_best_to_rm() const {
-        blz::DV<FT, blaze::rowVector> current_costs = blz::min<blz::columnwise>(blz::rows(*distmatp_, final_open_facilities_.data(), final_open_facilities_.size()));
+        blaze::DynamicVector<FT, blaze::rowVector> current_costs = blaze::min<blaze::columnwise>(blaze::rows(*distmatp_, final_open_facilities_.data(), final_open_facilities_.size()));
         FT min_loss = std::numeric_limits<FT>::max();
         IT bestind = -1;
         std::unique_ptr<IT[]> min_counters(new IT[ncities_]());
@@ -932,6 +933,12 @@ public:
         return bestind;
     }
 };
+
+template<typename MT, typename FT=blaze::ElementType_t<MT>, typename IT=uint32_t>
+auto make_jv_solver(const MT &mat) {
+    return JVSolver<MT, FT, IT>(mat);
+}
+
 
 } // namespace jv
 

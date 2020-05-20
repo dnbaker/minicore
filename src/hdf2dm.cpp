@@ -27,9 +27,11 @@ int main(int argc, char *argv[]) {
     // TODO: extract to binary file, then iterate over the file.
     std::string inpath = "5k_pbmc_protein_v3_raw_feature_bc_matrix.h5";
     std::string outpref = "";
+    std::string key = "matrix";
     if(argc > 1) inpath = argv[1];
+    if(argc > 2) key = argv[2];
     H5::H5File file(inpath.data(), H5F_ACC_RDONLY );
-    auto group = H5::Group(file.openGroup("matrix"));
+    auto group = H5::Group(file.openGroup(key.data()));
     auto shape = group.openDataSet("shape");
     assert(shape.getIntType().getSize() == 4);
     uint32_t shape_out[2];
