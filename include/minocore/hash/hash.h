@@ -131,6 +131,7 @@ public:
     auto l()   const {return settings_.l_;}
     const auto &settings() const {return settings_;}
 };
+
 template<typename FT=double, bool SO=blaze::rowMajor>
 class HellingerLSHasher: public JSDLSHasher<FT, SO> {
 public:
@@ -141,10 +142,6 @@ public:
 
 template<template<typename...> class Distribution, typename FT, bool SO, bool use_offsets, typename...Args>
 class PStableLSHasher {
-    // See S2JSD-LSH: A Locality-Sensitive Hashing Schema for Probability Distributions
-    // https://aaai.org/ocs/index.php/AAAI/AAAI17/paper/view/14692
-    // for the derivation
-    // Note that this is an LSH for the JS Metric, not the JSD.
     blaze::DynamicMatrix<FT, SO> randproj_;
     blaze::DynamicVector<FT, SO> boffsets_;
     LSHasherSettings settings_;
@@ -168,25 +165,25 @@ public:
     }
     template<typename VT>
     decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {
-        if constexpr(use_offsets) return blaze::floor(randproj_ * (~input) + 1.) + boffsets_;
+        if constexpr(use_offsets) return blaze::floor(randproj_ * (~input) + 1. + boffsets_);
         else                      return blaze::floor(randproj_ * (~input));
     }
     template<typename VT>
     decltype(auto) hash(const blaze::Vector<VT, !SO> &input) const {
-        if constexpr(use_offsets) return blaze::floor(randproj_ * trans(~input) + 1.) + boffsets_;
+        if constexpr(use_offsets) return blaze::floor(randproj_ * trans(~input) + 1. + boffsets_);
         else                      return blaze::floor(randproj_ * trans(~input));
     }
     template<typename MT>
     decltype(auto) hash(const blaze::Matrix<MT, SO> &input) const {
         if constexpr(use_offsets)
-            return trans(blaze::floor(randproj_ * trans(~input)) + blaze::expand(boffsets_, (~input).rows()));
+            return trans(blaze::floor(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).rows())));
         else
             return trans(blaze::floor(randproj_ * trans(~input)));
     }
     template<typename MT>
     decltype(auto) hash(const blaze::Matrix<MT, !SO> &input) const {
         if constexpr(use_offsets)
-            return trans(blaze::floor(randproj_ * trans(~input)) + blaze::expand(boffsets_, (~input).columns()));
+            return trans(blaze::floor(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).columns())));
         else
             return trans(blaze::floor(randproj_ * trans(~input)));
     }
@@ -326,6 +323,7 @@ struct LSHTable {
     const unsigned nh_;
     XXHasher<KT> xxhasher_;
     OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes;)
+    size_t ids_used_ = 0;
 
     static constexpr bool SO = Hasher::StorageOrder;
 
@@ -381,6 +379,7 @@ public:
             auto hh = xxhasher_(&hv[i * st.k_], sizeof(ElementType) * st.k_);
             insert(i, hh, id);
         }
+        ++ids_used_;
     }
     template<typename MT, bool OSO>
     void add(const blaze::Matrix<MT, OSO> &input, IT idoffset=0) {
@@ -396,12 +395,38 @@ public:
         }
         const size_t nr = (~input).rows();
         const auto _l = l(), _k = k();
+        OMP_PFOR
         for(unsigned i = 0; i < nr; ++i) {
             auto r = row(hv, i, blaze::unchecked);
             for(unsigned j = 0; j < _l; ++j) {
                 insert(j, xxhasher_(&r[j * _k], sizeof(ElementType) * _k), idoffset + i);
             }
         }
+        ids_used_ += nr;
+    }
+    template<typename VT, bool OSO>
+    std::vector<std::pair<IT, unsigned>> topk(const blaze::Vector<VT, OSO> &query, unsigned maxgather=0) const {
+        // TODO: build with a heap
+        if(!maxgather) maxgather = ids_used_;
+        std::vector<std::pair<IT, unsigned>> ret;
+        auto retupdate = [&](auto x) {
+            auto rit = std::find(ret.begin(), ret.end(), x);
+        };
+        auto hv = evaluate(hash(query));
+        for(unsigned i = 0; i < l(); ++i) {
+            if(auto it = tables_[i].find(xxhasher_(&hv[i * k()], sizeof(ElementType) * k()));
+               it != tables_[i].end())
+            {
+                for(const auto v: it->second) {
+                    auto rit = std::find_if(ret.begin(), ret.end(), [v](auto x) {return x.first == v;});
+                    if(rit == ret.end()) ret.emplace_back({v, 1u});
+                    else                 ++rit->second;
+                }
+            }
+        }
+        shared::sort(ret.begin(), ret.end(), [](auto x, auto y) {return x.second > y.second;});
+        if(maxgather < ret.size()) ret.resize(maxgather);
+        return ret;
     }
     template<typename VT, bool OSO>
     shared::flat_hash_map<IT, unsigned> query(const blaze::Vector<VT, OSO> &query) const {

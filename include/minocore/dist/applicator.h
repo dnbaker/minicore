@@ -493,9 +493,9 @@ public:
         }
 #if 0
         PRETTY_SAY << "Computing i vs outside o with cache and " << detail::prob2str(measure) << "\n";
-        PRETTY_SAY << "Performing with " 
-            << " row " << i << " and " 
-            << (void *)&o 
+        PRETTY_SAY << "Performing with "
+            << " row " << i << " and "
+            << (void *)&o
             << '\n';
 #endif
         FT ret;
@@ -641,97 +641,210 @@ public:
             auto s = ri + rj;
             ret = jsd_cache_->operator[](i) + jsd_cache_->operator[](j) - blaze::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
             return std::max(ret, static_cast<FT>(0.));
-        } else {
-            throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-            return FT(0);
+        } else if constexpr(IS_SPARSE) {
+            FT ret = get_jsdcache(i) + get_jsdcache(j);
+            auto lhit = row(i).begin(), lhe = row(i).end();
+            auto rhit = row(j).begin(), rhe = row(j).end();
+            auto lhrs = row_sums_[i];
+            auto rhrs = row_sums_[j];
+            auto lhrsi = 1. / lhrs;
+            auto rhrsi = 1. / rhrs;
+            auto lhrsimul = lhrsi * prior_data_->operator[](0);
+            auto rhrsimul = rhrsi * prior_data_->operator[](0);
+            if(prior_data_->size() == 1) {
+                std::fprintf(stderr, "prior size is 1\n");
+                size_t shared_zeros = 0;
+                for(;;) {
+                    if(lhit->index() == rhit->index()) {
+                        ret -= (lhit->value() + rhit->value()) * std::log(.5 * (lhit->value() + rhit->value()));
+                        if(++lhit == lhe) break;
+                        if(++rhit == rhe) break;
+                    } else if(lhit->index() < rhit->index()) {
+                        ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
+                        shared_zeros += (rhit->index() - lhit->index() - 1);
+                        if(++lhit == lhe) break;
+                    } else {
+                        ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
+                        shared_zeros += (lhit->index() - rhit->index() - 1);
+                        if(++rhit == rhe) break;
+                    }
+                }
+                std::fprintf(stderr, "Finished loop. lhit is end? %d rhit is ind? %d\n", lhit == lhe, rhit == rhe);
+                while(lhit != lhe) {
+                    std::fprintf(stderr, "Handling next lhit\n");
+                    size_t cind = lhit->index();
+                    ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
+                    size_t nextind = ++lhit == lhe ? data().columns(): lhit->index();
+                    shared_zeros += nextind - cind - 1;
+                }
+                std::fprintf(stderr, "Handled all lhit\n");
+                while(rhit != rhe) {
+                    std::fprintf(stderr, "Handling next rhit\n");
+                    size_t cind = rhit->index();
+                    ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
+                    size_t nextind = ++rhit == rhe ? data().columns(): rhit->index();
+                    shared_zeros += nextind - cind - 1;
+                }
+                std::fprintf(stderr, "Handled all lhit\n");
+                FT sump = (lhrsimul + rhrsimul);
+                ret -= shared_zeros * (sump * std::log(.5 * (sump)));
+            } else {
+                std::fprintf(stderr, "Fanciest\n");
+                // This could later be accelerated, but that kind of caching is more complicated.
+                auto &pd = *prior_data_;
+                for(;;) {
+                    if(lhit->index() == rhit->index()) {
+                        ret -= (lhit->value() + rhit->value()) * std::log(.5 * (lhit->value() + rhit->value()));
+                        if(++lhit == lhe) break;
+                        if(++rhit == rhe) break;
+                    } else if(lhit->index() < rhit->index()) {
+                        ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
+                        for(size_t i = lhit->index() + 1; i < rhit->index(); ++i) {
+                            auto sv = pd[i] * (lhrsi + rhrsi);
+                            ret -= sv * std::log(.5 * sv);
+                        }
+                        if(++lhit == lhe) break;
+                    } else {
+                        ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
+                        for(size_t i = rhit->index() + 1; i < lhit->index(); ++i) {
+                            auto sv = pd[i] * (rhrsi + lhrsi);
+                            ret -= sv * std::log(.5 * sv);
+                        }
+                        if(++rhit == rhe) break;
+                    }
+                }
+                // Remaining entries
+                while(rhit != rhe) {
+                    ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
+                    size_t nextind;
+                    if(++lhit == lhe) nextind = data().columns();
+                    else nextind = lhit->index();
+                    for(size_t i = 0; i < nextind; ++i) {
+                        auto sv = pd[i] * (lhrsi + rhrsi);
+                        ret -= sv * std::log(.5 * sv);
+                    }
+                }
+                while(rhit != rhe) {
+                    ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
+                    const size_t nextind = (++rhit == rhe) ? data().columns(): rhit->index();
+                    for(size_t i = 0; i < nextind; ++i) {
+                        auto sv = pd[i] * (rhrsi + lhrsi);
+                        ret -= sv * std::log(.5 * sv);
+                    }
+                }
+            }
+            return ret;
         }
+        __builtin_unreachable();
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto jsd(size_t i, const OT &o, const OT2 &olog) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto mnlog = evaluate(log(0.5 * (row(i) + o)));
         return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto jsd(size_t i, const OT &o) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto olog = evaluate(blaze::neginf2zero(blaze::log(o)));
         return jsd(i, o, olog);
     }
     auto mkl(size_t i, size_t j) const {
-        // Multinomial KL
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return get_jsdcache(i) - blaze::dot(row(i), logrow(j));
+        if constexpr(IS_SPARSE) {
+            if(prior_data_) {
+                const bool single_value = prior_data_->size() == 1;
+                auto lhit = row(i).begin();
+                auto rhit = row(j).begin();
+                auto lhe = row(i).end();
+                auto rhe = row(j).end();
+                auto lhrs = row_sums_[i];
+                auto rhrs = row_sums_[j];
+                auto lhrsi = 1. / lhrs;
+                auto rhrsi = 1. / rhrs;
+                auto lhrsimul = lhrsi * prior_data_->operator[](0);
+                auto rhrsimul = rhrsi * prior_data_->operator[](0);
+                auto &pd = *prior_data_;
+                auto lhrsimulog = std::log(lhrsimul);
+                auto rhrsimulog = std::log(rhrsimul);
+                FT ret = 0.;
+                auto handle_lt = [&](auto lhit, auto rhit) {
+                    auto dist = rhit->index() - lhit->index();
+                    if(single_value) {
+                        ret += ((lhrsimul * (lhrsimulog - rhrsimulog)) * (dist - 1) // Handle terms between lh and rh value
+                                + lhit->value() * (std::log(lhit->value()) - rhrsimulog));
+                                // handle term at lh value, which is 0 for the other
+                    } else {
+                        auto inc1 = lhit->value() * (std::log(lhit->value()) - pd[lhit->index()]);
+                        for(size_t i = lhit->index() + 1, j = rhit->index(); i < j; ++i) {
+                            auto lhv = lhrsi * pd[i], rhv = rhrsi * pd[i];
+                            inc1 += lhv * (std::log(lhv) - std::log(rhv));
+                        }
+                        ret += inc1;
+                    }
+                };
+                for(;;) {
+                    if(lhit->index() == rhit->index()) {
+                        ret += lhit->value() * (std::log(lhit->value()) - std::log(rhit->value()));
+                        if(++lhit == lhe) break;
+                        if(++rhit == rhe) break;
+                    } else if(lhit->index() < rhit->index()) {
+                        handle_lt(lhit, rhit);
+                        if(++lhit == lhe) break;
+                    } else /* if(rhit->index() < lhit->index()) */ {
+                        handle_lt(rhit, lhit);
+                        if(++rhit == rhe) break;
+                    }
+                }
+                // Handle the remainder
+                auto handle_last = [&](auto lhit, auto lhsim, auto rhsim, auto lhlog, auto rhlog) {
+                    FT inc;
+                    if(single_value) {
+                        inc = lhsim * (lhlog - rhlog) * (data().columns() - lhit->index() - 1)
+                              + lhit->value() * (std::log(lhit->value()) - rhlog);
+                    } else {
+                        inc = lhit->value() * (std::log(lhit->value()) - pd[lhit->index()]);
+                        for(size_t i = lhit->value() + 1, j = data().columns(); i < j; ++i) {
+                            auto lhv = lhsim * pd[i], rhv = rhsim * pd[i];
+                            inc += lhv * (std::log(lhv) - std::log(rhv));
+                        }
+                    }
+                    ret += inc;
+                };
+                if(lhit != lhe)
+                    handle_last(lhit, lhrsimul, rhrsimul, lhrsimulog, rhrsimulog);
+                else if(rhit != rhe)
+                    handle_last(rhit, rhrsimul, lhrsimul, rhrsimulog, lhrsimulog);
+                return ret;
+            }
+        }
+        return FT(get_jsdcache(i) - blz::dot(row(i), logrow(j)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto mkl(size_t i, const OT &o) const {
-        // Multinomial KL
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return get_jsdcache(i) - blaze::dot(row(i), blaze::neginf2zero(blaze::log(o)));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto mkl(const OT &o, size_t i, const OT2 &olog) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        // Multinomial KL
+        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return blaze::dot(o, olog - logrow(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     auto mkl(const OT &o, size_t i) const {
-        // Multinomial KL
         if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return blaze::dot(o, blaze::neginf2zero(blaze::log(o)) - logrow(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     auto mkl(size_t i, const OT &, const OT2 &olog) const {
         if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        // Multinomial KL
         return blaze::dot(row(i), logrow(i) - olog);
     }
-    auto pkl(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        // Poission KL
-        return get_jsdcache(i) - blaze::dot(row(i), logrow(j)) + blaze::sum(row(j) - row(i));
-    }
-    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
-    auto pkl(size_t i, const OT &o, const OT2 &olog) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        // Poission KL
-        return get_jsdcache(i) - blaze::dot(row(i), olog) + blaze::sum(row(i) - o);
-    }
-    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    auto pkl(size_t i, const OT &o) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return pkl(i, o, neginf2zero(blaze::log(o)));
-    }
-    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    auto pkl(const OT &o, size_t i) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        throw TODOError("Not done\n");
-        return pkl(i, o, neginf2zero(blaze::log(o)));
-    }
-    template<typename OT, typename OT2, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    auto pkl(const OT &o, size_t i, const OT2 &cache) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return blaze::dot(o, cache - logrow(i)) + blaze::sum(o - row(i));
-    }
-    auto psd(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        // Poission JSD
-        auto mnlog = evaluate(log(.5 * (row(i) + row(j))));
-        return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(row(j), logrow(j) - mnlog));
-    }
-    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
-    auto psd(size_t i, const OT &o, const OT2 &olog) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        // Poission JSD
-        auto mnlog = evaluate(log(.5 * (row(i) + o)));
-        return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
-    }
-    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    auto psd(size_t i, const OT &o) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return psd(i, o, neginf2zero(blaze::log(o)));
-    }
+    template<typename...Args>
+    auto pkl(Args &&...args) const { return mkl(std::forward<Args>(args)...);}
+    template<typename...Args>
+    auto psd(Args &&...args) const { return jsd(std::forward<Args>(args)...);}
+    template<typename...Args>
+    auto psm(Args &&...args) const { return jsm(std::forward<Args>(args)...);}
     auto bhattacharyya_sim(size_t i, size_t j) const {
         if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return sqrdata_ ? blaze::dot(sqrtrow(i), sqrtrow(j))
@@ -758,8 +871,6 @@ public:
         if(IS_SPARSE && prior_data_) throw std::runtime_error("Failed to calculate. TODO: complete special fast version of this supporting priors at no runtime cost.");
         return std::sqrt(1 - bhattacharyya_sim(std::forward<Args>(args)...));
     }
-    template<typename...Args>
-    auto psm(Args &&...args) const {return std::sqrt(std::forward<Args>(args)...);}
     auto llr(size_t i, size_t j) const {
         if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
             //blaze::dot(row(i), logrow(i)) * row_sums_[i]
@@ -839,15 +950,13 @@ private:
                 if constexpr(!IsSparseMatrix_v<MatrixType>) {
                     data_ += static_cast<FT>(1);
                 } else {
-                    prior_data_.reset(new VecT(data_.columns()));
-                    (*prior_data_)[0] = static_cast<FT>(1);
+                    prior_data_.reset(new VecT({FT(1)}));
                 }
                 break;
             case GAMMA_BETA:
                 if(c == nullptr) throw std::invalid_argument("Can't do gamma_beta with null pointer");
                 if constexpr(IsSparseMatrix_v<MatrixType>) {
-                    prior_data_.reset(new VecT(data_.columns()));
-                    (*prior_data_)[0] = (*c)[0];
+                    prior_data_.reset(new VecT({(*c)[0]}));
                 } else if constexpr(IsDenseMatrix_v<MatrixType>) {
                     data_ += (*c)[0];
                 }
@@ -905,9 +1014,36 @@ private:
         if(logdata_) {
             jsd_cache_.reset(new VecT(data_.rows()));
             auto &jc = *jsd_cache_;
-            for(size_t i = 0; i < jc.size(); ++i) {
-                jc[i] = dot(row(i), logrow(i));
+            if constexpr(IS_SPARSE) {
+                if(prior_data_) {
+                    // Handle sparse priors
+                    assert(prior_data_->size() == 1 || prior_data_->size() == data_.columns());
+                    const bool single_value = prior_data_->size() == 1;
+                    for(size_t i = 0; i < data_.rows(); ++i) {
+                        const auto rs = row_sums_[i];
+                        auto plp = evaluate(*prior_data_ / rs);
+                        plp = evaluate(plp * blaze::log(plp));
+                        auto r = row(i);
+                        size_t ind = 0;
+                        FT v = single_value ? FT(plp[0] * nonZeros(r)): FT(0);
+                        auto it = r.begin(), eit = r.end();
+                        for(;it != eit;++it) {
+                            const auto pind = it->index();
+                            if(ind < pind && !single_value)
+                                v += blaze::sum(subvector(plp, ind, pind - ind));
+                            ind = pind;
+                            v += it->value() * std::log(it->value());
+                        }
+                        if(!single_value)
+                            if(auto end = r.size() - 1;ind != end)
+                                v += blaze::sum(subvector(plp, ind, end - ind));
+                        jc[i] = v;
+                    }
+                }
             }
+            if(!(IS_SPARSE && prior_data_))
+                for(size_t i = 0; i < jc.size(); ++i)
+                    jc[i] = dot(row(i), logrow(i));
         }
     }
     FT get_jsdcache(size_t index) const {
