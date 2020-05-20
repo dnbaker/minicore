@@ -644,77 +644,45 @@ public:
         } else if constexpr(IS_SPARSE) {
             FT ret = get_jsdcache(i) + get_jsdcache(j);
             const size_t dim = row(i).size();
-            auto lhit = row(i).begin();
-            auto rhit = row(j).begin();
-            const auto lhe = row(i).end();
-            const auto rhe = row(j).end();
+            auto lhr = row(i), rhr = row(j);
+            auto lhit = lhr.begin(), rhit = rhr.begin();
+            const auto lhe = lhr.end(), rhe = rhr.end();
             auto lhrsi = 1. / row_sums_[i];
             auto rhrsi = 1. / row_sums_[j];
-            size_t i = 0;
             if(prior_data_->size() == 1) {
                 const auto lhrsimul = lhrsi * prior_data_->operator[](0);
                 const auto rhrsimul = rhrsi * prior_data_->operator[](0);
-                std::fprintf(stderr, "prior size is 1\n");
-                size_t shared_zeros = 0;
                 if(lhit == lhe || rhit == rhe) return static_cast<FT>(0);
+                auto dox = [&](auto x) {ret -= x * std::log(.5 * x);};
                 while(lhit != lhe && rhit != rhe) {
-                    const size_t minind = std::min(lhit->index(), rhit->index());
                     if(lhit->index() == rhit->index()) {
-                        ret -= (lhit->value() + rhit->value()) * std::log(.5 * (lhit->value() + rhit->value()));
+                        dox(lhit->value() + rhit->value());
                         ++lhit; ++rhit;
                     } else if(lhit->index() < rhit->index()) {
-                        ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
+                        dox(lhit->value() + rhrsimul);
                         ++lhit;
                     } else {
-                        ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
+                        dox(rhit->value() + lhrsimul);
                         ++rhit;
                     }
-                    shared_zeros += minind - i;
-                    i = minind + 1;
                 }
-                std::fprintf(stderr, "Finished loop. lhit is end? %d rhit is ind? %d\n", lhit == lhe, rhit == rhe);
-                if(lhit != lhe) {
-                    size_t cind = lhit->index();
-                    shared_zeros += cind - i;
-                    i = cind + 1;
-                    for(;;) {
-                        ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
-                        if(++lhit == lhe) {
-                            shared_zeros += dim - i;
-                            break;
-                        }
-                        size_t nextind = lhit->index();
-                        shared_zeros += nextind - i;
-                        i = nextind + 1;
-                    }
-                }
-                if(rhit != rhe) {
-                    size_t cind = rhit->index();
-                    shared_zeros += cind - i;
-                    i = cind + 1;
-                    for(;;) {
-                        ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
-                        if(++rhit == rhe) {
-                            shared_zeros += dim - i;
-                            break;
-                        }
-                        size_t nextind = rhit->index();
-                        shared_zeros += nextind - i;
-                        i = nextind + 1;
-                    }
-                }
-                std::fprintf(stderr, "Handled all lhit\n");
-                FT sump = (lhrsimul + rhrsimul);
-                ret -= shared_zeros * (sump * std::log(.5 * (sump)));
-                assert(shared_zeros + nonZeros(row(i) + row(j)) == dim || !std::fprintf(stderr, "sharedz: %zu. dim: %zu. nz: %zu\n", shared_zeros, dim, nonZeros(row(i) + row(j))));
+                //std::fprintf(stderr, "Finished loop. lhit is end? %d rhit is ind? %d\n", lhit == lhe, rhit == rhe);
+                for(;lhit != lhe;++lhit)
+                    dox(lhit->value() + rhrsimul);
+                for(;rhit != rhe;++rhit)
+                    dox(rhit->value() + lhrsimul);
+                //std::fprintf(stderr, "Handled all lhit\n");
+                const FT sump = (lhrsimul + rhrsimul);
+                ret -= (dim - nonZeros(lhr + rhr)) * (sump * std::log(.5 * (sump)));
             } else {
                 std::fprintf(stderr, "Fanciest\n");
                 // This could later be accelerated, but that kind of caching is more complicated.
                 auto &pd = *prior_data_;
                 auto dox = [&](auto x, auto y) {ret -= (x + y) * std::log(.5 * (x + y));};
                 auto doxy = [&](auto x) {ret -= x * std::log(.5 * x);};
-                bool rightemp = rhit == rhe;
-                bool leftemp = lhit == lhe;
+                size_t first_index = lhit != lhe ? (rhit != rhe ? std::min(lhit->index(), rhit->index()): lhit->index()): rhit != rhe ? rhit->index(): dim;
+                for(size_t i = 0; i < first_index; ++i)
+                    doxy(pd[i] * (lhrsi + rhrsi));
                 while(lhit != lhe && rhit != rhe) {
                     if(lhit->index() == rhit->index()) {
                         dox(lhit->value(), rhit->value());
@@ -733,33 +701,19 @@ public:
                     }
                 }
                 // Remaining entries
-                if(lhit != lhe) {
-                    if(rightemp) {
-                        for(size_t i = 0; i < lhit->index(); ++i)
-                            doxy(pd[i] * (lhrsi + rhrsi));
-                    }
-                    while(lhit != lhe) {
-                        dox(lhit->value(), pd[lhit->index()] * rhrsi);
-                        size_t i = lhit->index() + 1;
-                        size_t nextind = (++lhit == lhe) ? dim: lhit->index();
-                        for(; i < nextind; ++i)
-                            doxy(pd[i] * (lhrsi + rhrsi));
-                    }
-                } else if(rhit != rhe) {
-                    if(leftemp) {
-                        for(size_t i = 0; i < rhit->index(); ++i)
-                            doxy(pd[i] * (lhrsi + rhrsi));
-                    }
-                    while(rhit != rhe) {
-                        dox(rhit->value(), lhrsi * pd[rhit->index()]);
-                        size_t i = rhit->index() + 1;
-                        size_t nextind = (++rhit == rhe) ? dim: rhit->index();
-                        for(; i < nextind; ++i)
-                            doxy(pd[i] * (lhrsi + rhrsi));
-                    }
-                } else if(rightemp && leftemp) {
-                    for(size_t i = 0; i < dim; ++i)
-                        doxy(pd[i] * lhrsi + rhrsi);
+                while(lhit != lhe) {
+                    dox(lhit->value(), pd[lhit->index()] * rhrsi);
+                    size_t i = lhit->index() + 1;
+                    size_t nextind = (++lhit == lhe) ? dim: lhit->index();
+                    for(; i < nextind; ++i)
+                        doxy(pd[i] * (lhrsi + rhrsi));
+                }
+                while(rhit != rhe) {
+                    dox(rhit->value(), lhrsi * pd[rhit->index()]);
+                    size_t i = rhit->index() + 1;
+                    size_t nextind = (++rhit == rhe) ? dim: rhit->index();
+                    for(; i < nextind; ++i)
+                        doxy(pd[i] * (lhrsi + rhrsi));
                 }
             }
             return std::max(ret * .5, static_cast<FT>(0.));

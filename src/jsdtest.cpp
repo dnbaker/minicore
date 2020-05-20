@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
         ++i;
     }
     blz::SM<FLOAT_TYPE> first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
-    auto jsd = minocore::jsd::make_jsm_applicator(first25);
+    auto jsd = minocore::jsd::make_probdiv_applicator(first25, jsd::JSM, jsd::DIRICHLET);
     //auto jsddistmat = jsd.make_distance_matrix();
     dm::DistanceMatrix<FLOAT_TYPE> utdm(first25.rows());
     jsd.set_distance_matrix(utdm);
