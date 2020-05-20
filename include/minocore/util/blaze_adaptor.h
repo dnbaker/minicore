@@ -297,6 +297,38 @@ INLINE auto sum(const std::vector<FT, Alloc> &vec) {
 template<typename OT>
 INLINE decltype(auto) sum(const OT &x) {return blaze::sum(x);}
 
+template<typename VT, bool SO, typename VT2, bool SO2>
+size_t number_shared_zeros(const blaze::SparseVector<VT, SO> &_lhs, const blaze::SparseVector<VT2, SO2> &_rhs) {
+     auto &lhs = ~_lhs;
+     auto &rhs = ~_rhs;
+     assert(lhs.size() == rhs.size());
+     //const size_t sz = lhs.size();
+     auto lhit = lhs.begin();
+     auto rhit = rhs.begin();
+     auto lhe = lhs.end();
+     auto rhe = rhs.end();
+     if(lhit == lhe) return nonZeros(rhs);
+     if(rhit == rhe) return nonZeros(lhs);
+     auto getnextindex = [&]() {
+         size_t r1 = lhit == lhe ? size_t(-1): lhit->index();
+         size_t r2 = rhit == rhe ? size_t(-1): rhit->index();
+         if(r1 == r2) {
+             ++lhit;
+             ++rhit;
+         } else if(r1 < r2) ++lhit;
+         else ++rhit;
+         return std::min(r1, r2);
+     };
+     size_t current_index = getnextindex();
+     size_t ret = current_index;
+     for(size_t nv; (nv = getnextindex()) != size_t(-1);) {
+         if(nv == current_index) continue;
+         assert(nv > current_index);
+         ret += nv - current_index - 1;
+         current_index = nv;
+     }
+     return ret;
+ }
 
 template<typename MT, bool SO>
 void fill_helper(blaze::Matrix<MT, SO> &mat) {

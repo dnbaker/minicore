@@ -673,7 +673,8 @@ public:
                     dox(rhit->value() + lhrsimul);
                 //std::fprintf(stderr, "Handled all lhit\n");
                 const FT sump = (lhrsimul + rhrsimul);
-                ret -= (dim - nonZeros(lhr + rhr)) * (sump * std::log(.5 * (sump)));
+                ret -= blz::number_shared_zeros(lhr, rhr) * (sump * std::log(.5 * (sump)));
+                //ret -= (dim - nonZeros(lhr + rhr)) * (sump * std::log(.5 * (sump)));
             } else {
                 std::fprintf(stderr, "Fanciest\n");
                 // This could later be accelerated, but that kind of caching is more complicated.
