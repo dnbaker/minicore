@@ -503,7 +503,6 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
             auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(detail::make_aa(app), app.size(), ct);
             set_metric_return_values(metric_ret);
         } else {
-            PRETTY_SAY << "Setting centers with D2\n";
             for(const auto id: initcenters)
                 centers.emplace_back(row(app.data(), id));
             assert(centers.size() == k);
