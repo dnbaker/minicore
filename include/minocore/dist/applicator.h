@@ -638,102 +638,131 @@ public:
             FT ret;
             auto ri = row(i), rj = row(j);
             //constexpr FT logp5 = -0.693147180559945; // std::log(0.5)
-            auto s = ri + rj;
-            ret = jsd_cache_->operator[](i) + jsd_cache_->operator[](j) - blaze::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
-            return std::max(ret, static_cast<FT>(0.));
+            auto s = evaluate(ri + rj);
+            ret = get_jsdcache(i) + get_jsdcache(j) - blaze::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
+            return std::max(.5 * ret, static_cast<FT>(0.));
         } else if constexpr(IS_SPARSE) {
             FT ret = get_jsdcache(i) + get_jsdcache(j);
-            auto lhit = row(i).begin(), lhe = row(i).end();
-            auto rhit = row(j).begin(), rhe = row(j).end();
-            auto lhrs = row_sums_[i];
-            auto rhrs = row_sums_[j];
-            auto lhrsi = 1. / lhrs;
-            auto rhrsi = 1. / rhrs;
-            auto lhrsimul = lhrsi * prior_data_->operator[](0);
-            auto rhrsimul = rhrsi * prior_data_->operator[](0);
+            const size_t dim = row(i).size();
+            auto lhit = row(i).begin();
+            auto rhit = row(j).begin();
+            const auto lhe = row(i).end();
+            const auto rhe = row(j).end();
+            auto lhrsi = 1. / row_sums_[i];
+            auto rhrsi = 1. / row_sums_[j];
+            size_t i = 0;
             if(prior_data_->size() == 1) {
+                const auto lhrsimul = lhrsi * prior_data_->operator[](0);
+                const auto rhrsimul = rhrsi * prior_data_->operator[](0);
                 std::fprintf(stderr, "prior size is 1\n");
                 size_t shared_zeros = 0;
-                for(;;) {
+                if(lhit == lhe || rhit == rhe) return static_cast<FT>(0);
+                while(lhit != lhe && rhit != rhe) {
+                    const size_t minind = std::min(lhit->index(), rhit->index());
                     if(lhit->index() == rhit->index()) {
                         ret -= (lhit->value() + rhit->value()) * std::log(.5 * (lhit->value() + rhit->value()));
-                        if(++lhit == lhe) break;
-                        if(++rhit == rhe) break;
+                        ++lhit; ++rhit;
                     } else if(lhit->index() < rhit->index()) {
                         ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
-                        shared_zeros += (rhit->index() - lhit->index() - 1);
-                        if(++lhit == lhe) break;
+                        ++lhit;
                     } else {
                         ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
-                        shared_zeros += (lhit->index() - rhit->index() - 1);
-                        if(++rhit == rhe) break;
+                        ++rhit;
                     }
+                    shared_zeros += minind - i;
+                    i = minind + 1;
                 }
                 std::fprintf(stderr, "Finished loop. lhit is end? %d rhit is ind? %d\n", lhit == lhe, rhit == rhe);
-                while(lhit != lhe) {
-                    std::fprintf(stderr, "Handling next lhit\n");
+                if(lhit != lhe) {
                     size_t cind = lhit->index();
-                    ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
-                    size_t nextind = ++lhit == lhe ? data().columns(): lhit->index();
-                    shared_zeros += nextind - cind - 1;
+                    shared_zeros += cind - i;
+                    i = cind + 1;
+                    for(;;) {
+                        ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
+                        if(++lhit == lhe) {
+                            shared_zeros += dim - i;
+                            break;
+                        }
+                        size_t nextind = lhit->index();
+                        shared_zeros += nextind - i;
+                        i = nextind + 1;
+                    }
                 }
-                std::fprintf(stderr, "Handled all lhit\n");
-                while(rhit != rhe) {
-                    std::fprintf(stderr, "Handling next rhit\n");
+                if(rhit != rhe) {
                     size_t cind = rhit->index();
-                    ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
-                    size_t nextind = ++rhit == rhe ? data().columns(): rhit->index();
-                    shared_zeros += nextind - cind - 1;
+                    shared_zeros += cind - i;
+                    i = cind + 1;
+                    for(;;) {
+                        ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
+                        if(++rhit == rhe) {
+                            shared_zeros += dim - i;
+                            break;
+                        }
+                        size_t nextind = rhit->index();
+                        shared_zeros += nextind - i;
+                        i = nextind + 1;
+                    }
                 }
                 std::fprintf(stderr, "Handled all lhit\n");
                 FT sump = (lhrsimul + rhrsimul);
                 ret -= shared_zeros * (sump * std::log(.5 * (sump)));
+                assert(shared_zeros + nonZeros(row(i) + row(j)) == dim || !std::fprintf(stderr, "sharedz: %zu. dim: %zu. nz: %zu\n", shared_zeros, dim, nonZeros(row(i) + row(j))));
             } else {
                 std::fprintf(stderr, "Fanciest\n");
                 // This could later be accelerated, but that kind of caching is more complicated.
                 auto &pd = *prior_data_;
-                for(;;) {
+                auto dox = [&](auto x, auto y) {ret -= (x + y) * std::log(.5 * (x + y));};
+                auto doxy = [&](auto x) {ret -= x * std::log(.5 * x);};
+                bool rightemp = rhit == rhe;
+                bool leftemp = lhit == lhe;
+                while(lhit != lhe && rhit != rhe) {
                     if(lhit->index() == rhit->index()) {
-                        ret -= (lhit->value() + rhit->value()) * std::log(.5 * (lhit->value() + rhit->value()));
+                        dox(lhit->value(), rhit->value());
                         if(++lhit == lhe) break;
                         if(++rhit == rhe) break;
                     } else if(lhit->index() < rhit->index()) {
-                        ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
-                        for(size_t i = lhit->index() + 1; i < rhit->index(); ++i) {
-                            auto sv = pd[i] * (lhrsi + rhrsi);
-                            ret -= sv * std::log(.5 * sv);
-                        }
+                        dox(lhit->value(), pd[lhit->index()] * rhrsi);
+                        for(size_t i = lhit->index() + 1; i < rhit->index(); ++i)
+                            dox(pd[i] * lhrsi, pd[i] * rhrsi);
                         if(++lhit == lhe) break;
                     } else {
-                        ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
-                        for(size_t i = rhit->index() + 1; i < lhit->index(); ++i) {
-                            auto sv = pd[i] * (rhrsi + lhrsi);
-                            ret -= sv * std::log(.5 * sv);
-                        }
+                        dox(rhit->value(), pd[rhit->index()] * lhrsi);
+                        for(size_t i = rhit->index() + 1; i < lhit->index(); ++i)
+                            doxy(pd[i] * (lhrsi + rhrsi));
                         if(++rhit == rhe) break;
                     }
                 }
                 // Remaining entries
-                while(rhit != rhe) {
-                    ret -= (lhit->value() + rhrsimul) * std::log(.5 * (lhit->value() + rhrsimul));
-                    size_t nextind;
-                    if(++lhit == lhe) nextind = data().columns();
-                    else nextind = lhit->index();
-                    for(size_t i = 0; i < nextind; ++i) {
-                        auto sv = pd[i] * (lhrsi + rhrsi);
-                        ret -= sv * std::log(.5 * sv);
+                if(lhit != lhe) {
+                    if(rightemp) {
+                        for(size_t i = 0; i < lhit->index(); ++i)
+                            doxy(pd[i] * (lhrsi + rhrsi));
                     }
-                }
-                while(rhit != rhe) {
-                    ret -= (rhit->value() + lhrsimul) * std::log(.5 * (rhit->value() + lhrsimul));
-                    const size_t nextind = (++rhit == rhe) ? data().columns(): rhit->index();
-                    for(size_t i = 0; i < nextind; ++i) {
-                        auto sv = pd[i] * (rhrsi + lhrsi);
-                        ret -= sv * std::log(.5 * sv);
+                    while(lhit != lhe) {
+                        dox(lhit->value(), pd[lhit->index()] * rhrsi);
+                        size_t i = lhit->index() + 1;
+                        size_t nextind = (++lhit == lhe) ? dim: lhit->index();
+                        for(; i < nextind; ++i)
+                            doxy(pd[i] * (lhrsi + rhrsi));
                     }
+                } else if(rhit != rhe) {
+                    if(leftemp) {
+                        for(size_t i = 0; i < rhit->index(); ++i)
+                            doxy(pd[i] * (lhrsi + rhrsi));
+                    }
+                    while(rhit != rhe) {
+                        dox(rhit->value(), lhrsi * pd[rhit->index()]);
+                        size_t i = rhit->index() + 1;
+                        size_t nextind = (++rhit == rhe) ? dim: rhit->index();
+                        for(; i < nextind; ++i)
+                            doxy(pd[i] * (lhrsi + rhrsi));
+                    }
+                } else if(rightemp && leftemp) {
+                    for(size_t i = 0; i < dim; ++i)
+                        doxy(pd[i] * lhrsi + rhrsi);
                 }
             }
-            return ret;
+            return std::max(ret * .5, static_cast<FT>(0.));
         }
         __builtin_unreachable();
     }
@@ -752,69 +781,108 @@ public:
     auto mkl(size_t i, size_t j) const {
         if constexpr(IS_SPARSE) {
             if(prior_data_) {
-                const bool single_value = prior_data_->size() == 1;
-                auto lhit = row(i).begin();
-                auto rhit = row(j).begin();
-                auto lhe = row(i).end();
-                auto rhe = row(j).end();
-                auto lhrs = row_sums_[i];
-                auto rhrs = row_sums_[j];
-                auto lhrsi = 1. / lhrs;
-                auto rhrsi = 1. / rhrs;
-                auto lhrsimul = lhrsi * prior_data_->operator[](0);
-                auto rhrsimul = rhrsi * prior_data_->operator[](0);
-                auto &pd = *prior_data_;
-                auto lhrsimulog = std::log(lhrsimul);
-                auto rhrsimulog = std::log(rhrsimul);
+                const auto &pd(*prior_data_);
+                const bool single_value = pd.size() == 1;
+                auto lhr = row(i);
+                const size_t dim = lhr.size();
+                auto rhr = row(j);
+                auto lhit = lhr.begin(), rhit = rhr.begin();
+                const auto lhe = lhr.end(), rhe = rhr.end();
+                const auto lhrsi = 1. / row_sums_[i];
+                const auto rhrsi = 1. / row_sums_[j];
                 FT ret = 0.;
-                auto handle_lt = [&](auto lhit, auto rhit) {
-                    auto dist = rhit->index() - lhit->index();
-                    if(single_value) {
-                        ret += ((lhrsimul * (lhrsimulog - rhrsimulog)) * (dist - 1) // Handle terms between lh and rh value
-                                + lhit->value() * (std::log(lhit->value()) - rhrsimulog));
-                                // handle term at lh value, which is 0 for the other
-                    } else {
-                        auto inc1 = lhit->value() * (std::log(lhit->value()) - pd[lhit->index()]);
-                        for(size_t i = lhit->index() + 1, j = rhit->index(); i < j; ++i) {
-                            auto lhv = lhrsi * pd[i], rhv = rhrsi * pd[i];
-                            inc1 += lhv * (std::log(lhv) - std::log(rhv));
+                if(single_value) {
+                    size_t i = 0;
+                    const FT inc = pd[0];
+                    const FT lhinc = inc * lhrsi;
+                    const FT rhinc = inc * rhrsi;
+                    const FT rhincl = std::log(rhinc);
+                    const FT empty_contrib = -lhinc * rhincl;
+                    size_t nz = 0;
+                    for(;;) {
+                        if(lhit != lhe && rhit != rhe) {
+                            size_t cind = std::min(lhit->index(), rhit->index());
+                            nz += cind - i;
+                            i = cind + 1;
+                            const size_t lhi = lhit->index();
+                            const size_t rhi = rhit->index();
+                            if(lhi == rhi) {
+                                ret -= lhit->value() * std::log(rhit->value());
+                                ++lhit;
+                                ++rhit;
+                            } else if(lhi < rhi) {
+                                ret -= lhit->value() * rhincl;
+                                ++lhit;
+                            } else {
+                                ret -= lhinc * std::log(rhit->value());
+                                ++rhit;
+                            }
+                        } else if(lhit == lhe) {
+                            if(rhit == rhe) {
+                                nz += dim - i;
+                                i = dim;
+                                break;
+                            } else {
+                                for(;rhit != rhe;++rhit) {
+                                    nz += rhit->index() - i;
+                                    ret -= lhinc * std::log(rhit->value());
+                                    i = rhit->index() + 1;
+                                }
+                            }
+                        } else if(rhit == rhe) {
+                            for(;lhit != lhe;++lhit) {
+                                nz += lhit->index() - i;
+                                ret -= lhit->value() * rhincl;
+                                i = lhit->index() + 1;
+                            }
                         }
-                        ret += inc1;
                     }
-                };
-                for(;;) {
-                    if(lhit->index() == rhit->index()) {
-                        ret += lhit->value() * (std::log(lhit->value()) - std::log(rhit->value()));
-                        if(++lhit == lhe) break;
-                        if(++rhit == rhe) break;
-                    } else if(lhit->index() < rhit->index()) {
-                        handle_lt(lhit, rhit);
-                        if(++lhit == lhe) break;
-                    } else /* if(rhit->index() < lhit->index()) */ {
-                        handle_lt(rhit, lhit);
-                        if(++rhit == rhe) break;
+                    ret += empty_contrib * nz;
+                } else { // if(single_value) / else
+                    for(;;) {
+                        if(lhit != lhe && rhit != rhe) {
+                            size_t cind = std::min(lhit->index(), rhit->index());
+                            for(;i < cind;++i)
+                                ret -= lhrsi * pd[i] * std::log(rhrsi * pd[i]);
+                            const size_t lhi = lhit->index();
+                            const size_t rhi = rhit->index();
+                            if(lhi == rhi) {
+                                ret -= lhit->value() * std::log(rhit->value());
+                                ++lhit;
+                                ++rhit;
+                            } else if(lhi < rhi) {
+                                ret -= lhit->value() * std::log(rhrsi * pd[i]);
+                                ++lhit;
+                            } else {
+                                // lh contrib is prior over row sum
+                                ret -= pd[i] * lhrsi * std::log(rhit->value());
+                                ++rhit;
+                            }
+                            ++i;
+                        } else if(lhit == lhe) {
+                            if(rhit == rhe) {
+                                for(;i < dim;++i)
+                                    ret -= lhrsi * pd[i] * std::log(rhrsi * pd[i]);
+                                break;
+                            } else {
+                                for(;rhit != rhe;++rhit) {
+                                    for(;i < rhit->index(); ++i)
+                                        ret -= lhrsi * pd[i] * std::log(rhrsi * pd[i]);
+                                    ret -= lhrsi * pd[i] * std::log(rhit->value());
+                                    ++i;
+                                }
+                            }
+                        } else if(rhit == rhe) {
+                            for(;lhit != lhe;++lhit) {
+                                for(;i < lhit->index(); ++i)
+                                    ret -= lhrsi * pd[i] * std::log(rhrsi * pd[i]);
+                                ret -= lhit->value() * std::log(rhrsi * pd[i]);
+                                ++i;
+                            }
+                        }
                     }
                 }
-                // Handle the remainder
-                auto handle_last = [&](auto lhit, auto lhsim, auto rhsim, auto lhlog, auto rhlog) {
-                    FT inc;
-                    if(single_value) {
-                        inc = lhsim * (lhlog - rhlog) * (data().columns() - lhit->index() - 1)
-                              + lhit->value() * (std::log(lhit->value()) - rhlog);
-                    } else {
-                        inc = lhit->value() * (std::log(lhit->value()) - pd[lhit->index()]);
-                        for(size_t i = lhit->value() + 1, j = data().columns(); i < j; ++i) {
-                            auto lhv = lhsim * pd[i], rhv = rhsim * pd[i];
-                            inc += lhv * (std::log(lhv) - std::log(rhv));
-                        }
-                    }
-                    ret += inc;
-                };
-                if(lhit != lhe)
-                    handle_last(lhit, lhrsimul, rhrsimul, lhrsimulog, rhrsimulog);
-                else if(rhit != rhe)
-                    handle_last(rhit, rhrsimul, lhrsimul, rhrsimulog, lhrsimulog);
-                return ret;
+                return ret + get_jsdcache(i);
             }
         }
         return FT(get_jsdcache(i) - blz::dot(row(i), logrow(j)));
@@ -976,6 +1044,7 @@ private:
         {
             auto rowsumit = row_sums_.data();
             for(auto r: blz::rowiterator(data_)) {
+                FT countsum = blaze::sum(r);
                 if constexpr(blaze::IsDenseMatrix_v<MatrixType>) {
                     if(prior == NONE) {
                         r += 1e-50;
@@ -984,8 +1053,19 @@ private:
                             throw std::invalid_argument(std::string("Measure ") + dist::detail::prob2str(measure_) + " expects nonnegative data");
 #endif
                     }
+                } else if constexpr(blaze::IsSparseMatrix_v<MatrixType>) {
+                    bool single_value = prior_data_->size() == 1;
+                    if(prior == DIRICHLET) {
+                        countsum += r.size();
+                    } else {
+                        MINOCORE_VALIDATE(prior_data_ != nullptr);
+                        countsum += single_value ? r.size() * *prior_data_->begin()
+                                                 : blaze::sum(*prior_data_);
+                    }
+                    for(auto &item: r)
+                        item.value() +=
+                            (*prior_data_)[single_value ? size_t(0): item.index()];
                 }
-                const auto countsum = blaze::sum(r);
                 r /= countsum;
                 *rowsumit++ = countsum;
             }
@@ -1017,27 +1097,33 @@ private:
             if constexpr(IS_SPARSE) {
                 if(prior_data_) {
                     // Handle sparse priors
-                    assert(prior_data_->size() == 1 || prior_data_->size() == data_.columns());
-                    const bool single_value = prior_data_->size() == 1;
+                    MINOCORE_VALIDATE(prior_data_->size() == 1 || prior_data_->size() == data_.columns());
+                    auto &pd = *prior_data_;
+                    const bool single_value = pd.size() == 1;
                     for(size_t i = 0; i < data_.rows(); ++i) {
                         const auto rs = row_sums_[i];
-                        auto plp = evaluate(*prior_data_ / rs);
-                        plp = evaluate(plp * blaze::log(plp));
                         auto r = row(i);
-                        size_t ind = 0;
-                        FT v = single_value ? FT(plp[0] * nonZeros(r)): FT(0);
-                        auto it = r.begin(), eit = r.end();
-                        for(;it != eit;++it) {
-                            const auto pind = it->index();
-                            if(ind < pind && !single_value)
-                                v += blaze::sum(subvector(plp, ind, pind - ind));
-                            ind = pind;
-                            v += it->value() * std::log(it->value());
+                        size_t number_zero = r.size() - blaze::nonZeros(r);
+                        double contrib = 0.;
+                        auto upcontrib = [&](auto x) {contrib += x * std::log(x);};
+                        if(single_value) {
+                            FT invp = pd[0] / rs;
+                            contrib += number_zero * (invp * std::log(invp)); // Empty
+                            for(auto &pair: r) upcontrib(pair.value());       // Non-empty
+                        } else {
+                            size_t i = 0;
+                            auto it = r.begin();
+                            auto contribute_range = [&](size_t end) {
+                                while(i < end) upcontrib(pd[i++] / rs);
+                            };
+                            while(it != r.end() && i < r.size()) {
+                                contribute_range(it->index());
+                                upcontrib(it->value());
+                                if(++it == r.end())
+                                    contribute_range(r.size());
+                            }
                         }
-                        if(!single_value)
-                            if(auto end = r.size() - 1;ind != end)
-                                v += blaze::sum(subvector(plp, ind, end - ind));
-                        jc[i] = v;
+                        jc[i] = contrib;
                     }
                 }
             }

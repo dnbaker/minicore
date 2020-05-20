@@ -78,7 +78,9 @@ CXXFLAGS += $(EXTRA)
 
 CXXFLAGS += $(LDFLAGS)
 
-%dbg: src/%.cpp $(wildcard include/minocore/*.h)
+HEADERS=$(shell find include -name '*.h')
+
+%dbg: src/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread
 
 printlibs:
@@ -91,7 +93,7 @@ graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
 dmlrun: src/dmlsearch.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
-%: src/%.cpp $(wildcard include/minocore/*.h)
+%: src/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
 
 alphaest: src/alphaest.cpp $(wildcard include/minocore/*.h)

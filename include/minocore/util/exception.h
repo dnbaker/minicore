@@ -93,7 +93,7 @@ static int postcondition_require(bool condition, std::string s, int ec=0) {
 
 #ifndef MINOCORE_VALIDATE
 #define MINOCORE_VALIDATE(condition) \
-    ::minocore::exception::validate(condition, '[' + __FILE__ + '|' + __PRETTY_FUNCTION__ + "|#L" + std::to_string(__LINE__) + "] Failing condition: \"" + #condition + '"')
+    ::minocore::exception::validate(condition, std::string("[") + __FILE__ + '|' + __PRETTY_FUNCTION__ + "|#L" + std::to_string(__LINE__) + "] Failing condition: \"" + #condition + '"')
 #endif
 
 } // inline namespace exception
