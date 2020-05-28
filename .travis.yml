@@ -32,6 +32,7 @@ script:
   - ./fgcinctestdbg
   - ./geomedtestdbg
   - ./sparsepriortestdbg
+  - ./istestdbg
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:

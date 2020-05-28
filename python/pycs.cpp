@@ -27,5 +27,4 @@ void init_coreset(py::module &m) {
     "Generates a coreset sampler given a set of costs, assignments, and, optionally, weights. This can be used to generate an index coreset",
     py::arg("ncenters"), py::arg("costs"), py::arg("assignments"),
     py::arg("weights") =  py::cast<py::none>(Py_None), py::arg("seed") = 13, py::arg("sens")=minocore::coresets::BFL);
-
 }

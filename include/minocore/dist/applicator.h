@@ -549,7 +549,7 @@ public:
     void operator()(MatType &mat, DissimilarityMeasure measure, bool symmetrize=false) {
         set_distance_matrix(mat, measure, symmetrize);
     }
-    template<typename MatType>
+    template<typename MatType, typename=std::enable_if_t<!std::is_arithmetic_v<MatType>>>
     void operator()(MatType &mat, bool symmetrize=false) {
         set_distance_matrix(mat, symmetrize);
     }
@@ -566,8 +566,61 @@ public:
                 std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%zu\n", i, j);
                 throw std::runtime_error(buf);
             }
-            ret = -std::numeric_limits<FT>::max();
-            throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+            if(prior_data_->size() > 1) throw NotImplementedError("Incomplete: imbalanced sparse prior support");
+            const size_t dim = data_.columns();
+            auto lhr(row(i)), rhr(row(j));
+            auto lhit = lhr.begin(), rhit = rhr.begin();
+            auto lhe = lhr.end(), rhe = rhr.end();
+            size_t index = 0;
+            auto lhn = row_sums_[i], rhn = row_sums_[j];
+            const auto mul = prior_data_->operator[](0);
+            auto lhrsi = mul / lhn;
+            size_t shared_zero = 0;
+            ret = -static_cast<FT>(dim); // To account for -1 in IS distance.
+            auto do_inc = [&](auto x) {ret += x - std::log(x);};
+            while(index < dim) {
+                switch(((lhit == lhe) << 1) | (rhit == rhe)) {
+                    case 0: {
+                        size_t cind = std::min(lhit->index(), rhit->index());
+                        shared_zero += cind - index;
+                        index = cind + 1;
+                        if(lhit->index() == rhit->index()) {
+                            do_inc(lhit->value() / rhit->value());
+                            ++lhit;
+                            ++rhit;
+                        } else if(lhit->index() < rhit->index()) {
+                            do_inc(lhit->value() * rhn);
+                            ++lhit;
+                        } else {
+                            do_inc(lhrsi / rhit->value());
+                            ++rhit;
+                        }
+                    }
+                    break;
+                    case 1: {
+                        for(;lhit != lhe;++lhit) {
+                            shared_zero += lhit->index() - index;
+                            index = lhit->index() + 1;
+                            do_inc(lhit->value() * rhn);
+                        }
+                    }
+                    break;
+                    case 2: {
+                        for(;rhit != rhe;++rhit) {
+                            shared_zero += rhit->index() - index;
+                            index = rhit->index() + 1;
+                            do_inc(lhrsi / rhit->value());
+                        }
+                    }
+                    break;
+                    case 3: {
+                        shared_zero += dim - index;
+                        index = dim;
+                    }
+                }
+            }
+            //std::fprintf(stderr, "%zu shared zero\n", shared_zero);
+            ret += shared_zero * (lhrsi * rhn - std::log(lhrsi * rhn)); // Account for shared-zero positions
         } else {
             auto div = row(i) / row(j);
             ret = blaze::sum(div - blaze::log(div)) - row(i).size();
@@ -657,7 +710,6 @@ public:
                 const FT sump = (lhrsimul + rhrsimul);
                 ret -= blz::number_shared_zeros(lhr, rhr) * (sump * std::log(.5 * (sump)));
             } else {
-                std::fprintf(stderr, "Fanciest\n");
                 // This could later be accelerated, but that kind of caching is more complicated.
                 auto &pd = *prior_data_;
                 auto dox = [&](auto x, auto y) {ret -= (x + y) * std::log(.5 * (x + y));};
@@ -835,12 +887,12 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT mkl(const OT &o, size_t i) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return blaze::dot(o, blaze::neginf2zero(blaze::log(o)) - logrow(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     FT mkl(size_t i, const OT &, const OT2 &olog) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return blaze::dot(row(i), logrow(i) - olog);
     }
     template<typename...Args>
@@ -943,7 +995,6 @@ private:
 
     template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>
     void prep(Prior prior, const Container *c=nullptr) {
-        std::fprintf(stderr, "beginning prep.\n");
         switch(prior) {
             case NONE:
             break;
@@ -1174,11 +1225,6 @@ class MultinomialLLRApplicator: public DissimilarityApplicator<MatrixType> {
                              Prior prior=NONE,
                              const PriorContainer *c=nullptr):
         DissimilarityApplicator<MatrixType>(ref, LLR, prior, c) {}
-};
-
-template<typename MJD>
-struct BaseOperand {
-    using type = decltype(*std::declval<MJD>());
 };
 
 template<typename MatrixType, typename PriorContainer=blaze::DynamicVector<typename MatrixType::ElementType, blaze::rowVector>>

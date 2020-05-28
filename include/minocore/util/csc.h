@@ -8,13 +8,18 @@
 
 namespace minocore {
 
+
 template<typename IndPtrType=uint64_t, typename IndicesType=uint64_t, typename DataType=uint32_t>
 struct CSCMatrixView {
+    using ElementType = DataType;
     const IndPtrType *const indptr_;
     const IndicesType *const indices_;
     const DataType *const data_;
     const uint64_t nnz_;
     const uint32_t nf_, n_;
+    static_assert(std::is_integral_v<IndPtrType>, "IndPtr must be integral");
+    static_assert(std::is_integral_v<IndicesType>, "Indices must be integral");
+    static_assert(std::is_arithmetic_v<IndicesType>, "Data must be arithmetic");
     CSCMatrixView(const IndPtrType *indptr, const IndicesType *indices, const DataType *data,
                   uint64_t nnz, uint32_t nfeat, uint32_t nitems):
         indptr_(indptr),
@@ -24,17 +29,120 @@ struct CSCMatrixView {
         nf_(nfeat), n_(nitems)
     {
     }
+    struct CView: public std::pair<DataType *, size_t> {
+        size_t index() const {return this->second;}
+        DataType &value() {return *this->first;}
+        const DataType &value() const {return *this->first;}
+    };
+    struct ConstCView: public std::pair<const DataType*, size_t> {
+        size_t index() const {return this->second;}
+        const DataType &value() const {return *this->first;}
+    };
     struct Column {
         const CSCMatrixView &mat_;
-        Column(const CSCMatrixView &mat, size_t start, size_t stop): mat_(mat), start_(start), stop_(stop) {}
         size_t start_;
         size_t stop_;
+
+        Column(const CSCMatrixView &mat, size_t start, size_t stop): mat_(mat), start_(start), stop_(stop) {}
         size_t nnz() const {return stop_ - start_;}
+        size_t size() const {return mat_.columns();}
+        template<bool is_const>
+        struct ColumnIteratorBase {
+            using ViewType = std::conditional_t<is_const, ConstCView, CView>;
+            using ColType = std::conditional_t<is_const, const Column, Column>;
+            using ViewedType = std::conditional_t<is_const, const DataType, DataType>;
+            using difference_type = std::ptrdiff_t;
+            using value_type = ViewedType;
+            using reference = ViewedType &;
+            using pointer = ViewedType *;
+            using iterator_category = std::random_access_iterator_tag;
+            ColType &col_;
+            size_t index_;
+            private:
+            mutable ViewType data_;
+            public:
+
+            template<bool oconst>
+            bool operator==(const ColumnIteratorBase<oconst> &o) const {
+                return index_ == o.index_;
+            }
+            template<bool oconst>
+            bool operator!=(const ColumnIteratorBase<oconst> &o) const {
+                return index_ != o.index_;
+            }
+            template<bool oconst>
+            bool operator<(const ColumnIteratorBase<oconst> &o) const {
+                return index_ < o.index_;
+            }
+            template<bool oconst>
+            bool operator>(const ColumnIteratorBase<oconst> &o) const {
+                return index_ > o.index_;
+            }
+            template<bool oconst>
+            bool operator<=(const ColumnIteratorBase<oconst> &o) const {
+                return index_ <= o.index_;
+            }
+            template<bool oconst>
+            bool operator>=(const ColumnIteratorBase<oconst> &o) const {
+                return index_ >= o.index_;
+            }
+            template<bool oconst>
+            difference_type operator-(const ColumnIteratorBase<oconst> &o) const {
+                return this->index_ - o.index_;
+            }
+            ColumnIteratorBase<is_const> &operator++() {
+                ++index_;
+                return *this;
+            }
+            ColumnIteratorBase<is_const> operator++(int) {
+                ColumnIteratorBase ret(col_, index_);
+                ++index_;
+                return ret;
+            }
+            const CView &operator*() const {
+                set();
+                return data_;
+            }
+            CView &operator*() {
+                set();
+                return data_;
+            }
+            void set() const {
+                data_.first = const_cast<DataType *>(&col_.mat_.data_[index_]);
+                data_.second = col_.mat_.indices_[index_];
+            }
+            ViewType *operator->() {
+                return &data_;
+            }
+            const ViewType *operator->() const {
+                return &data_;
+            }
+            ColumnIteratorBase(ColType &col, size_t ind): col_(col), index_(ind) {
+            }
+        };
+        using ColumnIterator = ColumnIteratorBase<false>;
+        using ConstColumnIterator = ColumnIteratorBase<true>;
+        ColumnIterator begin() {return ColumnIterator(*this, start_);}
+        ColumnIterator end()   {return ColumnIterator(*this, stop_);}
+        ConstColumnIterator begin() const {return ConstColumnIterator(*this, start_);}
+        ConstColumnIterator end()   const {return ConstColumnIterator(*this, stop_);}
     };
     auto column(size_t i) const {
         return Column(*this, indptr_[i], indptr_[i + 1]);
     }
+    size_t nnz() const {return nnz_;}
+    size_t rows() const {return n_;}
+    size_t columns() const {return nf_;}
 };
+
+template<typename DataType, typename IndPtrType, typename IndicesType>
+size_t nonZeros(const typename CSCMatrixView<IndPtrType, IndicesType, DataType>::Column &col) {
+    return col.nnz();
+}
+template<typename DataType, typename IndPtrType, typename IndicesType>
+size_t nonZeros(const CSCMatrixView<IndPtrType, IndicesType, DataType> &mat) {
+    return mat.nnz();
+}
 
 template<typename FT=float, typename IndPtrType, typename IndicesType, typename DataType>
 blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesType, DataType> &mat, bool skip_empty=false) {
@@ -51,6 +159,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
         ret.finalize(used_rows++);
     }
     if(used_rows != i) std::fprintf(stderr, "Only used %zu/%zu rows, skipping empty rows\n", used_rows, i);
+    std::fprintf(stderr, "Parsed matrix of %zu/%zu\n", ret.rows(), ret.columns());
     return ret;
 }
 
@@ -116,6 +225,12 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix)
         ret.finalize(lastline++);
     if(std::getline(ifs, line)) throw std::runtime_error("Error reading file: too many lines");
     return ret;
+}
+
+template<typename FT=float, bool SO=blaze::rowMajor, typename IndPtrType, typename IndicesType, typename DataType>
+blz::SM<FT, SO> csc2sparse(const IndPtrType *indptr, const IndicesType *indices, const DataType *data, 
+                           size_t nnz, size_t nfeat, uint32_t nitems) {
+    return csc2sparse(CSCMatrixView<IndPtrType, IndicesType, DataType>(indptr, indices, data, nnz, nfeat, nitems));
 }
 
 } // namespace minocore

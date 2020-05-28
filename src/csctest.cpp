@@ -4,6 +4,36 @@ template<typename IndPtrT, typename IndicesT, typename VT>
 void dothing(std::string path) {
     auto read = minocore::csc2sparse<float, IndPtrT, IndicesT, VT>(path);
     std::fprintf(stderr, "nr: %zu. nc: %zu. nnz: %zu\n", read.rows(), read.columns(), read.nonZeros());
+    std::fprintf(stderr, "size of indptr: %zu siz of indices: %zu. size of vt: %zu. is floating? %d\n",
+                 sizeof(IndPtrT), sizeof(IndicesT), sizeof(VT), std::is_floating_point_v<VT>);
+    std::string indptrn  = path + "indptr.file";
+    std::string indicesn = path + "indices.file";
+    std::string datan    = path + "data.file";
+    std::string shape    = path + "shape.file";
+    mio::mmap_sink indptr(indptrn), indices(indicesn), data(datan);
+    minocore::CSCMatrixView<IndPtrT, IndicesT, VT> matview(
+        (const IndPtrT *)indptr.data(), (const IndicesT *)indices.data(),
+        (const VT *)data.data(), indices.size() / sizeof(IndicesT),
+        read.columns(), read.rows());
+    assert(read.rows() == matview.rows());
+    assert(read.columns() == matview.columns());
+    for(size_t i = 0; i < read.rows(); ++i) {
+        auto col = matview.column(i);
+        auto r = row(read, i);
+        assert(r.size() == col.size());
+        assert(nonZeros(r) == col.nnz());
+        auto colit = col.begin();
+        auto cole = col.end();
+        auto rowit = r.begin();
+        auto rowe = r.end();
+        assert(std::distance(colit, cole) == std::distance(rowit, rowe));
+        while(colit != cole) {
+            auto &p = *colit;
+            assert(p.value() == rowit->value());
+            assert(p.index() == rowit->index());
+            ++colit; ++rowit;
+        }
+    }
 }
 
 enum VT {
