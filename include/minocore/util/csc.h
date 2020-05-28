@@ -112,9 +112,11 @@ struct CSCMatrixView {
                 data_.second = col_.mat_.indices_[index_];
             }
             ViewType *operator->() {
+                set();
                 return &data_;
             }
             const ViewType *operator->() const {
+                set();
                 return &data_;
             }
             ColumnIteratorBase(ColType &col, size_t ind): col_(col), index_(ind) {
@@ -134,6 +136,15 @@ struct CSCMatrixView {
     size_t rows() const {return n_;}
     size_t columns() const {return nf_;}
 };
+
+template<typename T>
+struct is_csc_view: public std::false_type {};
+template<typename IndPtrType, typename IndicesType, typename DataType>
+struct is_csc_view<CSCMatrixView<IndPtrType, IndicesType, DataType>>: public std::true_type {};
+
+template<typename T>
+static constexpr bool is_csc_view_v = is_csc_view<T>::value;
+
 
 template<typename DataType, typename IndPtrType, typename IndicesType>
 size_t nonZeros(const typename CSCMatrixView<IndPtrType, IndicesType, DataType>::Column &col) {

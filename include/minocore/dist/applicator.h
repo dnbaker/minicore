@@ -5,8 +5,7 @@
 #include "minocore/dist/distance.h"
 #include "distmat/distmat.h"
 #include "minocore/optim/kmeans.h"
-#include <boost/math/special_functions/digamma.hpp>
-#include <boost/math/special_functions/polygamma.hpp>
+#include "minocore/util/csc.h"
 #include <set>
 
 
@@ -18,16 +17,19 @@ using namespace blz;
 using namespace blz::distance;
 
 
-template<typename MatrixType>
+template<typename MatrixType, typename ElementType=blaze::ElementType_t<MatrixType>>
 class DissimilarityApplicator {
-    static constexpr bool IS_SPARSE      = IsSparseMatrix_v<MatrixType>;
+    static constexpr bool IS_CSC_VIEW    = is_csc_view_v<MatrixType>;
+    static constexpr bool IS_SPARSE      = IsSparseMatrix_v<MatrixType> || IS_CSC_VIEW;
     static constexpr bool IS_DENSE_BLAZE = IsDenseMatrix_v<MatrixType>;
 
+    using ET = ElementType;
+
     MatrixType &data_;
-    using VecT = blaze::DynamicVector<typename MatrixType::ElementType, IsRowMajorMatrix_v<MatrixType> ? blaze::rowVector: blaze::columnVector>;
+    using VecT = blaze::DynamicVector<ET, IsRowMajorMatrix_v<MatrixType> || is_csc_view_v<MatrixType> ? blaze::rowVector: blaze::columnVector>;
     using matrix_type = MatrixType;
     VecT row_sums_;
-    using CacheMatrixType = std::conditional_t<IS_SPARSE, blaze::CompressedMatrix<blaze::ElementType_t<MatrixType>>, blaze::DynamicMatrix<blaze::ElementType_t<MatrixType>> >;
+    using CacheMatrixType = std::conditional_t<IS_SPARSE, blz::SM<ET>, blz::DM<ET> >;
     CacheMatrixType logdata_;
     CacheMatrixType sqrdata_;
     VecT jsd_cache_;
@@ -35,10 +37,11 @@ class DissimilarityApplicator {
     std::unique_ptr<VecT> l2norm_cache_;
     std::unique_ptr<VecT> pl2norm_cache_;
 public:
-    using FT = typename MatrixType::ElementType;
+    using FT = ET;
     using MT = MatrixType;
     using This = DissimilarityApplicator<MatrixType>;
     using ConstThis = const DissimilarityApplicator<MatrixType>;
+    static_assert(std::is_floating_point_v<FT>, "FT must be floating point");
 
     const DissimilarityMeasure measure_;
     const MatrixType &data() const {return data_;}
@@ -1057,10 +1060,32 @@ private:
             }
         }
 
-        if(dist::detail::needs_logs(measure_))
-            logdata_ = CacheMatrixType(neginf2zero(log(data_)));
-        if(dist::detail::needs_sqrt(measure_))
-            sqrdata_ = CacheMatrixType(blaze::sqrt(data_));
+        if(dist::detail::needs_logs(measure_)) {
+            if constexpr(IS_CSC_VIEW) {
+                logdata_ = CacheMatrixType(data_.rows(), data_.columns());
+                logdata_.reserve(data_.nnz());
+                for(size_t i = 0; i < data_.rows(); ++i) {
+                    for(const auto &pair: data_.column(i)) {
+                        logdata_.set(i, pair.index(), std::log(pair.value()));
+                    }
+                }
+            } else {
+                logdata_ = CacheMatrixType(neginf2zero(log(data_)));
+            }
+        }
+        if(dist::detail::needs_sqrt(measure_)) {
+            if constexpr(IS_CSC_VIEW) {
+                sqrdata_ = CacheMatrixType(data_.rows(), data_.columns());
+                sqrdata_.reserve(data_.nnz());
+                for(size_t i = 0; i < data_.rows(); ++i) {
+                    for(const auto &pair: data_.column(i)) {
+                        sqrdata_.set(i, pair.index(), std::sqrt(pair.value()));
+                    }
+                }
+            } else {
+                sqrdata_ = CacheMatrixType(blaze::sqrt(data_));
+            }
+        }
         if(dist::detail::needs_l2_cache(measure_)) {
             l2norm_cache_.reset(new VecT(data_.rows()));
             OMP_PFOR
