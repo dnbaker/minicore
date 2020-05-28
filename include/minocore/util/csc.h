@@ -205,7 +205,7 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix)
     do std::getline(ifs, line); while(line.front() == '%');
     char *s;
     size_t columns = std::strtoull(line.data(), &s, 10),
-             nr  = std::strtoull(s, &s, 10),
+             nr    = std::strtoull(s, &s, 10),
              lines = std::strtoull(s, nullptr, 10);
     size_t lastline = 0;
     blz::SM<FT, SO> ret(nr, columns);
@@ -230,7 +230,7 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix)
 template<typename FT=float, bool SO=blaze::rowMajor, typename IndPtrType, typename IndicesType, typename DataType>
 blz::SM<FT, SO> csc2sparse(const IndPtrType *indptr, const IndicesType *indices, const DataType *data, 
                            size_t nnz, size_t nfeat, uint32_t nitems) {
-    return csc2sparse(CSCMatrixView<IndPtrType, IndicesType, DataType>(indptr, indices, data, nnz, nfeat, nitems));
+    return csc2sparse<FT, SO>(CSCMatrixView<IndPtrType, IndicesType, DataType>(indptr, indices, data, nnz, nfeat, nitems));
 }
 
 } // namespace minocore

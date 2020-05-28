@@ -7,7 +7,7 @@ These methods allow for fast and accurate summarization of and clustering of dat
 
 Minocore both stands for "mini" and "core", as it builds *concise representations* via *core*-sets, and as a portmanteau of Manticore and Minotaur.
 
-![Minocore](https://raw.githubusercontent.com/dnbaker/minocore/master/media/Tondo_Minotaur_London.processed.jpg "The Minocore")
+![Minocore](https://raw.githubusercontent.com/dnbaker/minocore/ff4a0720758007c04400e0e7a87f585553670c6b/media/Tondo_Minotaur_London.processed.jpg "The Minocore")
 
 ### Dependencies
 
