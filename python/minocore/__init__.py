@@ -1,2 +1,3 @@
 import pyfgc
-from .constants import *
+from pyfgc import *
+from .constants import SENSDICT
