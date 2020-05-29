@@ -120,7 +120,7 @@ class BuildExt(build_ext):
         build_ext.build_extensions(self)
 
 setup(
-    name='pyfgc',
+    name='minocore',
     version=__version__,
     author='Daniel Baker',
     author_email='dnb@cs.jhu.edu',
