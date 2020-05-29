@@ -1,1 +1,2 @@
-from pyfgc import *
+import pyfgc
+from .constants import *

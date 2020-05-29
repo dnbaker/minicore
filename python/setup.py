@@ -45,7 +45,7 @@ include_dirs=[
 ext_modules = [
     Extension(
         'pyfgc',
-        ['pyfgc.cpp', 'pycs.cpp'],
+        ['pyfgc.cpp'],
         include_dirs=include_dirs,
         language='c++',
         extra_compile_args=extra_compile_args

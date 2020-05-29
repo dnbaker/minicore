@@ -44,10 +44,10 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
                 auto startp = &ret[i * k];
                 auto stopp = startp + k;
                 if(measure_is_dist) std::pop_heap(startp, stopp, std::less<void>());
-                                    std::pop_heap(startp, stopp, std::greater<void>());
+                else                std::pop_heap(startp, stopp, std::greater<void>());
                 ret[(i + 1) * k - 1] = packed::pair<FT, IT>{d, j};
                 if(measure_is_dist) std::push_heap(startp, stopp, std::less<void>());
-                                    std::push_heap(startp, stopp, std::greater<void>());
+                else                std::push_heap(startp, stopp, std::greater<void>());
             };
             if(cmp(d)) {
                 OMP_ONLY(std::lock_guard<std::mutex> lock(locks[i]);)
