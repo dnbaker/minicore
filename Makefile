@@ -34,10 +34,11 @@ LDFLAGS+=$(LIBS) -lz $(LINKS)
 EXTRA?=
 DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(BLAS_LINKING_FLAGS) \
-    -DBOOST_NO_AUTO_PTR
+    -DBOOST_NO_AUTO_PTR -lz
 
 
-EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
+DEX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
+EX=$(patsubst src/utils/%.cpp,%,$(wildcard src/utils/*.cpp))
 FEX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
 PGEX=$(patsubst %,%pg,$(EX))
 PGFEX=$(patsubst %,%pgf,$(EX))
@@ -55,6 +56,10 @@ else
     OMP_STR:=-fopenmp#-simd
 endif
 
+ifdef LZMA_ARCHIVE
+CXXFLAGS += $(LZMA_ARCHIVE) -llzma -DHAVE_LZMA
+endif
+
 ifdef TBBDIR
 INCLUDE_PATHS+= $(TBBDIR)/include
 LIBPATHS+= $(TBBDIR)/lib
@@ -63,9 +68,7 @@ LINKS += -ltbb
 endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
-      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg
-
-clust: kzclustexpdbg kzclustexp kzclustexpf
+      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg
 
 tests: $(TESTS)
 print_tests:
@@ -81,36 +84,54 @@ CXXFLAGS += $(LDFLAGS)
 HEADERS=$(shell find include -name '*.h')
 
 %dbg: src/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS)
+
+%dbg: src/tests/%.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS)
+
+%: src/tests/%.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(OMP_STR)
 
 printlibs:
 	echo $(LIBPATHS)
 
 
-graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
-
-dmlrun: src/dmlsearch.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
+#graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
+#	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
 %: src/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
 
-alphaest: src/alphaest.cpp $(wildcard include/minocore/*.h)
+%: src/utils/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
 
-dae: src/alphaest.cpp $(wildcard include/minocore/*.h)
+mtx%: src/mtx%.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -DNDEBUG # -fsanitize=undefined -fsanitize=address
+
+mtx%: src/utils/mtx%.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -DNDEBUG # -fsanitize=undefined -fsanitize=address
+
+mtx%dbg: src/mtx%.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0  # -fsanitize=undefined -fsanitize=address
+
+mtx%dbg: src/utils/mtx%.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0  # -fsanitize=undefined -fsanitize=address
+
+alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+
+dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB
 
-jsdkmeanstest: src/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
+jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz $(LDFLAGS)
 
-jsdkmeanstestdbg: src/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
+jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz $(LDFLAGS)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
-hdf2dm: src/hdf2dm.cpp $(wildcard include/minocore/*.h)
+hdf2dm: src/utils/hdf2dm.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(HDFLAGS)
 
 mpi%: src/%.cpp $(wildcard include/minocore/*.h)
@@ -126,25 +147,25 @@ mpi%: src/%.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< $(OMP_STR) -o $@
 
 
-osm2dimacsdbg: src/osm2dimacs.cpp
+osm2dimacsdbg: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@
 
-osm2dimacs: src/osm2dimacs.cpp
+osm2dimacs: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@ -O3 $(OMP_STR) -DNDEBUG
 
-osm2dimacspgf: src/osm2dimacs.cpp
+osm2dimacspgf: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg -DNDEBUG $(OMP_STR)
+        $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg -DNDEBUG $(OMP_STR)
 
-osm2dimacspg: src/osm2dimacs.cpp
+osm2dimacspg: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
+        $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
 libsleef.a:

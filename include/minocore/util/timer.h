@@ -57,6 +57,56 @@ struct Timer {
     }
 };
 
+struct TimeStamper {
+    using value_type = std::chrono::time_point<std::chrono::high_resolution_clock>;
+    using v_t = value_type;
+    struct Event {
+        std::string label;
+        v_t time;
+        Event(std::string l, v_t t): label(l), time(t) {}
+    };
+    static auto now() {return std::chrono::high_resolution_clock::now();}
+    std::vector<Event> events;
+    bool emit_on_close_ = false;
+    TimeStamper(std::string msg, bool emit_on_close=true): events({Event{msg, now()}}), emit_on_close_(emit_on_close) {}
+    TimeStamper() {}
+    void restart(std::string label) {
+        events = {Event{label, now()}};
+    }
+    void add_event(std::string label) {
+        events.emplace_back(label, now());
+    }
+    ~TimeStamper() {
+        if(emit_on_close_) {
+            emit();
+        }
+    }
+    std::vector<std::pair<std::string, double>> to_intervals() const {
+        auto t = now();
+        std::vector<std::pair<std::string, double>> ret(events.size());
+        for(size_t i = 0; i < events.size(); ++i) {
+            auto nt = i == events.size() - 1 ? t: events[i + 1].time;
+            ret[i] = {events[i].label, timediff2ms(events[i].time, nt)};
+        }
+        return ret;
+    }
+    void emit() const {
+        auto ivls = to_intervals();
+        auto total_time = std::accumulate(ivls.begin(), ivls.end(), 0., [](auto x, const auto &y) {return x + y.second;});
+        auto prod = 100. / total_time;
+        for(const auto &ivl: ivls) {
+            std::fprintf(stderr, "Event '%s' took %gms, %%%g of total %g\n", ivl.first.data(), ivl.second, ivl.second * prod, total_time);
+        }
+        std::vector<unsigned> idx(ivls.size());
+        std::iota(idx.data(), idx.data() + ivls.size(), 0);
+        std::sort(idx.begin(), idx.end(), [&](auto x, auto y) {return ivls[x].second > ivls[y].second;});
+        for(size_t i = 0; i < ivls.size(); ++i) {
+            std::fprintf(stderr, "%d/%s is %zu{st/th/nd} most expensive %u with %%%0.12g of total time\n",
+                         idx[i], events[idx[i]].label.data(), i + 1, idx[i], ivls[idx[i]].second * prod);
+        }
+    }
+};
+
 } // util
 
 } // minocore

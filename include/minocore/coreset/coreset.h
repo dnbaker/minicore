@@ -44,7 +44,15 @@ enum SensitivityMethod: int {
     LBK=LUCIC_BACHEM_KRAUSE
 };
 
-static const char *sm2str(SensitivityMethod sm) {
+static constexpr const SensitivityMethod CORESET_CONSTRUCTIONS [] {
+    BRAVERMAN_FELDMAN_LANG,
+    FELDMAN_LANGBERG,
+    LUCIC_FAULKNER_KRAUSE_FELDMAN,
+    VARADARAJAN_XIAO,
+    LUCIC_BACHEM_KRAUSE
+};
+
+static constexpr const char *sm2str(SensitivityMethod sm) {
     switch(sm) {
         case BFL:  return "BFL";
         case VX:   return "VX";
@@ -54,6 +62,15 @@ static const char *sm2str(SensitivityMethod sm) {
     }
     return "UNKNOWN";
 }
+
+static constexpr SensitivityMethod str2sm(const char *s) {
+    for(const auto sm: CORESET_CONSTRUCTIONS) if(std::strcmp(sm2str(sm), s) == 0) return sm;
+    return BRAVERMAN_FELDMAN_LANG;
+}
+static inline SensitivityMethod str2sm(const std::string &s) {
+    return str2sm(s.data());
+}
+
 using namespace std::literals;
 
 template<typename IT, typename FT>
@@ -68,6 +85,24 @@ struct IndexCoreset {
     size_t size() const {return indices_.size();}
     IndexCoreset(IndexCoreset &&o) = default;
     IndexCoreset(const IndexCoreset &o) = default;
+    IndexCoreset(std::FILE *fp) {this->read(fp);}
+    IndexCoreset(gzFile fp) {this->read(fp);}
+
+    void read(gzFile fp) {
+        uint64_t sz;
+        if(gzread(fp, &sz, sizeof(sz)) != ssize_t(sizeof(sz)))
+            goto fail;
+        indices_.resize(sz);
+        weights_.resize(sz);
+        if(gzread(fp, indices_.data(), indices_.size() * sizeof(IT)) != int64_t(indices_.size() * sizeof(indices_[0])))
+            goto fail;
+        if(gzread(fp, weights_.data(), weights_.size() * sizeof(IT)) != int64_t(weights_.size() * sizeof(weights_[0])))
+            goto fail;
+        return;
+        fail:
+            throw std::runtime_error("Failed to read from file");
+    }
+
     void write(gzFile fp) const {
         uint64_t n = size();
         if(gzwrite(fp, &n, sizeof(n)) != sizeof(n)) goto fail;
@@ -82,9 +117,9 @@ struct IndexCoreset {
     void write(std::FILE *fp) const {
         uint64_t n = size();
         if(std::fwrite(&n, sizeof(n), 1, fp) != 1) goto fail;
-        if(std::fwrite(indices_.data(), sizeof(IT), indices_.size(), fp) != int64_t(indices_.size()))
+        if(std::fwrite(indices_.data(), sizeof(IT), indices_.size(), fp) != indices_.size())
             goto fail;
-        if(std::fwrite(weights_.data(), sizeof(FT), weights_.size(), fp) != int64_t(weights_.size()))
+        if(std::fwrite(weights_.data(), sizeof(FT), weights_.size(), fp) != weights_.size())
             goto fail;
         return;
         fail:
@@ -96,14 +131,15 @@ struct IndexCoreset {
         write(fp);
         gzclose(fp);
     }
-    void compact(bool shrink_to_fit=true) {
+
+    auto &compact(bool shrink_to_fit=true) {
         // TODO: replace with hash map and compact
         std::map<std::pair<IT, FT>, uint32_t> m;
         for(IT i = 0; i < indices_.size(); ++i) {
             ++m[std::make_pair(indices_[i], weights_[i])];
             //++m[std::make_pair(p.first, p.second)];
         }
-        if(m.size() == indices_.size()) return;
+        if(m.size() == indices_.size()) return *this;
         size_t newsz = m.size();
         assert(newsz < indices_.size());
         DBG_ONLY(std::fprintf(stderr, "m size: %zu\n", m.size());)
@@ -119,6 +155,7 @@ struct IndexCoreset {
         weights_.resize(newsz);
         DBG_ONLY(std::fprintf(stderr, "Shrinking to fit\n");)
         if(shrink_to_fit) indices_.shrinkToFit(), weights_.shrinkToFit();
+        return *this;
     }
     std::vector<std::pair<IT, FT>> to_pairs() const {
         std::vector<std::pair<IT, FT>> ret(size());
@@ -356,14 +393,14 @@ struct CoresetSampler {
                       const FT *weights=nullptr,
                       uint64_t seed=137,
                       SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG,
-                      unsigned k = 0,
+                      unsigned k = unsigned(-1),
                       const IT *centerids = nullptr, // Necessary for FL sampling, otherwise useless
                       double alpha_est=0.)
     {
         sens_ = sens;
         np_ = np;
         b_ = ncenters;
-        if(!k) k = ncenters;
+        if(k == (unsigned)-1) k = ncenters;
         k_ = k;
         if(weights) {
             weights_.reset(new blaze::DynamicVector<FT>(np_));
@@ -576,12 +613,18 @@ struct CoresetSampler {
             ret.weights_[i] = getweight(ind) / (dn * container[i].second);
         }
     }
+    template<typename P, typename=std::enable_if_t<std::is_arithmetic_v<P>> >
+    void sample(P *start, P *end) {
+        sampler_->sample(start, end);
+    }
     IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0, double eps=0.1) {
         if(unlikely(!sampler_.get())) throw std::runtime_error("Sampler not constructed");
         if(seed) sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
         const double dn = n;
-        for(size_t i = 0; i < n; ++i) {
+        size_t sampled_directly = n;
+        if(sens_ == FL) sampled_directly = std::max((long)(n - b_), 0L);
+        for(size_t i = 0; i < sampled_directly; ++i) {
             const auto ind = sampler_->sample();
             assert(ind < np_);
             ret.indices_[i] = ind;
@@ -591,13 +634,16 @@ struct CoresetSampler {
             assert(fl_bicriteria_points_->size() == b_);
             std::unique_ptr<FT[]> wsums(new FT[b_]());
             auto &bicp = *fl_bicriteria_points_;
-            for(size_t i = 0; i < n; ++i)
+            size_t i;
+            for(i = 0; i < sampled_directly; ++i)
                 wsums[fl_asn_[i]] += ret.weights_[i];
             const double wmul = (1. + 10. * eps) * b_;
-            ret.resize(n + b_);
-            for(size_t i = n; i < ret.size(); ++i) {
-                ret.indices_[i] = bicp[i - n];
-                ret.weights_[i] = std::max(wmul - wsums[i - n], 0.);
+            auto bit = bicp.begin();
+            auto wit = wsums.get();
+            std::copy(bicp.begin(), bicp.end(), &ret.indices_[i]);
+            for(; i < n; ++i) {
+                ret.indices_[i] = *bit++;
+                ret.weights_[i] = std::max(wmul - *wit++, 0.);
             }
         }
         return ret;

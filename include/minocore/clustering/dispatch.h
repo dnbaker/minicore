@@ -9,7 +9,6 @@
 #include "minocore/clustering/sampling.h"
 #include "minocore/clustering/centroid.h"
 
-#include "boost/iterator/zip_iterator.hpp"
 #include "diskmat/diskmat.h"
 
 namespace minocore {
@@ -19,7 +18,6 @@ namespace clustering {
 using dist::DissimilarityMeasure;
 using blaze::ElementType_t;
 using diskmat::PolymorphicMat;
-using boost::make_zip_iterator;
 
 template<typename T>
 bool use_packed_distmat(const T &app) {
@@ -183,10 +181,6 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     LloydLoopResult ret = UNFINISHED;
     wy::WyRand<uint64_t> rng(seed);
     size_t iternum = 0;
-    // HEY DANIEL WHEN YOU GET BACK HERE
-    // You are removing the center_distance
-    // and instead calculating the objective function
-    // and terminating when the change in objective function is less than eps * first cost.
     using cv_t = blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded, blaze::rowVector>;
     std::unique_ptr<cv_t> weight_cv;
     if(weights) {
@@ -197,7 +191,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         if(centers_cache.size()) ret = &centers_cache[j];
         return ret;
     };
-    assert(centers_cache.empty() || getcache(0) == nullptr);
+    assert(centers_cache.empty() || getcache(0) != nullptr);
     auto getcost = [&]() {
         if constexpr(asn_method == HARD) {
             return weight_cv ? blz::sum(retcost * *weight_cv): blz::sum(retcost);
@@ -217,7 +211,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             }
 #endif
             if(weight_cv) {
-                auto ew = blaze::expand(*weight_cv, app.data().columns());
+                auto ew = blaze::expand(*weight_cv, mat.columns());
                 std::fprintf(stderr, "expanded weight shape: %zu/%zu. asn: %zu/%zu\n", ew.rows(), ew.columns(), assignments.rows(), assignments.columns());
                 return blaze::sum(assignments % retcost % ew);
             } else {
@@ -227,8 +221,10 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     };
     auto check = [&]() {
         ++iternum;
-        if(first_cost == std::numeric_limits<FT>::max()) first_cost = getcost();
-        else {
+        if(first_cost == std::numeric_limits<FT>::max()) {
+            first_cost = getcost();
+            std::fprintf(stderr, "First cost: %0.16g\n", first_cost);
+        } else {
             FT itercost = getcost();
             if(current_cost == std::numeric_limits<FT>::max()) {
                 current_cost = itercost;
@@ -243,7 +239,9 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                     return REACHED_MAX_ROUNDS;
             }
             current_cost = itercost;
+            std::fprintf(stderr, "Current cost: %0.16g\n", current_cost);
         }
+
         PRETTY_SAY << "iternum: " << iternum << '\n';
         return UNFINISHED;
     };
@@ -271,76 +269,152 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         }
     };
     if constexpr(asn_method == HARD) {
+#ifndef NDEBUG
+        std::unique_ptr<size_t[]> counts(new size_t[centers.size()]());
+        for(const auto a: assignments) ++counts[a];
+        for(unsigned i = 0; i < centers.size(); ++i) {
+            std::fprintf(stderr, "center %d had %zu supporting points and has a total sum of %g\n", i, counts[i], blaze::sum(centers[i]));
+            for(size_t j = 0, nz = 0; j < centers[i].size() && nz < 5; ++j) {
+                if(centers[i][j] > 0) {
+                    ++nz;
+                    std::fprintf(stderr, "%zd:%g,", j, centers[i][j]);
+                }
+            }
+            std::fputc('\n', stderr);
+        }
+#endif
+        std::fprintf(stderr, "Beginning loop\n");
+#if ASSIGNED_LIST_METHOD
         std::vector<std::vector<uint32_t>> assigned(k);
+#else
+        std::vector<uint32_t> assigned(k);
+#endif
         OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes(new std::mutex[k]);)
         for(;;) {
             // Do it forever
             if(centers_cache.size()) {
-                PRETTY_SAY << "Setting centers cache for measure " << dist::detail::prob2str(measure) << '\n';
+                std::fprintf(stderr, "Setting centers cache for measure %s\n", dist::detail::prob2str(measure));
                 for(unsigned i = 0; i < k; ++i)
                     dist::detail::set_cache(centers[i], centers_cache[i], measure);
+            } else {
+                std::fprintf(stderr, "No cache needed for %s\n", dist::detail::prob2str(measure));
             }
+#if ASSIGNED_LIST_METHOD
             for(auto &i: assigned) i.clear();
+#else
+            std::fill(&assigned.front(), &*assigned.end(), 0u);
+#endif
+            //std::fprintf(stderr, "Cache set, now assigning points to centers\n");
+            assert(centers.size() == k);
             OMP_PFOR
             for(size_t i = 0; i < npoints; ++i) {
                 auto dist = app(i, centers[0], getcache(0), measure);
                 unsigned asn = 0;
+                SK_UNROLL_4
                 for(unsigned j = 1; j < k; ++j) {
-                    auto newdist = app(i, centers[j], getcache(j), measure);
-                    if(newdist < dist) {
+                    if(auto newdist = app(i, centers[j], getcache(j), measure); newdist < dist) {
+                        //std::fprintf(stderr, "Replaced center %d with center %d to reduce cost from %g to %g\n", asn, j, dist, newdist);
                         asn = j;
                         dist = newdist;
                     }
                 }
                 retcost[i] = dist;
                 assignments[i] = asn;
+#if ASSIGNED_LIST_METHOD
                 {
                     OMP_ONLY(std::unique_lock<std::mutex> lock(mutexes[asn]);)
                     assigned[asn].push_back(i);
                 }
+#else
+                OMP_ATOMIC
+                ++assigned[asn];
+#endif
             }
+            //std::fprintf(stderr, "Checking termination\n");
             // Check termination condition
-            if(auto rc = check(); rc != UNFINISHED) {
-                ret = rc;
-                goto end;
-            }
             blaze::SmallArray<uint32_t, 16> centers_to_restart;
-            for(unsigned i = 0; i < k; ++i)
-                if(assigned[i].empty())
-                    centers_to_restart.pushBack(i);
+            for(unsigned i = 0; i < k; ++i) {
+                const uint32_t nasn =
+#if ASSIGNED_LIST_METHOD
+                    assigned[i].size();
+#else
+                    assigned[i];
+#endif
+                std::fprintf(stderr, "center %u has %u assignments\n", i, nasn);
+                if(!nasn) centers_to_restart.pushBack(i);
+            }
             if(auto restartn = centers_to_restart.size()) {
+                std::fprintf(stderr, "restarting %zu centers\n", restartn);
                 // Use D^2 sampling to stayrt a new cluster
                 // And then restart the loop
                 assert(retcost.size() == npoints);
                 retcost = std::numeric_limits<FT>::max();
+                auto oldcenters = blz::functional::indices_if([&](auto x) {
+                    return assigned[x]
+#if ASSIGNED_LIST_METHOD
+                                      .size()
+#endif
+                                       ;
+                 }, assigned.size());
                 OMP_PFOR
                 for(size_t i = 0; i < npoints; ++i) {
-                    for(size_t j = 0; j < k; ++j) {
-                        if(assigned[j].empty()) continue;
-                        auto fc = app(i, centers[j], getcache(j), measure);
-                        if(fc < retcost[i]) retcost[i] = fc;
+                    for(const auto j: oldcenters) {
+                        retcost[i] = std::min(retcost[i], app(i, centers[j], getcache(j), measure));
                     }
                 }
                 blaze::DynamicVector<FT> csum(npoints);
                 std::uniform_real_distribution<FT> urd;
-                for(size_t i = 0; i < restartn;) {
-                    std::partial_sum(retcost.data(), retcost.data() + retcost.size(), csum.data());
-                    auto newp = std::lower_bound(csum.data(), csum.data() + csum.size(), urd(rng) * csum[csum.size() - 1])
-                                - csum.data();
-                    centers[centers_to_restart[i]] = row(app.data(), newp, blaze::unchecked);
-                    if(++i != restartn) {
-                        OMP_PFOR
-                        for(size_t i = 0; i < npoints; ++i)
-                            retcost[i] = std::min(retcost[i], app(i, newp));
+                for(const auto cid: centers_to_restart) {
+                    assert(std::all_of(retcost.data(), retcost.data() + npoints, [](auto x) {return x >= 0.;}));
+                    std::discrete_distribution<uint32_t> dd(retcost.data(), retcost.data() + npoints);
+                    std::ptrdiff_t newp = dd(rng);
+#ifndef NDEBUG
+                    std::fprintf(stderr, "Newly assigned center: %zd, with probability %0.12g\n", newp, dd.probabilities()[newp]);
+#endif
+                    auto &ctr(centers[cid]);
+                    if(use_scaled_centers(measure)) {
+                        ctr = app.weighted_row(newp);
+                    } else {
+                        ctr = app.row(newp);
+                    }
+                    if constexpr(blaze::IsSparseMatrix_v<MatrixType>) {
+                        if(auto pd = app.prior_data_.get()) {
+                            auto pv = (*pd)[0];
+                            auto inc = use_scaled_centers(measure) ? pv: pv / app.row_sums()[newp];
+                            // Add to all
+                            ctr += inc;
+                            // But subtract instances we already used
+                            for(const auto &pair: app.row(newp))
+                                ctr[pair.index()] -= inc;
+                        }
+                    }
+                    std::fprintf(stderr, "Distance between ctr and weighted row: %0.16g\n", blaze::l2Norm(ctr - app.weighted_row(newp)));
+#if 0
+                    std::fprintf(stderr, "l2 norm between row and center: %g\n", blaze::l2Norm(ctr - app.weighted_row(newp)));
+                    std::fprintf(stderr, "l2 norm between row and unweighted center: %g\n", blaze::l2Norm(ctr - app.row(newp)));
+                    std::fprintf(stderr, "l2 norm between row and center, accessing directly through matrix: %g\n", blaze::l2Norm(ctr - row(mat, newp)));
+#endif
+                    auto &cidcache = centers_cache[cid];
+                    if(centers_cache.size()) dist::detail::set_cache(ctr, cidcache, measure);
+                    OMP_PFOR
+                    for(size_t idx = 0;idx < npoints; ++idx) {
+                        if(unlikely(idx == size_t(newp))) {
+                            retcost[idx] = 0.;
+                        } else
+                            retcost[idx] = std::min(retcost[idx], app(idx, ctr, &cidcache));
                     }
                 }
+                std::fprintf(stderr, "Reassigned centers\n");
                 continue; // Reassign, re-center, and re-compute
             }
+            std::fprintf(stderr, "Now checking change in objective function. (cost before: %0.16g)\n", current_cost);
+            if((ret = check()) != UNFINISHED) goto end;
+            std::fprintf(stderr, "Now setting centers\n");
             // Make centers
+#if ASSIGNED_LIST_METHOD
             for(size_t i = 0; i < centers_cpy.size(); ++i) {
                 auto &cref = centers_cpy[i];
                 auto &assigned_ids = assigned[i];
-                shared::sort(assigned_ids.begin(), assigned_ids.end()); // Better access pattern
                 auto aidptr = assigned_ids.data();
                 const size_t nid = assigned_ids.size();
                 auto rowsel = rows(mat, aidptr, nid);
@@ -352,10 +426,13 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                     CentroidPolicy::perform_average(cref, rowsel, sumsel,
                         static_cast<decltype(blaze::elements(*weight_cv, aidptr, nid)) *>(nullptr), measure
                     );
-                    //PRETTY_SAY << "Center " << i << " is " << cref << '\n';
-                    PRETTY_SAY << "Difference between previous center and new center is " << blz::sqrL2Dist(cref, centers[i]) << '\n';
                 }
+                PRETTY_SAY << "Difference between previous center and new center is " << blz::sqrL2Dist(cref, centers[i]) << '\n';
             }
+#else
+            CentroidPolicy::perform_average(mat, app.row_sums(), centers_cpy, assignments, measure,
+                                            weight_cv.get(), app.prior_data_.get());
+#endif
             // Set the returned values to be the last iteration's.
             centers = centers_cpy;
         }
@@ -375,17 +452,14 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             assert(blz::sum(assignments) - assignments.rows() < 1e-3 * assignments.rows());
             for(size_t i = 0; i < centers.size(); ++i)
                 if(blaze::sum(blaze::column(assignments, i)) == 0.)
-                    throw TODOError("TODO: reassignment for support goes to 0");
+                    std::fprintf(stderr, "Center %zu has no support. We may consider reassignment in the future.\n", i);
             // Check termination condition
-            if(auto rc = check(); rc != UNFINISHED) {
-                ret = rc;
-                goto end;
-            }
+            if((ret = check()) != UNFINISHED) goto end;
             // Now points have been assigned, and we now perform center assignment
             CentroidPolicy::perform_soft_assignment(
                 assignments, app.row_sums(),
                 OMP_ONLY(mutexes.get(),)
-                app.data(), centers_cpy, weight_cv.get(), measure
+                mat, centers_cpy, weight_cv.get(), measure
             );
         }
         std::swap(centers_cpy, centers);
@@ -441,7 +515,6 @@ void update_defaults_with_measure(ClusteringTraits<FT, IT, asn_method, co> &ct, 
     }
 }
 
-
 template<Assignment asn_method=HARD, CenterOrigination co=INTRINSIC, typename MatrixType, typename IT=uint32_t>
 auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, size_t npoints, unsigned k,
                         const ElementType_t<MatrixType> *weights=nullptr,
@@ -481,7 +554,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
         if constexpr(co == EXTRINSIC) {
             OMP_PFOR
             for(size_t i = 0; i < cc.size(); ++i) {
-                centers[i] = row(app.data(), cc[i], blaze::unchecked);
+                centers[i] = row(app.data(), cc[i]);
             }
         } else std::copy(cc.begin(), cc.end(), centers.begin()); // INTRINSIC
         if constexpr(asn_method == HARD) {
@@ -503,9 +576,20 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, siz
             auto metric_ret = perform_cluster_metric_kmedian<IT, FT>(detail::make_aa(app), app.size(), ct);
             set_metric_return_values(metric_ret);
         } else {
-            PRETTY_SAY << "Setting centers with D2\n";
-            for(const auto id: initcenters)
+            for(const auto id: initcenters) {
                 centers.emplace_back(row(app.data(), id));
+                if(dist::use_scaled_centers(measure))
+                     centers.back() *= app.row_sums()[id];
+                if constexpr(blaze::IsSparseMatrix_v<MatrixType>) {
+                    if(app.prior_data_) {
+                        auto pv = (*app.prior_data_)[0];
+                        if(!dist::use_scaled_centers(measure)) pv /= app.row_sums()[id];
+                        centers.back() += pv;
+                        for(auto &pair: app.row(id))
+                            centers[pair.index()] -= pv;
+                    }
+                }
+            }
             assert(centers.size() == k);
             PRETTY_SAY << "Beginning lloyd loop\n";
             // Perform EM

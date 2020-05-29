@@ -265,7 +265,7 @@ public:
 #ifdef _OPENMP
 #       pragma omp parallel for
 #endif
-        for(size_t i = 0; i < np_; ++i) 
+        for(size_t i = 0; i < np_; ++i)
             tmp[i] = oracle_(lh, i);
         output_type ret = tmp[rh];
 #ifndef NDEBUG

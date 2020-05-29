@@ -1,11 +1,10 @@
-from setuptools import setup, Extension, find_packages
+from setuptools import setup, Extension, find_packages, distutils
 from os import environ
 from setuptools.command.build_ext import build_ext
-import subprocess
-import sys
-import setuptools
+from glob import glob
+from subprocess import check_output
 
-__version__ = subprocess.check_output(["git", "describe", "--abbrev=4"]).decode().strip().split('-')[0]
+__version__ = check_output(["git", "describe", "--abbrev=4"]).decode().strip().split('-')[0]
 
 
 
@@ -26,7 +25,7 @@ class get_pybind_include(object):
 extra_compile_args = ['-march=native',
                       '-Wno-char-subscripts', '-Wno-unused-function',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
-                      '-lz', '-fopenmp', "-lgomp"]
+                      '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1"]
 
 if 'BOOST_DIR' in environ:
     extra_compile_args.append("-I%s" % environ['BOOST_DIR'])
@@ -42,13 +41,16 @@ include_dirs=[
    "../blaze",
    "../pybind11/include"
 ]
+
 ext_modules = [
     Extension(
         'pyfgc',
-        ['pyfgc.cpp', 'pycs.cpp'],
+        glob('*.cpp') + [
+         "../include/minocore/util/boost/zlib.cpp", "../include/minocore/util/boost/gzip.cpp"
+         ],
         include_dirs=include_dirs,
         language='c++',
-        extra_compile_args=extra_compile_args
+        extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"]
     ),
 ]
 
@@ -65,7 +67,7 @@ def has_flag(compiler, flagname):
         f.write('int main (int argc, char **argv) { return 0; }')
         try:
             compiler.compile([f.name], extra_postargs=[flagname])
-        except setuptools.distutils.errors.CompileError:
+        except distutils.errors.CompileError:
             return False
     return True
 
@@ -83,7 +85,7 @@ def cpp_flag(compiler):
                        'is needed!')
 
 
-extra_link_opts = ["-fopenmp", "-lgomp", "-lz"]
+extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1"]
 
 class BuildExt(build_ext):
     """A custom build extension for adding compiler-specific options."""
@@ -96,7 +98,8 @@ class BuildExt(build_ext):
         'unix': [],
     }
 
-    if sys.platform == 'darwin':
+    from sys import platform
+    if platform == 'darwin':
         darwin_opts = ['-mmacosx-version-min=10.7']# , '-libstd=libc++']
         # darwin_opts = []
         c_opts['unix'] += darwin_opts
@@ -120,12 +123,12 @@ class BuildExt(build_ext):
         build_ext.build_extensions(self)
 
 setup(
-    name='pyfgc',
+    name='minocore',
     version=__version__,
     author='Daniel Baker',
     author_email='dnb@cs.jhu.edu',
-    url='https://github.com/dnbaker/pyfgc',
-    description='A python module for stuff',
+    url='https://github.com/dnbaker/minocore',
+    description='A python module for coresets',
     long_description='',
     ext_modules=ext_modules,
     install_requires=['pybind11>=2.4'],

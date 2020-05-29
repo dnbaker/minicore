@@ -1,9 +1,6 @@
 [submodule "code/aesctr"]
 	path = aesctr
 	url = https://github.com/dnbaker/aesctr
-[submodule "code/lemon"]
-	path = lemon
-	url = https://github.com/seqan/lemon
 [submodule "code/robin-hood-hashing"]
 	path = robin-hood-hashing
 	url = https://github.com/martinus/robin-hood-hashing/
@@ -37,12 +34,6 @@
 [submodule "code/xxHash"]
 	path = xxHash
 	url = https://github.com/Cyan4973/xxHash
-[submodule "code/cpp-taskflow"]
-	path = cpp-taskflow
-	url = https://github.com/cpp-taskflow/cpp-taskflow
-[submodule "code/fastiota"]
-	path = fastiota
-	url = https://github.com/dnbaker/fastiota
 [submodule "discreture"]
 	path = discreture
 	url = https://github.com/mraggi/discreture/

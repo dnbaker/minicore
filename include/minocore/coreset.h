@@ -4,6 +4,8 @@
 #include <minocore/coreset/coreset.h>
 #include <minocore/coreset/matrix_coreset.h>
 
+#include <minocore/coreset/kcenter.h>
+
 #include <minocore/coreset/gmm.h>
 
 #endif

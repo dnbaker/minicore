@@ -1,8 +1,8 @@
 #pragma once
 #if defined(__has_include) && __has_include("sleef.h")
-extern "C" {
+  extern "C" {
 #  include "sleef.h"
-}
+  }
 #endif
 #include "aesctr/wy.h"
 #include "blaze/Math.h"
@@ -14,7 +14,7 @@ extern "C" {
 #include "./Inf2Zero.h"
 
 namespace blz {
-using blaze::unchecked;
+
 
 // These blaze adaptors exist for the purpose of
 // providing a pair of iterators.
@@ -95,16 +95,24 @@ struct column_iterator_t {
 
 template<typename MatType>
 struct RowViewer {
-    const row_iterator_t<MatType> start_, end_;
+    row_iterator_t<MatType> start_, end_;
     RowViewer(MatType &mat): start_(0, mat), end_(mat.rows(), mat) {}
     auto begin() const {return start_;}
     auto end()   const {return end_;}
+    template<size_t I>
+    auto &get() const {
+        if constexpr(I == 0) {
+            return start_;
+        } else {
+            return end_;
+        }
+    }
 };
 
 
 template<typename MatType>
 struct ColumnViewer {
-    const column_iterator_t<MatType> start_, end_;
+    column_iterator_t<MatType> start_, end_;
     ColumnViewer(MatType &mat): start_(0, mat), end_(mat.columns(), mat) {}
     auto begin() const {return start_;}
     auto end()   const {return end_;}
@@ -246,30 +254,6 @@ auto constcolumniterator(const MatType &mat) {
 }
 
 
-template<typename F, typename IT=std::uint32_t, size_t N=16>
-auto indices_if(const F &func, size_t n) {
-    blaze::SmallArray<IT, N> ret;
-    for(IT i = 0; i < n; ++i)
-        if(func(i)) ret.pushBack(i);
-    return ret;
-}
-
-template<typename M, typename F, typename IT=std::uint32_t>
-auto rows_if(const M &mat, const F &func) {
-    auto wrapfunc = [&](auto x) -> bool {return func(row(mat, x, blaze::unchecked));};
-    return rows(mat,
-                indices_if<decltype(wrapfunc),IT>(wrapfunc, // predicate
-                                                  mat.rows())); // nrow
-}
-
-template<typename M, typename F, typename IT=std::uint32_t>
-auto columns_if(const M &mat, const F &func) {
-    auto wrapfunc = [&](auto x) -> bool {return func(column(mat, x, blaze::unchecked));};
-    return columns(mat, // matrix
-                   indices_if<decltype(wrapfunc), IT>(wrapfunc, // predicate
-                                                      mat.columns())); // ncol
-}
-
 template<typename VT, typename Allocator, size_t N, typename VT2>
 INLINE auto push_back(blaze::SmallArray<VT, N, Allocator> &x, VT2 v) {
     return x.pushBack(v);
@@ -293,9 +277,44 @@ template<typename FT, typename Alloc>
 INLINE auto sum(const std::vector<FT, Alloc> &vec) {
     return blaze::sum(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
 }
+template<typename FT, typename Alloc>
+INLINE auto max(const std::vector<FT, Alloc> &vec) {
+    return blaze::max(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
+}
+template<typename FT, typename Alloc>
+INLINE auto min(const std::vector<FT, Alloc> &vec) {
+    return blaze::min(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
+}
+template<typename FT, typename Alloc>
+INLINE auto mean(const std::vector<FT, Alloc> &vec) {
+    return blaze::mean(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
+}
 
 template<typename OT>
 INLINE decltype(auto) sum(const OT &x) {return blaze::sum(x);}
+
+template<bool wiseness, typename OT>
+INLINE decltype(auto) sum(const OT &x) {return blaze::sum<wiseness>(x);}
+
+template<typename OT>
+INLINE decltype(auto) max(const OT &x) {return blaze::max(x);}
+template<bool wiseness, typename OT>
+INLINE decltype(auto) max(const OT &x) {return blaze::max<wiseness>(x);}
+template<typename OT>
+INLINE decltype(auto) mean(const OT &x) {return blaze::mean(x);}
+template<bool wiseness, typename OT>
+INLINE decltype(auto) mean(const OT &x) {return blaze::mean<wiseness>(x);}
+template<typename OT>
+INLINE decltype(auto) min(const OT &x) {return blaze::min(x);}
+template<bool wiseness, typename OT>
+INLINE decltype(auto) min(const OT &x) {return blaze::min<wiseness>(x);}
+template<typename...Args>
+INLINE decltype(auto) min(Args &&...args) {return blaze::min(std::forward<Args>(args)...);}
+template<typename...Args>
+INLINE decltype(auto) max(Args &&...args) {return blaze::max(std::forward<Args>(args)...);}
+template<typename...Args>
+INLINE decltype(auto) mean(Args &&...args) {return blaze::mean(std::forward<Args>(args)...);}
+
 
 template<typename VT, bool SO, typename VT2, bool SO2>
 size_t number_shared_zeros(const blaze::SparseVector<VT, SO> &_lhs, const blaze::SparseVector<VT2, SO2> &_rhs) {
@@ -401,9 +420,6 @@ template<typename VT, typename VT2, bool SO>\
 INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, !SO> &rhs) {\
     return norm##Norm(~rhs - trans(~lhs));\
 }\
-
-inline namespace distance {
-
 
 DECL_DIST(l1)
 DECL_DIST(l2)
@@ -525,7 +541,125 @@ struct SqrNormFunctor: public BaseDist {
 };
 template<>
 struct SqrNormFunctor<L2Norm>: public sqrL2Norm {};
-} // inline namespace distance
 
+namespace functional {
+
+template<typename F, typename IT=std::uint32_t, size_t N=16>
+auto indices_if(const F &func, size_t n) {
+    blaze::SmallArray<IT, N> ret;
+    for(IT i = 0; i < n; ++i) if(func(i)) ret.pushBack(i);
+    return ret;
+}
+
+template<typename M, typename F, typename IT=std::uint32_t>
+auto rows_if(const M &mat, const F &func) {
+    auto wrapfunc = [&](auto x) -> bool {return func(row(mat, x, blaze::unchecked));};
+    return rows(mat,
+                indices_if<decltype(wrapfunc),IT>(wrapfunc, // predicate
+                                                   mat.rows())); // nrow
+}
+
+template<typename M, typename F, typename IT=std::uint32_t>
+auto columns_if(const M &mat, const F &func) {
+    auto wrapfunc = [&](auto x) -> bool {return func(column(mat, x, blaze::unchecked));};
+    return columns(mat, // matrix
+                   indices_if<decltype(wrapfunc), IT>(wrapfunc, // predicate
+                                                      mat.columns())); // ncol
+}
+
+
+} // namespace blz::functional
+using functional::indices_if;
+
+// Solve geometric median for a set of points.
+template<typename MT, bool SO, typename VT, typename WeightType>
+auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType *weights, double eps=0)
+{
+    if((~mat).rows() == 1) return ~dv = row((~mat), 0);
+    const auto &_mat = ~mat;
+    using FT = typename std::decay_t<decltype(~mat)>::ElementType;
+    FT prevcost = std::numeric_limits<FT>::max();
+    size_t iternum = 0;
+    assert((~dv).size() == (~mat).columns());
+    DV<FT, SO> costs(_mat.rows());
+    std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
+    if(weights)
+        cv.reset(new CustomVector<WeightType, unaligned, unpadded, SO>(const_cast<WeightType *>(weights), _mat.rows()));
+    for(;;) {
+        if(cv) {
+            auto &cvr = *cv;
+            OMP_PFOR
+            for(size_t i = 0; i < _mat.rows(); ++i)
+                costs[i] = cvr[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
+        } else {
+#if 1
+            OMP_PFOR
+            for(size_t i = 0; i < _mat.rows(); ++i)
+                costs[i] = blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
+#else
+            costs = sqrt(sum<rowwise>(blz::pow(_mat - exp, 2))); // pow2 seems broken
+#endif
+        }
+        FT current_cost = sum(costs);
+        FT dist;
+        std::fprintf(stderr, "Current cost: %g.\n", current_cost);
+        if((dist = std::abs(prevcost - current_cost)) <= eps) break;
+        if(unlikely(std::isnan(dist))) {
+            std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+            break;
+        }
+        ++iternum;
+        costs = 1. / costs;
+        costs *= 1. / blaze::sum(costs);
+        ~dv = trans(costs) * ~mat;
+        prevcost = current_cost;
+    }
+    return ~dv;
+}
+template<typename MT, bool SO, typename VT>
+auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=0) {
+    return geomedian<MT, SO, VT, blz::ElementType_t<MT>>(mat, dv, static_cast<blaze::ElementType_t<MT> *>(nullptr), eps);
+}
 
 } // namespace blz
+
+
+namespace std {
+
+#define OLOAD(MAT, N)\
+   template<typename this_type> struct tuple_element<N, MAT<this_type>> {\
+        using type = decltype(std::declval<MAT<this_type>>().get<N>());\
+   };
+   template<size_t N, typename MatrixType>
+   struct tuple_element<N, blz::ColumnViewer<MatrixType>> {
+       using type = std::decay_t<decltype(std::declval<blz::ColumnViewer<MatrixType>>().template get<N>())>;
+   };
+   template<size_t N, typename MatrixType>
+   struct tuple_element<N, blz::RowViewer<MatrixType>> {
+       using type = std::decay_t<decltype(std::declval<blz::RowViewer<MatrixType>>().template get<N>())>;
+   };
+#if 0
+   template<typename this_type> struct tuple_element<0,blz::ConstColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<0,blz::ColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<0,blz::ConstRowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<0,blz::RowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<1,blz::ConstColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<1,blz::ColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<1,blz::ConstRowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<1,blz::RowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
+#endif
+
+   template<typename this_type> struct tuple_size<blz::RowViewer<this_type>> : public std::integral_constant<size_t,2> {};
+   template<typename this_type> struct tuple_size<blz::ColumnViewer<this_type>>: public std::integral_constant<size_t,2> {};
+   template<int I, typename Mat>
+   decltype(auto) get(const blz::RowViewer<Mat> &x) {
+        return x.get();
+   }
+   template<int I, typename Mat>
+   decltype(auto) get(const blz::ConstRowViewer<Mat> &x) {return x.get();}
+   template<int I, typename Mat>
+   decltype(auto) get(const blz::ColumnViewer<Mat> &x) {return x.get();}
+   template<int I, typename Mat>
+   decltype(auto) get(const blz::ConstColumnViewer<Mat> &x) {return x.get();}
+} // namespace std
+

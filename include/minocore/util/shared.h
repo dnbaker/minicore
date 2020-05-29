@@ -1,5 +1,6 @@
 #pragma once
 #include "robin-hood-hashing/src/include/robin_hood.h"
+#include "thirdparty/kxsort.h"
 #include "pdqsort/pdqsort.h"
 #include "aesctr/wy.h"
 #include "./macros.h"
@@ -35,6 +36,8 @@ using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, FGC
 template<typename T, typename H = robin_hood::hash<T>, typename E = std::equal_to<T>>
 using flat_hash_set = robin_hood::unordered_flat_set<T, H, E, FGC_MAX_HASH_LOAD_FACTOR>;
 
+using ssize_t = std::ptrdiff_t;
+
 INLINE auto checked_posix_write(int fd, const void *buf, ssize_t count) {
     ssize_t ret = ::write(fd, buf, count);
     if(unlikely(ret != count)) {
@@ -56,10 +59,18 @@ struct Deleter {
     }
 };
 
-template<typename It, typename Cmp=std::less<>>
+template<typename It, typename Cmp=std::less<>,
+         typename=std::enable_if_t<!std::is_integral_v<std::decay_t<decltype(*std::declval<It>())>>>>
 INLINE void sort(It beg, It end, Cmp cmp=Cmp()) {
     pdqsort(beg, end, cmp);
 }
+
+template<typename It,
+         typename=std::enable_if_t<std::is_integral_v<std::decay_t<decltype(*std::declval<It>())>>>>
+INLINE void sort(It beg, It end) {
+    kx::radix_sort(beg, end);
+}
+
 template<typename T>
 struct dumbrange {
     T beg, e_;
@@ -75,4 +86,5 @@ template<typename C>
 using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
 
 } // shared
+using shared::ssize_t;
 } // minocore

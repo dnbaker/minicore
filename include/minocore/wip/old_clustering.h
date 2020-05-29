@@ -27,7 +27,7 @@ struct CentroidPolicy {
             coresets::l1_median(r, ret,  wc);
         }
         else if(measure == blz::L1) {
-            using cmtype = 
+            using cmtype =
             std::conditional_t<blz::IsSparseMatrix_v<Range>,
                                blz::CompressedMatrix<FT, blz::StorageOrder_v<Range> >,
                                blz::DynamicMatrix<FT, blz::StorageOrder_v<Range> >
@@ -90,7 +90,7 @@ struct CentroidPolicy {
     }
 
     template<typename VT, bool TF, typename RowSums, typename MatType, typename CenterCon>
-    static void perform_soft_assignment(const blz::DynamicMatrix<VT, TF> &assignments, 
+    static void perform_soft_assignment(const blz::DynamicMatrix<VT, TF> &assignments,
         const RowSums &rs,
         std::mutex *mutptr,
         const MatType &data, CenterCon &newcon,
@@ -311,7 +311,7 @@ auto perform_clustering(const jsd::DissimilarityApplicator<MatrixType> &app, uns
 
     if(blz::detail::satisfies_d2(measure) || measure == blz::L1 || measure == blz::TOTAL_VARIATION_DISTANCE) {
         auto [initcenters, initasn, initcosts] = jsd::make_kmeanspp(app, k, seed, weights);
-         
+
         if constexpr(co == INTRINSIC) {
             throw std::invalid_argument("Shouldn't happen");
         }

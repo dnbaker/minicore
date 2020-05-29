@@ -17,5 +17,6 @@
 #include "minocore/util/geo.h"
 
 #include "minocore/util/timer.h"
+#include "minocore/util/fpq.h"
 
 #endif /* FGC_UTILITY_H__ */

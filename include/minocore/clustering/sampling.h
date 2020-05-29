@@ -9,14 +9,14 @@ namespace clustering {
 
 template<typename IT, typename FT>
 struct MetricSelectionResult: public std::tuple<std::vector<IT>, blz::DV<FT>, std::vector<IT>, blz::DM<FT> > {
-	auto &selected() {return std::get<0>(*this);}
-	const auto &selected() const {return std::get<0>(*this);}
-	auto &costs() {return std::get<1>(*this);}
-	const auto &costs() const {return std::get<1>(*this);}
-	auto &assignments() {return std::get<2>(*this);}
-	const auto &assignments() const {return std::get<2>(*this);}
-	auto &facility_cost_matrix() {return std::get<3>(*this);}
-	const auto &facility_cost_matrix() const {return std::get<3>(*this);}
+    auto &selected() {return std::get<0>(*this);}
+    const auto &selected() const {return std::get<0>(*this);}
+    auto &costs() {return std::get<1>(*this);}
+    const auto &costs() const {return std::get<1>(*this);}
+    auto &assignments() {return std::get<2>(*this);}
+    const auto &assignments() const {return std::get<2>(*this);}
+    auto &facility_cost_matrix() {return std::get<3>(*this);}
+    const auto &facility_cost_matrix() const {return std::get<3>(*this);}
 };
 
 
@@ -26,7 +26,7 @@ MetricSelectionResult<IT, FT>
 select_uniform_random(const OracleType &oracle, size_t np, ClusteringTraits<FT, IT, asn, co> opts)
 {
     assert(opts.k != (unsigned)-1);
-	MetricSelectionResult<IT, FT> ret;
+    MetricSelectionResult<IT, FT> ret;
     size_t nsamp = std::min(size_t(std::ceil(opts.k * opts.approx_mul)), np);
     std::vector<IT> selected;
     std::mt19937_64 rng(opts.seed);
@@ -59,7 +59,7 @@ MetricSelectionResult<IT, FT>
 select_greedy(const OracleType &oracle, size_t np, ClusteringTraits<FT, IT, asn, co> opts)
 {
     assert(opts.k != (unsigned)-1);
-	MetricSelectionResult<IT, FT> ret;
+    MetricSelectionResult<IT, FT> ret;
     size_t nsamp = std::min(size_t(std::ceil(opts.k * opts.approx_mul)), np);
     blz::DV<FT> costs(np);
     IT next = std::mt19937_64(opts.seed)() % np;
@@ -94,7 +94,7 @@ select_greedy(const OracleType &oracle, size_t np, ClusteringTraits<FT, IT, asn,
 template<typename OracleType, typename IT, typename FT, Assignment asn=HARD, CenterOrigination co=EXTRINSIC>
 MetricSelectionResult<IT, FT>
 select_d2(const OracleType &oracle, size_t np, ClusteringTraits<FT, IT, asn, co> opts) {
-	MetricSelectionResult<IT, FT> ret;
+    MetricSelectionResult<IT, FT> ret;
     size_t nsamp = std::min(size_t(std::ceil(opts.k * opts.approx_mul)), np);
     blz::DV<FT> costs(np);
     std::mt19937_64 mt(opts.seed);

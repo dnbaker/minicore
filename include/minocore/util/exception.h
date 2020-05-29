@@ -67,6 +67,10 @@ static int postcondition_require(bool condition, std::string s, int ec=0) {
     return ec;
 }
 
+#ifndef MN_THROW_RUNTIME
+#define MN_THROW_RUNTIME(x) do { std::cerr << x; std::exit(1);} while(0)
+#endif
+
 #ifndef PREC_REQ_EC
 #define PREC_REQ_EC(condition, s, ec) \
     ::minocore::exception::precondition_require(condition, std::string(s) + '[' + __FILE__ + '|' + __PRETTY_FUNCTION__ + "|#L" + std::to_string(__LINE__) + "] Failing condition: \"" + #condition + '"', ec)

@@ -85,10 +85,10 @@ enum MetricKMedianSolverMethod: ce_t {
 
 
 template<Assignment asn_method, typename index_t=uint32_t, typename cost_t=float>
-using assignment_fmt_t = std::conditional_t<asn_method == HARD,                                       
-                                         blz::DV<index_t>,                                         
-                                         blaze::DynamicMatrix<cost_t>                              
-                                        >;  
+using assignment_fmt_t = std::conditional_t<asn_method == HARD,
+                                         blz::DV<index_t>,
+                                         blaze::DynamicMatrix<cost_t>
+                                        >;
 
 template<typename FT=float, typename IT=uint32_t, Assignment asn=HARD, CenterOrigination co=EXTRINSIC>
 struct ClusteringTraits {

@@ -30,6 +30,15 @@
 #endif
 
 
+#ifndef ALWAYS_INLINE
+#  ifdef __GNUC__
+#    define ALWAYS_INLINE __attribute__((always_inline))
+#  else
+#    define ALWAYS_INLINE [[always_inline]]
+#  endif
+#endif
+
+
 // OpenMP
 
 #ifdef _OPENMP
