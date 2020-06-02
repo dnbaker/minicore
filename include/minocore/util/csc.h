@@ -209,7 +209,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
 }
 
 template<typename FT=float, bool SO=blaze::rowMajor>
-blz::SM<FT, SO> mtx2sparse(std::string prefix)
+blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
 {
     std::string line;
     std::ifstream ifs(prefix);
@@ -224,10 +224,11 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix)
     while(lines--)
     {
         if(!std::getline(ifs, line)) throw std::runtime_error("Error in reading file: unexpected number of lines");
-        size_t row, col, cnt;
+        size_t row, col;
         col = std::strtoull(line.data(), &s, 10) - 1;
         row = std::strtoull(s, &s, 10) - 1;
-        cnt = std::strtoull(s, &s, 10);
+        if(perform_transpose) std::swap(col, row);
+        FT cnt = std::atof(s);
         if(unlikely(lastline > row)) throw std::runtime_error("Unsorted file.");
         while(lastline < row) ret.finalize(lastline++);
         ret.append(row, col, cnt);
@@ -235,6 +236,10 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix)
     while(lastline < ret.rows())
         ret.finalize(lastline++);
     if(std::getline(ifs, line)) throw std::runtime_error("Error reading file: too many lines");
+    if(perform_transpose) {
+        transpose(ret);
+    }
+    std::fprintf(stderr, "Parsed file of %zu rows/%zu columns\n", ret.rows(), ret.columns());
     return ret;
 }
 
