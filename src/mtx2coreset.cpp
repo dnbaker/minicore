@@ -116,7 +116,8 @@ int m2ccore(std::string in, std::string out, Opts opts)
             }
         }
         auto lloydstop = std::chrono::high_resolution_clock::now();
-        std::fprintf(stderr, "Lloyd search took %gms\n", timediff2ms(lloydstop, approxstop));
+        total_cost = blz::sum(costs);
+        std::fprintf(stderr, "Lloyd search took %gms and has total cost %g\n", timediff2ms(lloydstop, approxstop), total_cost);
 
         // At this point, we can do some initial clustering.
         // TODO: do several rounds of Lloyd's algorithm
