@@ -4,6 +4,8 @@ using namespace minocore;
 
 namespace dist = blz::distance;
 
+using minocore::util::timediff2ms;
+
 struct Opts {
     size_t kmc2_rounds = 0;
     bool load_csr = false;
@@ -15,6 +17,7 @@ struct Opts {
     uint64_t seed = 0;
     unsigned extra_sample_tries = 5;
     unsigned lloyd_max_rounds = 1000;
+    unsigned sampled_number_coresets = 100;
     coresets::SensitivityMethod sm = coresets::BFL;
     // If nonzero, performs KMC2 with m kmc2_rounds as chain length
     // Otherwise, performs standard D2 sampling
@@ -65,6 +68,7 @@ auto get_initial_centers(minocore::DissimilarityApplicator<blz::SM<FT>> &app, RN
 template<typename FT>
 int m2ccore(std::string in, std::string out, Opts opts)
 {
+    auto tstart = std::chrono::high_resolution_clock::now();
     blz::SM<FT> sm(opts.load_csr ? csc2sparse<FT>(in): mtx2sparse<FT>(in));
     std::fprintf(stderr, "Loaded matrix [%zu/%zu] via %s\n", sm.rows(), sm.columns(), opts.load_csr ? "CSR": "MTX");
     std::string cmd = "mkdir " + out;
@@ -77,23 +81,28 @@ int m2ccore(std::string in, std::string out, Opts opts)
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     coresets::CoresetSampler<FT, uint32_t> cs;
     std::vector<blz::DV<FT, blz::rowVector>> centers(opts.k);
+    std::vector<uint32_t> indices, asn;
+    blz::DV<FT> costs;
     if(dist::detail::satisfies_d2(opts.dis)) {
-        auto [indices, asn, costs] = get_initial_centers(app, rng, opts);
+        auto approxstart = std::chrono::high_resolution_clock::now();
+        std::tie(indices, asn, costs) = get_initial_centers(app, rng, opts);
         auto total_cost = blz::sum(costs);
-        std::fprintf(stderr, "Initial approx cost is %g\n", total_cost);
+        std::fprintf(stderr, "Initial approx cost is %0.12g\n", total_cost);
         if(opts.extra_sample_tries) {
             for(unsigned i = opts.extra_sample_tries; i--;) {
                 auto [indices2, asn2, costs2] = get_initial_centers(app, rng, opts);
                 auto ntotal_cost = blz::sum(costs2);
                 if(ntotal_cost < total_cost) {
                     std::swap(indices, indices2); std::swap(asn, asn2); std::swap(costs, costs2);
-                    std::fprintf(stderr, "Swapping from cost of %g to %g\n", total_cost, ntotal_cost);
+                    std::fprintf(stderr, "Swapping from cost of %0.12g to %0.12g\n", total_cost, ntotal_cost);
                     total_cost = ntotal_cost;
                 }
             }
         }
         for(unsigned i = 0; i < opts.k; ++i)
             centers[i] = row(app.data(), indices[i], blaze::unchecked);
+        auto approxstop = std::chrono::high_resolution_clock::now();
+        std::fprintf(stderr, "Approximate solution took %gms\n", timediff2ms(approxstart, approxstop));
         if(opts.lloyd_max_rounds > 0) {
             if(clustering::perform_lloyd_loop<clustering::HARD>(
                 centers, asn, app, opts.k, costs, rng(), static_cast<const FT *>(nullptr),
@@ -103,12 +112,45 @@ int m2ccore(std::string in, std::string out, Opts opts)
                 std::fprintf(stderr, "Warning: Lloyd's loop reached maximum iterations [%u]\n", opts.lloyd_max_rounds);
             }
         }
+        auto lloydstop = std::chrono::high_resolution_clock::now();
+        std::fprintf(stderr, "Lloyd search took %gms\n", timediff2ms(lloydstop, approxstop));
+
         // At this point, we can do some initial clustering.
         // TODO: do several rounds of Lloyd's algorithm
         cs.make_sampler(app.size(), opts.k, costs.data(), asn.data(), nullptr, rng(), opts.sm);
     } else {
         throw NotImplementedError("Needed: non-d2 coresets");
     }
+    cs.write(out + "/sampler.css");
+    { // Sampled points
+        std::FILE *ofp, *rfp;
+        if((ofp = std::fopen((out + "/selected_points.tsv").data(), "wb")) == nullptr) throw 1;
+        if((rfp = std::fopen((out + "/selected_points.bin").data(), "wb")) == nullptr) throw 2;
+        for(unsigned i = 0; i < opts.sampled_number_coresets; ++i) {
+            auto sampled = cs.sample(opts.coreset_size);
+            sampled.write(rfp);
+            for(size_t i = 0, e = sampled.size(); i < e; ++i) {
+                std::fprintf(ofp, "%u\t%0.16g\n", sampled.indices_[i], sampled.weights_[i]);
+            }
+            std::fprintf(ofp, "===\n");
+        }
+        std::fclose(ofp); std::fclose(rfp);
+    }
+
+    { // Clustering result
+        std::ofstream ofs(out + "/clustering.out");
+        for(const auto &i: centers) ofs << i;
+
+        std::FILE *fp = std::fopen((out + "/clustering.tsv").data(), "a+");
+        if(!fp) throw 1;
+        std::fprintf(fp, "ID\tCluster Assignment\tCost\tSampling probability\n");
+        for(size_t i = 0; i < app.size(); ++i)
+            std::fprintf(fp, "%zu\t%u\t%0.12g\t%0.12g\n", i, asn[i], costs[i], cs.probs_[i]);
+        std::fclose(fp);
+    }
+    auto tstop = std::chrono::high_resolution_clock::now();
+    std::fprintf(stderr, "Full program took %gms\n", timediff2ms(tstart, tstop));
+    // Save results
     return 0;
 }
 
