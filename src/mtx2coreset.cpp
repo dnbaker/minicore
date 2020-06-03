@@ -8,7 +8,7 @@ using minocore::util::timediff2ms;
 
 struct Opts {
     size_t kmc2_rounds = 0;
-    bool load_csr = false;
+    bool load_csr = false, transpose_data = false;
     dist::DissimilarityMeasure dis = dist::JSD;
     dist::Prior prior = dist::DIRICHLET;
     double gamma = 1.;
@@ -27,21 +27,23 @@ Opts opts;
 
 void usage() {
     std::fprintf(stderr, "mtx2coreset <flags> [input file=""] [output_dir=mtx2coreset_output]\n"
+                         "=== Formatting ===\n"
                          "-f: Use floats (instead of doubles)\n"
-                         "-C: load csr format (4 files) rather than matrix.mtx\n"
-                         ">>> Dissimilarity Measures<<<\n"
+                         "-x: Transpose matrix (to swap feature/instance labels) during loading.\n"
+                         "-C: load csr format (4 files) rather than matrix.mtx\n\n\n"
+                         "=== Dissimilarity Measures ===\n"
                          "-1: Use L1 Norm \n"
                          "-2: Use L2 Norm \n"
                          "-S: Use squared L2 Norm (k-means)\n"
                          "-M: Use multinomial KL divergence\n"
-                         "-T: Use total variation distance\n"
-                         ">>> Prior settings <<<\n"
+                         "-T: Use total variation distance\n\n\n"
+                         "=== Prior settings ===\n"
                          "-N: Use no prior. Default: Dirichlet\n"
-                         "-g: Use the Gamma/Beta prior and set gamma's value [default: 1.]\n"
-                         ">>> Coreset Construction >>>\n"
+                         "-g: Use the Gamma/Beta prior and set gamma's value [default: 1.]\n\n\n"
+                         "=== Coreset Construction ===\n"
                          "-c: Set coreset size [1000]\n"
                          "-k: k (number of clusters)\n"
-                         "-K: Use KMC2 for D2 sampling rather than kmeans++. May be significantly faster, but may provide lower quality solution.\n"
+                         "-K: Use KMC2 for D2 sampling rather than kmeans++. May be significantly faster, but may provide lower quality solution.\n\n\n"
                          "-h: Emit usage\n");
     std::exit(1);
 }
@@ -69,9 +71,10 @@ template<typename FT>
 int m2ccore(std::string in, std::string out, Opts opts)
 {
     auto tstart = std::chrono::high_resolution_clock::now();
-    blz::SM<FT> sm(opts.load_csr ? csc2sparse<FT>(in): mtx2sparse<FT>(in));
-    std::fprintf(stderr, "Loaded matrix [%zu/%zu] via %s\n", sm.rows(), sm.columns(), opts.load_csr ? "CSR": "MTX");
-    std::string cmd = "mkdir " + out;
+    blz::SM<FT> sm(opts.load_csr ? csc2sparse<FT>(in): mtx2sparse<FT>(in, opts.transpose_data));
+    if(opts.load_csr && opts.transpose_data) sm.transpose();
+    std::fprintf(stderr, "Loaded matrix [%zu/%zu] via %s%s\n", sm.rows(), sm.columns(), opts.load_csr ? "CSR": "MTX", opts.transpose_data ? "(transposed)": "");
+    std::string cmd = "mkdir -p " + out;
     if(int i = std::system(cmd.data())) std::fprintf(stderr, "rc: %d\n", i);
     blz::DV<FT, blaze::rowVector> pc(1);
     pc[0] = opts.prior == dist::DIRICHLET ? FT(1): opts.gamma;
@@ -157,7 +160,7 @@ int m2ccore(std::string in, std::string out, Opts opts)
 int main(int argc, char **argv) {
     std::string inpath, outpath;
     bool use_double = true;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:KSMT12NCfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:xKSMT12NCfh?")) >= 0;) {
         switch(c) {
             case 'h': case '?': usage(); break;
             case 'f': use_double = false; break;
@@ -173,6 +176,7 @@ int main(int argc, char **argv) {
             case 'K': opts.kmc2_rounds = std::strtoull(optarg, 0, 10); break;
             case 's': opts.seed = std::strtoull(optarg,0,10); break;
             case 'N': opts.prior = dist::NONE;
+            case 'x': opts.transpose_data = true; break;
         }
     }
     if(argc == optind) usage();
