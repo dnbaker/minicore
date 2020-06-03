@@ -183,10 +183,6 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
     LloydLoopResult ret = UNFINISHED;
     wy::WyRand<uint64_t> rng(seed);
     size_t iternum = 0;
-    // HEY DANIEL WHEN YOU GET BACK HERE
-    // You are removing the center_distance
-    // and instead calculating the objective function
-    // and terminating when the change in objective function is less than eps * first cost.
     using cv_t = blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded, blaze::rowVector>;
     std::unique_ptr<cv_t> weight_cv;
     if(weights) {
@@ -271,6 +267,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         }
     };
     if constexpr(asn_method == HARD) {
+        std::fprintf(stderr, "Beginning loop\n");
         std::vector<std::vector<uint32_t>> assigned(k);
         OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes(new std::mutex[k]);)
         for(;;) {

@@ -15,7 +15,7 @@ struct Opts {
     unsigned k = 10;
     size_t coreset_size = 1000;
     uint64_t seed = 0;
-    unsigned extra_sample_tries = 5;
+    unsigned extra_sample_tries = 10;
     unsigned lloyd_max_rounds = 1000;
     unsigned sampled_number_coresets = 100;
     coresets::SensitivityMethod sm = coresets::BFL;
@@ -54,16 +54,19 @@ auto get_initial_centers(minocore::DissimilarityApplicator<blz::SM<FT>> &app, RN
     std::vector<uint32_t> indices, asn;
     blz::DV<FT> costs(app.size());
     if(opts.kmc2_rounds) {
+        std::fprintf(stderr, "Performing kmc\n");
         indices = coresets::kmc2(app, rng, app.size(), opts.k, opts.kmc2_rounds);
         auto [oasn, ocosts] = coresets::get_oracle_costs(app, app.size(), indices);
         costs = std::move(ocosts);
         asn.assign(oasn.data(), oasn.data() + oasn.size());
     } else {
+        std::fprintf(stderr, "Performing kmeanspp\n");
         std::vector<FT> fcosts;
         std::tie(indices, asn, fcosts) = make_kmeanspp(app, opts.k, rng());
         //indices = std::move(initcenters);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     }
+    std::fprintf(stderr, "Maximum idx %u\n", *std::maximum_element(indices.begin(), indices.end()));
     return std::make_tuple(indices, asn, costs);
 }
 
@@ -73,7 +76,8 @@ int m2ccore(std::string in, std::string out, Opts opts)
     auto tstart = std::chrono::high_resolution_clock::now();
     blz::SM<FT> sm(opts.load_csr ? csc2sparse<FT>(in): mtx2sparse<FT>(in, opts.transpose_data));
     if(opts.load_csr && opts.transpose_data) sm.transpose();
-    std::fprintf(stderr, "Loaded matrix [%zu/%zu] via %s%s\n", sm.rows(), sm.columns(), opts.load_csr ? "CSR": "MTX", opts.transpose_data ? "(transposed)": "");
+    std::fprintf(stderr, "Loaded matrix [%zu/%zu] via %s%s in %gms\n", sm.rows(), sm.columns(), opts.load_csr ? "CSR": "MTX", opts.transpose_data ? "(transposed)": "",
+                 timediff2ms(tstart, std::chrono::high_resolution_clock::now()));
     std::string cmd = "mkdir -p " + out;
     if(int i = std::system(cmd.data())) std::fprintf(stderr, "rc: %d\n", i);
     blz::DV<FT, blaze::rowVector> pc(1);
