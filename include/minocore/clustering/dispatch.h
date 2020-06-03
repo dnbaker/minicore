@@ -273,11 +273,15 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         for(;;) {
             // Do it forever
             if(centers_cache.size()) {
-                PRETTY_SAY << "Setting centers cache for measure " << dist::detail::prob2str(measure) << '\n';
+                std::fprintf(stderr, "Setting centers cache for measure %s\n", dist::detail::prob2str(measure));
                 for(unsigned i = 0; i < k; ++i)
                     dist::detail::set_cache(centers[i], centers_cache[i], measure);
+            } else {
+                std::fprintf(stderr, "No cache needed for %s\n", dist::detail::prob2str(measure));
             }
             for(auto &i: assigned) i.clear();
+            std::fprintf(stderr, "Cache set, now assigning points to centers\n");
+            assert(centers.size() == k);
             OMP_PFOR
             for(size_t i = 0; i < npoints; ++i) {
                 auto dist = app(i, centers[0], getcache(0), measure);
@@ -296,16 +300,19 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                     assigned[asn].push_back(i);
                 }
             }
+            std::fprintf(stderr, "Checking termination\n");
             // Check termination condition
             if(auto rc = check(); rc != UNFINISHED) {
                 ret = rc;
                 goto end;
             }
+            std::fprintf(stderr, "Termination failed, continuing\n");
             blaze::SmallArray<uint32_t, 16> centers_to_restart;
             for(unsigned i = 0; i < k; ++i)
                 if(assigned[i].empty())
                     centers_to_restart.pushBack(i);
             if(auto restartn = centers_to_restart.size()) {
+                std::fprintf(stderr, "restarting %zu centers\n", restartn);
                 // Use D^2 sampling to stayrt a new cluster
                 // And then restart the loop
                 assert(retcost.size() == npoints);
@@ -313,26 +320,30 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 OMP_PFOR
                 for(size_t i = 0; i < npoints; ++i) {
                     for(size_t j = 0; j < k; ++j) {
-                        if(assigned[j].empty()) continue;
-                        auto fc = app(i, centers[j], getcache(j), measure);
-                        if(fc < retcost[i]) retcost[i] = fc;
+                        if(!assigned[j].empty()) {
+                            const auto fc = app(i, centers[j], getcache(j), measure);
+                            if(fc < retcost[i]) retcost[i] = fc;
+                        }
                     }
                 }
                 blaze::DynamicVector<FT> csum(npoints);
                 std::uniform_real_distribution<FT> urd;
-                for(size_t i = 0; i < restartn;) {
+                int newp;
+                for(size_t i = 0; i < restartn;++i) {
                     std::partial_sum(retcost.data(), retcost.data() + retcost.size(), csum.data());
-                    auto newp = std::lower_bound(csum.data(), csum.data() + csum.size(), urd(rng) * csum[csum.size() - 1])
+                    newp = std::lower_bound(csum.data(), csum.data() + csum.size(), urd(rng) * csum[csum.size() - 1])
                                 - csum.data();
+                    std::fprintf(stderr, "Newly assigned center: %u\n", newp);
+                    assert(newp < csum.size());
                     centers[centers_to_restart[i]] = row(app.data(), newp, blaze::unchecked);
-                    if(++i != restartn) {
-                        OMP_PFOR
-                        for(size_t i = 0; i < npoints; ++i)
-                            retcost[i] = std::min(retcost[i], app(i, newp));
-                    }
                 }
+                OMP_PFOR
+                for(size_t idx = 0; idx < npoints; ++idx)
+                    retcost[idx] = std::min(retcost[idx], app(idx, newp));
+                std::fprintf(stderr, "Reassigned centers\n");
                 continue; // Reassign, re-center, and re-compute
             }
+            std::fprintf(stderr, "Now setting centers\n");
             // Make centers
             for(size_t i = 0; i < centers_cpy.size(); ++i) {
                 auto &cref = centers_cpy[i];

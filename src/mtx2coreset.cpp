@@ -66,7 +66,7 @@ auto get_initial_centers(minocore::DissimilarityApplicator<blz::SM<FT>> &app, RN
         //indices = std::move(initcenters);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     }
-    std::fprintf(stderr, "Maximum idx %u\n", *std::maximum_element(indices.begin(), indices.end()));
+    assert(*std::max_element(indices.begin(), indices.end()) < app.size());
     return std::make_tuple(indices, asn, costs);
 }
 
