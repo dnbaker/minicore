@@ -670,17 +670,17 @@ public:
                                : blaze::sqrNorm(blaze::sqrt(row(i)) - blaze::sqrt(row(j)));
     }
     FT jsd(size_t i, size_t j) const {
+        FT ret;
         if(!IsSparseMatrix_v<MatrixType> || !prior_data_) {
             assert(i < data_.rows());
             assert(j < data_.rows());
-            FT ret;
             auto ri = row(i), rj = row(j);
             //constexpr FT logp5 = -0.693147180559945; // std::log(0.5)
             auto s = evaluate(ri + rj);
             ret = __getjsc(i) + __getjsc(j) - blaze::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
-            return std::max(.5 * ret, static_cast<FT>(0.));
+            return std::max(static_cast<FT>(.5) * ret, static_cast<FT>(0.));
         } else if constexpr(IS_SPARSE) {
-            FT ret = __getjsc(i) + __getjsc(j);
+            ret = __getjsc(i) + __getjsc(j);
             const size_t dim = row(i).size();
             auto lhr = row(i), rhr = row(j);
             auto lhit = lhr.begin(), rhit = rhr.begin();
@@ -753,7 +753,7 @@ public:
                         doxy(pd[i] * (lhrsi + rhrsi));
                 }
             }
-            return std::max(ret * .5, static_cast<FT>(0.));
+            return std::max(ret * static_cast<FT>(.5), static_cast<FT>(0.));
         }
         __builtin_unreachable();
     }

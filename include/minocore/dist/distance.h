@@ -610,7 +610,7 @@ CT scipy_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVect
 }
 
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
-CT scipy_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y, double p=1.) {
+CT scipy_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1.) {
     auto &xr = ~x;
     auto &yr = ~y;
     const size_t sz = xr.size();
@@ -659,12 +659,7 @@ CT scipy_p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector
 }
 
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
-CT p_wasserstein(const blz::DenseVector<VT, SO> &x, const blz::DenseVector<VT2, SO> &y, double p=1.) {
-    return scipy_p_wasserstein(x, y, p);
-}
-
-template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
-CT p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {
+CT p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1.) {
     return scipy_p_wasserstein(x, y, p);
 }
 
