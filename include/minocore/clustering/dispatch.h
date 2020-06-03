@@ -193,7 +193,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         if(centers_cache.size()) ret = &centers_cache[j];
         return ret;
     };
-    assert(centers_cache.empty() || getcache(0) == nullptr);
+    assert(centers_cache.empty() || getcache(0) != nullptr);
     auto getcost = [&]() {
         if constexpr(asn_method == HARD) {
             return weight_cv ? blz::sum(retcost * *weight_cv): blz::sum(retcost);
@@ -267,6 +267,13 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
         }
     };
     if constexpr(asn_method == HARD) {
+#ifndef NDEBUG
+        std::unique_ptr<size_t[]> counts(new size_t[centers.size()]());
+        for(const auto a: assignments) ++counts[a];
+        for(unsigned i = 0; i < centers.size(); ++i) {
+            std::fprintf(stderr, "center %d had %zu supporting points\n", i, counts[i]);
+        }
+#endif
         std::fprintf(stderr, "Beginning loop\n");
         std::vector<std::vector<uint32_t>> assigned(k);
         OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes(new std::mutex[k]);)
@@ -289,6 +296,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 for(unsigned j = 1; j < k; ++j) {
                     auto newdist = app(i, centers[j], getcache(j), measure);
                     if(newdist < dist) {
+                        std::fprintf(stderr, "Replaced center %d with center %d to reduce cost from %g to %g\n", asn, j, dist, newdist);
                         asn = j;
                         dist = newdist;
                     }
@@ -306,11 +314,16 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 ret = rc;
                 goto end;
             }
-            std::fprintf(stderr, "Termination failed, continuing\n");
-            blaze::SmallArray<uint32_t, 16> centers_to_restart;
-            for(unsigned i = 0; i < k; ++i)
+            auto mnv(blz::min(retcost));
+            auto mxv(blz::max(retcost));
+            std::fprintf(stderr, "min/max costs: %g/%g\n", mnv, mxv);
+            std::fprintf(stderr, "Algorithm did not terminate, continuing\n");
+            blaze::SmallArray<uint32_t, 16> centers_to_restart; 
+            for(unsigned i = 0; i < k; ++i) {
+                std::fprintf(stderr, "center %u has %zu assignments\n", i, assigned[i].size());
                 if(assigned[i].empty())
                     centers_to_restart.pushBack(i);
+            }
             if(auto restartn = centers_to_restart.size()) {
                 std::fprintf(stderr, "restarting %zu centers\n", restartn);
                 // Use D^2 sampling to stayrt a new cluster
