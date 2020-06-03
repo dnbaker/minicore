@@ -175,7 +175,7 @@ int main(int argc, char **argv) {
             case 'M': opts.dis = dist::MKL; break;
             case 'K': opts.kmc2_rounds = std::strtoull(optarg, 0, 10); break;
             case 's': opts.seed = std::strtoull(optarg,0,10); break;
-            case 'N': opts.prior = dist::NONE;
+            case 'N': opts.prior = dist::NONE; break;
             case 'x': opts.transpose_data = true; break;
         }
     }
