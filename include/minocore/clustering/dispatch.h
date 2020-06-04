@@ -9,7 +9,6 @@
 #include "minocore/clustering/sampling.h"
 #include "minocore/clustering/centroid.h"
 
-#include "boost/iterator/zip_iterator.hpp"
 #include "diskmat/diskmat.h"
 
 namespace minocore {
@@ -19,7 +18,6 @@ namespace clustering {
 using dist::DissimilarityMeasure;
 using blaze::ElementType_t;
 using diskmat::PolymorphicMat;
-using boost::make_zip_iterator;
 
 template<typename T>
 bool use_packed_distmat(const T &app) {
@@ -213,7 +211,7 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             }
 #endif
             if(weight_cv) {
-                auto ew = blaze::expand(*weight_cv, app.data().columns());
+                auto ew = blaze::expand(*weight_cv, mat.columns());
                 std::fprintf(stderr, "expanded weight shape: %zu/%zu. asn: %zu/%zu\n", ew.rows(), ew.columns(), assignments.rows(), assignments.columns());
                 return blaze::sum(assignments % retcost % ew);
             } else {
@@ -240,6 +238,8 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             }
             current_cost = itercost;
         }
+
+        std::fprintf(stderr, "Current cost: %g\n", current_cost);
         PRETTY_SAY << "iternum: " << iternum << '\n';
         return UNFINISHED;
     };
@@ -293,10 +293,10 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             for(size_t i = 0; i < npoints; ++i) {
                 auto dist = app(i, centers[0], getcache(0), measure);
                 unsigned asn = 0;
+                SK_UNROLL_4
                 for(unsigned j = 1; j < k; ++j) {
-                    auto newdist = app(i, centers[j], getcache(j), measure);
-                    if(newdist < dist) {
-                        std::fprintf(stderr, "Replaced center %d with center %d to reduce cost from %g to %g\n", asn, j, dist, newdist);
+                    if(auto newdist = app(i, centers[j], getcache(j), measure); newdist < dist) {
+                        //std::fprintf(stderr, "Replaced center %d with center %d to reduce cost from %g to %g\n", asn, j, dist, newdist);
                         asn = j;
                         dist = newdist;
                     }
@@ -309,15 +309,12 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 }
             }
             std::fprintf(stderr, "Checking termination\n");
-            // Check termination condition
-            if(auto rc = check(); rc != UNFINISHED) {
-                ret = rc;
-                goto end;
-            }
+#ifndef NDEBUG
             auto mnv(blz::min(retcost));
             auto mxv(blz::max(retcost));
             std::fprintf(stderr, "min/max costs: %g/%g\n", mnv, mxv);
-            std::fprintf(stderr, "Algorithm did not terminate, continuing\n");
+#endif
+            // Check termination condition
             blaze::SmallArray<uint32_t, 16> centers_to_restart; 
             for(unsigned i = 0; i < k; ++i) {
                 std::fprintf(stderr, "center %u has %zu assignments\n", i, assigned[i].size());
@@ -341,14 +338,17 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 }
                 blaze::DynamicVector<FT> csum(npoints);
                 std::uniform_real_distribution<FT> urd;
-                int newp;
+                std::ptrdiff_t newp;
                 for(size_t i = 0; i < restartn;++i) {
                     std::partial_sum(retcost.data(), retcost.data() + retcost.size(), csum.data());
                     newp = std::lower_bound(csum.data(), csum.data() + csum.size(), urd(rng) * csum[csum.size() - 1])
                                 - csum.data();
-                    std::fprintf(stderr, "Newly assigned center: %u\n", newp);
-                    assert(newp < csum.size());
-                    centers[centers_to_restart[i]] = row(app.data(), newp, blaze::unchecked);
+                    if(HEDLEY_UNLIKELY(newp >= csum.size() || newp < 0)) {
+                        std::fprintf(stderr, "lower bound is out of bounds: %zd/%zu. Cost sum: %g", newp, csum.size(), csum[csum.size() - 1]);
+                        throw std::out_of_range("newp >= array size, check for negative distances");
+                    }
+                    std::fprintf(stderr, "Newly assigned center: %zd\n", newp);
+                    centers[centers_to_restart[i]] = row(mat, newp, blaze::unchecked);
                 }
                 OMP_PFOR
                 for(size_t idx = 0; idx < npoints; ++idx)
@@ -356,7 +356,9 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
                 std::fprintf(stderr, "Reassigned centers\n");
                 continue; // Reassign, re-center, and re-compute
             }
-            std::fprintf(stderr, "Now setting centers\n");
+            std::fprintf(stderr, "Now checking change in objective function. (cost before: %g)\n", current_cost);
+            if((ret = check()) != UNFINISHED) goto end;
+            std::fprintf(stderr, "Algorithm did not terminate, continuing.\nNow setting centers\n");
             // Make centers
             for(size_t i = 0; i < centers_cpy.size(); ++i) {
                 auto &cref = centers_cpy[i];
@@ -396,17 +398,14 @@ LloydLoopResult perform_lloyd_loop(CentersType &centers, Assignments &assignment
             assert(blz::sum(assignments) - assignments.rows() < 1e-3 * assignments.rows());
             for(size_t i = 0; i < centers.size(); ++i)
                 if(blaze::sum(blaze::column(assignments, i)) == 0.)
-                    throw TODOError("TODO: reassignment for support goes to 0");
+                    std::fprintf(stderr, "Center %zu has no support. We may consider reassignment in the future.\n", i);
             // Check termination condition
-            if(auto rc = check(); rc != UNFINISHED) {
-                ret = rc;
-                goto end;
-            }
+            if((ret = check()) != UNFINISHED) goto end;
             // Now points have been assigned, and we now perform center assignment
             CentroidPolicy::perform_soft_assignment(
                 assignments, app.row_sums(),
                 OMP_ONLY(mutexes.get(),)
-                app.data(), centers_cpy, weight_cv.get(), measure
+                mat, centers_cpy, weight_cv.get(), measure
             );
         }
         std::swap(centers_cpy, centers);

@@ -14,7 +14,7 @@ inline auto t() {
 }
 template<typename T>
 auto td(T x, T y) {
-    return std::abs(ssize_t((x - y).count()));
+    return std::abs(std::ptrdiff_t((x - y).count()));
 }
 
 template<typename T>
@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
         std::vector<float> v2; std::swap(v2, v);
     }
     std::vector<int> s(ns);
-    std::vector<ssize_t> times(nt);
+    std::vector<std::ptrdiff_t> times(nt);
     for(size_t i = 0; i < ns; ++i)
         s[i] = as.sample();
     decltype(t()) start, end;

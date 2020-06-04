@@ -35,6 +35,8 @@ using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, FGC
 template<typename T, typename H = robin_hood::hash<T>, typename E = std::equal_to<T>>
 using flat_hash_set = robin_hood::unordered_flat_set<T, H, E, FGC_MAX_HASH_LOAD_FACTOR>;
 
+using ssize_t = std::ptrdiff_t;
+
 INLINE auto checked_posix_write(int fd, const void *buf, ssize_t count) {
     ssize_t ret = ::write(fd, buf, count);
     if(unlikely(ret != count)) {
@@ -75,4 +77,5 @@ template<typename C>
 using ContainedTypeFromIterator = std::decay_t<decltype((*std::declval<C>())[0])>;
 
 } // shared
+using shared::ssize_t;
 } // minocore

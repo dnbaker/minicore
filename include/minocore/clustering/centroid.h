@@ -60,7 +60,7 @@ struct CentroidPolicy {
                 assert(blaze::max(~ret) < 1. || !std::fprintf(stderr, "max in ret: %g for a probability distribution.", blaze::max(~ret)));
             }
         } else {
-            PRETTY_SAY << "Unweighted, anything but L1 or LLR" << dist::detail::prob2str(measure) << '\n';
+            PRETTY_SAY << "Unweighted, anything but L1 or LLR (" << dist::detail::prob2str(measure) << ")\n";
             if(dist::detail::is_probability(measure)) {
                 // Weighted average for all
 #ifndef NDEBUG
