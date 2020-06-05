@@ -6,6 +6,26 @@
 
 namespace minocore { namespace clustering {
 
+#if 0
+template<typename Mat, typename RowSums>
+struct RAIIScaler {
+    Mat &m_;
+    const RowSums &rs_;
+    RAIIScaler(Mat &m, const RowSums &rs): m_(m), rs_(rs) {
+        m_ %= blz::expand(trans(rs_), m_.columns());
+    }
+    ~RAIIScaler() {
+        m_ %= blz::expand(trans(1. / rs_), m_.columns());
+    }
+};
+
+template<typename Mat, typename RowSums>
+auto make_raiiscaler(Mat &m, const RowSums &rs) {
+    return RAIIScaler<Mat, RowSums>(m, rs);
+}
+
+#endif
+
 struct CentroidPolicy {
     template<typename VT, bool TF, typename Range, typename VT2=VT, typename RowSums>
     static void perform_average(blaze::DenseVector<VT, TF> &ret, const Range &r, const RowSums &rs,
@@ -42,7 +62,7 @@ struct CentroidPolicy {
                 ~ret = blaze::sum<blz::columnwise>(r % blz::expand(trans(rs), r.columns())) * total_sum_inv;
             }
         } else if(wc) {
-            PRETTY_SAY << "Weighted, anything but L1 or LLR" << dist::detail::prob2str(measure) << '\n';
+            PRETTY_SAY << "Weighted, anything but L1 or LLR (" << dist::detail::prob2str(measure) << ")\n";
             assert((~(*wc)).size() == r.rows());
             assert(blz::expand(~(*wc), r.columns()).rows() == r.rows());
             assert(blz::expand(~(*wc), r.columns()).columns() == r.columns());
@@ -70,6 +90,87 @@ struct CentroidPolicy {
 #endif
                 ~ret = blaze::sum<blz::columnwise>(r % blz::expand(trans(rs), r.columns())) * (1. / (blaze::sum(rs) * r.rows()));
             } else ~ret = blz::mean<blz::columnwise>(r % blz::expand(trans(rs), r.columns()));
+        }
+    }
+    template<typename Matrix, typename RSVec, typename PriorData=RSVec, typename FT=blz::ElementType_t<Matrix>, typename AsnV, typename WPT=blz::DV<FT, blz::rowVector>, bool WSO=blz::rowVector>
+    static void perform_average(Matrix &mat, const RSVec &rs, std::vector<blz::DV<FT, blz::rowVector>> &centers,
+                                AsnV &assignments, dist::DissimilarityMeasure measure,
+                                const blaze::Vector<WPT, WSO> *weight_cv=nullptr, const PriorData *pd=nullptr)
+    {
+        // Scale weights up if necessary
+        std::vector<blaze::SmallArray<uint32_t, 16>> assignv(centers.size());
+        for(size_t i = 0; i < assignments.size(); ++i) {
+            assert(assignments[i] < centers.size());
+            assignv.at(assignments[i]).pushBack(i);
+        }
+        if(measure == dist::TVD || measure == dist::L1) {
+            using ptr_t = decltype((~*weight_cv).data());
+            ptr_t ptr = nullptr;
+            if(weight_cv) ptr = (~*weight_cv).data();
+            OMP_PFOR
+            for(unsigned i = 0; i < centers.size(); ++i) {
+                coresets::l1_median(mat, centers[i], assignv[i], ptr);
+            }
+            return;
+        }
+        [[maybe_unused]] auto pv = pd ? FT(pd->operator[](0)): FT(1.);
+        assert(!pd || pd->size() == 1); // TODO: support varied prior over features
+        for(unsigned i = 0; i < centers.size(); ++i) {
+            auto aip = assignv[i].data();
+            auto ain = assignv[i].size();
+            std::fprintf(stderr, "Setting center %u with %zu support\n", i, ain);
+            auto r(blz::rows(mat, aip, ain));
+            auto &c(centers[i]);
+            std::fprintf(stderr, "max row index: %u\n", *std::max_element(aip, aip + ain));
+
+            if(weight_cv) {
+                c = blaze::sum<blaze::columnwise>(
+                    blz::rows(mat, aip, ain)
+                    % blaze::expand(blaze::elements(trans(~*weight_cv), aip, ain), mat.columns()));
+            } else {
+                std::fprintf(stderr, "Performing unweighted sum of %zu rows\n", ain);
+                c = blaze::sum<blaze::columnwise>(blz::rows(mat, aip, ain));
+            }
+
+            assert(rs.size() == mat.rows());
+            if constexpr(blaze::IsSparseMatrix_v<Matrix>) {
+                if(pd) {
+                    std::fprintf(stderr, "Sparse prior handling\n");
+                    if(weight_cv) {
+                        c += pv * blz::sum(blz::elements(rs * ~*weight_cv, aip, ain));
+                    } else {
+                        c += pv * ain;
+                    }
+                    for(const auto ri: assignv[i]) {
+                        assert(ri < rs.size());
+                        assert(ri < mat.rows());
+                        auto rsri = pv;
+                        if(!use_scaled_centers(measure)) rsri /= rs[ri];
+                        for(const auto &pair: row(mat, ri, blz::unchecked))
+                            c[pair.index()] -= rsri;
+                    }
+                }
+            }
+            double div;
+            if(measure == dist::LLR || measure == dist::OLLR || measure == dist::UWLLR) {
+                if(weight_cv)
+                    div = blz::sum(blz::elements(rs * ~*weight_cv, aip, ain));
+                else
+                    div = blz::sum(blz::elements(rs, aip, ain));
+            } else {
+                if(weight_cv) {
+                    std::fprintf(stderr, "weighted, nonLLR\n");
+                    div = blz::sum(~*weight_cv);
+                } else {
+                    std::fprintf(stderr, "unweighted, nonLLR\n");
+                    div = ain;
+                }
+            }
+            auto oldnorm = blaze::l2Norm(c);
+            c *= (1. / div);
+            auto newnorm = blaze::l2Norm(c);
+            std::fprintf(stderr, "norm before %g, after %g\n", oldnorm, newnorm);
+            assert(min(c) >= 0 || !std::fprintf(stderr, "min center loc: %g\n", min(c)));
         }
     }
     template<typename FT, typename Row, typename Src>

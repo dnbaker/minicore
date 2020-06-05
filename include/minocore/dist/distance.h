@@ -53,6 +53,8 @@ enum DissimilarityMeasure {
     WEMD, // Weighted Earth-mover's distance
     ORACLE_METRIC,
     ORACLE_PSEUDOMETRIC,
+    PL2,
+    PSL2,
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
@@ -61,7 +63,7 @@ enum DissimilarityMeasure {
     IS=ITAKURA_SAITO
 };
 
-namespace detail {
+inline namespace detail {
 /*
  *
  * Traits for each divergence, whether they need:
@@ -104,7 +106,7 @@ static constexpr INLINE bool is_bregman(DissimilarityMeasure d)  {
     return false;
 }
 static constexpr INLINE bool satisfies_d2(DissimilarityMeasure d) {
-    return d == LLR || is_bregman(d) || d == SQRL2;
+    return d == LLR || is_bregman(d) || d == SQRL2 || d == PSL2;
 }
 static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
     switch(d) {
@@ -115,6 +117,7 @@ static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
         case TOTAL_VARIATION_DISTANCE:
         case HELLINGER:
         case ORACLE_METRIC:
+        case PL2:
             return true;
         default: ;
     }
@@ -123,6 +126,7 @@ static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
 static constexpr INLINE bool satisfies_rho_metric(DissimilarityMeasure d) {
     if(satisfies_metric(d)) return true;
     switch(d) {
+        case PSL2:  // rho = 2
         case SQRL2: // rho = 2
         // These three don't, technically, but using a prior can force it to follow it on real data
         case ORACLE_PSEUDOMETRIC:
@@ -142,12 +146,30 @@ static constexpr INLINE bool needs_logs(DissimilarityMeasure d)  {
     return false;
 }
 
+static constexpr INLINE bool use_scaled_centers(DissimilarityMeasure measure) {                         
+    // Whether centers should be produced as being not normalized by row sums
+    // compared to default behavior
+    switch(measure) {                                                                                  
+        case LLR:                                                                                
+        case OLLR:                                                                               
+        case UWLLR:                                                                              
+        case L1:                                                                                 
+        case SQRL2:                                                                              
+        case L2:                                                                                 
+        case COSINE_DISTANCE:                                                                    
+        case WEMD:                                                                               
+           return true;                                                                                
+        default: return false;                                                                         
+    }                                                                                                  
+}
+
 static constexpr INLINE bool is_probability(DissimilarityMeasure d)  {
     switch(d) {
         case TOTAL_VARIATION_DISTANCE: case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
+        case HELLINGER:
         case MKL: case POISSON: case REVERSE_MKL: case REVERSE_POISSON:
         case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
-        case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
+        case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO: case PSL2: case PL2:
         return true;
         default: break;
     }
@@ -171,15 +193,16 @@ static constexpr bool expects_nonnegative(DissimilarityMeasure measure) {
         case BHATTACHARYYA_DISTANCE: case TOTAL_VARIATION_DISTANCE: case LLR:
         case REVERSE_MKL: case REVERSE_POISSON: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
         case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+        case PL2: case PSL2:
         return true;
-        
+
     }
 }
 
 static constexpr INLINE bool is_dissimilarity(DissimilarityMeasure d) {
     switch(d) {
         case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
-        case COSINE_SIMILARITY:      case PROBABILITY_COSINE_DISTANCE:
+        case COSINE_SIMILARITY:      case PROBABILITY_COSINE_SIMILARITY:
             return false;
         default: ;
     }
@@ -201,24 +224,29 @@ static constexpr INLINE bool is_symmetric(DissimilarityMeasure d) {
         case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
         case COSINE_DISTANCE: case COSINE_SIMILARITY:
         case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
+        case PL2: case PSL2:
             return true;
         default: ;
     }
     return false;
 }
 
-template<typename VT, bool TF, typename VT2>
-void set_cache(const blz::Vector<VT, TF> &src, blz::Vector<VT2, TF> &dest, DissimilarityMeasure d) {
-    if(needs_logs(d)) {
-        if(is_probability(d))
-            ~dest = neginf2zero(log(~src));
-        else
-            ~dest = neginf2zero(log(~src / blaze::sum(~src)));
-        return;
-    }
-    if(needs_sqrt(d)) {
-        ~dest = sqrt(~src);
-        return;
+template<typename VT, bool TF, typename VT2, typename CVT=VT, bool TF2=TF>
+void set_cache(const blz::Vector<VT, TF> &src, blz::Vector<VT2, TF> &dest, DissimilarityMeasure d, blz::Vector<CVT, TF2> *cp=nullptr) {
+    if(!cp) {
+        if(needs_logs(d)) {
+            if(is_probability(d))
+                ~dest = neginf2zero(log(~src));
+            else
+                ~dest = neginf2zero(log(~src / blaze::sum(~src)));
+            return;
+        }
+        if(needs_sqrt(d)) {
+            ~dest = sqrt(~src);
+            return;
+        }
+    } else {
+        throw std::runtime_error("Not implemented: setting cache for the instance of a nonzero prior");
     }
 }
 
@@ -249,6 +277,8 @@ static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {
         case PROBABILITY_COSINE_SIMILARITY: return "PROBABILITY_COSINE_SIMILARITY";
         case ORACLE_METRIC: return "ORACLE_METRIC";
         case ORACLE_PSEUDOMETRIC: return "ORACLE_PSEUDOMETRIC";
+        case PSL2: return "PSL2";
+        case PL2: return "PL2";
         default: return "INVALID TYPE";
     }
 }
@@ -279,7 +309,9 @@ static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
         case PROBABILITY_COSINE_SIMILARITY: return "Cosine similarity of the probability vectors: \\frac{A \\cdot B}{|A|_2 |B|_2}";
         case ORACLE_METRIC: return "Placeholder for oracle metrics, allowing us to use DissimilarityMeasure in other situations";
         case ORACLE_PSEUDOMETRIC: return "Placeholder for oracle pseudometrics";
-        default: return "INVALID TYPE";
+        case PSL2: return "Probability squared L2 norm, k-means in probabilityspace";
+        case PL2: return "Probability L2 norm";
+        default: return prob2str(d);
     }
 }
 static void print_measures() {
@@ -296,7 +328,7 @@ static void print_measures() {
         BHATTACHARYYA_DISTANCE,
         TOTAL_VARIATION_DISTANCE,
         LLR,
-        OLLR,
+        //OLLR,
         //EMD,
         REVERSE_MKL,
         REVERSE_POISSON,
@@ -311,6 +343,8 @@ static void print_measures() {
         COSINE_SIMILARITY,
         PROBABILITY_COSINE_DISTANCE,
         PROBABILITY_COSINE_SIMILARITY,
+        PL2,
+        PSL2
     };
     for(const auto measure: measures) {
         std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
@@ -325,6 +359,7 @@ static constexpr bool is_valid_measure(DissimilarityMeasure measure) {
         case ITAKURA_SAITO: case COSINE_DISTANCE: case PROBABILITY_COSINE_DISTANCE:
         case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
         case EMD: case WEMD: case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
+        case PL2: case PSL2:
         return true;
         default: ;
     }

@@ -200,7 +200,6 @@ kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=
     std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(~mat);
-        std::fprintf(stderr, "Mat shape: %zu/%zu\n", (~mat).rows(), (~mat).columns());
         ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights);
     } else { // columnwise
         auto columnit = blz::columniterator(~mat);
@@ -254,7 +253,8 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     centers_reassigned = false;
     /*
      *
-     * The moving average is supposed to be 
+     * The moving average is supposed to be more numerically stable, but I get better results
+     * with naive summation.
      */
     if(!use_moving_average) {
         OMP_PRAGMA("omp parallel for schedule(dynamic)")
@@ -516,18 +516,6 @@ auto kmeans_matrix_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng,
 #endif
     return index2matrix(ics, ~mat);
 }
-
-// TODO: 1. get run kmeans clustering on MatrixCoreset
-//       2. Use this for better coreset construction (since coreset size is dependent on the approximation ratio)
-//       3. Generate new solution
-//       4. Iterate over this
-//       5. ???
-//       6. PROFIT
-//       Why?
-//       The solution is 1 + eps accurate, with the error being 1/eps^2
-//       We can effectively remove the log(n) approximation
-//       ratio from
-//       Epilogue.
 
 
 } // namespace coresets

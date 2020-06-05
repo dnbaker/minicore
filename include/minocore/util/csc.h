@@ -223,13 +223,20 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
     ret.reserve(lines);
     while(lines--)
     {
-        if(!std::getline(ifs, line)) throw std::runtime_error("Error in reading file: unexpected number of lines");
+        if(!std::getline(ifs, line)) {
+            const char *s = "Error in reading file: unexpected number of lines";
+            std::cerr << s;
+            throw std::runtime_error(s);
+        }
         size_t row, col;
         col = std::strtoull(line.data(), &s, 10) - 1;
         row = std::strtoull(s, &s, 10) - 1;
         if(perform_transpose) std::swap(col, row);
         FT cnt = std::atof(s);
-        if(unlikely(lastline > row)) throw std::runtime_error("Unsorted file.");
+        if(unlikely(lastline > row)) {
+            std::cerr << "Unsorted file\n";
+            throw std::runtime_error("Unsorted file.");
+        }
         while(lastline < row) ret.finalize(lastline++);
         ret.append(row, col, cnt);
     }
@@ -240,6 +247,11 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
         transpose(ret);
     }
     std::fprintf(stderr, "Parsed file of %zu rows/%zu columns\n", ret.rows(), ret.columns());
+#if 0
+    for(size_t i = 0; i < ret.rows(); ++i) {
+        std::fprintf(stderr, "Row %zu has %zu nonzeros\n", i, blaze::nonZeros(row(ret, i)));
+    }
+#endif
     return ret;
 }
 

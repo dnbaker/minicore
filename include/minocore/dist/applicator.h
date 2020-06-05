@@ -33,10 +33,10 @@ class DissimilarityApplicator {
     CacheMatrixType logdata_;
     CacheMatrixType sqrdata_;
     VecT jsd_cache_;
+public:
     std::unique_ptr<VecT> prior_data_;
     std::unique_ptr<VecT> l2norm_cache_;
     std::unique_ptr<VecT> pl2norm_cache_;
-public:
     using FT = ET;
     using MT = MatrixType;
     using This = DissimilarityApplicator<MatrixType>;
@@ -44,7 +44,7 @@ public:
     static_assert(std::is_floating_point_v<FT>, "FT must be floating point");
 
     const DissimilarityMeasure measure_;
-    const MatrixType &data() const {return data_;}
+    MatrixType &data() const {return data_;}
     const VecT &row_sums() const {return row_sums_;}
     size_t size() const {return data_.rows();}
     template<typename PriorContainer=blaze::DynamicVector<FT, blaze::rowVector>>
@@ -140,6 +140,8 @@ public:
             case L1:                       set_distance_matrix<MatType, L1>(m, symmetrize); break;
             case L2:                       set_distance_matrix<MatType, L2>(m, symmetrize); break;
             case SQRL2:                    set_distance_matrix<MatType, SQRL2>(m, symmetrize); break;
+            case PL2:                      set_distance_matrix<MatType, PL2>(m, symmetrize); break;
+            case PSL2:                     set_distance_matrix<MatType, PSL2>(m, symmetrize); break;
             case JSD:                      set_distance_matrix<MatType, JSD>(m, symmetrize); break;
             case JSM:                      set_distance_matrix<MatType, JSM>(m, symmetrize); break;
             case REVERSE_MKL:              set_distance_matrix<MatType, REVERSE_MKL>(m, symmetrize); break;
@@ -219,9 +221,9 @@ public:
     decltype(auto) weighted_row(size_t ind) const {
         return blaze::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_[ind];
     }
-    auto row(size_t ind) const {return blaze::row(data_, ind BLAZE_CHECK_DEBUG);}
-    auto logrow(size_t ind) const {return blaze::row(logdata_, ind BLAZE_CHECK_DEBUG);}
-    auto sqrtrow(size_t ind) const {return blaze::row(sqrdata_, ind BLAZE_CHECK_DEBUG);}
+    decltype(auto) row(size_t ind) const {return blaze::row(data_, ind BLAZE_CHECK_DEBUG);}
+    decltype(auto) logrow(size_t ind) const {return blaze::row(logdata_, ind BLAZE_CHECK_DEBUG);}
+    decltype(auto) sqrtrow(size_t ind) const {return blaze::row(sqrdata_, ind BLAZE_CHECK_DEBUG);}
 
     /*
      * Distances
@@ -251,6 +253,10 @@ public:
             ret = l2Norm(weighted_row(i) - o);
         } else if constexpr(constexpr_measure == SQRL2) {
             ret = blaze::sqrNorm(weighted_row(i) - o);
+        } else if constexpr(constexpr_measure == PSL2) {
+            ret = blaze::sqrNorm(i - o);
+        } else if constexpr(constexpr_measure == PL2) {
+            ret = l2Norm(i - o);
         } else if constexpr(constexpr_measure == JSD) {
             if(cp) {
                 ret = jsd(i, o, *cp);
@@ -264,8 +270,10 @@ public:
         } else if constexpr(constexpr_measure == MKL) {
             ret = cp ? mkl(o, i, *cp): mkl(o, i);
         } else if constexpr(constexpr_measure == EMD) {
+            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
             ret = p_wasserstein(row(i), o);
         } else if constexpr(constexpr_measure == WEMD) {
+            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
             ret = p_wasserstein(weighted_row(i), o);
         } else if constexpr(constexpr_measure == REVERSE_POISSON) {
             ret = cp ? pkl(i, o, *cp): pkl(i, o);
@@ -305,15 +313,21 @@ public:
              typename=std::enable_if_t<!std::is_integral_v<OT> && !std::is_integral_v<CacheT>>>
     INLINE FT call(size_t i, OT &o, [[maybe_unused]] CacheT *cp=static_cast<CacheT *>(nullptr)) const {
         FT ret;
+        assert(i < this->data().rows());
         if constexpr(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
             ret = discrete_total_variation_distance(row(i), o);
         } else if constexpr(constexpr_measure == L1) {
             ret = l1Norm(weighted_row(i) - o);
         } else if constexpr(constexpr_measure == L2) {
             ret = l2Norm(weighted_row(i) - o);
+        } else if constexpr(constexpr_measure == PL2) {
+            ret = l2Norm(row(i) - o);
         } else if constexpr(constexpr_measure == SQRL2) {
-            assert(i < this->data().rows());
             ret = blaze::sqrNorm(weighted_row(i) - o);
+            std::fprintf(stderr, "wrow norm is %g, o norm is %g, dist norm is %g, unweighted distnorm is %g, dist when weighting o: %g\n", blz::sqrNorm(weighted_row(i)), blz::sqrNorm(o), ret, blaze::sqrNorm(row(i) - o), blaze::sqrNorm(row(i) * row_sums_[i] - o));
+            //std::fprintf(stderr, "SQRL2 between row %zu and row starting at %p is %g\n", i, (void *)&*o.begin(), ret);
+        } else if constexpr(constexpr_measure == PSL2) {
+            ret = blaze::sqrNorm(i - o);
         } else if constexpr(constexpr_measure == JSD) {
             if(cp) {
                 ret = jsd(i, o, *cp);
@@ -331,8 +345,10 @@ public:
                 ret = mkl(i, o, *cp);
             } else ret = mkl(i, o);
         } else if constexpr(constexpr_measure == EMD) {
+            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
             ret = p_wasserstein(row(i), o);
         } else if constexpr(constexpr_measure == WEMD) {
+            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
             ret = p_wasserstein(weighted_row(i), o);
         } else if constexpr(constexpr_measure == REVERSE_POISSON) {
             ret = cp ? pkl(o, i, *cp): pkl(o, i);
@@ -383,8 +399,15 @@ public:
             ret = l1Norm(weighted_row(i) - weighted_row(j));
         } else if constexpr(constexpr_measure == L2) {
             ret = l2Norm(weighted_row(i) - weighted_row(j));
+        } else if constexpr(constexpr_measure == PL2) {
+            ret = l2Norm(row(i) - row(j));
         } else if constexpr(constexpr_measure == SQRL2) {
             ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j));
+            //ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j));
+            std::fprintf(stderr, "wrow norm is %g, j norm is %g, dist norm is %g\n", blz::sqrNorm(weighted_row(i)), blz::sqrNorm(weighted_row(j)), ret);
+            //std::fprintf(stderr, "SQRL2 between row %zu and %zu is %g\n", i, j, ret);
+        } else if constexpr(constexpr_measure == PSL2) {
+            ret = blaze::sqrNorm(row(i) - row(j));
         } else if constexpr(constexpr_measure == JSD) {
             ret = jsd(i, j);
         } else if constexpr(constexpr_measure == JSM) {
@@ -394,8 +417,10 @@ public:
         } else if constexpr(constexpr_measure == MKL) {
             ret = mkl(i, j);
         } else if constexpr(constexpr_measure == EMD) {
+            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
             ret = p_wasserstein(row(i), row(j));
         } else if constexpr(constexpr_measure == WEMD) {
+            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
             ret = p_wasserstein(weighted_row(i), weighted_row(j));
         } else if constexpr(constexpr_measure == REVERSE_POISSON) {
             ret = pkl(j, i);
@@ -446,6 +471,8 @@ public:
             case L1: ret = call<L1>(o, i); break;
             case L2: ret = call<L2>(o, i); break;
             case SQRL2: ret = call<SQRL2>(o, i); break;
+            case PSL2: ret = call<PSL2>(o, i); break;
+            case PL2: ret = call<PL2>(o, i); break;
             case JSD: ret = call<JSD>(o, i); break;
             case JSM: ret = call<JSM>(o, i); break;
             case REVERSE_MKL: ret = call<REVERSE_MKL>(o, i, cache); break;
@@ -488,6 +515,8 @@ public:
             case TOTAL_VARIATION_DISTANCE: ret = call<TOTAL_VARIATION_DISTANCE>(i, o); break;
             case L1: ret = call<L1>(i, o); break;
             case L2: ret = call<L2>(i, o); break;
+            case PL2: ret = call<PL2>(i, o); break;
+            case PSL2: ret = call<PSL2>(i, o); break;
             case SQRL2: ret = call<SQRL2>(i, o); break;
             case JSD: ret = call<JSD>(i, o); break;
             case JSM: ret = call<JSM>(i, o); break;
@@ -523,6 +552,8 @@ public:
             case TOTAL_VARIATION_DISTANCE: ret = call<TOTAL_VARIATION_DISTANCE>(i, j); break;
             case L1: ret = call<L1>(i, j); break;
             case L2: ret = call<L2>(i, j); break;
+            case PL2: ret = call<PL2>(i, j); break;
+            case PSL2: ret = call<PSL2>(i, j); break;
             case SQRL2: ret = call<SQRL2>(i, j); break;
             case JSD: ret = call<JSD>(i, j); break;
             case JSM: ret = call<JSM>(i, j); break;

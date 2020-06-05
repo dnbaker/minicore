@@ -1,4 +1,5 @@
 #include "minocore/minocore.h"
+#include "blaze/util/Serialization.h"
 
 using namespace minocore;
 
@@ -8,14 +9,14 @@ using minocore::util::timediff2ms;
 
 struct Opts {
     size_t kmc2_rounds = 0;
-    bool load_csr = false, transpose_data = false;
+    bool load_csr = false, transpose_data = false, load_blaze = false;
     dist::DissimilarityMeasure dis = dist::JSD;
     dist::Prior prior = dist::DIRICHLET;
     double gamma = 1.;
     unsigned k = 10;
     size_t coreset_size = 1000;
     uint64_t seed = 0;
-    unsigned extra_sample_tries = 10;
+    unsigned extra_sample_tries = 0;
     unsigned lloyd_max_rounds = 1000;
     unsigned sampled_number_coresets = 100;
     coresets::SensitivityMethod sm = coresets::BFL;
@@ -27,8 +28,9 @@ Opts opts;
 
 void usage() {
     std::fprintf(stderr, "mtx2coreset <flags> [input file=""] [output_dir=mtx2coreset_output]\n"
-                         "=== Formatting ===\n"
+                         "=== General/Formatting ===\n"
                          "-f: Use floats (instead of doubles)\n"
+                         "-p: Set number of threads [1]\n"
                          "-x: Transpose matrix (to swap feature/instance labels) during loading.\n"
                          "-C: load csr format (4 files) rather than matrix.mtx\n\n\n"
                          "=== Dissimilarity Measures ===\n"
@@ -36,6 +38,9 @@ void usage() {
                          "-2: Use L2 Norm \n"
                          "-S: Use squared L2 Norm (k-means)\n"
                          "-M: Use multinomial KL divergence\n"
+                         "-j: Use multinomial Jensen-Shannon divergence\n"
+                         "-J: Use multinomial Jensen-Shannon metric (square root of JSD)\n"
+                         "-P: Use probability squared L2 norm\n"
                          "-T: Use total variation distance\n\n\n"
                          "=== Prior settings ===\n"
                          "-N: Use no prior. Default: Dirichlet\n"
@@ -74,7 +79,27 @@ template<typename FT>
 int m2ccore(std::string in, std::string out, Opts opts)
 {
     auto tstart = std::chrono::high_resolution_clock::now();
-    blz::SM<FT> sm(opts.load_csr ? csc2sparse<FT>(in): mtx2sparse<FT>(in, opts.transpose_data));
+    blz::SM<FT> sm;
+    if(opts.load_csr) {
+        std::fprintf(stderr, "Trying to load from csr\n");
+        sm = csc2sparse<FT>(in);
+    } else if(opts.load_blaze) {
+        std::fprintf(stderr, "Trying to load from blaze\n");
+        blaze::Archive<std::ifstream> arch(in);
+        arch >> sm;
+    } else {
+        std::fprintf(stderr, "Trying to load from mtx\n");
+        sm = mtx2sparse<FT>(in, opts.transpose_data);
+    }
+#if 0
+    //std::ofstream tmp("plain.txt");
+    //tmp << sm;
+    //blz::DV<FT, blz::rowVector> means(blz::mean<blz::columnwise>(sm));
+    std::fprintf(stderr, "means: ");
+    for(size_t i = 0; i < means.size(); ++i) {
+        std::fprintf(stderr, "%zu/%g\n", i, means[i]);
+    }
+#endif
     if(opts.load_csr && opts.transpose_data) sm.transpose();
     std::fprintf(stderr, "Loaded matrix [%zu/%zu] via %s%s in %gms\n", sm.rows(), sm.columns(), opts.load_csr ? "CSR": "MTX", opts.transpose_data ? "(transposed)": "",
                  timediff2ms(tstart, std::chrono::high_resolution_clock::now()));
@@ -90,6 +115,15 @@ int m2ccore(std::string in, std::string out, Opts opts)
     std::vector<blz::DV<FT, blz::rowVector>> centers(opts.k);
     std::vector<uint32_t> indices, asn;
     blz::DV<FT> costs;
+    if(dist::use_scaled_centers(app.get_measure())) {
+        std::fprintf(stderr, "Weighted centers\n");
+        blz::DV<FT, blz::rowVector> r(app.weighted_row(0));
+        blz::DV<FT, blz::rowVector> r1(app.weighted_row(1));
+        blz::DV<FT, blz::rowVector> rnw(app.row(0));
+        std::fprintf(stderr, "by idx with 0: %g. by value with copied vector: %g. by value, unweighted %g\n", app(1, 0), app(1, r), app(1, rnw));
+        std::fprintf(stderr, "True distance: %g\n", sqrNorm(r - r1));
+        assert(app(1, 0) == app(1, r));
+    }
     if(dist::detail::satisfies_d2(opts.dis)) {
         auto approxstart = std::chrono::high_resolution_clock::now();
         std::tie(indices, asn, costs) = get_initial_centers(app, rng, opts);
@@ -106,8 +140,42 @@ int m2ccore(std::string in, std::string out, Opts opts)
                 }
             }
         }
-        for(unsigned i = 0; i < opts.k; ++i)
-            centers[i] = row(app.data(), indices[i], blaze::unchecked);
+        for(unsigned i = 0; i < opts.k; ++i) {
+            auto idx = indices[i];
+            if(dist::use_scaled_centers(app.get_measure())) {
+                centers[i] = app.weighted_row(idx);
+            } else {
+                std::fprintf(stderr, "Unweighted centers\n");
+                centers[i] = app.row(idx);
+            }
+        }
+        std::fprintf(stderr, "Set centers\n");
+#ifndef NDEBUG
+        std::vector<uint32_t> manual_asn(costs.size());
+        for(size_t i = 0; i < app.size(); ++i) {
+            auto cost = app(i, indices[0]);
+            assert(cost == app(i, centers[0]) || !std::fprintf(stderr, "cost1: %g, 2: %g\n", cost, app(i, centers[0])));
+            unsigned v = 0;
+            for(unsigned j = 1; j < opts.k; ++j) {
+                auto newcost = app(i, indices[j]);
+                if(newcost < cost) v = j, cost = newcost;
+                assert(app(i, indices[j]) == app(i, centers[j]));
+            }
+            manual_asn[i] = v;
+        }
+        std::vector<uint32_t> counts(indices.size());
+        for(size_t i = 0; i < asn.size(); ++i) {
+            assert(manual_asn[i] == asn[i]);
+            if(manual_asn[i] != asn[i]) {
+                std::fprintf(stderr, "mismatch: manual %u, asn %u. Costs; %g, %g\n", manual_asn[i], asn[i], app(i, indices[asn[i]]), app(i, indices[manual_asn[i]]));
+            }
+        }
+        for(size_t i = 0; i < asn.size(); ++i)
+            ++counts[asn[i]];
+        for(size_t i = 0; i < counts.size(); ++i) {
+            std::fprintf(stderr, "After initial seeding, assignments are: %zu/%u\n", i, counts[i]);
+        }
+#endif
         auto approxstop = std::chrono::high_resolution_clock::now();
         std::fprintf(stderr, "Approximate solution took %gms\n", timediff2ms(approxstart, approxstop));
         if(opts.lloyd_max_rounds > 0) {
@@ -165,22 +233,27 @@ int m2ccore(std::string in, std::string out, Opts opts)
 int main(int argc, char **argv) {
     std::string inpath, outpath;
     bool use_double = true;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:xKSMT12NCfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:BPjJxKSMT12NCfh?")) >= 0;) {
         switch(c) {
-            case 'h': case '?': usage(); break;
-            case 'f': use_double = false; break;
+            case 'h': case '?': usage();          break;
+            case 'B': opts.load_blaze = true; opts.load_csr = false; break;
+            case 'f': use_double = false;         break;
             case 'c': opts.coreset_size = std::strtoull(optarg, nullptr, 10); break;
-            case 'C': opts.load_csr = true; break;
+            case 'C': opts.load_csr = true;       break;
+            case 'p': OMP_ONLY(omp_set_num_threads(std::atoi(optarg));)       break;
             case 'g': opts.gamma = std::atof(optarg); opts.prior = dist::GAMMA_BETA; break;
             case 'k': opts.k = std::atoi(optarg); break;
-            case '1': opts.dis = dist::L1; break;
-            case '2': opts.dis = dist::L2; break;
-            case 'S': opts.dis = dist::SQRL2; break;
-            case 'T': opts.dis = dist::TVD; break;
-            case 'M': opts.dis = dist::MKL; break;
+            case '1': opts.dis = dist::L1;        break;
+            case '2': opts.dis = dist::L2;        break;
+            case 'S': opts.dis = dist::SQRL2;     break;
+            case 'T': opts.dis = dist::TVD;       break;
+            case 'M': opts.dis = dist::MKL;       break;
+            case 'j': opts.dis = dist::JSD;       break;
+            case 'J': opts.dis = dist::JSM;       break;
+            case 'P': opts.dis = dist::PSL2;      break;
             case 'K': opts.kmc2_rounds = std::strtoull(optarg, 0, 10); break;
             case 's': opts.seed = std::strtoull(optarg,0,10); break;
-            case 'N': opts.prior = dist::NONE; break;
+            case 'N': opts.prior = dist::NONE;    break;
             case 'x': opts.transpose_data = true; break;
         }
     }
