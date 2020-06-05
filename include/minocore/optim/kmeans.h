@@ -138,10 +138,16 @@ template<typename Oracle,
 std::vector<IT>
 kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
 {
-    if(m == 0) throw std::invalid_argument("m must be nonzero");
+    if(m == 0)  {
+        std::fprintf(stderr, "m must be nonzero\n");
+        std::abort();
+    }
     schism::Schismatic<IT> div(np);
     shared::flat_hash_set<IT> centers{div.mod(IT(rng()))};
-    if(*centers.begin() > np) throw std::runtime_error("ZOMGSDFD");
+    if(*centers.begin() > np) {
+        std::fprintf(stderr, "Out of range\n");
+        std::abort();
+    }
     // Helper function for minimum distance
     auto mindist = [&centers,&oracle](auto newind) {
         typename shared::flat_hash_set<IT>::const_iterator it = centers.begin(), end = centers.end();

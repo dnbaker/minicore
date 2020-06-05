@@ -68,7 +68,7 @@ auto get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
         indices = coresets::kmc2(matrix, rng, k, kmc2rounds, blz::sqrL2Norm());
         auto oracle = [&](size_t i, size_t j) {
             // Return distance from item at reference i to item at j
-            return blz::sqrNorm(row(~matrix, indices.at(i), blz::unchecked) - row(~matrix, j, blz::unchecked));
+            return blz::sqrNorm(row(~matrix, i, blz::unchecked) - row(~matrix, j, blz::unchecked));
         };
         auto [oasn, ncosts] = coresets::get_oracle_costs(oracle, nr, indices);
         costs = std::move(ncosts);
@@ -95,7 +95,7 @@ auto repeatedly_get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
         auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2rounds);
         auto ncost = blz::sum(_costs);
         if(ncost < tcost) {
-            std::fprintf(stderr, "%g->%g: %g\n", ncost, tcost, ncost - tcost);
+            std::fprintf(stderr, "%g->%g: %g\n", tcost, ncost, tcost - ncost);
             std::tie(idx, asn, costs, tcost) = std::move(std::tie(_idx, _asn, _costs, ncost));
         }
     }
@@ -124,6 +124,7 @@ auto kmeans_sum_core(blz::SM<FT> &mat, std::string, Opts opts) {
     for(;;) {
         std::fprintf(stderr, "[Iter %zu] Cost: %g\n", iternum, tcost);
         // Set centers
+        center_setup:
         for(auto &c: centers) c = 0.;
         std::fprintf(stderr, "Performing sums\n");
         std::fill_n(counts.get(), opts.k, 0u);
@@ -135,12 +136,32 @@ auto kmeans_sum_core(blz::SM<FT> &mat, std::string, Opts opts) {
             OMP_ATOMIC
             ++counts[myasn];
         }
+        blz::SmallArray<uint32_t, 16> sa;
         for(unsigned i = 0; i < opts.k; ++i) {
             if(counts[i]) {
                 centers[i] /= counts[i];
             } else {
-                throw NotImplementedError("When a center loses all support");
+                sa.pushBack(i);
             }
+        }
+        if(sa.size()) {
+            for(unsigned i = 0; i < sa.size(); ++i) {
+                const auto idx = sa[i];
+                blz::DV<FT> probs(mat.rows());
+                FT *pd = probs.data(), *pe = pd + probs.size();
+                std::partial_sum(costs.begin(), costs.end(), pd);
+                std::uniform_real_distribution<double> dist;
+                std::ptrdiff_t found = std::lower_bound(pd, pe, dist(rng) * pe[-1]) - pd;
+                centers[idx] = row(mat, found);
+                for(size_t i = 0; i < mat.rows(); ++i) {
+                    auto c = blz::sqrNorm(centers[idx] - row(mat, i, blz::unchecked));
+                    if(c < costs[i]) {
+                        asn[i] = idx;
+                        costs[i] = c;
+                    }
+                }
+            }
+            goto center_setup;
         }
         std::fill(asn.begin(), asn.end(), 0);
         OMP_PFOR
@@ -171,6 +192,7 @@ auto kmeans_sum_core(blz::SM<FT> &mat, std::string, Opts opts) {
 template<typename FT>
 int m2ccore(std::string in, std::string out, Opts opts)
 {
+    std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
     auto tstart = std::chrono::high_resolution_clock::now();
     blz::SM<FT> sm;
     if(opts.load_csr) {
@@ -240,7 +262,7 @@ int m2ccore(std::string in, std::string out, Opts opts)
 int main(int argc, char **argv) {
     std::string inpath, outpath;
     bool use_double = true;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:BPjJxKSMT12NCfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:BPjJxSMT12NCfh?")) >= 0;) {
         switch(c) {
             case 'h': case '?': usage();          break;
             case 'B': opts.load_blaze = true; opts.load_csr = false; break;
@@ -258,7 +280,7 @@ int main(int argc, char **argv) {
             case 'j': opts.dis = dist::JSD;       break;
             case 'J': opts.dis = dist::JSM;       break;
             case 'P': opts.dis = dist::PSL2;      break;
-            case 'K': opts.kmc2_rounds = std::strtoull(optarg, 0, 10); break;
+            case 'K': opts.kmc2_rounds = std::strtoull(optarg, nullptr, 10); break;
             case 's': opts.seed = std::strtoull(optarg,0,10); break;
             case 'N': opts.prior = dist::NONE;    break;
             case 'x': opts.transpose_data = true; break;
