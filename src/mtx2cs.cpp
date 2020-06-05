@@ -1,5 +1,7 @@
 #include "minocore/minocore.h"
 #include "blaze/util/Serialization.h"
+#include "./sqrl2.h"
+#include "./l2.h"
 
 using namespace minocore;
 
@@ -7,25 +9,6 @@ namespace dist = blz::distance;
 
 using minocore::util::timediff2ms;
 template<typename FT> using CType = blz::DV<FT, blz::rowVector>;
-
-struct Opts {
-    size_t kmc2_rounds = 0;
-    bool load_csr = false, transpose_data = false, load_blaze = false;
-    dist::DissimilarityMeasure dis = dist::JSD;
-    dist::Prior prior = dist::DIRICHLET;
-    double gamma = 1.;
-    double eps = 1e-9;
-    unsigned k = 10;
-    size_t coreset_size = 1000;
-    uint64_t seed = 0;
-    unsigned extra_sample_tries = 10;
-    unsigned lloyd_max_rounds = 1000;
-    unsigned sampled_number_coresets = 100;
-    coresets::SensitivityMethod sm = coresets::BFL;
-    bool soft = false;
-    // If nonzero, performs KMC2 with m kmc2_rounds as chain length
-    // Otherwise, performs standard D2 sampling
-};
 
 Opts opts;
 
@@ -56,145 +39,6 @@ void usage() {
     std::exit(1);
 }
 
-template<typename MT, bool SO, typename RNG>
-auto get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
-                         unsigned k, unsigned kmc2rounds) {
-    using FT = blaze::ElementType_t<MT>;
-    const size_t nr = (~matrix).rows(), nc = (~matrix).columns();
-    std::vector<uint32_t> indices, asn;
-    blz::DV<FT> costs(nr);
-    if(kmc2rounds) {
-        std::fprintf(stderr, "Performing kmc\n");
-        indices = coresets::kmc2(matrix, rng, k, kmc2rounds, blz::sqrL2Norm());
-        auto oracle = [&](size_t i, size_t j) {
-            // Return distance from item at reference i to item at j
-            return blz::sqrNorm(row(~matrix, i, blz::unchecked) - row(~matrix, j, blz::unchecked));
-        };
-        auto [oasn, ncosts] = coresets::get_oracle_costs(oracle, nr, indices);
-        costs = std::move(ncosts);
-        asn.assign(oasn.data(), oasn.data() + oasn.size());
-    } else {
-        std::fprintf(stderr, "Performing kmeanspp\n");
-        std::vector<FT> fcosts;
-        std::tie(indices, asn, fcosts) = coresets::kmeanspp(matrix, rng, opts.k, blz::sqrL2Norm());
-        //indices = std::move(initcenters);
-        std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
-    }
-    assert(*std::max_element(indices.begin(), indices.end()) < nr);
-    return std::make_tuple(indices, asn, costs);
-}
-
-template<typename MT, bool SO, typename RNG>
-auto repeatedly_get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
-                         unsigned k, unsigned kmc2rounds, unsigned ntimes) {
-    using FT = blaze::ElementType_t<MT>;
-    if(ntimes > 0) --ntimes;
-    auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2rounds);
-    auto tcost = blz::sum(costs);
-    for(;ntimes--;) {
-        auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2rounds);
-        auto ncost = blz::sum(_costs);
-        if(ncost < tcost) {
-            std::fprintf(stderr, "%g->%g: %g\n", tcost, ncost, tcost - ncost);
-            std::tie(idx, asn, costs, tcost) = std::move(std::tie(_idx, _asn, _costs, ncost));
-        }
-    }
-    CType<FT> modcosts(costs.size());
-    std::copy(costs.begin(), costs.end(), modcosts.begin());
-    return std::make_tuple(idx, asn, modcosts); // Return a blaze vector
-}
-
-template<typename FT>
-auto kmeans_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
-    wy::WyRand<uint64_t, 2> rng(opts.seed);
-    std::vector<uint32_t> indices, asn;
-    blz::DV<FT, blz::rowVector> costs;
-    std::tie(indices, asn, costs) = repeatedly_get_initial_centers(mat, rng, opts.k, opts.kmc2_rounds, opts.extra_sample_tries);
-    std::vector<blz::DV<FT, blz::rowVector>> centers(opts.k);
-    { // write selected initial points to file
-        std::ofstream ofs(out + ".initial_points");
-        for(size_t i = 0; i < indices.size(); ++i) {
-            ofs << indices[i] << ',';
-        }
-        ofs << '\n';
-    }
-    OMP_PFOR
-    for(unsigned i = 0; i < opts.k; ++i) {
-        centers[i] = row(mat, indices[i]);
-        std::fprintf(stderr, "Center %u initialized by index %u and has sum of %g\n", i, indices[i], blz::sum(centers[i]));
-    }
-    FT tcost = blz::sum(costs), firstcost = tcost;
-    //auto centerscpy = centers;
-    size_t iternum = 0;
-    OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes(new std::mutex[opts.k]);)
-    std::unique_ptr<uint32_t[]> counts(new uint32_t[opts.k]);
-    for(;;) {
-        std::fprintf(stderr, "[Iter %zu] Cost: %g\n", iternum, tcost);
-        // Set centers
-        center_setup:
-        for(auto &c: centers) c = 0.;
-        std::fprintf(stderr, "Performing sums\n");
-        std::fill_n(counts.get(), opts.k, 0u);
-        OMP_PFOR
-        for(size_t i = 0; i < mat.rows(); ++i) {
-            auto myasn = asn[i];
-            OMP_ONLY(std::lock_guard<std::mutex> lock(mutexes[myasn]);)
-            centers[myasn] += row(mat, i, blaze::unchecked);
-            OMP_ATOMIC
-            ++counts[myasn];
-        }
-        blz::SmallArray<uint32_t, 16> sa;
-        for(unsigned i = 0; i < opts.k; ++i) {
-            if(counts[i]) {
-                centers[i] /= counts[i];
-            } else {
-                sa.pushBack(i);
-            }
-        }
-        if(sa.size()) {
-            for(unsigned i = 0; i < sa.size(); ++i) {
-                const auto idx = sa[i];
-                blz::DV<FT> probs(mat.rows());
-                FT *pd = probs.data(), *pe = pd + probs.size();
-                std::partial_sum(costs.begin(), costs.end(), pd);
-                std::uniform_real_distribution<double> dist;
-                std::ptrdiff_t found = std::lower_bound(pd, pe, dist(rng) * pe[-1]) - pd;
-                centers[idx] = row(mat, found);
-                for(size_t i = 0; i < mat.rows(); ++i) {
-                    auto c = blz::sqrNorm(centers[idx] - row(mat, i, blz::unchecked));
-                    if(c < costs[i]) {
-                        asn[i] = idx;
-                        costs[i] = c;
-                    }
-                }
-            }
-            goto center_setup;
-        }
-        std::fill(asn.begin(), asn.end(), 0);
-        OMP_PFOR
-        for(size_t i = 0; i < mat.rows(); ++i) {
-            auto lhr = row(mat, i, blaze::unchecked);
-            asn[i] = 0;
-            costs[i] = blz::sqrNorm(lhr - centers[0]);
-            for(unsigned j = 1; j < opts.k; ++j)
-                if(auto v = blz::sqrNorm(lhr - centers[j]);
-                   v < costs[i]) costs[i] = v, asn[i] = j;
-            assert(asn[i] < opts.k);
-        }
-        auto newcost = blz::sum(costs);
-        std::fprintf(stderr, "newcost: %g. Cost changed by %g at iter %zu\n", newcost, newcost - tcost, iternum);
-        if(std::abs(newcost - tcost) < opts.eps * firstcost) {
-            break;
-        }
-        tcost = newcost;
-        if(++iternum >= opts.lloyd_max_rounds) {
-            break;
-        }
-    }
-    std::fprintf(stderr, "Completed: clustering\n");
-    return std::make_tuple(centers, asn, costs);
-}
-
 
 template<typename FT>
 int m2ccore(std::string in, std::string out, Opts opts)
@@ -217,10 +61,18 @@ int m2ccore(std::string in, std::string out, Opts opts)
     std::tuple<std::vector<CType<FT>>, blz::DM<FT>, CType<FT>> softresult;
 
     switch(opts.dis) {
-        case dist::SQRL2: case dist::PSL2: {
-            if(opts.dis == dist::PSL2) {
-                for(auto r: blz::rowiterator(sm)) r /= blz::sum(r);
+        case dist::L2: case dist::PL2: {
+            assert(min(sm) >= 0.);
+            if(opts.dis == dist::PL2) for(auto r: blz::rowiterator(sm)) r /= blz::sum(r);
+            if(opts.soft) {
+                throw NotImplementedError("L2/PL2 under soft clustering");
+            } else {
+                hardresult = l2_sum_core(sm, out, opts);
             }
+            break;
+        }
+        case dist::SQRL2: case dist::PSL2: {
+            if(opts.dis == dist::PSL2) for(auto r: blz::rowiterator(sm)) r /= blz::sum(r);
             if(opts.soft) {
                 throw NotImplementedError("SQRL2/PSL2 under soft clustering");
             } else {
