@@ -105,12 +105,19 @@ auto repeatedly_get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
 }
 
 template<typename FT>
-auto kmeans_sum_core(blz::SM<FT> &mat, std::string, Opts opts) {
+auto kmeans_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     std::vector<uint32_t> indices, asn;
     blz::DV<FT, blz::rowVector> costs;
     std::tie(indices, asn, costs) = repeatedly_get_initial_centers(mat, rng, opts.k, opts.kmc2_rounds, opts.extra_sample_tries);
     std::vector<blz::DV<FT, blz::rowVector>> centers(opts.k);
+    { // write selected initial points to file
+        std::ofstream ofs(out + ".initial_points");
+        for(size_t i = 0; i < indices.size(); ++i) {
+            ofs << indices[i] << ',';
+        }
+        ofs << '\n';
+    }
     OMP_PFOR
     for(unsigned i = 0; i < opts.k; ++i) {
         centers[i] = row(mat, indices[i]);
