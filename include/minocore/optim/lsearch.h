@@ -52,10 +52,10 @@ auto make_kmed_esearcher(const MatType &mat, unsigned k) {
     return ExhaustiveSearcher<MatType, IType>(mat, k);
 }
 
-template<typename MatType, typename IType=std::uint32_t>
+template<typename MatType, typename IType>
 struct LocalKMedSearcher {
     using value_type = typename MatType::ElementType;
-
+    static_assert(std::is_integral_v<IType>, "IType must be integral");
 
     const MatType &mat_;
     shared::flat_hash_set<IType> sol_;
@@ -108,6 +108,25 @@ struct LocalKMedSearcher {
         assignments_ = 0;
     }
 
+    template<typename RNG>
+    void my_kcenter(RNG &rng) {
+            sol_.insert(rng() % mat_.rows());
+            auto cid = *sol_.begin();
+            constexpr bool rowitude = blz::IsRowMajorMatrix_v<MatType> ? blz::rowVector: blz::columnVector;
+            blz::DV<blz::ElementType_t<MatType>, rowitude> costs = row(mat_, cid);
+            while(sol_.size() < std::min(size_t(k_), mat_.rows())) {
+                std::pair<value_type, IType> best{std::numeric_limits<value_type>::min(), IType(-1)};
+#ifdef _OPENMP
+                #pragma omp declare reduction(max: std::pair<value_type, IType>: omp_out = std::max(omp_in, omp_out) )
+#endif
+                OMP_PRAGMA("omp parallel for reduction(max:best)")
+                for(size_t i = 0; i < costs.size(); ++i)
+                    best = std::max(best, std::pair<value_type, IType>(costs[i], i));
+                assert(sol_.find(best.second) == sol_.end());
+                sol_.insert(best.second);
+                costs = blz::min(row(mat_, best.second), costs);
+            }
+    }
     template<typename IndexContainer=std::vector<uint32_t>>
     void reseed(uint64_t seed, bool do_kcenter=false, const IndexContainer *wc=nullptr) {
         assignments_ = 0;
@@ -119,9 +138,7 @@ struct LocalKMedSearcher {
                 sol_.insert(i);
         } else if(do_kcenter && mat_.rows() == mat_.columns()) {
             std::fprintf(stderr, "Using kcenter\n");
-            auto rowits = blz::rowiterator(mat_);
-            auto approx = coresets::kcenter_greedy_2approx(rowits.begin(), rowits.end(), rng, k_, MatrixLookup(), std::min(mat_.rows(), mat_.columns()));
-            for(const auto c: approx) sol_.insert(c);
+            my_kcenter(rng);
 #ifndef NDEBUG
             std::fprintf(stderr, "k_: %u. sol size: %zu. rows: %zu. columns: %zu\n", k_, sol_.size(),
                          mat_.rows(), mat_.columns());
