@@ -4,15 +4,24 @@
 #include <vector>
 #include "minocore/util/blaze_adaptor.h"
 
-
 namespace minocore {
+
+template<typename FT>
+std::tuple<std::vector<uint32_t>, std::vector<uint32_t>, blz::DV<FT, blz::rowVector>>
+get_jv_centers(blz::SM<FT> &mat, unsigned k, unsigned maxiter, double, uint64_t);
+
+
 template<typename FT>
 std::tuple<std::vector<blz::DV<FT, blz::rowVector>>, std::vector<uint32_t>, blz::DV<FT, blz::rowVector>>
 l2_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     std::vector<uint32_t> indices, asn;
     blz::DV<FT, blz::rowVector> costs;
-    std::tie(indices, asn, costs) = repeatedly_get_initial_centers(mat, rng, opts.k, opts.kmc2_rounds, opts.extra_sample_tries, blz::L2Norm());
+    if(opts.discrete_metric_search) { // Use EM to solve instead of JV
+        std::tie(indices, asn, costs) = get_jv_centers(mat, opts.k, opts.lloyd_max_rounds, opts.eps, opts.seed);
+    } else {
+        std::tie(indices, asn, costs) = repeatedly_get_initial_centers(mat, rng, opts.k, opts.kmc2_rounds, opts.extra_sample_tries, blz::L2Norm());
+    }
     std::vector<blz::DV<FT, blz::rowVector>> centers(opts.k);
     { // write selected initial points to file
         std::ofstream ofs(out + ".initial_points");
@@ -89,6 +98,76 @@ l2_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
         }
     }
     return std::make_tuple(centers, asn, costs);
+}
+
+template<typename FT>
+std::tuple<std::vector<uint32_t>, std::vector<uint32_t>, blz::DV<FT, blz::rowVector>>
+get_jv_centers(blz::SM<FT> &mat, unsigned k, unsigned maxiter, double eps, uint64_t seed) {
+    auto start = std::chrono::high_resolution_clock::now();
+    diskmat::PolymorphicMat<FT> distmat(mat.rows(), mat.rows());
+    auto &dm = ~distmat;
+    size_t np = dm.rows();
+    size_t nd = mat.columns();
+    for(size_t i = 0; i < mat.rows(); ++i) {
+        auto r = row(dm, i, blz::unchecked);
+        auto dr = row(mat, i, blz::unchecked);
+        r[i] = 0;
+        OMP_PFOR
+        for(size_t j = i + 1; j < mat.rows(); ++j) {
+            dm(j, i) = r[j] = blz::l2Norm(dr - row(mat, j, blz::unchecked));
+        }
+        if(unlikely(i % 16 == 0)) {
+            std::fprintf(stderr, "Computed %zu/%zu rows in %gms\n", i, mat.rows(), util::timediff2ms(start, std::chrono::high_resolution_clock::now()));
+        }
+    }
+    auto distmattime = std::chrono::high_resolution_clock::now();
+    // Run JV
+    std::fprintf(stderr, "[get_jv_centers:%s:%d] Time to compute distance matrix: %gms\n", __FILE__, __LINE__, util::timediff2ms(start, distmattime));
+    auto solver = jv::make_jv_solver(dm);
+    auto [fac, asn] = solver.kmedian(k, maxiter);
+    std::fprintf(stderr, "initial centers: "); for(const auto f: fac) std::fprintf(stderr, ",%d", f); std::fputc('\n', stderr);
+    // Local search from that solution
+    auto lsearcher = make_kmed_lsearcher(dm, k, eps, seed);
+    lsearcher.lazy_eval_ = 2;
+    shared::sort(fac.begin(), fac.end());
+    lsearcher.assign_centers(fac.begin(), fac.end());
+    lsearcher.run();
+    fac.assign(lsearcher.sol_.begin(), lsearcher.sol_.end());
+    blz::DV<FT, blz::rowVector> costs(np);
+    std::vector<uint32_t> asnret(np);
+    OMP_PFOR
+    for(size_t i = 0; i < np; ++i) {
+#if !NDEBUG
+        auto r = row(dm, i, blz::unchecked);
+        auto assignment = std::min_element(fac.begin(), fac.end(), [&](auto x, auto y) {return r[x] < r[y];}) - fac.begin();
+        asnret[i] = assignment;
+        costs[i] = r[assignment];
+        //assert(std::all_of(fac.begin(), fac.end(), [&](auto x) {return dm(i, x) >= dm(i, asnret[i]);}));
+#endif
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+#if 0
+
+    OMP_PFOR
+    for(size_t i = 0; i < np; ++i) {
+        FT fc = dm(i, fac.front());
+        unsigned assignment = 0;
+        SK_UNROLL_8
+        for(size_t j = 1; j < fac.size(); ++j) {
+            FT fc2 = dm(i, fac[j]);
+            if(fc2 < fc) assignment = j, c2 = fc2;
+        }
+        costs[i] = fc;
+        bool fail = false;
+        if(assignment != asn[i]) {
+            fail = true;
+            std::fprintf(stderr, "Incorrectly assigned point from JV solver. Expected %d and got %d", assignment, asn[i]);
+        }
+        asn[i] = assignment;
+    }
+#endif
+    std::fprintf(stderr, "jvcost: %0.12g in %gms\n", blz::sum(costs), util::timediff2ms(start, stop));
+    return std::make_tuple(fac, asnret, costs);
 }
 
 } // namespace minocore

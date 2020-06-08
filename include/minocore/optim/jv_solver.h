@@ -450,7 +450,7 @@ public:
             pay_schedule_[i] = cost;
         }
         assert(next_paid_.find({get_fac_cost(0), 0}) != next_paid_.end());
-        assert(next_paid_.size() == pay_schedule_.size());
+        assert(next_paid_.size() == std::ptrdiff_t(pay_schedule_.size()));
         assert(client_w_.rows() == distmatp_->rows());
         assert(client_w_.columns() == distmatp_->columns());
     }

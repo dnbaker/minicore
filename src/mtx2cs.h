@@ -8,6 +8,9 @@ using CType = blz::DV<FT, blz::rowVector>;
 
 struct Opts {
     size_t kmc2_rounds = 0;
+    // If nonzero, performs KMC2 with m kmc2_rounds as chain length
+    // Otherwise, performs standard D2 sampling
+
     bool load_csr = false, transpose_data = false, load_blaze = false;
     dist::DissimilarityMeasure dis = dist::JSD;
     dist::Prior prior = dist::DIRICHLET;
@@ -21,8 +24,8 @@ struct Opts {
     unsigned sampled_number_coresets = 100;
     coresets::SensitivityMethod sm = coresets::BFL;
     bool soft = false;
-    // If nonzero, performs KMC2 with m kmc2_rounds as chain length
-    // Otherwise, performs standard D2 sampling
+    bool discrete_metric_search = false; // Search in metric solver before performing EM
+                                         //
 };
 
 
@@ -58,10 +61,9 @@ template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm>
 auto repeatedly_get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
                          unsigned k, unsigned kmc2rounds, unsigned ntimes, const Norm &norm=Norm()) {
     using FT = blaze::ElementType_t<MT>;
-    if(ntimes > 0) --ntimes;
     auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2rounds, norm);
     auto tcost = blz::sum(costs);
-    for(;ntimes--;) {
+    for(;--ntimes;) {
         auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2rounds, norm);
         auto ncost = blz::sum(_costs);
         if(ncost < tcost) {

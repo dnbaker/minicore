@@ -30,6 +30,8 @@ void usage() {
                          "=== Prior settings ===\n"
                          "-N: Use no prior. Default: Dirichlet\n"
                          "-g: Use the Gamma/Beta prior and set gamma's value [default: 1.]\n\n\n"
+                         "=== Optimizer settings ===\n"
+                         "-D: Use metric solvers before EM rather than D2 sampling\n\n\n"
                          "=== Coreset Construction ===\n"
                          "-c: Set coreset size [1000]\n"
                          "-k: k (number of clusters)\n"
@@ -67,6 +69,7 @@ int m2ccore(std::string in, std::string out, Opts opts)
                 throw NotImplementedError("L2/PL2 under soft clustering");
             } else {
                 hardresult = l2_sum_core(sm, out, opts);
+                std::fprintf(stderr, "Total cost: %g\n", blz::sum(std::get<2>(hardresult)));
             }
             break;
         }
@@ -111,6 +114,9 @@ int m2ccore(std::string in, std::string out, Opts opts)
         if(!(ofp = std::fopen((out + fmt + ".importance").data(), "w"))) throw 1;
         if(std::fwrite(cs.probs_.get(), sizeof(FT), cs.size(), ofp) != cs.size()) throw 2;
         std::fclose(ofp);
+        if(!(ofp = std::fopen((out + fmt + ".costs").data(), "w"))) throw 1;
+        if(std::fwrite(costs.data(), sizeof(FT), costs.size(), ofp) != costs.size()) throw 3;
+        std::fclose(ofp);
     }
     auto tstop = std::chrono::high_resolution_clock::now();
     std::fprintf(stderr, "Full program took %gms\n", util::timediff2ms(tstart, tstop));
@@ -120,7 +126,7 @@ int m2ccore(std::string in, std::string out, Opts opts)
 int main(int argc, char **argv) {
     std::string inpath, outpath;
     bool use_double = true;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:BPjJxSMT12NCfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:BPjJxSMT12NCDfh?")) >= 0;) {
         switch(c) {
             case 'h': case '?': usage();          break;
             case 'B': opts.load_blaze = true; opts.load_csr = false; break;
@@ -141,6 +147,7 @@ int main(int argc, char **argv) {
             case 'K': opts.kmc2_rounds = std::strtoull(optarg, nullptr, 10); break;
             case 's': opts.seed = std::strtoull(optarg,0,10); break;
             case 'N': opts.prior = dist::NONE;    break;
+            case 'D': opts.discrete_metric_search = true; break;
             case 'x': opts.transpose_data = true; break;
         }
     }
