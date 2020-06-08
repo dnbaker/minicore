@@ -561,6 +561,25 @@ enum Prior {
     FEATURE_SPECIFIC_PRIOR // Requires a vector of parameters
 };
 
+static constexpr const char *prior2str(Prior p) {
+    switch(p) {
+        case NONE: return "NONE";
+        case DIRICHLET: return "DIRICHLET";
+        case GAMMA_BETA: return "GAMMA_BETA";
+        case FEATURE_SPECIFIC_PRIOR: return "FEATURE_SPECIFIC_PRIOR";
+        default: return "unknown";
+    }
+}
+
+static constexpr const char *prior2desc(Prior p) {
+    switch(p) {
+        case DIRICHLET: return "DIRICHLET: Uniform prior, smoothes divergences";
+        case GAMMA_BETA: return "GAMMA_BETA: Uniform prior, soothes divergences, parametrized. Larger values make points more similar, the smaller makes points less similar";
+        case NONE: return "NONE: no prior.";
+        default: return prior2str(p);
+    }
+}
+
 
 
 template<typename LHVec, typename RHVec>

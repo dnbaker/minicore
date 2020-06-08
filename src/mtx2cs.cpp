@@ -1,7 +1,8 @@
 #include "minocore/minocore.h"
 #include "blaze/util/Serialization.h"
-#include "./sqrl2.h"
-#include "./l2.h"
+#include "minocore/clustering/sqrl2.h"
+#include "minocore/clustering/l2.h"
+#include "minocore/clustering/l1.h"
 
 using namespace minocore;
 
@@ -28,7 +29,7 @@ void usage() {
                          "-P: Use probability squared L2 norm\n"
                          "-T: Use total variation distance\n\n\n"
                          "=== Prior settings ===\n"
-                         "-N: Use no prior. Default: Dirichlet\n"
+                         "-d: Use Dirichlet prior. Default: no prior.\n"
                          "-g: Use the Gamma/Beta prior and set gamma's value [default: 1.]\n\n\n"
                          "=== Optimizer settings ===\n"
                          "-D: Use metric solvers before EM rather than D2 sampling\n\n\n"
@@ -45,6 +46,7 @@ template<typename FT>
 int m2ccore(std::string in, std::string out, Opts opts)
 {
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
+    std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
     auto tstart = std::chrono::high_resolution_clock::now();
     blz::SM<FT> sm;
     if(opts.load_csr) {
@@ -62,6 +64,17 @@ int m2ccore(std::string in, std::string out, Opts opts)
     std::tuple<std::vector<CType<FT>>, blz::DM<FT>, CType<FT>> softresult;
 
     switch(opts.dis) {
+        case dist::L1: case dist::TVD: {
+            assert(min(sm) >= 0.);
+            if(opts.dis == dist::TVD) for(auto r: blz::rowiterator(sm)) r /= blz::sum(r);
+            if(opts.soft) {
+                throw NotImplementedError("L1/TVD under soft clustering");
+            } else {
+                hardresult = l1_sum_core(sm, out, opts);
+                std::fprintf(stderr, "Total cost: %g\n", blz::sum(std::get<2>(hardresult)));
+            }
+            break;
+        }
         case dist::L2: case dist::PL2: {
             assert(min(sm) >= 0.);
             if(opts.dis == dist::PL2) for(auto r: blz::rowiterator(sm)) r /= blz::sum(r);
@@ -126,7 +139,7 @@ int m2ccore(std::string in, std::string out, Opts opts)
 int main(int argc, char **argv) {
     std::string inpath, outpath;
     bool use_double = true;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:BPjJxSMT12NCDfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:BdjJxSMT12NCDfh?")) >= 0;) {
         switch(c) {
             case 'h': case '?': usage();          break;
             case 'B': opts.load_blaze = true; opts.load_csr = false; break;
@@ -146,7 +159,7 @@ int main(int argc, char **argv) {
             case 'P': opts.dis = dist::PSL2;      break;
             case 'K': opts.kmc2_rounds = std::strtoull(optarg, nullptr, 10); break;
             case 's': opts.seed = std::strtoull(optarg,0,10); break;
-            case 'N': opts.prior = dist::NONE;    break;
+            case 'd': opts.prior = dist::DIRICHLET;    break;
             case 'D': opts.discrete_metric_search = true; break;
             case 'x': opts.transpose_data = true; break;
         }
