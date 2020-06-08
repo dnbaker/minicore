@@ -24,16 +24,12 @@ auto l1dists(const Mat &m, const Vec &vec) {
 
 template<typename Mat, typename Vec>
 auto reductionl1(const Mat &m, const Vec &vec) {
-    std::fprintf(stderr, "trying reductoin l1\n");
     double ret = blz::sum(blz::abs(m - blz::expand(vec, m.rows())));
-    std::fprintf(stderr, "did reductoin l1\n");
     return ret;
 }
 template<typename Mat, typename Vec>
 auto expandl1s(const Mat &m, const Vec &vec) {
-    std::fprintf(stderr, "trying expand l1\n");
     auto ret(blz::DV<ElementType_t<Mat>>(blaze::sum<blz::rowwise>(blz::abs(m - blz::expand(vec, m.rows())))));
-    std::fprintf(stderr, "expanded l1\n");
     return ret;
 }
 

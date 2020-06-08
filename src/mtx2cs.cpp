@@ -8,7 +8,6 @@ using namespace minocore;
 namespace dist = blz::distance;
 
 using minocore::util::timediff2ms;
-template<typename FT> using CType = blz::DV<FT, blz::rowVector>;
 
 Opts opts;
 

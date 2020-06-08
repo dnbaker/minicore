@@ -273,6 +273,9 @@ INLINE auto sum(const std::vector<FT, Alloc> &vec) {
 template<typename OT>
 INLINE decltype(auto) sum(const OT &x) {return blaze::sum(x);}
 
+template<bool wiseness, typename OT>
+INLINE decltype(auto) sum(const OT &x) {return blaze::sum<wiseness>(x);}
+
 template<typename VT, bool SO, typename VT2, bool SO2>
 size_t number_shared_zeros(const blaze::SparseVector<VT, SO> &_lhs, const blaze::SparseVector<VT2, SO2> &_rhs) {
      auto &lhs = ~_lhs;

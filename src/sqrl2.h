@@ -2,8 +2,10 @@
 #define SQRL2_DETAIL_H__
 #include "mtx2cs.h"
 
+namespace minocore {
+
 template<typename FT>
-std::tuple<std:vector<uint32_t>, std::vector<uint32_t>, blz::DV<FT, blz::rowVector>>
+auto 
 kmeans_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     std::vector<uint32_t> indices, asn;
@@ -23,7 +25,6 @@ kmeans_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
         std::fprintf(stderr, "Center %u initialized by index %u and has sum of %g\n", i, indices[i], blz::sum(centers[i]));
     }
     FT tcost = blz::sum(costs), firstcost = tcost;
-    //auto centerscpy = centers;
     size_t iternum = 0;
     OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes(new std::mutex[opts.k]);)
     std::unique_ptr<uint32_t[]> counts(new uint32_t[opts.k]);
@@ -93,6 +94,8 @@ kmeans_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
     std::fprintf(stderr, "Completed: clustering\n");
     return std::make_tuple(centers, asn, costs);
 }
+
+} // namespace minocore
 
 #endif
 

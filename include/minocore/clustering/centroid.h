@@ -6,26 +6,6 @@
 
 namespace minocore { namespace clustering {
 
-#if 0
-template<typename Mat, typename RowSums>
-struct RAIIScaler {
-    Mat &m_;
-    const RowSums &rs_;
-    RAIIScaler(Mat &m, const RowSums &rs): m_(m), rs_(rs) {
-        m_ %= blz::expand(trans(rs_), m_.columns());
-    }
-    ~RAIIScaler() {
-        m_ %= blz::expand(trans(1. / rs_), m_.columns());
-    }
-};
-
-template<typename Mat, typename RowSums>
-auto make_raiiscaler(Mat &m, const RowSums &rs) {
-    return RAIIScaler<Mat, RowSums>(m, rs);
-}
-
-#endif
-
 struct CentroidPolicy {
     template<typename VT, bool TF, typename Range, typename VT2=VT, typename RowSums>
     static void perform_average(blaze::DenseVector<VT, TF> &ret, const Range &r, const RowSums &rs,
