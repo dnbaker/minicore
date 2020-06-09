@@ -40,6 +40,7 @@ struct IndexPQ: public std::priority_queue<std::pair<CI, IT>, std::vector<std::p
 template<typename FT>
 std::tuple<std::vector<blz::DV<FT, blz::rowVector>>, std::vector<uint32_t>, blz::DV<FT, blz::rowVector>>
 l1_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
+    const size_t nd = mat.columns();
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     std::vector<uint32_t> indices, asn;
     blz::DV<FT, blz::rowVector> costs;
@@ -93,73 +94,24 @@ l1_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
                 default:;
             }
             auto med1ts = std::chrono::high_resolution_clock::now();
-#if 0
             coresets::l1_median(blz::rows(mat, asn.data(), asn.size()), centers[i]);
-#else
-            auto &ctr = centers[i];
-            ctr = FT(0);
-            using CI = typename blz::SM<FT>::ConstIterator;
-            IndexPQ<CI, uint32_t> pq(numasn);
-            std::vector<CI> ve(numasn);
-            const size_t nd = mat.columns();
-            for(unsigned i = 0; i < numasn; ++i) {
-                auto rbeg = row(mat, asn[i]).begin(), rend = row(mat, asn[i]).end();
-                pq.push(std::pair<CI, uint32_t>(rbeg, i)), ve[i] = rend;
+#if 0
+            blz::DV<FT, blz::rowVector> tmp(nd);
+            blz::DM<FT> tmpmat(blz::rows(mat, asn.data(), asn.size()));
+            coresets::l1_median(tmpmat, tmp);
+            if(tmp != centers[i]) {
+                //for(size_t j = 0; j < centers[i].size(); ++j) if(centers[i][j]) std::fprintf(stderr, "%zu/%g\n", j, centers[i][j]);
+                for(size_t j = 0; j < nd; ++j) {
+                    if((tmp[j] || centers[i][j]) && tmp[j] != centers[i][j]) {
+                        std::fprintf(stderr, "at %zu found %g but expected %g, difference %g\n", j, centers[i][j], tmp[j], centers[i][j] - tmp[j]);
+                    }
+                }
             }
-            assert(pq.size() == numasn);
-            uint32_t cid = 0;
-            std::vector<FT> vals;
-            assert(pq.empty() || pq.top().first->index() == std::min_element(pq.getc().begin(), pq.getc().end(), [](auto x, auto y) {return x.first->index() < y.first->index();})->first->index());
-            // Setting all to 0 lets us simply skip elements with the wrong number of nonzeros.
-            while(pq.size()) {
-                //std::fprintf(stderr, "Top index: %zu\n", pq.top().first->index());
-                while(cid < pq.top().first->index()) ++cid;
-                if(unlikely(cid > pq.top().first->index())) {
-                    auto pqs = pq.getsorted();
-                    for(const auto v: pqs) std::fprintf(stderr, "%zu:%g\n", v.first->index(), v.first->value());
-                    std::exit(1);
-                    //throw std::runtime_error("pq is incorrectly sorted.");
-                }
-                while(pq.top().first->index() == cid) {
-                    auto pair = pq.top();
-                    pq.pop();
-                    vals.push_back(pair.first->value());
-                    if(++pair.first != ve[pair.second]) {
-                        pq.push(pair);
-                    } else if(pq.empty()) break;
-                }
-                auto &cref = ctr[cid];
-                const size_t vsz = vals.size();
-                if(vsz < nd / 2) {
-                    cref = 0.;
-                } else {
-                    shared::sort(vals.data(), vals.data() + vals.size());
-                    size_t nextra_below = nd - vals.size(), midpoint = nd / 2 - nextra_below;
-                    cref = nd & 1 ? vals[midpoint]: FT(.5) * (vals[midpoint] + vals[midpoint - 1]);
-                }
-                vals.clear();
-            }
+            auto dist = blz::l1Norm(tmp - centers[i]);
+            assert(dist == 0 || !std::fprintf(stderr, "dist between sparse l1 and dnese l1 is %g (compared to %g)\n", dist, blz::l1Norm(centers[i])) || !&(std::cerr << (tmp - centers[i])));
 #endif
             auto med1tend = std::chrono::high_resolution_clock::now();
             std::fprintf(stderr, "Median took %gms\n", util::timediff2ms(med1ts, med1tend));
-#if 0
-            blaze::DynamicMatrix<FT, blaze::rowMajor> submat = blz::rows(mat, asn.data(), asn.size());
-            char buf[256];
-            std::sprintf(buf, "saverows.%zurows.%zucolumns.center%d", submat.rows(), submat.columns(), i);
-            std::FILE *ofp = std::fopen(buf, "w");
-            if(!ofp) throw 1;
-            for(size_t i = 0; i < submat.rows(); ++i) {
-                if(std::fwrite(&row(submat, i)[0], sizeof(FT), submat.columns(), ofp) != submat.columns()) {
-                    std::fprintf(stderr, "Unexpected return value\n");
-                    throw 1;
-                }
-            }
-            std::fclose(ofp);
-            std::sprintf(buf, "savecenter.%zucolumns.center%d", submat.columns(), i);
-            if((ofp = std::fopen(buf, "w")) == nullptr) throw 2;
-            std::fwrite(centers[i].data(), sizeof(FT), centers[i].size(), ofp);
-            std::fclose(ofp);
-#endif
         }
         // Set centers
         if(sa.size()) {
@@ -167,6 +119,9 @@ l1_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
             blz::DV<FT> probs(mat.rows());
             FT *pd = probs.data(), *pe = pd + probs.size();
             std::fill(asn.begin(), asn.end(), 0);
+            std::vector<uint32_t> current_indices;
+            for(unsigned i = 0; i < opts.k; ++i)
+                if(std::find(sa.begin(), sa.end(), i) == sa.end()) current_indices.push_back(i);
             for(auto &i: asns) i.clear();
             std::fill(costs.begin(), costs.end(), std::numeric_limits<FT>::max());
             {
@@ -176,18 +131,9 @@ l1_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
                         ap[idx] = cid;
                     }
                 };
-                auto check_all_indices = [&](auto cid) {
-                    for(size_t i = 0; i < costs.size(); check_idx(i++, cid));
-                };
-                uint32_t j = 0;
-                for(auto sab = sa.begin(), sae = sa.end();;++j) {
-                    if(sab == sae) {
-                        for(;j < opts.k;check_all_indices(j++));
-                        break;
-                    }
-                    for(;j < *sab;check_all_indices(j++));
-                    ++j; // to skip the element at sab
-                }
+                for(size_t i = 0; i < costs.size(); ++i)
+                    for(const auto cid: current_indices)
+                        check_idx(i, cid);
             }
             for(const auto idx: sa) {
                 std::fprintf(stderr, "idx being reseeded: %d\n", idx);
@@ -234,7 +180,8 @@ l1_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
 
 template<typename FT>
 std::tuple<std::vector<uint32_t>, std::vector<uint32_t>, blz::DV<FT, blz::rowVector>>
-get_ms_centers_l1(blz::SM<FT> &mat, unsigned k, [[maybe_unused]] unsigned maxiter, double eps, uint64_t seed) {
+get_ms_centers_l1(blz::SM<FT> &mat, unsigned k, [[maybe_unused]] unsigned maxiter, double eps, uint64_t seed)
+{
     auto start = std::chrono::high_resolution_clock::now();
     diskmat::PolymorphicMat<FT> distmat(mat.rows(), mat.rows());
     auto &dm = ~distmat;

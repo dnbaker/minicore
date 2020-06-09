@@ -236,7 +236,7 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
         FT cnt = std::atof(s);
         if(row < lastrow) throw std::runtime_error("Unsorted file");
         else if(row != lastrow) {
-            std::fprintf(stderr, "lastrow %zu has %zu indices\n", row, indices.size());
+            //std::fprintf(stderr, "lastrow %zu has %zu indices\n", row, indices.size());
             std::sort(indices.begin(), indices.end());
             for(const auto [idx, cnt]: indices)
                 ret.append(lastrow, idx, cnt);

@@ -23,7 +23,7 @@ struct Opts {
     unsigned k = 10;
     size_t coreset_size = 1000;
     uint64_t seed = 0;
-    unsigned extra_sample_tries = 10;
+    unsigned extra_sample_tries = 1;
     unsigned lloyd_max_rounds = 1000;
     unsigned sampled_number_coresets = 100;
     coresets::SensitivityMethod sm = coresets::BFL;
