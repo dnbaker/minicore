@@ -70,7 +70,7 @@ int main(int c, char **a) {
     std::cout << "L1 dist under approx component-wise median: " << reductionl1(m, v3) << '\n';
     std::cout << "L1 dist under component-wise mean: " << l1dist(m, blaze::evaluate(blaze::mean<blaze::columnwise>(m))) << '\n';
     for(unsigned feature = 0; feature < m.rows(); ++feature) {
-        for(const auto pert: {-1., -0.05, -0.01, 0.01, 0.1, 1.}) {
+        for(const auto pert: {-1., -0.05, -0.01, -0.001, 0.001, 0.01, 0.1, 1.}) {
             auto tmpv = v2;
             v2[feature] += pert;
             assert(l1dist(m, tmpv) >= cwmed || !std::fprintf(stderr, "newv: %g vs oldv %g, pert = %g", l1dist(m, tmpv), cwmed, pert));

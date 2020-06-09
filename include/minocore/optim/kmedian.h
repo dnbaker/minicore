@@ -156,7 +156,7 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT, 
     for(size_t i = 0; i < dr.columns(); ++i) {
         blaze::DynamicVector<ElementType_t<MT>, blaze::columnVector> tmpind = column(data, i); // Should do fast copying.
         shared::sort(tmpind.begin(), tmpind.end());
-        rr[i] = odd ? tmpind[hlf]: ElementType_t<MT>(.5) * (tmpind[hlf - 1] + tmpind[hlf]);
+        rr[i] = odd ? tmpind[hlf]: ElementType_t<MT>(.5) * (tmpind[hlf] + tmpind[hlf + 1]);
     }
 }
 
@@ -177,7 +177,7 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &_data, const Rows &rs, blz:
         for(unsigned j = 0; j < nr; ++j) {
             auto r(blaze::row(tmpind, j));
             shared::sort(r.begin(), r.end());
-            rr[i + j] = odd ? r[hlf]: ElementType_t<MT>(0.5) * (r[hlf - 1] + r[hlf]);
+            rr[i + j] = odd ? r[hlf]: ElementType_t<MT>(0.5) * (r[hlf] + r[hlf + 1]);
         }
         i += nr;
     }
