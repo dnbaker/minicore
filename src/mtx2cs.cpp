@@ -174,6 +174,9 @@ int main(int argc, char **argv) {
         outpath = "mtx2coreset_output.";
         outpath += std::to_string(uint64_t(std::time(nullptr)));
     }
+    return m2ccore<double>(inpath, outpath, opts);
+#if 0
     return use_double ? m2ccore<double>(inpath, outpath, opts)
                       : m2ccore<float>(inpath, outpath, opts);
+#endif
 }

@@ -218,8 +218,9 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
     size_t columns = std::strtoull(line.data(), &s, 10),
              nr    = std::strtoull(s, &s, 10),
              lines = std::strtoull(s, nullptr, 10);
-    size_t lastline = 0;
     blz::SM<FT, SO> ret(nr, columns);
+    std::vector<std::pair<size_t, FT>> indices;
+    size_t lastrow = 0;
     ret.reserve(lines);
     while(lines--)
     {
@@ -233,25 +234,25 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
         row = std::strtoull(s, &s, 10) - 1;
         if(perform_transpose) std::swap(col, row);
         FT cnt = std::atof(s);
-        if(unlikely(lastline > row)) {
-            std::cerr << "Unsorted file\n";
-            throw std::runtime_error("Unsorted file.");
+        if(row < lastrow) throw std::runtime_error("Unsorted file");
+        else if(row != lastrow) {
+            std::fprintf(stderr, "lastrow %zu has %zu indices\n", row, indices.size());
+            std::sort(indices.begin(), indices.end());
+            for(const auto [idx, cnt]: indices)
+                ret.append(lastrow, idx, cnt);
+            indices.clear();
+            while(lastrow < row) ret.finalize(lastrow++);
         }
-        while(lastline < row) ret.finalize(lastline++);
-        ret.append(row, col, cnt);
+        indices.emplace_back(col, cnt);
     }
-    while(lastline < ret.rows())
-        ret.finalize(lastline++);
+    std::sort(indices.begin(), indices.end());
+    for(const auto [idx, cnt]: indices) ret.append(lastrow, idx, cnt);
+    while(lastrow < ret.rows()) ret.finalize(lastrow++);
     if(std::getline(ifs, line)) throw std::runtime_error("Error reading file: too many lines");
     if(perform_transpose) {
         transpose(ret);
     }
     std::fprintf(stderr, "Parsed file of %zu rows/%zu columns\n", ret.rows(), ret.columns());
-#if 0
-    for(size_t i = 0; i < ret.rows(); ++i) {
-        std::fprintf(stderr, "Row %zu has %zu nonzeros\n", i, blaze::nonZeros(row(ret, i)));
-    }
-#endif
     return ret;
 }
 

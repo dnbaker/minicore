@@ -52,6 +52,8 @@ auto make_kmed_esearcher(const MatType &mat, unsigned k) {
     return ExhaustiveSearcher<MatType, IType>(mat, k);
 }
 
+
+
 template<typename MatType, typename IType>
 struct LocalKMedSearcher {
     using value_type = typename MatType::ElementType;
@@ -108,27 +110,63 @@ struct LocalKMedSearcher {
         assignments_ = 0;
     }
 
+
     template<typename RNG>
-    void my_kcenter(RNG &rng) {
-            sol_.insert(rng() % mat_.rows());
-            auto cid = *sol_.begin();
-            constexpr bool rowitude = blz::IsRowMajorMatrix_v<MatType> ? blz::rowVector: blz::columnVector;
-            blz::DV<blz::ElementType_t<MatType>, rowitude> costs = row(mat_, cid);
-            while(sol_.size() < std::min(size_t(k_), mat_.rows())) {
-                std::pair<value_type, IType> best{std::numeric_limits<value_type>::min(), IType(-1)};
+    std::pair<shared::flat_hash_set<IType>, value_type> my_kcenter(RNG &rng, int extratries=2) {
+        shared::flat_hash_set<IType> ret;
+        ret.clear();
+        ret.insert(rng() % mat_.rows());
+        auto cid = *ret.begin();
+        constexpr bool rowitude = blz::IsRowMajorMatrix_v<MatType> ? blz::rowVector: blz::columnVector;
+        blz::DV<blz::ElementType_t<MatType>, rowitude> costs = row(mat_, cid);
+        using FT = value_type;
+        using IT = IType;
+        using PT = std::pair<FT, IT>;
+        auto fill_set = [&](auto &set) -> value_type {
+            while(set.size() < std::min(size_t(k_), mat_.rows())) {
+                PT argmaxcost{std::numeric_limits<value_type>::min(), IType(-1)};
+
+
 #ifdef _OPENMP
-                #pragma omp declare reduction(max: std::pair<value_type, IType>: omp_out = std::max(omp_in, omp_out) )
+    #pragma omp declare reduction (merge : PT : std::max(omp_in, omp_out) )
+#if 0
+    #pragma omp parallel for reduction(merge: argmaxcost)
+#else
+    #pragma omp parallel for
 #endif
-                OMP_PRAGMA("omp parallel for reduction(max:best)")
-                for(size_t i = 0; i < costs.size(); ++i)
-                    best = std::max(best, std::pair<value_type, IType>(costs[i], i));
-                assert(sol_.find(best.second) == sol_.end());
-                sol_.insert(best.second);
-                costs = blz::min(row(mat_, best.second), costs);
+#endif
+                for(size_t i = 0; i < costs.size(); ++i) {
+#if 0
+                    argmaxcost = std::max(argmaxcost, {costs[i], i});
+#else
+                    if(costs[i] > argmaxcost.first) {
+                        OMP_CRITICAL
+                        {
+                            OMP_ONLY(if(costs[i] > argmaxcost.first))
+                            argmaxcost = {costs[i], i};
+                        }
+                    }
+#endif
+                }
+                assert(set.find(argmaxcost.second) == set.end());
+                set.insert(argmaxcost.second);
+                costs = blz::min(row(mat_, argmaxcost.second), costs);
             }
+            return blz::sum(costs);
+        };
+        value_type retcost = fill_set(ret), nextcost;
+        while(extratries > 0) {
+            IType cid = rng() % mat_.rows();
+            shared::flat_hash_set<IType> tmpset{cid};
+            costs = row(mat_, cid);
+            if((nextcost = fill_set(tmpset)) < retcost)
+                std::tie(nextcost, tmpset) = std::move(std::tie(retcost, ret));
+        }
+        return std::make_pair(ret, retcost);
     }
+
     template<typename IndexContainer=std::vector<uint32_t>>
-    void reseed(uint64_t seed, bool do_kcenter=false, const IndexContainer *wc=nullptr) {
+    void reseed(uint64_t seed, bool do_kcenter=false, const IndexContainer *wc=nullptr, unsigned extra_kc=0) {
         assignments_ = 0;
         current_cost_ = std::numeric_limits<value_type>::max();
         wy::WyRand<IType, 2> rng(seed);
@@ -138,10 +176,10 @@ struct LocalKMedSearcher {
                 sol_.insert(i);
         } else if(do_kcenter && mat_.rows() == mat_.columns()) {
             std::fprintf(stderr, "Using kcenter\n");
-            my_kcenter(rng);
+            std::tie(sol_, current_cost_) = my_kcenter(rng, extra_kc);
 #ifndef NDEBUG
-            std::fprintf(stderr, "k_: %u. sol size: %zu. rows: %zu. columns: %zu\n", k_, sol_.size(),
-                         mat_.rows(), mat_.columns());
+            std::fprintf(stderr, "k_: %u. sol size: %zu. rows: %zu. columns: %zu. %d kcenter tries.\n", k_, sol_.size(),
+                         mat_.rows(), mat_.columns(), extra_kc);
 #endif
             assert(sol_.size() == k_ || sol_.size() == mat_.rows());
         } else {
@@ -153,8 +191,8 @@ struct LocalKMedSearcher {
                 blaze::DynamicMatrix<value_type> subm = blaze::rows(mat_, wc->data(), wc->size());
                 //std::cerr << subm << '\n';
                 //std::fprintf(stderr, "subm rows: %zu\n", subm.rows());
-                std::vector<uint32_t> approx{uint32_t(rng() % subm.rows())};
-                auto first = approx.front();
+                uint32_t first = rng() % subm.rows();
+                std::vector<uint32_t> approx{first};
                 blaze::DynamicVector<value_type, blaze::rowVector> mincosts = row(subm, first);
                 std::vector<uint32_t> remaining(subm.rows());
                 std::iota(remaining.begin(), remaining.end(), 0u);
@@ -209,14 +247,13 @@ struct LocalKMedSearcher {
         std::fprintf(stderr, "rows: %zu. cols: %zu. sol size: %zu. k: %u\n",
                      mat_.rows(), mat_.columns(), sol_.size(), k_);
         assert(sol_.size() == k_ || sol_.size() == mat_.rows());
-        DBG_ONLY(std::fprintf(stderr, "Initialized assignments at size %zu\n", assignments_.size());)
         auto it = sol_.begin();
         const auto eit = sol_.end();
         assignments_ = *it;
         current_costs_ = row(mat_, *it);
         while(++it != eit) {
             auto center = *it;
-            auto r = row(mat_, center BLAZE_CHECK_DEBUG);
+            auto r = row(mat_, center);
             OMP_PFOR
             for(size_t ci = 0; ci < nc_; ++ci) {
                 auto asn = assignments_[ci];
@@ -434,17 +471,17 @@ struct LocalKMedSearcher {
                 if(const auto val = evaluate_swap(potential_index, oldcenter, true);
                    val > diffthresh) {
 #ifndef NDEBUG
-                    std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g. Threshold: %g.\n", potential_index, oldcenter, total + 1, current_cost_, val, diffthresh);
+                     std::fprintf(stderr, "Swapping %zu for %u. Swap number %zu. Current cost: %g. Improvement: %g. Threshold: %g.\n", potential_index, oldcenter, total + 1, current_cost_, val, diffthresh);
 #endif
-                    sol_.erase(oldcenter);
-                    sol_.insert(potential_index);
-                    ++total;
-                    current_cost_ -= val;
-                    std::fprintf(stderr, "Swap number %zu with cost %0.12g\n", total, current_cost_);
-                    goto next;
-                }
-            }
-       }
+                     sol_.erase(oldcenter);
+                     sol_.insert(potential_index);
+                     ++total;
+                     current_cost_ -= val;
+                     std::fprintf(stderr, "Swap number %zu with cost %0.12g\n", total, current_cost_);
+                     goto next;
+                 }
+             }
+        }
         std::fprintf(stderr, "Finished in %zu swaps by exhausting all potential improvements. Final cost: %f\n",
                      total, current_cost_);
         if(max_swap_n_ > 1) {

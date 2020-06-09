@@ -728,7 +728,7 @@ auto wasserstein_p2(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, !SO> &y
 
 template<typename VT, typename VT2, bool SO>
 auto discrete_total_variation_distance(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs) {
-    return ElementType_t<VT>(0.5) * blz::l1Norm(~lhs - ~rhs);
+    return ElementType_t<CommonType_t<VT, VT2>>(0.5) * blz::l1Norm(~lhs - ~rhs);
 }
 
 #if 0

@@ -124,27 +124,32 @@ get_jv_centers(blz::SM<FT> &mat, unsigned k, unsigned maxiter, double eps, uint6
     auto distmattime = std::chrono::high_resolution_clock::now();
     // Run JV
     std::fprintf(stderr, "[get_jv_centers:%s:%d] Time to compute distance matrix: %gms\n", __FILE__, __LINE__, util::timediff2ms(start, distmattime));
+#if USE_JV_TOO
+    std::fprintf(stderr, "[get_ms_centers_l1:%s:%d] Time to compute distance matrix: %gms\n", __FILE__, __LINE__, util::timediff2ms(start, distmattime));
     auto solver = jv::make_jv_solver(dm);
     auto [fac, asn] = solver.kmedian(k, maxiter);
     std::fprintf(stderr, "initial centers: "); for(const auto f: fac) std::fprintf(stderr, ",%d", f); std::fputc('\n', stderr);
-    // Local search from that solution
-    auto lsearcher = make_kmed_lsearcher(dm, k, eps, seed);
-    lsearcher.lazy_eval_ = 2;
     shared::sort(fac.begin(), fac.end());
+#else
+    std::vector<uint32_t> fac;
+#endif
+    // Local search from that solution (if JV), otherwise from k-center approx
+    auto lsearcher = make_kmed_lsearcher(dm, k, eps, seed + maxiter);
+    lsearcher.lazy_eval_ = 2;
+#if USE_JV_TOO
     lsearcher.assign_centers(fac.begin(), fac.end());
+#endif
     lsearcher.run();
     fac.assign(lsearcher.sol_.begin(), lsearcher.sol_.end());
+    auto fbeg = &fac[0], fend = &fac[k];
     blz::DV<FT, blz::rowVector> costs(np);
     std::vector<uint32_t> asnret(np);
     OMP_PFOR
     for(size_t i = 0; i < np; ++i) {
-#if !NDEBUG
         auto r = row(dm, i, blz::unchecked);
-        auto assignment = std::min_element(fac.begin(), fac.end(), [&](auto x, auto y) {return r[x] < r[y];}) - fac.begin();
+        auto assignment = std::min_element(fbeg, fend, [&](auto x, auto y) {return r[x] < r[y];}) - fbeg;
         asnret[i] = assignment;
         costs[i] = r[assignment];
-        //assert(std::all_of(fac.begin(), fac.end(), [&](auto x) {return dm(i, x) >= dm(i, asnret[i]);}));
-#endif
     }
     auto stop = std::chrono::high_resolution_clock::now();
     std::fprintf(stderr, "jvcost: %0.12g in %gms\n", blz::sum(costs), util::timediff2ms(start, stop));
