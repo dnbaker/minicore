@@ -52,6 +52,7 @@ int main(int c, char **a) {
     auto stop = t();
     auto manstart = t();
     double cwmed2 = reductionl1(m, v2);
+    std::fprintf(stderr, "l1 diff: %0.16g/%0.16g\n", cwmed2, cwmed);
     auto manstop = t();
     std::fprintf(stderr, "Manual l1 dist time: %zu/%g. reduction-based: %zu/%g\n", size_t((stop - start).count() / 1000), cwmed, size_t((manstop - manstart).count() / 1000), cwmed2);
     start = t();
@@ -69,11 +70,12 @@ int main(int c, char **a) {
     std::cout << "L1 dist under component-wise median: " << cwmed << '\n';
     std::cout << "L1 dist under approx component-wise median: " << reductionl1(m, v3) << '\n';
     std::cout << "L1 dist under component-wise mean: " << l1dist(m, blaze::evaluate(blaze::mean<blaze::columnwise>(m))) << '\n';
-    for(unsigned feature = 0; feature < m.rows(); ++feature) {
-        for(const auto pert: {-1., -0.05, -0.01, -0.001, 0.001, 0.01, 0.1, 1.}) {
+    for(unsigned feature = 0; feature < m.columns(); ++feature) {
+        for(const auto pert: {-1., -0.05, -0.01, -0.001, 0.001, 0.00001, 0.01, 0.1, 1.}) {
             auto tmpv = v2;
             v2[feature] += pert;
-            assert(l1dist(m, tmpv) >= cwmed || !std::fprintf(stderr, "newv: %g vs oldv %g, pert = %g", l1dist(m, tmpv), cwmed, pert));
+            if(l1dist(m, tmpv) - cwmed2 <= 0)
+                std::fprintf(stderr, "feature %d. newv: %0.20g vs oldv %0.20g (diff %0.12g), pert = %g\n", feature, l1dist(m, tmpv), cwmed, l1dist(m, tmpv) - cwmed, pert);
         }
     }
 }
