@@ -8,6 +8,7 @@
 
 namespace minocore {
 
+namespace util {
 
 template<typename IndPtrType=uint64_t, typename IndicesType=uint64_t, typename DataType=uint32_t>
 struct CSCMatrixView {
@@ -261,6 +262,14 @@ blz::SM<FT, SO> csc2sparse(const IndPtrType *indptr, const IndicesType *indices,
                            size_t nnz, size_t nfeat, uint32_t nitems) {
     return csc2sparse<FT, SO>(CSCMatrixView<IndPtrType, IndicesType, DataType>(indptr, indices, data, nnz, nfeat, nitems));
 }
+
+} // namespace util
+using util::csc2sparse;
+using util::mtx2sparse;
+using util::nonZeros;
+using util::CSCMatrixView;
+using util::is_csc_view;
+using util::is_csc_view_v;
 
 } // namespace minocore
 
