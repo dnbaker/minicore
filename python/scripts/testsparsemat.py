@@ -14,3 +14,6 @@ assert hasattr(mat, "asformat")
 
 smw = minocore.SparseMatrixWrapper(mat)
 smw.emit()
+smw.transpose_()
+smw.emit()
+print(str(smw))
