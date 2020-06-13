@@ -125,10 +125,20 @@ int m2ccore(std::string in, std::string out, Opts opts)
         std::fclose(ofp);
         std::string fmt = sizeof(FT) == 4 ? ".float32": ".double";
         if(!(ofp = std::fopen((out + fmt + ".importance").data(), "w"))) throw 1;
-        if(std::fwrite(cs.probs_.get(), sizeof(FT), cs.size(), ofp) != cs.size()) throw 2;
+        if(std::fwrite(cs.probs_.get(), sizeof(cs.probs_[0]), cs.size(), ofp) != cs.size()) throw 2;
         std::fclose(ofp);
         if(!(ofp = std::fopen((out + fmt + ".costs").data(), "w"))) throw 1;
         if(std::fwrite(costs.data(), sizeof(FT), costs.size(), ofp) != costs.size()) throw 3;
+        std::fclose(ofp);
+        if(!(ofp = std::fopen((out + fmt + ".samples").data(), "w"))) throw 1;
+        std::unique_ptr<uint32_t[]> indices(new uint32_t[opts.coreset_samples]);
+        cs.sample(&indices[0], &indices[opts.coreset_samples]);
+        if(std::fwrite(indices.get(), sizeof(indices[0]), opts.coreset_samples, ofp) != opts.coreset_samples)
+            throw std::runtime_error("3");
+        std::fclose(ofp);
+        if(!(ofp = std::fopen((out + fmt + ".samples.txt").data(), "w"))) throw 1;
+        for(size_t i = 0; i < opts.coreset_samples; ++i)
+            std::fprintf(ofp, "%u\t%0.12g\n", unsigned(indices[i]), cs.probs_[indices[i]]);
         std::fclose(ofp);
     }
     auto tstop = std::chrono::high_resolution_clock::now();
@@ -138,13 +148,13 @@ int m2ccore(std::string in, std::string out, Opts opts)
 
 int main(int argc, char **argv) {
     std::string inpath, outpath;
-    bool use_double = true;
+    [[maybe_unused]] bool use_double = true;
     for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:BdjJxSMT12NCDfh?")) >= 0;) {
         switch(c) {
             case 'h': case '?': usage();          break;
             case 'B': opts.load_blaze = true; opts.load_csr = false; break;
             case 'f': use_double = false;         break;
-            case 'c': opts.coreset_size = std::strtoull(optarg, nullptr, 10); break;
+            case 'c': opts.coreset_samples = std::strtoull(optarg, nullptr, 10); break;
             case 'C': opts.load_csr = true;       break;
             case 'p': OMP_ONLY(omp_set_num_threads(std::atoi(optarg));)       break;
             case 'g': opts.gamma = std::atof(optarg); opts.prior = dist::GAMMA_BETA; break;
@@ -174,9 +184,10 @@ int main(int argc, char **argv) {
         outpath = "mtx2coreset_output.";
         outpath += std::to_string(uint64_t(std::time(nullptr)));
     }
-    return m2ccore<double>(inpath, outpath, opts);
-#if 0
+#ifndef NDEBUG
     return use_double ? m2ccore<double>(inpath, outpath, opts)
                       : m2ccore<float>(inpath, outpath, opts);
+#else
+    return m2ccore<double>(inpath, outpath, opts); // Reduce compilation time
 #endif
 }

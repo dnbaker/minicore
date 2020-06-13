@@ -595,6 +595,10 @@ struct CoresetSampler {
             ret.weights_[i] = getweight(ind) / (dn * container[i].second);
         }
     }
+    template<typename P, typename=std::enable_if_t<std::is_arithmetic_v<P>> >
+    void sample(P *start, P *end) {
+        sampler_->sample(start, end);
+    }
     IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0, double eps=0.1) {
         if(unlikely(!sampler_.get())) throw std::runtime_error("Sampler not constructed");
         if(seed) sampler_->seed(seed);

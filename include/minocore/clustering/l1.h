@@ -40,7 +40,6 @@ struct IndexPQ: public std::priority_queue<std::pair<CI, IT>, std::vector<std::p
 template<typename FT>
 std::tuple<std::vector<blz::DV<FT, blz::rowVector>>, std::vector<uint32_t>, blz::DV<FT, blz::rowVector>>
 l1_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
-    const size_t nd = mat.columns();
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     std::vector<uint32_t> indices, asn;
     blz::DV<FT, blz::rowVector> costs;
@@ -200,7 +199,7 @@ get_ms_centers_l1(blz::SM<FT> &mat, unsigned k, [[maybe_unused]] unsigned maxite
         }
 #endif
     }
-    auto distmattime = std::chrono::high_resolution_clock::now();
+    [[maybe_unused]] auto distmattime = std::chrono::high_resolution_clock::now();
     // Run JV
 #if USE_JV_TOO
     std::fprintf(stderr, "[get_ms_centers_l1:%s:%d] Time to compute distance matrix: %gms\n", __FILE__, __LINE__, util::timediff2ms(start, distmattime));

@@ -21,7 +21,7 @@ struct Opts {
     double gamma = 1.;
     double eps = 1e-9;
     unsigned k = 10;
-    size_t coreset_size = 1000;
+    size_t coreset_samples = 1'000'000uL;
     uint64_t seed = 0;
     unsigned extra_sample_tries = 1;
     unsigned lloyd_max_rounds = 1000;
@@ -35,9 +35,9 @@ struct Opts {
                                     "extrasampletries: %d. coreset size: %zu. eps: %g. dis: %d/%s. %s clustering.%s";
         const char *dmsstr = discrete_metric_search ? "Use discrete metric search": "";
         const char *softstr = soft ? "soft": "hard";
-        int nb = std::snprintf(nullptr, 0, fmt, k, (int)sm, size_t(seed), gamma, (int)prior, dist::prior2desc(prior), extra_sample_tries, coreset_size, eps, (int)dis, dist::detail::prob2str(dis), softstr, dmsstr);
+        int nb = std::snprintf(nullptr, 0, fmt, k, (int)sm, size_t(seed), gamma, (int)prior, dist::prior2desc(prior), extra_sample_tries, coreset_samples, eps, (int)dis, dist::detail::prob2str(dis), softstr, dmsstr);
         std::string buf(nb, '\0');
-        std::sprintf(buf.data(), fmt, k, (int)sm, size_t(seed), gamma, (int)prior, dist::prior2desc(prior), extra_sample_tries, coreset_size, eps, (int)dis, dist::detail::prob2str(dis), softstr, dmsstr);
+        std::sprintf(buf.data(), fmt, k, (int)sm, size_t(seed), gamma, (int)prior, dist::prior2desc(prior), extra_sample_tries, coreset_samples, eps, (int)dis, dist::detail::prob2str(dis), softstr, dmsstr);
         return buf;
     }
 };
