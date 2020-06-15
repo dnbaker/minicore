@@ -36,7 +36,9 @@ template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr) {
-    //std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
+#ifndef NDEBUG
+    std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
+#endif
     std::vector<IT> centers;
     std::vector<FT> distances(np, 0.), cdf(np);
     {
@@ -49,7 +51,9 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
 #endif
         for(size_t i = 0; i < np; ++i) {
             if(unlikely(i == fc)) continue;
-            //std::fprintf(stderr, "Oracle about to call fc%zu / i%zu.\n", fc, i);
+#if 0
+            std::fprintf(stderr, "Oracle about to call fc%zu / i%zu.\n", fc, i);
+#endif
             double dist = oracle(fc, i);
             distances[i] = dist;
         }
@@ -58,6 +62,9 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             return x + y * weights[&y - ds];
         });
         else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
+#ifndef NDEBUG
+        std::fprintf(stderr, "Max cost: %g\n", cdf[np - 1]);
+#endif
     }
     std::vector<IT> assignments(np);
     std::uniform_real_distribution<double> urd;
@@ -92,6 +99,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         });
         else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
     }
+    std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
 }
 

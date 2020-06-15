@@ -1305,6 +1305,12 @@ auto make_kmeanspp(const DissimilarityApplicator<MatrixType> &app, unsigned k, u
     return coresets::kmeanspp(app, gen, app.size(), k, weights);
 }
 
+template<typename MatrixType, typename WFT=blaze::ElementType_t<MatrixType>>
+auto make_kcenter(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr) {
+    wy::WyRand<uint64_t> gen(seed);
+    return coresets::kmeanspp(app, gen, app.size(), k, weights);
+}
+
 template<typename MatrixType, typename WFT=typename MatrixType::ElementType, typename IT=uint32_t>
 auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, coresets::SensitivityMethod sens=cs::LBK) {
     auto [centers, asn, costs] = make_kmeanspp(app, k, seed);

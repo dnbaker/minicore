@@ -95,14 +95,14 @@ struct TimeStamper {
         auto total_time = std::accumulate(ivls.begin(), ivls.end(), 0., [](auto x, const auto &y) {return x + y.second;});
         auto prod = 100. / total_time;
         for(const auto &ivl: ivls) {
-            std::fprintf(stderr, "___Event '%s' took %gms___%%%0.12g of total___\n", ivl.first.data(), ivl.second, total_time);
+            std::fprintf(stderr, "Event '%s' took %gms, %%%g of total%g\n", ivl.first.data(), ivl.second, ivl.second * prod, total_time);
         }
         std::vector<unsigned> idx(ivls.size());
         std::iota(idx.data(), idx.data() + ivls.size(), 0);
         std::sort(idx.begin(), idx.end(), [&](auto x, auto y) {return ivls[x].second > ivls[y].second;});
         for(size_t i = 0; i < ivls.size(); ++i) {
-            std::fprintf(stderr, "%zu{st/th/nd} most expensive has id %u with %%%0.12g of total time\n",
-                         i + 1, idx[i], ivls[idx[i]].second * prod);
+            std::fprintf(stderr, "%d/%s is %zu{st/th/nd} most expensive %u with %%%0.12g of total time\n",
+                         idx[i], events[idx[i]].label.data(), i + 1, idx[i], ivls[idx[i]].second * prod);
         }
     }
 };

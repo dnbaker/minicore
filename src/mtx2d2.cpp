@@ -11,7 +11,6 @@ namespace dist = blz::distance;
 using minocore::util::timediff2ms;
 
 Opts opts;
-util::TimeStamper ts;
 
 void usage() {
     std::fprintf(stderr, "mtx2coreset <flags> [input file=""] [output_dir=mtx2coreset_output]\n"
@@ -47,11 +46,13 @@ void usage() {
 template<typename FT>
 int m2ccore(std::string in, std::string out, Opts &opts)
 {
+    auto &ts = *opts.stamper_;
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
     std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
-    ts.add_event("Parse matrix\n");
+    ts.add_event("Parse matrix");
     auto tstart = std::chrono::high_resolution_clock::now();
     blz::SM<FT> sm;
+    opts.stamper_->add_event("load matrix");
     if(opts.load_csr) {
         std::fprintf(stderr, "Trying to load from csr\n");
         sm = csc2sparse<FT>(in);
@@ -63,93 +64,70 @@ int m2ccore(std::string in, std::string out, Opts &opts)
         std::fprintf(stderr, "Trying to load from mtx\n");
         sm = mtx2sparse<FT>(in, opts.transpose_data);
     }
-    std::tuple<std::vector<CType<FT>>, std::vector<uint32_t>, CType<FT>> hardresult;
-    std::tuple<std::vector<CType<FT>>, blz::DM<FT>, CType<FT>> softresult;
+    std::fprintf(stderr, "Loaded\n");
 
-    ts.add_event("Initial solution\n");
-    switch(opts.dis) {
-        case dist::L1: case dist::TVD: {
-            assert(min(sm) >= 0.);
-            if(opts.dis == dist::TVD) for(auto r: blz::rowiterator(sm)) r /= blz::sum(r);
-            if(opts.soft) {
-                throw NotImplementedError("L1/TVD under soft clustering");
-            } else {
-                hardresult = l1_sum_core(sm, out, opts);
-                std::fprintf(stderr, "Total cost: %g\n", blz::sum(std::get<2>(hardresult)));
-            }
-            break;
-        }
-        case dist::L2: case dist::PL2: {
-            assert(min(sm) >= 0.);
-            if(opts.dis == dist::PL2) for(auto r: blz::rowiterator(sm)) r /= blz::sum(r);
-            if(opts.soft) {
-                throw NotImplementedError("L2/PL2 under soft clustering");
-            } else {
-                hardresult = l2_sum_core(sm, out, opts);
-                std::fprintf(stderr, "Total cost: %g\n", blz::sum(std::get<2>(hardresult)));
-            }
-            break;
-        }
-        case dist::SQRL2: case dist::PSL2: {
-            if(opts.dis == dist::PSL2) for(auto r: blz::rowiterator(sm)) r /= blz::sum(r);
-            if(opts.soft) {
-                throw NotImplementedError("SQRL2/PSL2 under soft clustering");
-            } else {
-                hardresult = kmeans_sum_core(sm, out, opts);
-            }
-            break;
-        }
-        default: {
-            std::fprintf(stderr, "%d/%s not supported\n", (int)opts.dis, blz::detail::prob2desc(opts.dis));
-            throw NotImplementedError("Not yet");
+    blz::DV<FT, blz::rowVector> pc(1);
+    blz::DV<FT, blz::rowVector> *pcp = nullptr;
+    pcp = &pc;
+    if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
+    else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
+    if(opts.prior != dist::NONE)
+        pcp = &pc;
+    ts.add_event("Set up applicator + caching");
+    auto app = jsd::make_probdiv_applicator(sm, opts.dis, opts.prior, pcp);
+    std::fprintf(stderr, "made applicator\n");
+    ts.add_event("D^2 sampling");
+    auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed);
+    auto csum = blz::sum(costs);
+    for(unsigned i = 0; i < opts.extra_sample_tries; ++i) {
+        auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed);
+        auto csum2 = blz::sum(costs2);
+        if(csum2 < csum) std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
+    }
+    std::fprintf(stderr, "sampled points\n");
+    
+    ts.add_event("Coreset sampler");
+    coresets::CoresetSampler<FT, uint32_t> cs;
+    cs.make_sampler(sm.rows(), opts.k, costs.data(), asn.data(), nullptr, opts.seed, opts.sm, opts.fl_b, centers.data());
+    ts.add_event("Save results");
+    std::FILE *ofp;
+    if(!(ofp = std::fopen((out + ".centers").data(), "w"))) throw 1;
+    for(size_t i = 0; i < opts.k; ++i) {
+        std::fprintf(ofp, "%u\n", centers[i]);
+    }
+    std::fclose(ofp);
+    if(!(ofp = std::fopen((out + ".assignments").data(), "w"))) throw 1;
+    for(size_t i = 0; i < asn.size(); ++i) {
+        std::fprintf(ofp, "%zu\t%u\n", i, asn[i]);
+    }
+    std::fclose(ofp);
+    std::string fmt = sizeof(FT) == 4 ? ".float32": ".double";
+    if(!(ofp = std::fopen((out + fmt + ".importance").data(), "w"))) throw 1;
+    if(std::fwrite(cs.probs_.get(), sizeof(cs.probs_[0]), cs.size(), ofp) != cs.size()) throw 2;
+    std::fclose(ofp);
+    if(!(ofp = std::fopen((out + fmt + ".costs").data(), "w"))) throw 1;
+    if(std::fwrite(costs.data(), sizeof(FT), costs.size(), ofp) != costs.size()) throw 3;
+    std::fclose(ofp);
+    if(!(ofp = std::fopen((out + fmt + ".samples").data(), "w"))) throw 1;
+    ts.add_event(std::string("Sample ") + std::to_string(opts.coreset_samples) + " points");
+    std::unique_ptr<uint32_t[]> indices(new uint32_t[opts.coreset_samples]);
+    cs.sample(&indices[0], &indices[opts.coreset_samples]);
+    if(std::fwrite(indices.get(), sizeof(indices[0]), opts.coreset_samples, ofp) != opts.coreset_samples)
+        throw std::runtime_error("3");
+    std::fclose(ofp);
+    if(!(ofp = std::fopen((out + fmt + ".samples.txt").data(), "w"))) throw 1;
+    for(size_t i = 0; i < opts.coreset_samples; ++i)
+        std::fprintf(ofp, "%u\t%0.12g\n", unsigned(indices[i]), cs.probs_[indices[i]]);
+    std::fclose(ofp);
+    if(opts.sm == coresets::FL) {
+        for(const auto sz: {100, 1000, 10000, 100000}) {
+            if(!(ofp = std::fopen((out + fmt + '.' + std::to_string(sz) + ".samples.txt").data(), "w"))) throw 1;
+            auto cso = cs.sample(sz);
+            cso.compact();
+            for(size_t i = 0; i < cso.size(); ++i) std::fprintf(ofp, "%u\t%0.12g\n", cso.indices_[i], cso.weights_[i]);
+            std::fclose(ofp);
         }
     }
-    if(opts.soft) {
-        throw 1;
-    } else {
-        auto &[centers, asn, costs] = hardresult;
-        ts.add_event("Build coreset sampler");
-        coresets::CoresetSampler<FT, uint32_t> cs;
-        cs.make_sampler(sm.rows(), opts.k, costs.data(), asn.data(), nullptr, opts.seed, opts.sm);
-        ts.add_event("Write summary data to disk");
-        cs.write(out + ".coreset_sampler");
-        std::FILE *ofp;
-        if(!(ofp = std::fopen((out + ".centers").data(), "w"))) throw 1;
-        std::fprintf(ofp, "#Center\tFeatures\t...\t...\n");
-        for(size_t i = 0; i < opts.k; ++i) {
-            std::fprintf(ofp, "%zu\t", i + 1);
-            const auto &c(centers[i]);
-            for(size_t j = 0; j < c.size() - 1; ++j)
-                std::fprintf(ofp, "%0.12g\t", c[j]);
-            std::fprintf(ofp, "%0.12g\n", c[opts.k - 1]);
-        }
-        std::fclose(ofp);
-        if(!(ofp = std::fopen((out + ".assignments").data(), "w"))) throw 1;
-        for(size_t i = 0; i < asn.size(); ++i) {
-            std::fprintf(ofp, "%zu\t%u\n", i, asn[i]);
-        }
-        std::fclose(ofp);
-        std::string fmt = sizeof(FT) == 4 ? ".float32": ".double";
-        if(!(ofp = std::fopen((out + fmt + ".importance").data(), "w"))) throw 1;
-        if(std::fwrite(cs.probs_.get(), sizeof(cs.probs_[0]), cs.size(), ofp) != cs.size()) throw 2;
-        std::fclose(ofp);
-        if(!(ofp = std::fopen((out + fmt + ".costs").data(), "w"))) throw 1;
-        if(std::fwrite(costs.data(), sizeof(FT), costs.size(), ofp) != costs.size()) throw 3;
-        std::fclose(ofp);
-        if(!(ofp = std::fopen((out + fmt + ".samples").data(), "w"))) throw 1;
-        ts.add_event(std::string("Sample ") + std::to_string(opts.coreset_samples) + " points");
-        std::unique_ptr<uint32_t[]> indices(new uint32_t[opts.coreset_samples]);
-        cs.sample(&indices[0], &indices[opts.coreset_samples]);
-        if(std::fwrite(indices.get(), sizeof(indices[0]), opts.coreset_samples, ofp) != opts.coreset_samples)
-            throw std::runtime_error("3");
-        std::fclose(ofp);
-        if(!(ofp = std::fopen((out + fmt + ".samples.txt").data(), "w"))) throw 1;
-        for(size_t i = 0; i < opts.coreset_samples; ++i)
-            std::fprintf(ofp, "%u\t%0.12g\n", unsigned(indices[i]), cs.probs_[indices[i]]);
-        std::fclose(ofp);
-    }
-    auto tstop = std::chrono::high_resolution_clock::now();
-    std::fprintf(stderr, "Full program took %gms\n", util::timediff2ms(tstart, tstop));
     return 0;
 }
 
@@ -157,7 +135,7 @@ int main(int argc, char **argv) {
     opts.stamper_.reset(new util::TimeStamper("argparse"));
     std::string inpath, outpath;
     [[maybe_unused]] bool use_double = true;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:FVPBdjJxSMT12NCDfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:PBdjJxSMT12NCDfh?")) >= 0;) {
         switch(c) {
             case 'h': case '?': usage();          break;
             case 'B': opts.load_blaze = true; opts.load_csr = false; break;
@@ -181,8 +159,6 @@ int main(int argc, char **argv) {
             case 'd': opts.prior = dist::DIRICHLET;    break;
             case 'D': opts.discrete_metric_search = true; break;
             case 'x': opts.transpose_data = true; break;
-            case 'F': opts.sm = coresets::FL; break;
-            case 'V': opts.sm = coresets::VARADARAJAN_XIAO; break;
         }
     }
     if(argc == optind) usage();

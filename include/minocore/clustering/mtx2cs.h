@@ -26,6 +26,7 @@ struct Opts {
     unsigned extra_sample_tries = 1;
     unsigned lloyd_max_rounds = 1000;
     unsigned sampled_number_coresets = 100;
+    unsigned fl_b = -1;
     coresets::SensitivityMethod sm = coresets::BFL;
     bool soft = false;
     bool discrete_metric_search = false; // Search in metric solver before performing EM
