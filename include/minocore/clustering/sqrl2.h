@@ -6,34 +6,42 @@ namespace minocore {
 
 template<typename FT>
 auto 
-kmeans_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
+kmeans_sum_core(blz::SM<FT> &mat, std::string out, Opts &opts) {
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     std::vector<uint32_t> indices, asn;
     blz::DV<FT, blz::rowVector> costs;
+    opts.stamper_->add_event("Get initial centers");
     std::tie(indices, asn, costs) = repeatedly_get_initial_centers(mat, rng, opts.k, opts.kmc2_rounds, opts.extra_sample_tries);
     std::vector<blz::DV<FT, blz::rowVector>> centers(opts.k);
+#ifndef NDEBUG
     { // write selected initial points to file
+        opts.stamper_->add_event("Save initial points to disk");
         std::ofstream ofs(out + ".initial_points");
         for(size_t i = 0; i < indices.size(); ++i) {
             ofs << indices[i] << ',';
         }
         ofs << '\n';
     }
+#endif
+    opts.stamper_->add_event("Set initial centers");
     OMP_PFOR
     for(unsigned i = 0; i < opts.k; ++i) {
         centers[i] = row(mat, indices[i]);
+#ifndef NDEBUG
         std::fprintf(stderr, "Center %u initialized by index %u and has sum of %g\n", i, indices[i], blz::sum(centers[i]));
+#endif
     }
+    opts.stamper_->add_event("Setup locks + counts");
     FT tcost = blz::sum(costs), firstcost = tcost;
     size_t iternum = 0;
     OMP_ONLY(std::unique_ptr<std::mutex[]> mutexes(new std::mutex[opts.k]);)
     std::unique_ptr<uint32_t[]> counts(new uint32_t[opts.k]);
+    opts.stamper_->add_event("Optimize");
     for(;;) {
         std::fprintf(stderr, "[Iter %zu] Cost: %g\n", iternum, tcost);
         // Set centers
         center_setup:
         for(auto &c: centers) c = 0.;
-        std::fprintf(stderr, "Performing sums\n");
         std::fill_n(counts.get(), opts.k, 0u);
         OMP_PFOR
         for(size_t i = 0; i < mat.rows(); ++i) {

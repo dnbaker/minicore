@@ -13,7 +13,7 @@ get_jv_centers(blz::SM<FT> &mat, unsigned k, unsigned maxiter, double, uint64_t)
 
 template<typename FT>
 std::tuple<std::vector<blz::DV<FT, blz::rowVector>>, std::vector<uint32_t>, blz::DV<FT, blz::rowVector>>
-l2_sum_core(blz::SM<FT> &mat, std::string out, Opts opts) {
+l2_sum_core(blz::SM<FT> &mat, std::string out, Opts &opts) {
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     std::vector<uint32_t> indices, asn;
     blz::DV<FT, blz::rowVector> costs;

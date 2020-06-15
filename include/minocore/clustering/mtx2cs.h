@@ -29,7 +29,7 @@ struct Opts {
     coresets::SensitivityMethod sm = coresets::BFL;
     bool soft = false;
     bool discrete_metric_search = false; // Search in metric solver before performing EM
-                                         //
+    std::shared_ptr<util::TimeStamper> stamper_;
     std::string to_string() const {
         constexpr const char *fmt = "K: %d. Construction method: %d. Seed:%zu. gamma: %g. prior: %d/%s."
                                     "extrasampletries: %d. coreset size: %zu. eps: %g. dis: %d/%s. %s clustering.%s";
@@ -40,6 +40,9 @@ struct Opts {
         std::sprintf(buf.data(), fmt, k, (int)sm, size_t(seed), gamma, (int)prior, dist::prior2desc(prior), extra_sample_tries, coreset_samples, eps, (int)dis, dist::detail::prob2str(dis), softstr, dmsstr);
         return buf;
     }
+    Opts(Opts &&) = default;
+    Opts(const Opts &) = delete;
+    Opts() {}
 };
 
 

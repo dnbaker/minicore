@@ -11,6 +11,7 @@ namespace dist = blz::distance;
 using minocore::util::timediff2ms;
 
 Opts opts;
+util::TimeStamper ts;
 
 void usage() {
     std::fprintf(stderr, "mtx2coreset <flags> [input file=""] [output_dir=mtx2coreset_output]\n"
@@ -43,10 +44,11 @@ void usage() {
 
 
 template<typename FT>
-int m2ccore(std::string in, std::string out, Opts opts)
+int m2ccore(std::string in, std::string out, Opts &opts)
 {
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
     std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
+    ts.add_event("Parse matrix\n");
     auto tstart = std::chrono::high_resolution_clock::now();
     blz::SM<FT> sm;
     if(opts.load_csr) {
@@ -63,6 +65,7 @@ int m2ccore(std::string in, std::string out, Opts opts)
     std::tuple<std::vector<CType<FT>>, std::vector<uint32_t>, CType<FT>> hardresult;
     std::tuple<std::vector<CType<FT>>, blz::DM<FT>, CType<FT>> softresult;
 
+    ts.add_event("Initial solution\n");
     switch(opts.dis) {
         case dist::L1: case dist::TVD: {
             assert(min(sm) >= 0.);
@@ -104,8 +107,10 @@ int m2ccore(std::string in, std::string out, Opts opts)
         throw 1;
     } else {
         auto &[centers, asn, costs] = hardresult;
+        ts.add_event("Build coreset sampler");
         coresets::CoresetSampler<FT, uint32_t> cs;
         cs.make_sampler(sm.rows(), opts.k, costs.data(), asn.data(), nullptr, opts.seed, opts.sm);
+        ts.add_event("Write summary data to disk");
         cs.write(out + ".coreset_sampler");
         std::FILE *ofp;
         if(!(ofp = std::fopen((out + ".centers").data(), "w"))) throw 1;
@@ -131,6 +136,7 @@ int m2ccore(std::string in, std::string out, Opts opts)
         if(std::fwrite(costs.data(), sizeof(FT), costs.size(), ofp) != costs.size()) throw 3;
         std::fclose(ofp);
         if(!(ofp = std::fopen((out + fmt + ".samples").data(), "w"))) throw 1;
+        ts.add_event(std::string("Sample ") + std::to_string(opts.coreset_samples) + " points");
         std::unique_ptr<uint32_t[]> indices(new uint32_t[opts.coreset_samples]);
         cs.sample(&indices[0], &indices[opts.coreset_samples]);
         if(std::fwrite(indices.get(), sizeof(indices[0]), opts.coreset_samples, ofp) != opts.coreset_samples)
@@ -147,9 +153,10 @@ int m2ccore(std::string in, std::string out, Opts opts)
 }
 
 int main(int argc, char **argv) {
+    opts.stamper_.reset(new util::TimeStamper("argparse"));
     std::string inpath, outpath;
     [[maybe_unused]] bool use_double = true;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:BdjJxSMT12NCDfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:PBdjJxSMT12NCDfh?")) >= 0;) {
         switch(c) {
             case 'h': case '?': usage();          break;
             case 'B': opts.load_blaze = true; opts.load_csr = false; break;
