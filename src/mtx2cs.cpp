@@ -11,7 +11,6 @@ namespace dist = blz::distance;
 using minocore::util::timediff2ms;
 
 Opts opts;
-util::TimeStamper ts;
 
 void usage() {
     std::fprintf(stderr, "mtx2coreset <flags> [input file=""] [output_dir=mtx2coreset_output]\n"
@@ -43,12 +42,146 @@ void usage() {
     std::exit(1);
 }
 
+template<typename FT>
+int m2d2core(std::string in, std::string out, Opts &opts)
+{
+    auto &ts = *opts.stamper_;
+    std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
+    std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
+    ts.add_event("Parse matrix");
+    auto tstart = std::chrono::high_resolution_clock::now();
+    blz::SM<FT> sm;
+    opts.stamper_->add_event("load matrix");
+    if(opts.load_csr) {
+        std::fprintf(stderr, "Trying to load from csr\n");
+        sm = csc2sparse<FT>(in);
+    } else if(opts.load_blaze) {
+        std::fprintf(stderr, "Trying to load from blaze\n");
+        blaze::Archive<std::ifstream> arch(in);
+        arch >> sm;
+    } else {
+        std::fprintf(stderr, "Trying to load from mtx\n");
+        sm = mtx2sparse<FT>(in, opts.transpose_data);
+    }
+    std::fprintf(stderr, "Loaded\n");
+
+    blz::DV<FT, blz::rowVector> pc(1);
+    blz::DV<FT, blz::rowVector> *pcp = nullptr;
+    pcp = &pc;
+    if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
+    else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
+    if(opts.prior != dist::NONE)
+        pcp = &pc;
+    ts.add_event("Set up applicator + caching");
+    auto app = jsd::make_probdiv_applicator(sm, opts.dis, opts.prior, pcp);
+    std::fprintf(stderr, "made applicator\n");
+    ts.add_event("D^2 sampling");
+    auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed);
+    auto csum = blz::sum(costs);
+    for(unsigned i = 0; i < opts.extra_sample_tries; ++i) {
+        auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed);
+        auto csum2 = blz::sum(costs2);
+        if(csum2 < csum) std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
+    }
+    std::fprintf(stderr, "sampled points\n");
+
+    ts.add_event("Coreset sampler");
+    coresets::CoresetSampler<FT, uint32_t> cs;
+    cs.make_sampler(sm.rows(), opts.k, costs.data(), asn.data(), nullptr, opts.seed, opts.sm, opts.fl_b, centers.data());
+    ts.add_event("Save results");
+    std::FILE *ofp;
+    if(!(ofp = std::fopen((out + ".centers").data(), "w"))) throw 1;
+    for(size_t i = 0; i < opts.k; ++i) {
+        std::fprintf(ofp, "%u\n", centers[i]);
+    }
+    std::fclose(ofp);
+    if(!(ofp = std::fopen((out + ".assignments").data(), "w"))) throw 1;
+    for(size_t i = 0; i < asn.size(); ++i) {
+        std::fprintf(ofp, "%zu\t%u\n", i, asn[i]);
+    }
+    std::fclose(ofp);
+    std::string fmt = sizeof(FT) == 4 ? ".float32": ".double";
+    if(!(ofp = std::fopen((out + fmt + ".importance").data(), "w"))) throw 1;
+    if(std::fwrite(cs.probs_.get(), sizeof(cs.probs_[0]), cs.size(), ofp) != cs.size()) throw 2;
+    std::fclose(ofp);
+    if(!(ofp = std::fopen((out + fmt + ".costs").data(), "w"))) throw 1;
+    if(std::fwrite(costs.data(), sizeof(FT), costs.size(), ofp) != costs.size()) throw 3;
+    std::fclose(ofp);
+    if(!(ofp = std::fopen((out + fmt + ".samples").data(), "w"))) throw 1;
+    ts.add_event(std::string("Sample ") + std::to_string(opts.coreset_samples) + " points");
+    std::unique_ptr<uint32_t[]> indices(new uint32_t[opts.coreset_samples]);
+    cs.sample(&indices[0], &indices[opts.coreset_samples]);
+    if(std::fwrite(indices.get(), sizeof(indices[0]), opts.coreset_samples, ofp) != opts.coreset_samples)
+        throw std::runtime_error("3");
+    std::fclose(ofp);
+    if(!(ofp = std::fopen((out + fmt + ".samples.txt").data(), "w"))) throw 1;
+    for(size_t i = 0; i < opts.coreset_samples; ++i)
+        std::fprintf(ofp, "%u\t%0.12g\n", unsigned(indices[i]), cs.probs_[indices[i]]);
+    std::fclose(ofp);
+    if(opts.sm == coresets::FL) {
+        for(const auto sz: {100, 1000, 10000, 100000}) {
+            if(!(ofp = std::fopen((out + fmt + '.' + std::to_string(sz) + ".samples.txt").data(), "w"))) throw 1;
+            auto cso = cs.sample(sz);
+            cso.compact();
+            for(size_t i = 0; i < cso.size(); ++i) std::fprintf(ofp, "%u\t%0.12g\n", cso.indices_[i], cso.weights_[i]);
+            std::fclose(ofp);
+        }
+    }
+    return 0;
+}
+
+
+template<typename FT>
+int m2greedycore(std::string in, std::string out, Opts &opts)
+{
+    auto &ts = *opts.stamper_;
+    std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
+    std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
+    ts.add_event("Parse matrix");
+    blz::SM<FT> sm;
+    opts.stamper_->add_event("load matrix");
+    if(opts.load_csr) {
+        std::fprintf(stderr, "Trying to load from csr\n");
+        sm = csc2sparse<FT>(in);
+    } else if(opts.load_blaze) {
+        std::fprintf(stderr, "Trying to load from blaze\n");
+        blaze::Archive<std::ifstream> arch(in);
+        arch >> sm;
+    } else {
+        std::fprintf(stderr, "Trying to load from mtx\n");
+        sm = mtx2sparse<FT>(in, opts.transpose_data);
+    }
+    std::fprintf(stderr, "Loaded\n");
+
+    blz::DV<FT, blz::rowVector> pc(1);
+    blz::DV<FT, blz::rowVector> *pcp = nullptr;
+    pcp = &pc;
+    if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
+    else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
+    if(opts.prior != dist::NONE)
+        pcp = &pc;
+    ts.add_event("Set up applicator + caching");
+    auto app = jsd::make_probdiv_applicator(sm, opts.dis, opts.prior, pcp);
+    std::fprintf(stderr, "made applicator\n");
+    ts.add_event("D^2 sampling");
+    std::mt19937_64 mt(opts.seed);
+    auto centers = coresets::kcenter_greedy_2approx(app, app.size(), opts.k, mt);
+    std::FILE *ofp;
+    if(!(ofp = std::fopen((out + ".centers").data(), "w"))) throw 1;
+    for(size_t i = 0; i < opts.k; ++i) {
+        std::fprintf(ofp, "%u\n", centers[i]);
+    }
+    std::fclose(ofp);
+    return 0;
+}
+
 
 template<typename FT>
 int m2ccore(std::string in, std::string out, Opts &opts)
 {
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
     std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
+    auto &ts = *opts.stamper_;
     ts.add_event("Parse matrix\n");
     auto tstart = std::chrono::high_resolution_clock::now();
     blz::SM<FT> sm;
@@ -153,36 +286,51 @@ int m2ccore(std::string in, std::string out, Opts &opts)
     return 0;
 }
 
+enum ResultType {
+    CORESET,
+    GREEDY_SELECTION,
+    D2_SAMPLING
+};
+
 int main(int argc, char **argv) {
     opts.stamper_.reset(new util::TimeStamper("argparse"));
     std::string inpath, outpath;
     [[maybe_unused]] bool use_double = true;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:FVPBdjJxSMT12NCDfh?")) >= 0;) {
+    ResultType rt = ResultType::CORESET;
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:lGHiIYQbFVPBdjJxSMT12NCDfh?")) >= 0;) {
         switch(c) {
-            case 'h': case '?': usage();          break;
-            case 'B': opts.load_blaze = true; opts.load_csr = false; break;
-            case 'f': use_double = false;         break;
-            case 'c': opts.coreset_samples = std::strtoull(optarg, nullptr, 10); break;
-            case 'C': opts.load_csr = true;       break;
             case 'p': OMP_ONLY(omp_set_num_threads(std::atoi(optarg));)       break;
-            case 'g': opts.gamma = std::atof(optarg); opts.prior = dist::GAMMA_BETA; break;
-            case 'k': opts.k = std::atoi(optarg); break;
+            case 'h': case '?': usage();          break;
+            case 'c': opts.coreset_samples = std::strtoull(optarg, nullptr, 10); break;
             case '1': opts.dis = dist::L1;        break;
             case '2': opts.dis = dist::L2;        break;
+            case 'H': opts.dis = dist::HELLINGER; break;
+            case 'I': opts.dis = dist::REVERSE_ITAKURA_SAITO; break;
+            case 'J': opts.dis = dist::JSM;       break;
+            case 'M': opts.dis = dist::MKL;       break;
+            case 'P': opts.dis = dist::PSL2;      break;
+            case 'Q': opts.dis = dist::PL2;       break;
             case 'S': opts.dis = dist::SQRL2;     break;
             case 'T': opts.dis = dist::TVD;       break;
-            case 'M': opts.dis = dist::MKL;       break;
+            case 'Y': opts.dis = dist::BHATTACHARYYA_DISTANCE; break;
+            case 'b': opts.dis = dist::BHATTACHARYYA_METRIC; break;
+            case 'i': opts.dis = dist::ITAKURA_SAITO; break;
             case 'j': opts.dis = dist::JSD;       break;
-            case 'L': opts.lloyd_max_rounds = std::strtoull(optarg, nullptr, 10); break;
-            case 'J': opts.dis = dist::JSM;       break;
-            case 'P': opts.dis = dist::PSL2;      break;
-            case 'K': opts.kmc2_rounds = std::strtoull(optarg, nullptr, 10); break;
-            case 's': opts.seed = std::strtoull(optarg,0,10); break;
-            case 'd': opts.prior = dist::DIRICHLET;    break;
+            case 'G': rt = ResultType::GREEDY_SELECTION; break;
             case 'D': opts.discrete_metric_search = true; break;
-            case 'x': opts.transpose_data = true; break;
+            case 'g': opts.gamma = std::atof(optarg); opts.prior = dist::GAMMA_BETA; break;
+            case 'k': opts.k = std::atoi(optarg); break;
+            case 'K': opts.kmc2_rounds = std::strtoull(optarg, nullptr, 10); break;
+            case 'L': opts.lloyd_max_rounds = std::strtoull(optarg, nullptr, 10); break;
+            case 'B': opts.load_blaze = true; opts.load_csr = false; break;
+            case 'C': opts.load_csr = true;       break;
+            case 'd': opts.prior = dist::DIRICHLET; break;
+			case 'l': rt = ResultType::D2_SAMPLING; break;
+            case 's': opts.seed = std::strtoull(optarg,0,10); break;
             case 'F': opts.sm = coresets::FL; break;
             case 'V': opts.sm = coresets::VARADARAJAN_XIAO; break;
+            case 'x': opts.transpose_data = true; break;
+            case 'f': use_double = false;         break;
         }
     }
     if(argc == optind) usage();
@@ -195,10 +343,25 @@ int main(int argc, char **argv) {
         outpath = "mtx2coreset_output.";
         outpath += std::to_string(uint64_t(std::time(nullptr)));
     }
+    // Only compile version with doubles in debug mode to reduce compilation time
+    switch(rt) {
 #ifndef NDEBUG
-    return use_double ? m2ccore<double>(inpath, outpath, opts)
-                      : m2ccore<float>(inpath, outpath, opts);
+        case GREEDY_SELECTION: {
+            return use_double ? m2greedycore<double>(inpath, outpath, opts):
+                                m2greedycore<float>(inpath, outpath, opts);
+        }
+        case D2_SAMPLING: {
+            return use_double ? m2d2core<double>(inpath, outpath, opts)
+                              : m2d2core<float>(inpath, outpath, opts);
+        }
+        case CORESET:
+            return use_double ? m2ccore<double>(inpath, outpath, opts)
+                              : m2ccore<float>(inpath, outpath, opts);
 #else
-    return m2ccore<double>(inpath, outpath, opts); // Reduce compilation time
+	case CORESET: 	       return m2ccore<double>(inpath, outpath, opts);
+	case GREEDY_SELECTION: return m2greedycore<double>(inpath, outpath, opts);
+	case D2_SAMPLING:      return m2d2core<double>(inpath, outpath, opts);
 #endif
+	default: HEDLEY_UNREACHABLE();
+    }
 }

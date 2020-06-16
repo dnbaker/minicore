@@ -13,7 +13,7 @@ using minocore::util::timediff2ms;
 Opts opts;
 
 void usage() {
-    std::fprintf(stderr, "mtx2coreset <flags> [input file=""] [output_dir=mtx2coreset_output]\n"
+    std::fprintf(stderr, "mtx2d2 <flags> [input file=""] [output_dir=mtx2d2_output]\n"
                          "=== General/Formatting ===\n"
                          "-f: Use floats (instead of doubles)\n"
                          "-p: Set number of threads [1]\n"
@@ -135,30 +135,36 @@ int main(int argc, char **argv) {
     opts.stamper_.reset(new util::TimeStamper("argparse"));
     std::string inpath, outpath;
     [[maybe_unused]] bool use_double = true;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:PBdjJxSMT12NCDfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:HIibYQPBdjJxSMT12NCDfh?")) >= 0;) {
         switch(c) {
             case 'h': case '?': usage();          break;
-            case 'B': opts.load_blaze = true; opts.load_csr = false; break;
-            case 'f': use_double = false;         break;
-            case 'c': opts.coreset_samples = std::strtoull(optarg, nullptr, 10); break;
-            case 'C': opts.load_csr = true;       break;
             case 'p': OMP_ONLY(omp_set_num_threads(std::atoi(optarg));)       break;
-            case 'g': opts.gamma = std::atof(optarg); opts.prior = dist::GAMMA_BETA; break;
-            case 'k': opts.k = std::atoi(optarg); break;
+            case 'c': opts.coreset_samples = std::strtoull(optarg, nullptr, 10); break;
             case '1': opts.dis = dist::L1;        break;
             case '2': opts.dis = dist::L2;        break;
+            case 'H': opts.dis = dist::HELLINGER; break;
+            case 'I': opts.dis = dist::REVERSE_ITAKURA_SAITO; break;
+            case 'J': opts.dis = dist::JSM;       break;
+            case 'M': opts.dis = dist::MKL;       break;
+            case 'P': opts.dis = dist::PSL2;      break;
+            case 'Q': opts.dis = dist::PL2;      break;
             case 'S': opts.dis = dist::SQRL2;     break;
             case 'T': opts.dis = dist::TVD;       break;
-            case 'M': opts.dis = dist::MKL;       break;
+            case 'Y': opts.dis = dist::BHATTACHARYYA_DISTANCE; break;
+            case 'b': opts.dis = dist::BHATTACHARYYA_METRIC; break;
+            case 'i': opts.dis = dist::ITAKURA_SAITO; break;
             case 'j': opts.dis = dist::JSD;       break;
-            case 'L': opts.lloyd_max_rounds = std::strtoull(optarg, nullptr, 10); break;
-            case 'J': opts.dis = dist::JSM;       break;
-            case 'P': opts.dis = dist::PSL2;      break;
-            case 'K': opts.kmc2_rounds = std::strtoull(optarg, nullptr, 10); break;
-            case 's': opts.seed = std::strtoull(optarg,0,10); break;
-            case 'd': opts.prior = dist::DIRICHLET;    break;
             case 'D': opts.discrete_metric_search = true; break;
+            case 'g': opts.gamma = std::atof(optarg); opts.prior = dist::GAMMA_BETA; break;
+            case 'k': opts.k = std::atoi(optarg); break;
+            case 'K': opts.kmc2_rounds = std::strtoull(optarg, nullptr, 10); break;
+            case 'L': opts.lloyd_max_rounds = std::strtoull(optarg, nullptr, 10); break;
+            case 'B': opts.load_blaze = true; opts.load_csr = false; break;
+            case 'C': opts.load_csr = true;       break;
+            case 'd': opts.prior = dist::DIRICHLET;    break;
+            case 's': opts.seed = std::strtoull(optarg,0,10); break;
             case 'x': opts.transpose_data = true; break;
+            case 'f': use_double = false;         break;
         }
     }
     if(argc == optind) usage();
@@ -168,7 +174,7 @@ int main(int argc, char **argv) {
             outpath = argv[optind + 1];
     }
     if(outpath.empty()) {
-        outpath = "mtx2coreset_output.";
+        outpath = "mtx2d2_output.";
         outpath += std::to_string(uint64_t(std::time(nullptr)));
     }
 #ifndef NDEBUG

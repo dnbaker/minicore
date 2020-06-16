@@ -88,6 +88,15 @@ int main(int argc, char *argv[]) {
     // then, a coreset can be constructed
     start = t();
     auto kc = kcenter_greedy_2approx(ptr, ptr + n, gen, npoints);
+#ifndef NDEBUG
+    assert(std::set<uint32_t>(kc.begin(), kc.end()).size() == npoints);
+#else
+    auto v = std::set<uint32_t>(kc.begin(), kc.end()).size();
+    if(v != npoints) {
+        std::cerr << v << "instead of " << npoints << '\n';
+        throw std::runtime_error("Wrong number of points in k-center algorithm");
+    }
+#endif
     stop = t();
     std::fprintf(stderr, "Time for kcenter_greedy_2approx: %0.12gs\n", double((stop - start).count()) / 1e9);
     start = t();
