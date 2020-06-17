@@ -300,6 +300,12 @@ template<typename OT>
 INLINE decltype(auto) min(const OT &x) {return blaze::min(x);}
 template<bool wiseness, typename OT>
 INLINE decltype(auto) min(const OT &x) {return blaze::min<wiseness>(x);}
+template<typename...Args>
+INLINE decltype(auto) min(Args &&...args) {return blaze::min(std::forward<Args>(args)...);}
+template<typename...Args>
+INLINE decltype(auto) max(Args &&...args) {return blaze::max(std::forward<Args>(args)...);}
+template<typename...Args>
+INLINE decltype(auto) mean(Args &&...args) {return blaze::mean(std::forward<Args>(args)...);}
 
 
 template<typename VT, bool SO, typename VT2, bool SO2>

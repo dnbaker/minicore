@@ -184,22 +184,51 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT cosine_similarity(size_t j, const OT &o) const {
+        if constexpr(IS_SPARSE) {
+            if(prior_data_) {
+                if(prior_data_->size() != 1) throw TODOError("Disuniform prior");
+                const auto pv = (*prior_data_)[0];
+                if constexpr(blz::IsSparseVector_v<OT>) {
+                    throw TODOError("Sparse-within but not without");
+                } else {
+                    auto v = blaze::dot(o + pv, weighted_row(j));
+                    auto extra = blz::sum(o * pv);
+                    auto rhn = blz::sqrt(blz::sum(blz::pow(o + pv, 2)));
+                    return (v + extra) * (*l2norm_cache_)[j] / rhn;
+                }
+            }
+        }
         return blaze::dot(o, weighted_row(j)) / blaze::l2Norm(o) * l2norm_cache_->operator[](j);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT cosine_similarity(const OT &o, size_t j) const {
-        return blaze::dot(o, weighted_row(j)) / blaze::l2Norm(o) * l2norm_cache_->operator[](j);
+        return cosine_similarity(j, o);
     }
     FT pcosine_similarity(size_t i, size_t j) const {
         return blaze::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT pcosine_similarity(size_t j, const OT &o) const {
+        if constexpr(IS_SPARSE) {
+            if(prior_data_) {
+                if(prior_data_->size() != 1) throw TODOError("Disuniform prior");
+                const auto pv = (*prior_data_)[0];
+                const auto pvi = 1. / row_sums_[j];
+                if constexpr(blz::IsSparseVector_v<OT>) {
+                    throw TODOError("Sparse-within but not without");
+                } else {
+                    auto v = blaze::dot(o + pvi, row(j));
+                    auto extra = blz::sum(o * pvi);
+                    auto rhn = blz::sqrt(blz::sum(blz::pow(o + pvi, 2)));
+                    return (v + extra) * (*l2norm_cache_)[j] / rhn;
+                }
+            }
+        }
         return blaze::dot(o, row(j)) / blaze::l2Norm(o) * pl2norm_cache_->operator[](j);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT pcosine_similarity(const OT &o, size_t j) const {
-        return blaze::dot(o, row(j)) / blaze::l2Norm(o) * pl2norm_cache_->operator[](j);
+        return pcosine_distance(j, o);
     }
 
     template<typename...Args>
@@ -914,8 +943,77 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT mkl(size_t i, const OT &o) const {
-        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
-        return __getjsc(i) - blaze::dot(row(i), blaze::neginf2zero(blaze::log(o)));
+        FT ret = __getjsc(i);
+        if constexpr(IS_SPARSE) {
+            if(prior_data_) {
+                const auto osum = blz::sum(o);
+                auto &pd = *prior_data_;
+                if(pd.size() == 1) {
+                    auto r = row(i);
+                    auto rb = r.begin(), re = r.end();
+                    auto rs = row_sums_[i];
+                    auto rsa = rs + prior_sum_;
+                    auto orsa = osum + prior_sum_;
+                    auto rsai = 1. / rsa;
+                    auto orsai = 1. / orsa;
+                    const auto pv = pd[0];
+                    auto rsaimul = rsai * pv;
+                    auto orsaimul = orsai * pv;
+                    auto lorsaimul = std::log(orsaimul);
+                    FT ret = 0;
+                    size_t ind = 0;
+                    if constexpr(blz::IsSparseVector_v<OT>) {
+                        int sharedz = 0;
+                        auto oit = o.begin(), eo = o.end();
+                        for(;;) {
+                            if(oit == eo) {
+                                while(rb != re) {
+                                    size_t nextind = rb->index();
+                                    sharedz += nextind - ind;
+                                    ind = nextind + 1;
+                                    ret -= (rb->value() + rsaimul) * lorsaimul;
+                                    ++rb;
+                                }
+                            } else if(rb == re) {
+                                while(oit != eo) {
+                                    size_t nextind = oit->index();
+                                    sharedz += nextind - ind;
+                                    ind = nextind + 1;
+                                    ret -= (rsaimul) * std::log(orsaimul + oit->value());
+                                    ++oit;
+                                }
+                            } else {
+                                size_t nextind = std::min(rb->index(), oit->index());
+                                sharedz += nextind - ind;
+                                ind = nextind + 1;
+                                if(oit->index() == rb->index()) {
+                                    ret -= (rb->value() + rsaimul) * std::log(orsaimul + oit->value());
+                                    ++oit; ++rb;
+                                } else if(oit->index() < rb->index()) {
+                                    ret -= (rsaimul) * std::log(orsaimul + oit->value());
+                                    ++oit;
+                                } else {
+                                    ret -= (rb->value() + rsaimul) * lorsaimul;
+                                    ++rb;
+                                }
+                            }
+                        }
+                    } else {
+                        while(rb != re) {
+                            while(ind < rb->index())
+                                ret -= rsaimul * std::log(o[ind++] + orsaimul);
+                            ret -= (rb->value() + rsaimul) * std::log(o[ind]);
+                        }
+                        while(ind < r.size()) ret -= rsaimul * std::log(o[ind++] + orsaimul);
+                    }
+                } else {
+                    throw TODOError("TODO: Special fast version for sparsity-preserving with non-uniform prior");
+                }
+            }
+        } else {
+            ret -= blaze::dot(row(i), blaze::neginf2zero(blaze::log(o)));
+        }
+        return ret;
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     FT mkl(const OT &o, size_t i, const OT2 &olog) const {
@@ -1077,15 +1175,12 @@ private:
                             throw std::invalid_argument(std::string("Measure ") + dist::detail::prob2str(measure_) + " expects nonnegative data");
                     }
                 }
-#if 0
-                // We now store the sum of the adjusted prior in a variable, *prior_sum
+                FT div = countsum;
                 if constexpr(blaze::IsSparseMatrix_v<MatrixType>) {
-                    if(prior_data_) {
-                        countsum += *prior_sum_;
-                    }
+                    if(prior_data_)
+                        div += prior_sum_;
                 }
-#endif
-                r /= countsum;
+                r /= div;
                 row_sums_[i] = countsum;
             }
         }
@@ -1119,14 +1214,40 @@ private:
         if(dist::detail::needs_l2_cache(measure_)) {
             l2norm_cache_.reset(new VecT(data_.rows()));
             OMP_PFOR
-            for(size_t i = 0; i < data_.rows(); ++i)
-                l2norm_cache_->operator[](i)  = 1. / blaze::l2Norm(weighted_row(i));
+            for(size_t i = 0; i < data_.rows(); ++i) {
+                if(prior_data_ && IS_SPARSE) {
+                    double s = 0.;
+                    auto r = weighted_row(i);
+                    auto getv = [&,iss=prior_data_->size() == 1](size_t x) {
+                        return (*prior_data_)[iss ? size_t(0): x];
+                    };
+                    for(size_t i = 0; i < data_.columns(); ++i) {
+                        s += std::pow(r[i] + getv(i), 2);
+                    }
+                    l2norm_cache_->operator[](i)  = 1. / std::sqrt(s);
+                } else {
+                    l2norm_cache_->operator[](i)  = 1. / blaze::l2Norm(weighted_row(i));
+                }
+            }
         }
         if(dist::detail::needs_probability_l2_cache(measure_)) {
             pl2norm_cache_.reset(new VecT(data_.rows()));
             OMP_PFOR
             for(size_t i = 0; i < data_.rows(); ++i) {
-                pl2norm_cache_->operator[](i) = 1. / blaze::l2Norm(row(i));
+                if(prior_data_ && IS_SPARSE) {
+                    double s = 0.;
+                    auto r = row(i);
+                    auto getv = [&,iss=prior_data_->size() == 1](size_t x) {
+                        return (*prior_data_)[iss ? size_t(0): x];
+                    };
+                    auto rsi = 1. / row_sums_[i];
+                    for(size_t i = 0; i < data_.columns(); ++i) {
+                        s += std::pow(r[i] + getv(i) * rsi, 2);
+                    }
+                    pl2norm_cache_->operator[](i)  = 1. / std::sqrt(s);
+                } else {
+                    pl2norm_cache_->operator[](i)  = 1. / blaze::l2Norm(weighted_row(i));
+                }
             }
         }
         if(logdata_.rows()) {
@@ -1155,8 +1276,9 @@ private:
                                 while(i < end) upcontrib(pd[i++] / rs);
                             };
                             while(it != r.end() && i < r.size()) {
-                                contribute_range(it->index());
-                                upcontrib(it->value() + pd[it->index] / rs);
+                                auto idx = it->index();
+                                contribute_range(idx);
+                                upcontrib(it->value() + pd[idx] / rs);
                                 if(++it == r.end())
                                     contribute_range(r.size());
                             }
@@ -1195,7 +1317,6 @@ private:
             const auto pv = prior_data_->operator[](0), pv2 = pv * 2;
             const auto lhrsimul = lhrsi * pv;
             const auto rhrsimul = rhrsi * pv;
-            const auto bothsimul = lhrsimul + rhrsimul;
             size_t shared_zero = 0;
             // ret += (lhrsimul * lambda + rhrsimul * m1l)
             for(;;) {

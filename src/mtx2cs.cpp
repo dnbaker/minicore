@@ -24,10 +24,17 @@ void usage() {
                          "-2: Use L2 Norm \n"
                          "-S: Use squared L2 Norm (k-means)\n"
                          "-M: Use multinomial KL divergence\n"
+                         "-R: Use reverse multinomial KL divergence\n"
                          "-j: Use multinomial Jensen-Shannon divergence\n"
                          "-J: Use multinomial Jensen-Shannon metric (square root of JSD)\n"
                          "-P: Use probability squared L2 norm\n"
-                         "-T: Use total variation distance\n\n\n"
+                         "-T: Use total variation distance\n"
+                         "-i: Use Itakura-Saito distance\n"
+                         "-I: Use reverse Itakura-Saito distance\n"
+                         "-H: Use Hellinger distance\n"
+                         "-u: Use Probability Cosine distance\n"
+                         "-U: Use Cosine distance\n"
+                        "\n\n\n"
                          "=== Prior settings ===\n"
                          "-d: Use Dirichlet prior. Default: no prior.\n"
                          "-g: Use the Gamma/Beta prior and set gamma's value [default: 1.]\n\n\n"
@@ -49,7 +56,6 @@ int m2d2core(std::string in, std::string out, Opts &opts)
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
     std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
     ts.add_event("Parse matrix");
-    auto tstart = std::chrono::high_resolution_clock::now();
     blz::SM<FT> sm;
     opts.stamper_->add_event("load matrix");
     if(opts.load_csr) {
@@ -297,9 +303,10 @@ int main(int argc, char **argv) {
     std::string inpath, outpath;
     [[maybe_unused]] bool use_double = true;
     ResultType rt = ResultType::CORESET;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:lGHiIYQbFVPBdjJxSMT12NCDfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:uURlGHiIYQbFVPBdjJxSMT12NCDfh?")) >= 0;) {
         switch(c) {
-            case 'p': OMP_ONLY(omp_set_num_threads(std::atoi(optarg));)       break;
+            case 'R': opts.dis = dist::REVERSE_MKL; break;
+            case 'p': OMP_ONLY(omp_set_num_threads(std::atoi(optarg));) break;
             case 'h': case '?': usage();          break;
             case 'c': opts.coreset_samples = std::strtoull(optarg, nullptr, 10); break;
             case '1': opts.dis = dist::L1;        break;
@@ -316,6 +323,8 @@ int main(int argc, char **argv) {
             case 'b': opts.dis = dist::BHATTACHARYYA_METRIC; break;
             case 'i': opts.dis = dist::ITAKURA_SAITO; break;
             case 'j': opts.dis = dist::JSD;       break;
+            case 'u': opts.dis = dist::PROBABILITY_COSINE_DISTANCE; break;
+            case 'U': opts.dis = dist::COSINE_DISTANCE; break;
             case 'G': rt = ResultType::GREEDY_SELECTION; break;
             case 'D': opts.discrete_metric_search = true; break;
             case 'g': opts.gamma = std::atof(optarg); opts.prior = dist::GAMMA_BETA; break;
@@ -343,6 +352,7 @@ int main(int argc, char **argv) {
         outpath = "mtx2coreset_output.";
         outpath += std::to_string(uint64_t(std::time(nullptr)));
     }
+    opts.stamper_.reset(new util::TimeStamper("dispatch main"));
     // Only compile version with doubles in debug mode to reduce compilation time
     switch(rt) {
 #ifndef NDEBUG
@@ -364,4 +374,5 @@ int main(int argc, char **argv) {
 #endif
 	default: HEDLEY_UNREACHABLE();
     }
+    return 1; // Never happens
 }
