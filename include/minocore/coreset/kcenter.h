@@ -14,11 +14,11 @@ namespace outliers {
 
 template<typename IT=std::uint32_t, typename FT=float, typename Container=std::vector<std::pair<FT, IT>>,
          typename Cmp=std::greater<>>
-struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
+struct fpq: public std::priority_queue<std::pair<FT, IT>, Container, Cmp> {
     // priority queue providing access to underlying constainer with getc()
     // , a reserve function and that defaults to std::greater<> for farthest points.
-    using super = std::priority_queue<std::pair<double, IT>, Container, Cmp>;
-    using value_type = std::pair<double, IT>;
+    using super = std::priority_queue<std::pair<FT, IT>, Container, Cmp>;
+    using value_type = std::pair<FT, IT>;
 
     IT size_;
     fpq(IT size=0): size_(size) {reserve(size);}
@@ -49,9 +49,9 @@ struct fpq: public std::priority_queue<std::pair<double, IT>, Container, Cmp> {
 
 
 
-template<typename IT>
-struct bicriteria_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<double, IT>>, double> {
-    using super = std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<double, IT>>, double>;
+template<typename IT, typename FT>
+struct bicriteria_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<FT, IT>>, FT> {
+    using super = std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<FT, IT>>, FT>;
     template<typename...Args>
     bicriteria_result_t(Args &&...args): super(std::forward<Args>(args)...) {}
     auto &centers() {return std::get<0>(*this);}
@@ -59,7 +59,7 @@ struct bicriteria_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<st
     // alias
     auto &labels() {return assignments();}
     auto &outliers() {return std::get<2>(*this);}
-    double outlier_threshold() const {return std::get<3>(*this);}
+    FT outlier_threshold() const {return std::get<3>(*this);}
     size_t num_centers() const {return centers().size();}
 };
 
@@ -73,7 +73,7 @@ struct bicriteria_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<st
 
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
-bicriteria_result_t<IT>
+bicriteria_result_t<IT, FT>
 kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
                    double gamma=0.001, size_t t = 100, double eta=0.01,
                    const Norm &norm=Norm())
@@ -184,7 +184,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
         }
     }
     const double minmaxdist = pq.top().first;
-    bicriteria_result_t<IT> bicret;
+    bicriteria_result_t<IT, FT> bicret;
     assert(flat_hash_set<IT>(ret.begin(), ret.end()).size() == ret.size());
     bicret.centers() = std::move(ret);
     bicret.labels() = std::move(labels);
@@ -210,8 +210,8 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
 {
     auto dm = make_index_dm(first, norm);
     const size_t np = end - first;
-    const size_t z = std::ceil(gamma * np);
-    size_t farthestchunksize = std::ceil((1. + eps) * z);
+    size_t farthestchunksize = std::ceil((1. + eps) * gamma * np);
+    if(farthestchunksize > np) farthestchunksize = np;
     fpq<IT, FT> pq(farthestchunksize);
     //pq.reserve(farthestchunksize + 1);
     std::vector<IT> ret;
@@ -245,6 +245,46 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
     return ret;
 }// kcenter_greedy_2approx_outliers
 
+template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
+std::vector<IT>
+kcenter_greedy_2approx_outliers(Oracle &oracle, size_t np, RNG &rng, size_t k, double eps,
+                                double gamma=0.001)
+{
+    size_t farthestchunksize = std::ceil((1. + eps) * gamma * np);
+    fpq<IT, FT> pq(farthestchunksize);
+    //pq.reserve(farthestchunksize + 1);
+    std::vector<IT> ret;
+    std::vector<FT> distances(np, std::numeric_limits<FT>::max());
+    ret.reserve(k);
+    auto newc = rng() % np;
+    ret.push_back(newc);
+    do {
+        //const auto &newel = first[newc];
+        // Fill pq
+#ifdef _OPENMP
+    #pragma omp declare reduction (merge : fpq<IT, FT> : omp_out.update(omp_in)) initializer(omp_priv(omp_orig))
+    #pragma omp parallel for reduction(merge: pq)
+#endif
+        for(IT i = 0; i < np; ++i) {
+            double dist = distances[i];
+            if(dist == 0.) continue;
+            double newdist;
+            if((newdist = oracle(i, newc)) < dist)
+                dist = newdist;
+            distances[i] = dist;
+            pq.add(dist, i);
+        }
+
+        // Sample point
+        newc = pq.getc()[rng() % farthestchunksize].second;
+        assert(newc < np);
+        ret.push_back(newc);
+        pq.getc().clear();
+    } while(ret.size() < k);
+    return ret;
+}// kcenter_greedy_2approx_outliers
+
 // Algorithm 3 (coreset construction)
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
@@ -258,8 +298,8 @@ kcenter_coreset_outliers(Iter first, Iter end, RNG &rng, size_t k, double eps=0.
     const size_t np = end - first;
     size_t L = std::ceil(std::pow(2. / mu, rho) * k);
     size_t nrounds = std::ceil((L + std::sqrt(L)) / (1. - eta));
-    auto bic = kcenter_bicriteria(first, end, rng, k, eps,
-                                  gamma, nrounds, eta, norm);
+    auto bic = kcenter_bicriteria<Iter, FT>(first, end, rng, k, eps,
+                                            gamma, nrounds, eta, norm);
     double rtilde = bic.outlier_threshold();
     std::fprintf(stderr, "outlier threshold: %f\n", rtilde);
     auto &centers = bic.centers();

@@ -32,7 +32,7 @@ SENSES = {"FL": " -F ", "VX": " -V ", "BFL": "", "LBK": ' -E '}
 
 
 class Run:
-    def __init__(self, k=10, *, cmd, key, gammabeta=1., sample_tries=DEFAULT_SAMPLE_TRIES, lloyd_iter=100, seed=1337, sm="BFL", threads=None, dest=None, path=None, prior="NONE", r=None):
+    def __init__(self, k=10, *, cmd, key, gammabeta=1., sample_tries=DEFAULT_SAMPLE_TRIES, lloyd_iter=100, seed=1337, sm="BFL", threads=None, dest=None, path=None, prior="NONE", r=None, of=0.):
         assert key in DISTS, "key must be in %s" % (','.join(DISTS.keys()))
         assert prior in PRIORS, f"{prior} not in {','.join(PRIORS)}"
         assert cmd in COMMAND, f"{cmd} not in {','.join(COMMAND)}"
@@ -52,6 +52,7 @@ class Run:
             self.gammabeta = 1.
         self.threads = threads
         self.r = r
+        self.of = of
 
 
     # Pass a range to r (list, etc.) to perform multiple times.
@@ -83,6 +84,9 @@ class Run:
         if self.threads:
             cmd += f" -p{int(self.threads)} "
         cmd += f" -s{seed} "
+        if self.of:
+            assert 1. >= self.of  >= 0., f"{self.of} out of range"
+            cmd = cmd + f" -O{of} "
         cmd = f"{cmd} {path} {dest}"
         #print("About to call '%s'" % cmd)
         #print("dest", dest, "path", path)
@@ -101,6 +105,8 @@ if __name__ == "__main__":
     ap.add_argument("--dest", default=None)
     ap.add_argument("--lloyd-iter", type=int, default=100)
     ap.add_argument("--logfile", "-l", type=str)
+    ap.add_argument("--threads", "-p", type=int)
+    ap.add_argument("--outlier-fraction", "-O", type=float, default=0.)
     args = ap.parse_args()
     k = args.k
     path = args.path
@@ -109,6 +115,8 @@ if __name__ == "__main__":
     ret = []
     rng = None if not args.times else range(args.times)
     lf = args.logfile
+    threads = args.threads
+    of = args.outlier_fraction
     if not lf:
         if dest:
             lf = dest
@@ -123,28 +131,30 @@ if __name__ == "__main__":
         mydest = dest + "_" + m
         # print("dest is %s and mydest is %s" % (dest, mydest))
         s = PRIORDICT[m]
-        def perform_run(with_cmd):
+        def perform_run(with_cmd, md=mydest, lf=of):
             ret = []
             if s:
                 for g in s:
-                    r = Run(cmd=with_cmd, key=m, k=k, path=path, dest=mydest, gammabeta=g, seed=args.seed, prior="GAMMA_BETA", lloyd_iter=li)
-                    tups = r.call(path=path, dest=mydest, r=rng)
+                    r = Run(cmd=with_cmd, key=m, k=k, path=path, dest=md, gammabeta=g, seed=args.seed, prior="GAMMA_BETA", lloyd_iter=li, threads=threads, of=lf)
+                    tups = r.call(path=path, dest=md, r=rng)
                     for x, tup in zip(rng, tups):
                         #print(tup, len(tup))
-                        with open(mydest + f"{g}.{x}.log", "wb") as f:
+                        with open(md + f"{g}.{x}.log", "wb") as f:
                             f.write(tup[0] + tup[1])
                     ret += tups
             else:
-                r = Run(cmd=with_cmd, key=m, k=k, seed=args.seed, lloyd_iter=li)
-                tups = r.call(path=path, dest=mydest, r=rng)
+                r = Run(cmd=with_cmd, key=m, k=k, seed=args.seed, lloyd_iter=li, threads=threads, of=lf)
+                tups = r.call(path=path, dest=md, r=rng)
                 for x, tup in zip(rng, tups):
-                    with open(mydest + f"{x}.log", "wb") as f:
+                    with open(md + f"{x}.log", "wb") as f:
                         f.write(tup[0] + tup[1])
                 ret += tups
             return ret
         if cmds[0]:
             print("Doing Greedy", file=sys.stderr)
-            ret += perform_run("GREEDY")
+            if of:
+                ret += perform_run("GREEDY", md=mydest + "_OUTLIERS", lf=of)
+            ret += perform_run("GREEDY", lf=0.)
         if cmds[1]:
             print("Doing D2", file=sys.stderr)
             ret += perform_run("D2")

@@ -14,6 +14,12 @@ Opts opts;
 
 void usage() {
     std::fprintf(stderr, "mtx2coreset <flags> [input file=""] [output_dir=mtx2coreset_output]\n"
+                         "=== Mode settings ===\n"
+                         "Default: cluster\n"
+                         "-G: use greedy farthest-point selection (k-center 2-approximation)\n"
+                         "-l: use D2 sampling\n"
+                         "-O: outlier fraction to use for k-center clustering with outliers -G. Implies -G\n"
+                        "\n\n\n"
                          "=== General/Formatting ===\n"
                          "-f: Use floats (instead of doubles)\n"
                          "-p: Set number of threads [1]\n"
@@ -173,7 +179,13 @@ int m2greedycore(std::string in, std::string out, Opts &opts)
     std::fprintf(stderr, "made applicator\n");
     ts.add_event("D^2 sampling");
     std::mt19937_64 mt(opts.seed);
-    auto centers = coresets::kcenter_greedy_2approx(app, app.size(), opts.k, mt);
+    std::vector<uint32_t> centers;
+    if(opts.outlier_fraction) {
+        centers = coresets::kcenter_greedy_2approx_outliers(
+            app, app.size(), mt, opts.k,
+            /*eps=*/1.5, opts.outlier_fraction
+        );
+    } else centers = coresets::kcenter_greedy_2approx(app, app.size(), opts.k, mt);
     std::FILE *ofp;
     if(!(ofp = std::fopen((out + ".centers").data(), "w"))) throw 1;
     for(size_t i = 0; i < opts.k; ++i) {
@@ -303,12 +315,12 @@ enum ResultType {
 int main(int argc, char **argv) {
     opts.stamper_.reset(new util::TimeStamper("argparse"));
     std::fprintf(stderr, "[CLI: '");
-    for(char **av; *av; std::fprintf(stderr, "%s ", *av++));
-    std::fprintf("']\n");
+    for(char **av = argv; *av; std::fprintf(stderr, "%s ", *av++));
+    std::fprintf(stderr, "']\n");
     std::string inpath, outpath;
     [[maybe_unused]] bool use_double = true;
     ResultType rt = ResultType::CORESET;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:uURlGHiIYQbFVPBdjJxSMT12NCDfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:O:uURlGHiIYQbFVPBdjJxSMT12NCDfh?")) >= 0;) {
         switch(c) {
             case 'p': OMP_ONLY(omp_set_num_threads(std::atoi(optarg));) break;
             case 'h': case '?': usage();          break;
@@ -336,6 +348,7 @@ int main(int argc, char **argv) {
             case 'E': opts.sm = coresets::LBK; break;
 
             case 'G': rt = ResultType::GREEDY_SELECTION; break;
+            case 'O': opts.outlier_fraction = std::atof(optarg); rt = ResultType::GREEDY_SELECTION; break;
 			case 'l': rt = ResultType::D2_SAMPLING; break;
 
             case 'g': opts.gamma = std::atof(optarg); opts.prior = dist::GAMMA_BETA; break;

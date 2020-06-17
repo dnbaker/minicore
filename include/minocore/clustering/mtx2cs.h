@@ -30,6 +30,7 @@ struct Opts {
     coresets::SensitivityMethod sm = coresets::BFL;
     bool soft = false;
     bool discrete_metric_search = false; // Search in metric solver before performing EM
+    double outlier_fraction = 0.;
     std::shared_ptr<util::TimeStamper> stamper_;
     std::string to_string() const {
         constexpr const char *fmt = "K: %d. Construction method: %d. Seed:%zu. gamma: %g. prior: %d/%s."
