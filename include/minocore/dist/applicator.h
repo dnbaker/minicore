@@ -755,26 +755,39 @@ public:
                 const auto rhrsimul = rhrsi * prior_data_->operator[](0);
                 const auto bothsimul = lhrsimul + rhrsimul;
                 if(lhit == lhe || rhit == rhe) return static_cast<FT>(0);
-                auto dox = [&](auto x) {ret -= x * std::log(.5 * x);};
+                auto dox = [&,bothsimul](auto x) {
+                    x += bothsimul;
+                    ret -= x * std::log(.5 * x);
+                };
+                size_t ci = 0;
+                unsigned shared_zeros = 0;
                 while(lhit != lhe && rhit != rhe) {
+                    auto next = std::min(lhit->index(), rhit->index()) ;
+                    shared_zeros += next - ci;
+                    ci = next + 1;
                     if(lhit->index() == rhit->index()) {
-                        dox(lhit->value() + rhit->value() + bothsimul);
+                        dox(lhit->value() + rhit->value());
                         ++lhit; ++rhit;
                     } else if(lhit->index() < rhit->index()) {
-                        dox(lhit->value() + bothsimul);
+                        dox(lhit->value());
                         ++lhit;
                     } else {
-                        dox(rhit->value() + bothsimul);
+                        dox(rhit->value());
                         ++rhit;
                     }
                 }
-                //std::fprintf(stderr, "Finished loop. lhit is end? %d rhit is ind? %d\n", lhit == lhe, rhit == rhe);
-                for(;lhit != lhe;++lhit)
-                    dox(lhit->value() + bothsimul);
-                for(;rhit != rhe;++rhit)
-                    dox(rhit->value() + bothsimul);
-                //std::fprintf(stderr, "Handled all lhit\n");
-                ret -= blz::number_shared_zeros(lhr, rhr) * (bothsimul * std::log(.5 * (bothsimul)));
+                for(;lhit != lhe;++lhit) {
+                    shared_zeros += lhit->index() - ci;
+                    ci = lhit->index() + 1;
+                    dox(lhit->value());
+                }
+                for(;rhit != rhe;++rhit) {
+                    shared_zeros += rhit->index() - ci;
+                    ci = rhit->index() + 1;
+                    dox(rhit->value());
+                }
+                shared_zeros += dim - ci;
+                ret -= shared_zeros * (bothsimul * std::log(.5 * (bothsimul)));
             } else {
                 // This could later be accelerated, but that kind of caching is more complicated.
                 auto &pd = *prior_data_;
@@ -816,7 +829,7 @@ public:
                         doxy(pd[i] * (lhrsi + rhrsi));
                 }
             }
-            return std::max(ret * static_cast<FT>(.5), static_cast<FT>(0.));
+            return ret * static_cast<FT>(.5);
         }
         __builtin_unreachable();
     }
@@ -1260,7 +1273,7 @@ private:
                     auto &pd = *prior_data_;
                     const bool single_value = pd.size() == 1;
                     for(size_t i = 0; i < data_.rows(); ++i) {
-                        const auto rs = row_sums_[i];
+                        const auto rs = row_sums_[i] + prior_sum_;
                         auto r = row(i);
                         double contrib = 0.;
                         auto upcontrib = [&](auto x) {contrib += x * std::log(x);};
