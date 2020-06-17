@@ -63,12 +63,13 @@ int main(int argc, char *argv[]) {
 #else
     decltype(sparsemat) filtered_sparsemat = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
 #endif
-    auto full_jsm = minocore::jsd::make_jsm_applicator(filtered_sparsemat, /*prior=*/blz::distance::NONE);
+    auto full_jsm = minocore::jsd::make_probdiv_applicator(filtered_sparsemat, /*dis=*/blz::distance::JSD, /*prior=*/blz::distance::DIRICHLET);
     minocore::util::Timer timer("k-means");
     auto kmppdat = minocore::jsd::make_kmeanspp(full_jsm, k);
     timer.report();
     std::fprintf(stderr, "finished kmpp. Now getting cost\n");
-    std::fprintf(stderr, "kmpp solution cost: %g\n", blz::sum(std::get<2>(kmppdat)));
+    const auto &dat = std::get<2>(kmppdat);
+    std::fprintf(stderr, "kmpp solution cost: %g. min/max/mean: %g/%g/%g\n", blz::sum(dat), blz::min(dat), blz::max(dat), blz::mean(dat));
     timer.restart("kmc");
     auto kmcdat = minocore::jsd::make_kmc2(full_jsm, k, m);
     timer.report();
@@ -102,7 +103,11 @@ double mb_lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
                      const WFT *weights=nullptr)
 {
 #else
+#if 1
     minocore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 50, oracle);
+#else
+    minocore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 50, app);
+#endif
     auto cpyasn = asn;
     auto cpycounts = counts;
     auto cpycenters = centers;

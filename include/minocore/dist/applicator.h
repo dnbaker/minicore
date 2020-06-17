@@ -35,6 +35,7 @@ class DissimilarityApplicator {
     VecT jsd_cache_;
 public:
     std::unique_ptr<VecT> prior_data_;
+    double prior_sum_ = 0.;
     std::unique_ptr<VecT> l2norm_cache_;
     std::unique_ptr<VecT> pl2norm_cache_;
     using FT = ET;
@@ -324,7 +325,6 @@ public:
             ret = l2Norm(row(i) - o);
         } else if constexpr(constexpr_measure == SQRL2) {
             ret = blaze::sqrNorm(weighted_row(i) - o);
-            std::fprintf(stderr, "wrow norm is %g, o norm is %g, dist norm is %g, unweighted distnorm is %g, dist when weighting o: %g\n", blz::sqrNorm(weighted_row(i)), blz::sqrNorm(o), ret, blaze::sqrNorm(row(i) - o), blaze::sqrNorm(row(i) * row_sums_[i] - o));
             //std::fprintf(stderr, "SQRL2 between row %zu and row starting at %p is %g\n", i, (void *)&*o.begin(), ret);
         } else if constexpr(constexpr_measure == PSL2) {
             ret = blaze::sqrNorm(i - o);
@@ -606,9 +606,10 @@ public:
             auto lhit = lhr.begin(), rhit = rhr.begin();
             auto lhe = lhr.end(), rhe = rhr.end();
             size_t index = 0;
-            auto lhn = row_sums_[i], rhn = row_sums_[j];
+            auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
             const auto mul = prior_data_->operator[](0);
             auto lhrsi = mul / lhn;
+            auto rhrsi = mul / rhn;
             size_t shared_zero = 0;
             ret = -static_cast<FT>(dim); // To account for -1 in IS distance.
             auto do_inc = [&](auto x) {ret += x - std::log(x);};
@@ -619,14 +620,14 @@ public:
                         shared_zero += cind - index;
                         index = cind + 1;
                         if(lhit->index() == rhit->index()) {
-                            do_inc(lhit->value() / rhit->value());
+                            do_inc((lhit->value() + lhrsi) / (rhit->value() + rhrsi));
                             ++lhit;
                             ++rhit;
                         } else if(lhit->index() < rhit->index()) {
-                            do_inc(lhit->value() * rhn);
+                            do_inc((lhit->value() + lhrsi) * rhn);
                             ++lhit;
                         } else {
-                            do_inc(lhrsi / rhit->value());
+                            do_inc(lhrsi / (rhit->value() + rhrsi));
                             ++rhit;
                         }
                     }
@@ -635,7 +636,7 @@ public:
                         for(;lhit != lhe;++lhit) {
                             shared_zero += lhit->index() - index;
                             index = lhit->index() + 1;
-                            do_inc(lhit->value() * rhn);
+                            do_inc((lhit->value() + lhrsi) * rhn);
                         }
                     }
                     break;
@@ -643,7 +644,7 @@ public:
                         for(;rhit != rhe;++rhit) {
                             shared_zero += rhit->index() - index;
                             index = rhit->index() + 1;
-                            do_inc(lhrsi / rhit->value());
+                            do_inc(lhrsi / (rhit->value() + rhrsi));
                         }
                     }
                     break;
@@ -710,39 +711,41 @@ public:
             auto s = evaluate(ri + rj);
             ret = __getjsc(i) + __getjsc(j) - blaze::dot(s, blaze::neginf2zero(blaze::log(s * 0.5)));
             return std::max(static_cast<FT>(.5) * ret, static_cast<FT>(0.));
-        } else if constexpr(IS_SPARSE) {
+        }
+        if constexpr(IS_SPARSE) {
             ret = __getjsc(i) + __getjsc(j);
             const size_t dim = row(i).size();
             auto lhr = row(i), rhr = row(j);
             auto lhit = lhr.begin(), rhit = rhr.begin();
             const auto lhe = lhr.end(), rhe = rhr.end();
-            auto lhrsi = 1. / row_sums_[i];
-            auto rhrsi = 1. / row_sums_[j];
+            auto lhrsi = 1. / (row_sums_[i] + prior_sum_);
+            auto rhrsi = 1. / (row_sums_[j] + prior_sum_);
+            auto bothsi = lhrsi + rhrsi;
             if(prior_data_->size() == 1) {
                 const auto lhrsimul = lhrsi * prior_data_->operator[](0);
                 const auto rhrsimul = rhrsi * prior_data_->operator[](0);
+                const auto bothsimul = lhrsimul + rhrsimul;
                 if(lhit == lhe || rhit == rhe) return static_cast<FT>(0);
                 auto dox = [&](auto x) {ret -= x * std::log(.5 * x);};
                 while(lhit != lhe && rhit != rhe) {
                     if(lhit->index() == rhit->index()) {
-                        dox(lhit->value() + rhit->value());
+                        dox(lhit->value() + rhit->value() + bothsimul);
                         ++lhit; ++rhit;
                     } else if(lhit->index() < rhit->index()) {
-                        dox(lhit->value() + rhrsimul);
+                        dox(lhit->value() + bothsimul);
                         ++lhit;
                     } else {
-                        dox(rhit->value() + lhrsimul);
+                        dox(rhit->value() + bothsimul);
                         ++rhit;
                     }
                 }
                 //std::fprintf(stderr, "Finished loop. lhit is end? %d rhit is ind? %d\n", lhit == lhe, rhit == rhe);
                 for(;lhit != lhe;++lhit)
-                    dox(lhit->value() + rhrsimul);
+                    dox(lhit->value() + bothsimul);
                 for(;rhit != rhe;++rhit)
-                    dox(rhit->value() + lhrsimul);
+                    dox(rhit->value() + bothsimul);
                 //std::fprintf(stderr, "Handled all lhit\n");
-                const FT sump = (lhrsimul + rhrsimul);
-                ret -= blz::number_shared_zeros(lhr, rhr) * (sump * std::log(.5 * (sump)));
+                ret -= blz::number_shared_zeros(lhr, rhr) * (bothsimul * std::log(.5 * (bothsimul)));
             } else {
                 // This could later be accelerated, but that kind of caching is more complicated.
                 auto &pd = *prior_data_;
@@ -753,31 +756,31 @@ public:
                     doxy(pd[i] * (lhrsi + rhrsi));
                 while(lhit != lhe && rhit != rhe) {
                     if(lhit->index() == rhit->index()) {
-                        dox(lhit->value(), rhit->value());
+                        dox(lhit->value() + pd[lhit->index()] * lhrsi, rhit->value() + pd[lhit->index()] * rhrsi);
                         if(++lhit == lhe) break;
                         if(++rhit == rhe) break;
                     } else if(lhit->index() < rhit->index()) {
-                        dox(lhit->value(), pd[lhit->index()] * rhrsi);
+                        dox(lhit->value() + pd[lhit->index()] * lhrsi, pd[lhit->index()] * rhrsi);
                         for(size_t i = lhit->index() + 1; i < rhit->index(); ++i)
                             dox(pd[i] * lhrsi, pd[i] * rhrsi);
                         if(++lhit == lhe) break;
                     } else {
-                        dox(rhit->value(), pd[rhit->index()] * lhrsi);
+                        dox(rhit->value() + pd[rhit->index()] * rhrsi, pd[rhit->index()] * lhrsi);
                         for(size_t i = rhit->index() + 1; i < lhit->index(); ++i)
-                            doxy(pd[i] * (lhrsi + rhrsi));
+                            doxy(pd[i] * bothsi);
                         if(++rhit == rhe) break;
                     }
                 }
                 // Remaining entries
                 while(lhit != lhe) {
-                    dox(lhit->value(), pd[lhit->index()] * rhrsi);
+                    dox(lhit->value() + pd[lhit->index()] * lhrsi, pd[lhit->index()] * rhrsi);
                     size_t i = lhit->index() + 1;
                     size_t nextind = (++lhit == lhe) ? dim: lhit->index();
                     for(; i < nextind; ++i)
                         doxy(pd[i] * (lhrsi + rhrsi));
                 }
                 while(rhit != rhe) {
-                    dox(rhit->value(), lhrsi * pd[rhit->index()]);
+                    dox(rhit->value() + pd[rhit->index()] * rhrsi, lhrsi * pd[rhit->index()]);
                     size_t i = rhit->index() + 1;
                     size_t nextind = (++rhit == rhe) ? dim: rhit->index();
                     for(; i < nextind; ++i)
@@ -810,8 +813,8 @@ public:
                 auto rhr = row(j);
                 auto lhit = lhr.begin(), rhit = rhr.begin();
                 const auto lhe = lhr.end(), rhe = rhr.end();
-                const auto lhrsi = 1. / row_sums_[i];
-                const auto rhrsi = 1. / row_sums_[j];
+                const auto lhrsi = 1. / (row_sums_[i] + prior_sum_);
+                const auto rhrsi = 1. / (row_sums_[j] + prior_sum_);
                 FT ret = 0.;
                 if(single_value) {
                     size_t i = 0;
@@ -829,14 +832,14 @@ public:
                             const size_t lhi = lhit->index();
                             const size_t rhi = rhit->index();
                             if(lhi == rhi) {
-                                ret -= lhit->value() * std::log(rhit->value());
+                                ret -= (lhit->value() + lhinc) * std::log(rhit->value() + rhinc);
                                 ++lhit;
                                 ++rhit;
                             } else if(lhi < rhi) {
-                                ret -= lhit->value() * rhincl;
+                                ret -= (lhit->value() + lhinc) * rhincl;
                                 ++lhit;
                             } else {
-                                ret -= lhinc * std::log(rhit->value());
+                                ret -= lhinc * std::log(rhit->value() + rhinc);
                                 ++rhit;
                             }
                         } else if(lhit == lhe) {
@@ -847,14 +850,14 @@ public:
                             } else {
                                 for(;rhit != rhe;++rhit) {
                                     nz += rhit->index() - i;
-                                    ret -= lhinc * std::log(rhit->value());
+                                    ret -= lhinc * std::log(rhit->value() + rhinc);
                                     i = rhit->index() + 1;
                                 }
                             }
                         } else if(rhit == rhe) {
                             for(;lhit != lhe;++lhit) {
                                 nz += lhit->index() - i;
-                                ret -= lhit->value() * rhincl;
+                                ret -= (lhit->value() + lhinc) * rhincl;
                                 i = lhit->index() + 1;
                             }
                         }
@@ -869,15 +872,15 @@ public:
                             const size_t lhi = lhit->index();
                             const size_t rhi = rhit->index();
                             if(lhi == rhi) {
-                                ret -= lhit->value() * std::log(rhit->value());
+                                ret -= (lhit->value() + pd[lhi] * lhrsi) * std::log(rhit->value() + pd[lhi] * rhrsi);
                                 ++lhit;
                                 ++rhit;
                             } else if(lhi < rhi) {
-                                ret -= lhit->value() * std::log(rhrsi * pd[i]);
+                                ret -= (lhit->value() + lhrsi * pd[i]) * std::log(rhrsi * pd[i]);
                                 ++lhit;
                             } else {
                                 // lh contrib is prior over row sum
-                                ret -= pd[i] * lhrsi * std::log(rhit->value());
+                                ret -= pd[i] * lhrsi * std::log(rhit->value() + pd[i] * rhrsi);
                                 ++rhit;
                             }
                             ++i;
@@ -890,7 +893,7 @@ public:
                                 for(;rhit != rhe;++rhit) {
                                     for(;i < rhit->index(); ++i)
                                         ret -= lhrsi * pd[i] * std::log(rhrsi * pd[i]);
-                                    ret -= lhrsi * pd[i] * std::log(rhit->value());
+                                    ret -= lhrsi * pd[i] * std::log(rhit->value() + rhrsi * pd[i]);
                                     ++i;
                                 }
                             }
@@ -898,7 +901,7 @@ public:
                             for(;lhit != lhe;++lhit) {
                                 for(;i < lhit->index(); ++i)
                                     ret -= lhrsi * pd[i] * std::log(rhrsi * pd[i]);
-                                ret -= lhit->value() * std::log(rhrsi * pd[i]);
+                                ret -= (lhit->value() + lhrsi * pd[i]) * std::log(rhrsi * pd[i]);
                                 ++i;
                             }
                         }
@@ -1058,6 +1061,10 @@ private:
                 }
             break;
         }
+        if(prior_data_) {
+            if(prior_data_->size() == 1) prior_sum_ = data_.columns() * prior_data_->operator[](0);
+            else                         prior_sum_ = std::accumulate(prior_data_->begin(), prior_data_->end(), 0.);
+        }
         row_sums_.resize(data_.rows());
         {
             for(size_t i = 0; i < data_.rows(); ++i) {
@@ -1066,26 +1073,18 @@ private:
                 if constexpr(blaze::IsDenseMatrix_v<MatrixType>) {
                     if(prior == NONE) {
                         r += 1e-50;
-#ifndef NDEBUG
                         if(dist::detail::expects_nonnegative(measure_) && blaze::min(r) < 0.)
                             throw std::invalid_argument(std::string("Measure ") + dist::detail::prob2str(measure_) + " expects nonnegative data");
-#endif
-                    }
-                } else if constexpr(blaze::IsSparseMatrix_v<MatrixType>) {
-                    if(prior_data_) {
-                        bool single_value = prior_data_->size() == 1;
-                        if(prior == DIRICHLET) {
-                            countsum += r.size();
-                        } else {
-                            MINOCORE_VALIDATE(prior_data_ != nullptr);
-                            countsum += single_value ? r.size() * *prior_data_->begin()
-                                                     : blaze::sum(*prior_data_);
-                        }
-                        for(auto &item: r)
-                            item.value() +=
-                                (*prior_data_)[single_value ? size_t(0): item.index()];
                     }
                 }
+#if 0
+                // We now store the sum of the adjusted prior in a variable, *prior_sum
+                if constexpr(blaze::IsSparseMatrix_v<MatrixType>) {
+                    if(prior_data_) {
+                        countsum += *prior_sum_;
+                    }
+                }
+#endif
                 r /= countsum;
                 row_sums_[i] = countsum;
             }
@@ -1148,7 +1147,7 @@ private:
                             FT invp = pd[0] / rs;
                             size_t number_zero = r.size() - nonZeros(r);
                             contrib += number_zero * (invp * std::log(invp)); // Empty
-                            for(auto &pair: r) upcontrib(pair.value());       // Non-empty
+                            for(auto &pair: r) upcontrib(pair.value() + invp);       // Non-empty
                         } else {
                             size_t i = 0;
                             auto it = r.begin();
@@ -1157,7 +1156,7 @@ private:
                             };
                             while(it != r.end() && i < r.size()) {
                                 contribute_range(it->index());
-                                upcontrib(it->value());
+                                upcontrib(it->value() + pd[it->index] / rs);
                                 if(++it == r.end())
                                     contribute_range(r.size());
                             }
@@ -1181,7 +1180,7 @@ private:
     FT __llr_sparse_prior(size_t i, size_t j) const {
         assert(IS_SPARSE);
         auto lhr(row(i)), rhr(row(j));
-        const auto lhn = row_sums_[i], rhn = row_sums_[j];
+        const auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
         const auto lhjc = __getjsc(i), rhjc = __getjsc(j);
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
         const size_t dim = lhr.size();
@@ -1193,53 +1192,54 @@ private:
         if(prior_data_->size() == 1) {
             const auto lhrsi = 1. / lhn;
             const auto rhrsi = 1. / rhn;
-            const auto pv = prior_data_->operator[](0);
+            const auto pv = prior_data_->operator[](0), pv2 = pv * 2;
             const auto lhrsimul = lhrsi * pv;
             const auto rhrsimul = rhrsi * pv;
+            const auto bothsimul = lhrsimul + rhrsimul;
             size_t shared_zero = 0;
             // ret += (lhrsimul * lambda + rhrsimul * m1l)
             for(;;) {
                 switch(((lhit == lhe) << 1) | (rhit == rhe)) {
                     case 0: {
-                        shared_zero += (dim - index);
-                        goto end;
-                    }
+                        const size_t nextind = std::min(lhit->index(), rhit->index());
+                        shared_zero += nextind - index;
+                        index = nextind + 1;
+                        if(lhit->index() == rhit->index()) {
+                            ret -= (rhn * rhit->value() + lhn * lhit->value() + pv2) * std::log(lambda * (lhit->value() + lhrsimul) + m1l * (rhit->value() + rhrsimul));
+                            ++lhit;
+                            ++rhit;
+                        } else if(lhit->index() < rhit->index()) {
+                            ret -= (lhn * lhit->value() + pv2) * std::log(lambda * (lhit->value() + lhrsimul) + m1l * rhrsimul);
+                            ++lhit;
+                        } else { // rhit->index() < lhit->index()
+                            ret -= (rhn * rhit->value() + pv2) * std::log(lambda * lhrsimul + m1l * (rhit->value() + rhrsimul));
+                            ++rhit;
+                        }
+                    } break;
                     case 1: {
                         for(;lhit != lhe;++lhit) {
                             shared_zero += lhit->index() - index;
-                            ret -= (lhn * lhit->value() + pv) * std::log(lambda * lhit->value() + m1l * rhrsimul);
+                            ret -= (lhn * lhit->value() + pv2) * std::log(lambda * (lhit->value() + lhrsimul) + m1l * rhrsimul);
                             index = lhit->index() + 1;
                         }
                     } break;
                     case 2: {
                         for(;rhit != rhe;++rhit) {
                             shared_zero += rhit->index() - index;
-                            ret -= (rhn * rhit->value() + pv) * std::log(m1l * rhit->value() + lambda * lhrsimul);
+                            ret -= (rhn * rhit->value() + pv2) * std::log(m1l * (rhit->value() + rhrsimul) + lambda * lhrsimul);
                             index = rhit->index() + 1;
                         }
                     } break;
                     case 3: {
-                        const size_t nextind = std::min(lhit->index(), rhit->index());
-                        shared_zero += nextind - index;
-                        index = nextind + 1;
-                        if(lhit->index() == rhit->index()) {
-                            ret -= (rhn * rhit->value() + lhn * lhit->value()) * std::log(lambda * lhit->value() + m1l * rhit->value());
-                            ++lhit;
-                            ++rhit;
-                        } else if(lhit->index() < rhit->index()) {
-                            ret -= (lhn * lhit->value() + pv) * std::log(lambda * lhit->value() + m1l * rhrsimul);
-                            ++lhit;
-                        } else { // rhit->index() < lhit->index()
-                            ret -= (rhn * rhit->value() + pv) * std::log(lambda * lhrsimul + m1l * rhrsimul);
-                            ++rhit;
-                        }
-                    } break;
+                        shared_zero += (dim - index);
+                        goto end;
+                    }
                 }
             }
             end:
-            ret -= shared_zero * (pv + pv) * std::log(lambda * lhrsimul + m1l * rhrsimul);
+            ret -= shared_zero * (pv2) * std::log(lambda * lhrsimul + m1l * rhrsimul);
         } else {
-            throw TODOError("Not yet implemented: LLR with a prior under sparse representation.");
+            throw TODOError("Not yet implemented: LLR with a non-uniform prior under sparse representation.");
         }
         return std::max(ret, FT(0.));
     }

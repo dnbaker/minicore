@@ -269,12 +269,38 @@ template<typename FT, typename Alloc>
 INLINE auto sum(const std::vector<FT, Alloc> &vec) {
     return blaze::sum(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
 }
+template<typename FT, typename Alloc>
+INLINE auto max(const std::vector<FT, Alloc> &vec) {
+    return blaze::max(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
+}
+template<typename FT, typename Alloc>
+INLINE auto min(const std::vector<FT, Alloc> &vec) {
+    return blaze::min(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
+}
+template<typename FT, typename Alloc>
+INLINE auto mean(const std::vector<FT, Alloc> &vec) {
+    return blaze::mean(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
+}
 
 template<typename OT>
 INLINE decltype(auto) sum(const OT &x) {return blaze::sum(x);}
 
 template<bool wiseness, typename OT>
 INLINE decltype(auto) sum(const OT &x) {return blaze::sum<wiseness>(x);}
+
+template<typename OT>
+INLINE decltype(auto) max(const OT &x) {return blaze::max(x);}
+template<bool wiseness, typename OT>
+INLINE decltype(auto) max(const OT &x) {return blaze::max<wiseness>(x);}
+template<typename OT>
+INLINE decltype(auto) mean(const OT &x) {return blaze::mean(x);}
+template<bool wiseness, typename OT>
+INLINE decltype(auto) mean(const OT &x) {return blaze::mean<wiseness>(x);}
+template<typename OT>
+INLINE decltype(auto) min(const OT &x) {return blaze::min(x);}
+template<bool wiseness, typename OT>
+INLINE decltype(auto) min(const OT &x) {return blaze::min<wiseness>(x);}
+
 
 template<typename VT, bool SO, typename VT2, bool SO2>
 size_t number_shared_zeros(const blaze::SparseVector<VT, SO> &_lhs, const blaze::SparseVector<VT2, SO2> &_rhs) {
