@@ -153,18 +153,18 @@ if __name__ == "__main__":
         if cmds[0]:
             print("Doing Greedy", file=sys.stderr)
             if of:
-                ret += perform_run("GREEDY", md=mydest + "_OUTLIERS", lf=of)
-            ret += perform_run("GREEDY", lf=0.)
+                ret += perform_run("GREEDY", md=mydest + "_GREEDY_OUTLIERS_%f_" % of, lf=of)
+            ret += perform_run("GREEDY", md=mydest + "_GREEDY", lf=0.)
         if cmds[1]:
             print("Doing D2", file=sys.stderr)
-            ret += perform_run("D2")
+            ret += perform_run("D2", md=mydest + "_D2")
         if cmds[3]:
             print("Doing CLUSTER", file=sys.stderr)
-            ret += perform_run("CLUSTER")
+            ret += perform_run("CLUSTER", md=mydest + "_CLUSTER")
         if cmds[2]:
             tmpli = li
             li = 1
-            ret += perform_run("CLUSTER")
+            ret += perform_run("CLUSTER", md=mydest + "_CLUSTER_1_ITER")
             li = tmpli
     ulog = lf + ".complete.log"
     olog = lf + ".out.log"
