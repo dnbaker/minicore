@@ -95,7 +95,7 @@ struct TimeStamper {
         auto total_time = std::accumulate(ivls.begin(), ivls.end(), 0., [](auto x, const auto &y) {return x + y.second;});
         auto prod = 100. / total_time;
         for(const auto &ivl: ivls) {
-            std::fprintf(stderr, "Event '%s' took %gms, %%%g of total%g\n", ivl.first.data(), ivl.second, ivl.second * prod, total_time);
+            std::fprintf(stderr, "Event '%s' took %gms, %%%g of total %g\n", ivl.first.data(), ivl.second, ivl.second * prod, total_time);
         }
         std::vector<unsigned> idx(ivls.size());
         std::iota(idx.data(), idx.data() + ivls.size(), 0);

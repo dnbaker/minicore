@@ -460,9 +460,6 @@ public:
             ret = l2Norm(row(i) - row(j));
         } else if constexpr(constexpr_measure == SQRL2) {
             ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j));
-            //ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j));
-            std::fprintf(stderr, "wrow norm is %g, j norm is %g, dist norm is %g\n", blz::sqrNorm(weighted_row(i)), blz::sqrNorm(weighted_row(j)), ret);
-            //std::fprintf(stderr, "SQRL2 between row %zu and %zu is %g\n", i, j, ret);
         } else if constexpr(constexpr_measure == PSL2) {
             ret = blaze::sqrNorm(row(i) - row(j));
         } else if constexpr(constexpr_measure == JSD) {
