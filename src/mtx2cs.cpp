@@ -348,7 +348,7 @@ int main(int argc, char **argv) {
             case 'E': opts.sm = coresets::LBK; break;
 
             case 'G': rt = ResultType::GREEDY_SELECTION; break;
-            case 'O': opts.outlier_fraction = std::atof(optarg); rt = ResultType::GREEDY_SELECTION; break;
+            case 'O': opts.outlier_fraction = std::atof(optarg); break;
 			case 'l': rt = ResultType::D2_SAMPLING; break;
 
             case 'g': opts.gamma = std::atof(optarg); opts.prior = dist::GAMMA_BETA; break;
