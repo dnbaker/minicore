@@ -1,4 +1,5 @@
 import sys
+import math
 
 DISTS = {
     'L1': '1', 'L2': '2', 'SQRL2': 'S', 'MKL': 'M',
@@ -85,7 +86,7 @@ class Run:
         if self.threads:
             cmd += f" -p{int(self.threads)} "
         cmd += f" -s{seed} "
-        if self.of:
+        if self.of and self.cmd == "GREEDY":
             assert 1. >= self.of  >= 0., f"{self.of} out of range"
             cmd = cmd + f" -O{of} "
         cmd = f"{cmd} {path} {dest}"
@@ -108,7 +109,7 @@ if __name__ == "__main__":
     ap.add_argument("--dest", default=None)
     ap.add_argument("--lloyd-iter", type=int, default=100)
     ap.add_argument("--logfile", "-l", type=str)
-    ap.add_argument("--threads", "-p", type=int)
+    ap.add_argument("--threads", "-p", type=int, default=1)
     ap.add_argument("--outlier-fraction", "-O", type=float, default=0.)
     ap.add_argument("--timefunc", '-T', type=str, default=None)
     args = ap.parse_args()
