@@ -32,7 +32,7 @@ SENSES = {"FL": " -F ", "VX": " -V ", "BFL": "", "LBK": ' -E '}
 
 
 class Run:
-    def __init__(self, k=10, *, cmd, key, gammabeta=1., sample_tries=DEFAULT_SAMPLE_TRIES, lloyd_iter=100, seed=1337, sm="BFL", threads=None, dest=None, path=None, prior="NONE", r=None, of=0.):
+    def __init__(self, k=10, *, cmd, key, gammabeta=1., sample_tries=DEFAULT_SAMPLE_TRIES, lloyd_iter=100, seed=1337, sm="BFL", threads=None, dest=None, path=None, prior="NONE", r=None, of=0., timefunc=None):
         assert key in DISTS, "key must be in %s" % (','.join(DISTS.keys()))
         assert prior in PRIORS, f"{prior} not in {','.join(PRIORS)}"
         assert cmd in COMMAND, f"{cmd} not in {','.join(COMMAND)}"
@@ -53,6 +53,7 @@ class Run:
         self.threads = threads
         self.r = r
         self.of = of
+        self.timefunc = timefunc
 
 
     # Pass a range to r (list, etc.) to perform multiple times.
@@ -88,6 +89,8 @@ class Run:
             assert 1. >= self.of  >= 0., f"{self.of} out of range"
             cmd = cmd + f" -O{of} "
         cmd = f"{cmd} {path} {dest}"
+        if self.timefunc:
+            cmd = f"{self.timefunc} -v {cmd}"
         #print("About to call '%s'" % cmd)
         #print("dest", dest, "path", path)
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
@@ -107,6 +110,7 @@ if __name__ == "__main__":
     ap.add_argument("--logfile", "-l", type=str)
     ap.add_argument("--threads", "-p", type=int)
     ap.add_argument("--outlier-fraction", "-O", type=float, default=0.)
+    ap.add_argument("--timefunc", '-T', type=str, default=None)
     args = ap.parse_args()
     k = args.k
     path = args.path
@@ -117,6 +121,7 @@ if __name__ == "__main__":
     lf = args.logfile
     threads = args.threads
     of = args.outlier_fraction
+    tf = args.timefunc
     if not lf:
         if dest:
             lf = dest
@@ -135,7 +140,7 @@ if __name__ == "__main__":
             ret = []
             if s:
                 for g in s:
-                    r = Run(cmd=with_cmd, key=m, k=k, path=path, dest=md, gammabeta=g, seed=args.seed, prior="GAMMA_BETA", lloyd_iter=li, threads=threads, of=lf)
+                    r = Run(cmd=with_cmd, key=m, k=k, path=path, dest=md, gammabeta=g, seed=args.seed, prior="GAMMA_BETA", lloyd_iter=li, threads=threads, of=lf, timefunc=tf)
                     tups = r.call(path=path, dest=md, r=rng)
                     for x, tup in zip(rng, tups):
                         #print(tup, len(tup))
@@ -143,7 +148,7 @@ if __name__ == "__main__":
                             set(map(f.write, tup))
                     ret += tups
             else:
-                r = Run(cmd=with_cmd, key=m, k=k, seed=args.seed, lloyd_iter=li, threads=threads, of=lf)
+                r = Run(cmd=with_cmd, key=m, k=k, seed=args.seed, lloyd_iter=li, threads=threads, of=lf, timefunc=tf)
                 tups = r.call(path=path, dest=md, r=rng)
                 for x, tup in zip(rng, tups):
                     with open(md + f"{x}.log", "wb") as f:
@@ -175,3 +180,8 @@ if __name__ == "__main__":
         ofp.write(out)
         efp.write(err)
     sys.exit(0)
+
+
+__all__ = [
+    "Run", "DISTS", "MEASURES", "CMDZIP", "PRIORS", "PRIORDICT", "COMMAND", "VANILLA_METRICS", "CMDDICT", "SENSES"
+]
