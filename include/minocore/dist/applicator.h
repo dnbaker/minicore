@@ -211,9 +211,10 @@ public:
     FT pcosine_similarity(size_t j, const OT &o) const {
         if constexpr(IS_SPARSE) {
             if(prior_data_) {
+#if 0
                 if(prior_data_->size() != 1) throw TODOError("Disuniform prior");
                 const auto pv = (*prior_data_)[0];
-                const auto pvi = 1. / row_sums_[j];
+                const auto pvi = pv / (row_sums_[j] + prior_sum_);
                 if constexpr(blz::IsSparseVector_v<OT>) {
                     throw TODOError("Sparse-within but not without");
                 } else {
@@ -222,6 +223,33 @@ public:
                     auto rhn = blz::sqrt(blz::sum(blz::pow(o + pvi, 2)));
                     return (v + extra) * (*l2norm_cache_)[j] / rhn;
                 }
+#else
+                // dot(x + a, y + a)
+                // ==
+                // dot(x, y) + dot(x, a) + dot(y, a) + dot(a, a)
+                if(prior_data_->size() == 1) {
+                    const auto pv = (*prior_data_)[0];
+                    auto rsj = row_sums_[j];
+                    const auto pvi = 1. / (prior_sum_ + rsj);
+                    double dim = data_.columns();
+                    auto dotxy = blaze::dot(o, row(j));
+                    //auto dotxa = (blaze::dot(o, [prior])) = blz::sum(o) * prior
+                    auto dotxa = (rsj + prior_sum_);
+                    auto osum = blz::sum(o);
+                    auto dotya = osum + prior_sum_;
+                    auto sum = (dotxa + dotya) * pv;
+                    auto suma2 = data_.columns() * std::pow(pvi, 2);
+                    auto num = dotxy + sum + suma2;
+                    auto l2i = (*pl2norm_cache_)[j];
+                    auto onorm = blz::sqrL2Norm(o);
+                    // dot(o + a, o + a) = 
+                    // dot(o, o) + 2 * dot(o, a) + dot(a, a)
+                    auto onormsub = 2 * osum * pvi;
+                    auto denom = std::sqrt(onorm + onormsub + suma2);
+                    auto frac = num / (l2i * denom);
+                    return frac;
+                } else TODOError("fast sparse pcosine with disuniform prior");
+#endif
             }
         }
         return blaze::dot(o, row(j)) / blaze::l2Norm(o) * pl2norm_cache_->operator[](j);
@@ -620,6 +648,25 @@ public:
     auto operator()() {
         return make_distance_matrix(measure_);
     }
+
+#if 0
+    template<typename F1, typename F2, typename F3, typename F4>
+    void generic_sparse_uniform_prior(size_t i, size_t j, const F1 &fshare, const F2 &lho, const F3 &rho, const F4 &sharedz) const {
+        size_t ci = 0;
+        auto lhr = row(i), rhr = row(j);
+        auto lhit = lhr.begin(), lhe = lhr.end(), rhit = rhr.begin(), rhe = rhr.end();
+        unsigned shared_zeros = 0;
+        size_t nextindex;
+        for(;;) {
+            switch(((lhit == lhe) << 1) | (rhit == rhe)) {
+                case 0: {
+                    auto lhi = lhit->index(), rhi = rhit->index();
+                    nextindex = std::min(lhi, rhi);
+                }
+            }
+        }
+    }
+#endif
 
     FT itakura_saito(size_t i, size_t j) const {
         FT ret;

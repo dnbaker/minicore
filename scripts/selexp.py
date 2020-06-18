@@ -139,15 +139,15 @@ if __name__ == "__main__":
                     tups = r.call(path=path, dest=md, r=rng)
                     for x, tup in zip(rng, tups):
                         #print(tup, len(tup))
-                        with open(md + f"{g}.{x}.log", "wb") as f:
-                            f.write(tup[0] + tup[1])
+                        with open(md + f"{g}.iter{x}.log", "wb") as f:
+                            set(map(f.write, tup))
                     ret += tups
             else:
                 r = Run(cmd=with_cmd, key=m, k=k, seed=args.seed, lloyd_iter=li, threads=threads, of=lf)
                 tups = r.call(path=path, dest=md, r=rng)
                 for x, tup in zip(rng, tups):
                     with open(md + f"{x}.log", "wb") as f:
-                        f.write(tup[0] + tup[1])
+                        set(map(f.write, tup))
                 ret += tups
             return ret
         if cmds[0]:
