@@ -381,7 +381,7 @@ int main(int argc, char **argv) {
         outpath = "mtx2coreset_output.";
         outpath += std::to_string(uint64_t(std::time(nullptr)));
     }
-    opts.stamper_.reset(new util::TimeStamper("dispatch main"));
+    opts.stamper_->add_event("dispatch main");
     // Only compile version with doubles in debug mode to reduce compilation time
     switch(rt) {
 #ifndef NDEBUG
