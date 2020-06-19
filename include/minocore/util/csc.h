@@ -210,6 +210,35 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
 }
 
 template<typename FT=float, bool SO=blaze::rowMajor>
+blz::SM<FT, SO> transposed_mtx2sparse(std::ifstream &ifs, size_t cols, size_t nr, size_t nnz) {
+    blz::SM<FT, SO> ret(nr, cols);
+    ret.reserve(nnz);
+    std::vector<std::tuple<size_t, size_t, FT>> indices(nnz);
+    size_t i = 0;
+    for(std::string line;std::getline(ifs, line);) {
+        size_t row, col;
+        char *s = line.data();
+        col = std::strtoull(line.data(), &s, 10) - 1;
+        row = std::strtoull(s, &s, 10) - 1;
+        FT cnt = std::atof(s);
+        indices[i++] = {row, col, cnt};
+        assert(row < nr || !std::fprintf(stderr, "ret rows: %zu. row ind %zu\n", ret.columns(), row));
+        assert(col < cols || !std::fprintf(stderr, "ret columns: %zu. col ind %zu\n", ret.rows(), col));
+    }
+    shared::sort(indices.begin(), indices.end());
+    size_t ci = 0;
+    for(const auto [x, y, v]: indices) {
+        while(ci < x) ret.finalize(ci++);
+        ret.append(x, y, v);
+    }
+    while(ci < nr) ret.finalize(ci++);
+    //std::fprintf(stderr, "ret has %zu columns, %zu rows\n", ret.columns(), ret.rows());
+    transpose(ret);
+    std::fprintf(stderr, "ret has %zu columns, %zu rows after transposition\n", ret.columns(), ret.rows());
+    return ret;
+}
+
+template<typename FT=float, bool SO=blaze::rowMajor>
 blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
 {
     std::string line;
@@ -219,6 +248,9 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
     size_t columns = std::strtoull(line.data(), &s, 10),
              nr    = std::strtoull(s, &s, 10),
              lines = std::strtoull(s, nullptr, 10);
+    if(perform_transpose) {
+        return transposed_mtx2sparse(ifs, columns, nr, lines);
+    }
     blz::SM<FT, SO> ret(nr, columns);
     std::vector<std::pair<size_t, FT>> indices;
     size_t lastrow = 0;
@@ -247,12 +279,11 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
         indices.emplace_back(col, cnt);
     }
     std::sort(indices.begin(), indices.end());
-    for(const auto [idx, cnt]: indices) ret.append(lastrow, idx, cnt);
+    for(const auto [idx, cnt]: indices) {
+        ret.append(lastrow, idx, cnt);
+    }
     while(lastrow < ret.rows()) ret.finalize(lastrow++);
     if(std::getline(ifs, line)) throw std::runtime_error("Error reading file: too many lines");
-    if(perform_transpose) {
-        transpose(ret);
-    }
     std::fprintf(stderr, "Parsed file of %zu rows/%zu columns\n", ret.rows(), ret.columns());
     return ret;
 }
