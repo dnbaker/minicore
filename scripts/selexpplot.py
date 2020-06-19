@@ -58,4 +58,3 @@ def gather_data(files, trueset, samples=None):
             "res": {
                 "scores": res, "samples": samples
             }}
-
