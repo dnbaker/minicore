@@ -105,6 +105,9 @@ printlibs:
 mtx%: src/mtx%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 # -fsanitize=undefined -fsanitize=address
 
+mtx%: src/utils/mtx%.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 # -fsanitize=undefined -fsanitize=address
+
 alphaest: src/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
 

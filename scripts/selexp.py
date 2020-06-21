@@ -33,7 +33,7 @@ SENSES = {"FL": " -F ", "VX": " -V ", "BFL": "", "LBK": ' -E '}
 
 
 class Run:
-    def __init__(self, k=10, *, cmd, key, gammabeta=1., sample_tries=DEFAULT_SAMPLE_TRIES, lloyd_iter=100, seed=1337, sm="BFL", threads=None, dest=None, path=None, prior="NONE", r=None, of=0., timefunc=None):
+    def __init__(self, k=10, *, cmd, key, gammabeta=1., sample_tries=DEFAULT_SAMPLE_TRIES, lloyd_iter=100, seed=1337, sm="BFL", threads=None, dest=None, path=None, prior="NONE", r=None, of=0., timefunc=None, pb=False):
         assert key in DISTS, "key must be in %s" % (','.join(DISTS.keys()))
         assert prior in PRIORS, f"{prior} not in {','.join(PRIORS)}"
         assert cmd in COMMAND, f"{cmd} not in {','.join(COMMAND)}"
@@ -55,6 +55,7 @@ class Run:
         self.r = r
         self.of = of
         self.timefunc = timefunc
+        self.pb = pb
 
 
     # Pass a range to r (list, etc.) to perform multiple times.
@@ -89,6 +90,8 @@ class Run:
         if self.of and self.cmd == "GREEDY":
             assert 1. >= self.of  >= 0., f"{self.of} out of range"
             cmd = cmd + f" -O{of} "
+        if self.pb:
+            cnd = cmd + " -B "
         cmd = f"{cmd} {path} {dest}"
         if self.timefunc:
             cmd = f"{self.timefunc} -v {cmd}"
@@ -112,6 +115,7 @@ if __name__ == "__main__":
     ap.add_argument("--threads", "-p", type=int, default=1)
     ap.add_argument("--outlier-fraction", "-O", type=float, default=0.)
     ap.add_argument("--timefunc", '-T', type=str, default=None)
+    ap.add_argument("--parse-blaze", '-B', action='store_true')
     args = ap.parse_args()
     k = args.k
     path = args.path
@@ -131,6 +135,7 @@ if __name__ == "__main__":
             lf = reduce(lambda x, y: x ^ hash(y), sys.argv, 0)
             lf = f"logfile{reduce(lambda x, y: x ^ hash(y), sys.argv, 0)}"
             print("No logfile provided, using '%s'" % lf, file=sys.stderr)
+    pb = args.parse_blaze
     for m in MEASURES:
         print(f"processing {m}", file=sys.stderr)
         cmds = CMDDICT[m]
@@ -141,7 +146,7 @@ if __name__ == "__main__":
             ret = []
             if s:
                 for g in s:
-                    r = Run(cmd=with_cmd, key=m, k=k, path=path, dest=md, gammabeta=g, seed=args.seed, prior="GAMMA_BETA", lloyd_iter=li, threads=threads, of=lf, timefunc=tf)
+                    r = Run(cmd=with_cmd, key=m, k=k, path=path, dest=md, gammabeta=g, seed=args.seed, prior="GAMMA_BETA", lloyd_iter=li, threads=threads, of=lf, timefunc=tf, pb=pb)
                     tups = r.call(path=path, dest=md, r=rng)
                     for x, tup in zip(rng, tups):
                         #print(tup, len(tup))
@@ -149,10 +154,11 @@ if __name__ == "__main__":
                             set(map(f.write, tup))
                     ret += tups
             else:
-                r = Run(cmd=with_cmd, key=m, k=k, seed=args.seed, lloyd_iter=li, threads=threads, of=lf, timefunc=tf)
-                tups = r.call(path=path, dest=md, r=rng)
-                for x, tup in zip(rng, tups):
-                    with open(md + f"{x}.log", "wb") as f:
+                r = Run(cmd=with_cmd, key=m, k=k, seed=args.seed, lloyd_iter=li, threads=threads, of=lf, timefunc=tf, pb=pb)
+                tups = r.call(path=path, dest=md, r=range(1))
+                print(tups)
+                for x, tup in zip(range(1), tups):
+                    with open(md + f".{x}.log", "wb") as f:
                         set(map(f.write, tup))
                 ret += tups
             return ret
