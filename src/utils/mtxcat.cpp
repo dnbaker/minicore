@@ -3,7 +3,8 @@
 #include <getopt.h>
 
 void usage() {
-    std::abort();
+    std::fprintf(stderr, "mtxcat <flags> [files]\n-t: transpose\n-h: usage\n");
+    std::exit(1);
 }
 
 int main(int argc, char **argv) {
