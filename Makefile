@@ -83,15 +83,18 @@ HEADERS=$(shell find include -name '*.h')
 %dbg: src/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread
 
+%dbg: src/tests/%.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread
+
+%: src/test/%.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $< -o -DNDEBUG $(OMP_STR) $@ -pthread
+
 printlibs:
 	echo $(LIBPATHS)
 
 
-graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
-
-dmlrun: src/dmlsearch.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
+#graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
+#	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
 %: src/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
@@ -132,22 +135,22 @@ mpi%: src/%.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< $(OMP_STR) -o $@
 
 
-osm2dimacsdbg: src/osm2dimacs.cpp
+osm2dimacsdbg: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@
 
-osm2dimacs: src/osm2dimacs.cpp
+osm2dimacs: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@ -O3 $(OMP_STR) -DNDEBUG
 
-osm2dimacspgf: src/osm2dimacs.cpp
+osm2dimacspgf: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg -DNDEBUG $(OMP_STR)
 
-osm2dimacspg: src/osm2dimacs.cpp
+osm2dimacspg: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
