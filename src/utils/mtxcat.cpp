@@ -3,16 +3,19 @@
 #include <getopt.h>
 
 void usage() {
-    std::fprintf(stderr, "mtxcat <flags> [files]\n-t: transpose\n-h: usage\n");
+    std::fprintf(stderr, "mtxcat <flags> [files]\n-t: transpose\n-h: usage\t-T: transpose submatrices before concatenation\n");
     std::exit(1);
 }
 
 int main(int argc, char **argv) {
-    bool transpose = false;
-    for(int c;(c = getopt(argc, argv, "th?")) >= 0;) {
+    bool transpose = false, posttranspose = false;
+    const char *outfile = "/dev/stdout";
+    for(int c;(c = getopt(argc, argv, "o:Tth?")) >= 0;) {
         switch(c) {
             case 'h': usage(); break;
             case 't': transpose = true; break;
+            case 'T': posttranspose = true; break;
+            case 'o': outfile = optarg; break;
         }
     }
     blz::SM<double> finalmat;
@@ -27,6 +30,7 @@ int main(int argc, char **argv) {
         OMP_ATOMIC
         nz += nonZeros(submats[i]);
         std::fprintf(stderr, "%s/%d has %zu/%zu and %zu nonzers\n", paths[i].data(), i, submats[i].rows(), submats[i].columns(), nonZeros(submats[i]));
+        if(posttranspose) blaze::transpose(submats[i]);
     }
     std::fprintf(stderr, "Expected %zu nonzeros\n", nz);
     finalmat.resize(s, submats.front().columns());
@@ -42,6 +46,6 @@ int main(int argc, char **argv) {
         finaloff += submat.rows();
     }
     std::fprintf(stderr, "final mat has %zu/%zu and %zu nonzeros\n", finalmat.rows(), finalmat.columns(), blaze::nonZeros(finalmat));
-    blaze::Archive<std::ofstream> arch("/dev/stdout");
+    blaze::Archive<std::ofstream> arch(outfile);
     arch << finalmat;
 }
