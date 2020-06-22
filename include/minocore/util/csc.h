@@ -288,6 +288,19 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
     return ret;
 }
 
+template<typename MT, bool SO>
+void erase_empty(blaze::Matrix<MT, SO> &mat) {
+    std::fprintf(stderr, "Before resizing, %zu/%zu\n", (~mat).rows(), (~mat).columns());
+    size_t orn = (~mat).rows(), ocn = (~mat).columns();
+    auto rs = blaze::evaluate(blaze::sum<blaze::rowwise>(blaze::abs(~mat)));
+    auto cs = blaze::evaluate(blaze::sum<blaze::columnwise>(blaze::abs(~mat)));
+    auto rsn = blz::functional::indices_if([&rs](auto x) {return rs[x] > 0.;}, rs.size());
+    auto csn = blz::functional::indices_if([&cs](auto x) {return cs[x] > 0.;}, cs.size());
+    std::fprintf(stderr, "Eliminating %zu empty rows and %zu empty columns\n", orn - rsn.size(), ocn - csn.size());
+    ~mat = columns(rows(~mat, rsn), csn);
+    std::fprintf(stderr, "After resizing, %zu/%zu\n", (~mat).rows(), (~mat).columns());
+}
+
 template<typename FT=float, bool SO=blaze::rowMajor, typename IndPtrType, typename IndicesType, typename DataType>
 blz::SM<FT, SO> csc2sparse(const IndPtrType *indptr, const IndicesType *indices, const DataType *data, 
                            size_t nnz, size_t nfeat, uint32_t nitems) {
