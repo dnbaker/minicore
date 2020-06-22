@@ -5,7 +5,7 @@
 
 int main(int argc, char *argv[]) {
     bool use_float = true;
-    for(int c;(c = getopt(argc, argv, "d:")) >= 0;)
+    for(int c;(c = getopt(argc, argv, "dh?")) >= 0;)
         if(c == 'd') use_float = false;
     std::string out("/dev/stdout");
     if(optind + 2 <= argc)
