@@ -215,9 +215,9 @@ template<typename Stream, typename FT=float, bool SO=blaze::rowMajor>
 blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_t nnz) {
     std::fprintf(stderr, "Getting transposed matrix %zu cols and %zu nr, %zu nnz\n", cols, nr, nnz);
     blz::SM<FT, SO> ret(nr, cols); // Note that this is reversed
-    std::fprintf(stderr, "nr %zu, nc %zu\n", nr, cols);
     ret.reserve(nnz);
-    std::vector<std::tuple<size_t, size_t, FT>> indices(nnz);
+    std::fprintf(stderr, "nr %zu, nc %zu. Reserved space for %zu nonzero elements\n", nr, cols, nnz);
+    std::vector<std::tuple<size_t, size_t, FT>> indices;
     size_t i = 0;
     std::ptrdiff_t maxr = 0, maxc = 0, col, row;
     for(std::string line;std::getline(ifs, line);) {
@@ -234,16 +234,22 @@ blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_
             MN_THROW_RUNTIME(std::string("row > ret.rows() [") + std::to_string(row) + ']');
         }
         FT cnt = std::atof(s);
-        indices[i++] = {row, col, cnt};
+        indices.emplace_back(row, col, cnt);
+        if(indices.size() == nnz) {
+            std::fprintf(stderr, "Just reached nnz (%zu)\n", nnz)
+        } else if(indices.size() > nnz) {
+            std::fprintf(stderr, "indices size (%zu) is greater than (%zu)\n", indices.size(), nnz);
+        }
         if(row > maxr) maxr = row;
         maxc = std::max(maxc, col);
         maxr = std::max(maxr, row);
         //assert(size_t(row) < nr || !std::fprintf(stderr, "ret rows: %zu. row ind %zd\n", ret.columns(), row));
         //assert(size_t(col) < cols || !std::fprintf(stderr, "ret columns: %zu. col ind %zu\n", ret.rows(), col));
     }
-    std::fprintf(stderr, "max col: %zd. max row: %zd\n", maxc, maxr);
+    std::fprintf(stderr, "max col: %zd. max row: %zd. Total number of nonzeros: %zu\n", maxc, maxr, indices.size());
     shared::sort(indices.begin(), indices.end());
     size_t ci = 0;
+    size_t nzi = 0;
     for(const auto [x, y, v]: indices) {
         //std::fprintf(stderr, "x: %ld\n", x);
         if(y > ret.columns()) {
