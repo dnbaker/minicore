@@ -34,7 +34,7 @@ LDFLAGS+=$(LIBS) -lz $(LINKS)
 EXTRA?=
 DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(BLAS_LINKING_FLAGS) \
-    -DBOOST_NO_AUTO_PTR -fvisibility=hidden
+    -DBOOST_NO_AUTO_PTR -fvisibility=hidden -lz
 
 
 EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
@@ -81,10 +81,10 @@ CXXFLAGS += $(LDFLAGS)
 HEADERS=$(shell find include -name '*.h')
 
 %dbg: src/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread
 
 %dbg: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread
 
 %: src/test/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o -DNDEBUG $(OMP_STR) $@ -pthread
@@ -141,22 +141,22 @@ mpi%: src/%.cpp $(wildcard include/minocore/*.h)
 osm2dimacsdbg: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lz -lbz2 -lexpat -o $@
+        $< -lbz2 -lexpat -o $@
 
 osm2dimacs: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lz -lbz2 -lexpat -o $@ -O3 $(OMP_STR) -DNDEBUG
+        $< -lbz2 -lexpat -o $@ -O3 $(OMP_STR) -DNDEBUG
 
 osm2dimacspgf: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg -DNDEBUG $(OMP_STR)
+        $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg -DNDEBUG $(OMP_STR)
 
 osm2dimacspg: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lz -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
+        $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
 libsleef.a:

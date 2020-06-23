@@ -27,10 +27,14 @@ int main() {
                 auto v= app(i, j);
                 if(v < mnv) {
                     mnv = v;
+#ifndef VERBOSE_AF
                     std::fprintf(stderr, "new min: %g\n", mnv);
+#endif
                 } else if(v > mxv) {
                     mxv = v;
+#ifndef VERBOSE_AF
                     std::fprintf(stderr, "new max: %g\n", mxv);
+#endif
                 }
             }
         }
