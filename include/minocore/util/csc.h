@@ -218,7 +218,6 @@ blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_
     ret.reserve(nnz);
     std::fprintf(stderr, "nr %zu, nc %zu. Reserved space for %zu nonzero elements\n", nr, cols, nnz);
     std::vector<std::tuple<size_t, size_t, FT>> indices;
-    size_t i = 0;
     std::ptrdiff_t maxr = 0, maxc = 0, col, row;
     for(std::string line;std::getline(ifs, line);) {
         char *s = line.data();
@@ -227,29 +226,30 @@ blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_
         if(!s) MN_THROW_RUNTIME("s is null after col");
         row = std::strtoll(s, &s, 10) - 1;
         if(!s) MN_THROW_RUNTIME("s is null after row");
-        if(col > ret.columns()) {
+        if(size_t(col) > ret.columns()) {
             MN_THROW_RUNTIME(std::string("col > ret.columns() [") + std::to_string(col) + ']');
         }
-        if(row > ret.rows()) {
+        if(size_t(row) > ret.rows()) {
             MN_THROW_RUNTIME(std::string("row > ret.rows() [") + std::to_string(row) + ']');
         }
         FT cnt = std::atof(s);
         indices.emplace_back(row, col, cnt);
+#if 0
         if(indices.size() == nnz) {
             std::fprintf(stderr, "Just reached nnz (%zu)\n", nnz);
         } else if(indices.size() > nnz) {
             std::fprintf(stderr, "ERROR indices size (%zu) is greater than (%zu)\n", indices.size(), nnz);
         }
+#endif
         if(row > maxr) maxr = row;
         maxc = std::max(maxc, col);
         maxr = std::max(maxr, row);
         //assert(size_t(row) < nr || !std::fprintf(stderr, "ret rows: %zu. row ind %zd\n", ret.columns(), row));
         //assert(size_t(col) < cols || !std::fprintf(stderr, "ret columns: %zu. col ind %zu\n", ret.rows(), col));
     }
-    std::fprintf(stderr, "max col: %zd. max row: %zd. Total number of nonzeros: %zu\n", maxc, maxr, indices.size());
     shared::sort(indices.begin(), indices.end());
-#if 0
     size_t ci = 0;
+#if 0
     size_t nzi = 0;
     auto beg = indices.begin(), e = indices.end();
     for(;;) {

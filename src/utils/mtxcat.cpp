@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
         auto lnz = nonZeros(submats[i]);
         OMP_ATOMIC
         nz += lnz;
-        std::fprintf(stderr, "%zu/%zu\n", i, paths.size());
+        std::fprintf(stderr, "%u/%zu\n", i, paths.size());
         std::fprintf(stderr, "%s/%d has %zu/%zu and %zu nonzeros\n", paths[i].data(), i, submats[i].rows(), submats[i].columns(), nonZeros(submats[i]));
     }
     std::fprintf(stderr, "Finished loop\n");
