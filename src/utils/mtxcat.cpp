@@ -26,27 +26,57 @@ int main(int argc, char **argv) {
     OMP_PFOR
     for(unsigned i = 0; i < paths.size(); ++i) {
         submats[i] = minocore::mtx2sparse<double>(paths[i], transpose);
+        auto nr = submats[i].rows();
         OMP_ATOMIC
-        s += submats[i].rows();
+        s += nr;
+        auto lnz = nonZeros(submats[i]);
         OMP_ATOMIC
-        nz += nonZeros(submats[i]);
+        nz += lnz;
+        std::fprintf(stderr, "%zu/%zu\n", i, paths.size());
         std::fprintf(stderr, "%s/%d has %zu/%zu and %zu nonzeros\n", paths[i].data(), i, submats[i].rows(), submats[i].columns(), nonZeros(submats[i]));
-        if(posttranspose) blaze::transpose(submats[i]);
+    }
+    std::fprintf(stderr, "Finished loop\n");
+    if(posttranspose) {
+        for(auto &mat: submats) {
+            std::fprintf(stderr, "transposing matrix\n");
+            blaze::transpose(mat);
+            std::fprintf(stderr, "transposed matrix\n");
+        }
+    }
+    std::fprintf(stderr, "Checking column numbers\n");
+    for(unsigned i = 0; i < submats.size() - 1; ++i) {
+        auto v1 = submats[i].columns(), v2 = submats[i + 1].columns();
+        if(v1 != v2) {
+            char buf[1024];
+            std::sprintf(buf, "Mismatched column numbers: %zu/%zu\n", v1, v2);
+            throw std::runtime_error(buf);
+        }
     }
     std::fprintf(stderr, "Expected %zu nonzeros\n", nz);
     finalmat.resize(s, submats.front().columns());
     finalmat.reserve(nz);
     size_t finaloff = 0;
-    for(auto &submat: submats) {
+    size_t submatid = 0;
+    std::reverse(submats.begin(), submats.end());
+    while(submats.size()) {
+        auto submat = std::move(submats.back());
+        submats.pop_back();
+        assert(submat.columns() == finalmat.columns());
         for(size_t i = 0; i < submat.rows(); ++i) {
             auto r = row(submat, i);
             auto rb = r.begin(), re = r.end();
-            while(rb != re) finalmat.append(i, rb->index(), rb->value()), ++rb;
+            std::fprintf(stderr, "[%zu] row %zu/%zu has %zu nonzeros\n", submatid, i, submat.rows(), nonZeros(r));
+            while(rb != re) {
+                assert(rb->index() < finalmat.columns());
+                finalmat.append(i, rb->index(), rb->value()), ++rb;
+            }
             finalmat.finalize(i + finaloff);
         }
         finaloff += submat.rows();
-        auto tmp(std::move(submat)); // free memory
+        std::fprintf(stderr, "finaloff after mat %zu is %zu\n", submatid + 1, finaloff);
+        ++submatid;
     }
+    std::fprintf(stderr, "Made final mat. Free unused memory\n");
     std::fprintf(stderr, "concatenated mat has %zu rows, %zu columns and %zu nonzeros\n", finalmat.rows(), finalmat.columns(), blaze::nonZeros(finalmat));
     if(empty) {
         auto [rows, cols] = minocore::util::erase_empty(finalmat);
@@ -66,6 +96,7 @@ int main(int argc, char **argv) {
             }
         }
     }
+    std::fprintf(stderr, "Making archive at %s\n", outfile);
     blaze::Archive<std::ofstream> arch(outfile);
     arch << finalmat;
 }

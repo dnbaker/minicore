@@ -86,16 +86,16 @@ public:
     } while(0)
         if(indbuf.itemsize == 4) {
             if(indpbuf.itemsize == 4) {
-                __DISPATCH_ALL_IF(uint32_t, uint32_t)
+                __DISPATCH_ALL_IF(uint32_t, uint32_t);
             } else {
-                __DISPATCH_ALL_IF(uint64_t, uint32_t)
+                __DISPATCH_ALL_IF(uint64_t, uint32_t);
             }
         } else {
             assert(indbuf.itemsize == 8);
             if(indpbuf.itemsize == 4) {
-                __DISPATCH_ALL_IF(uint32_t, uint64_t)
+                __DISPATCH_ALL_IF(uint32_t, uint64_t);
             } else {
-                __DISPATCH_ALL_IF(uint64_t, uint64_t)
+                __DISPATCH_ALL_IF(uint64_t, uint64_t);
             }
         }
         throw std::runtime_error("Unexpected type");

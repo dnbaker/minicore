@@ -213,31 +213,50 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
 
 template<typename Stream, typename FT=float, bool SO=blaze::rowMajor>
 blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_t nnz) {
-    std::fprintf(stderr, "Getting transposed matrix\n");
-    blz::SM<FT, SO> ret(nr, cols);
+    std::fprintf(stderr, "Getting transposed matrix %zu cols and %zu nr, %zu nnz\n", cols, nr, nnz);
+    blz::SM<FT, SO> ret(nr, cols); // Note that this is reversed
+    std::fprintf(stderr, "nr %zu, nc %zu\n", nr, cols);
     ret.reserve(nnz);
     std::vector<std::tuple<size_t, size_t, FT>> indices(nnz);
     size_t i = 0;
+    std::ptrdiff_t maxr = 0, maxc = 0, col, row;
     for(std::string line;std::getline(ifs, line);) {
-        size_t row, col;
         char *s = line.data();
-        col = std::strtoull(line.data(), &s, 10) - 1;
-        row = std::strtoull(s, &s, 10) - 1;
+        if(!s) MN_THROW_RUNTIME("s is null immediately");
+        col = std::strtoll(line.data(), &s, 10) - 1;
+        if(!s) MN_THROW_RUNTIME("s is null after col");
+        row = std::strtoll(s, &s, 10) - 1;
+        if(!s) MN_THROW_RUNTIME("s is null after row");
+        if(col > ret.columns()) {
+            MN_THROW_RUNTIME(std::string("col > ret.columns() [") + std::to_string(col) + ']');
+        }
+        if(row > ret.rows()) {
+            MN_THROW_RUNTIME(std::string("row > ret.rows() [") + std::to_string(row) + ']');
+        }
         FT cnt = std::atof(s);
         indices[i++] = {row, col, cnt};
-        assert(row < nr || !std::fprintf(stderr, "ret rows: %zu. row ind %zu\n", ret.columns(), row));
-        assert(col < cols || !std::fprintf(stderr, "ret columns: %zu. col ind %zu\n", ret.rows(), col));
+        if(row > maxr) maxr = row;
+        maxc = std::max(maxc, col);
+        maxr = std::max(maxr, row);
+        //assert(size_t(row) < nr || !std::fprintf(stderr, "ret rows: %zu. row ind %zd\n", ret.columns(), row));
+        //assert(size_t(col) < cols || !std::fprintf(stderr, "ret columns: %zu. col ind %zu\n", ret.rows(), col));
     }
+    std::fprintf(stderr, "max col: %zd. max row: %zd\n", maxc, maxr);
     shared::sort(indices.begin(), indices.end());
     size_t ci = 0;
     for(const auto [x, y, v]: indices) {
+        //std::fprintf(stderr, "x: %ld\n", x);
+        if(y > ret.columns()) {
+            std::fprintf(stderr, "y %zd > ret col %zd\n", y, ret.columns());
+            std::exit(1);
+        }
         while(ci < x) ret.finalize(ci++);
         ret.append(x, y, v);
     }
-    while(ci < nr) ret.finalize(ci++);
+    while(ci < ret.columns()) ret.finalize(ci++);
     //std::fprintf(stderr, "ret has %zu columns, %zu rows\n", ret.columns(), ret.rows());
     //transpose(ret);
-    std::fprintf(stderr, "ret has %zu columns, %zu rows after transposition\n", ret.columns(), ret.rows());
+    std::fprintf(stderr, "ret has %zu columns, %zu rows, %zu nnz after transposition\n", ret.columns(), ret.rows(), nonZeros(ret));
     return ret;
 }
 
@@ -249,6 +268,7 @@ blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false)
     auto &ifs = *ifsp;
     do std::getline(ifs, line); while(line.front() == '%');
     char *s;
+    std::cerr << "first line: " << line << '\n';
     size_t columns = std::strtoull(line.data(), &s, 10),
              nr    = std::strtoull(s, &s, 10),
              lines = std::strtoull(s, nullptr, 10);
@@ -296,15 +316,16 @@ erase_empty(blaze::Matrix<MT, SO> &mat) {
     std::pair<std::vector<size_t>, std::vector<size_t>> ret;
     std::fprintf(stderr, "Before resizing, %zu/%zu\n", (~mat).rows(), (~mat).columns());
     size_t orn = (~mat).rows(), ocn = (~mat).columns();
-    auto rs = blaze::evaluate(blaze::sum<blaze::rowwise>(blaze::abs(~mat)));
-    auto cs = blaze::evaluate(blaze::sum<blaze::columnwise>(blaze::abs(~mat)));
+    auto rs = blaze::evaluate(blaze::sum<blaze::rowwise>(~mat));
     auto rsn = blz::functional::indices_if([&rs](auto x) {return rs[x] > 0.;}, rs.size());
-    auto csn = blz::functional::indices_if([&cs](auto x) {return cs[x] > 0.;}, cs.size());
     ret.first.assign(rsn.begin(), rsn.end());
+    std::fprintf(stderr, "Eliminating %zu empty rows\n", orn - rsn.size());
+    ~mat = rows(~mat, rsn);
+    auto cs = blaze::evaluate(blaze::sum<blaze::columnwise>(~mat));
+    auto csn = blz::functional::indices_if([&cs](auto x) {return cs[x] > 0.;}, cs.size());
     ret.second.assign(csn.begin(), csn.end());
-    std::fprintf(stderr, "Eliminating %zu empty rows and %zu empty columns\n", orn - rsn.size(), ocn - csn.size());
-    ~mat = columns(rows(~mat, rsn), csn);
-    std::fprintf(stderr, "After resizing, %zu/%zu\n", (~mat).rows(), (~mat).columns());
+    ~mat = columns(~mat, csn);
+    std::fprintf(stderr, "Eliminating %zu empty columns\n", ocn - rsn.size());
     return ret;
 }
 

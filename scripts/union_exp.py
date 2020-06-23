@@ -1,7 +1,10 @@
 from collections import Counter
+import numpy as np
 from scipy.io import mmread, mmwrite
+import scipy.sparse as sp
 import sys
 import itertools
+import minocore
 
 
 def xopen(x):
@@ -37,7 +40,7 @@ def get_selected_ids(idc, idm, features):
     for fid, f in enumerate(features):
         if f in idm:
             if idc[f] == 1:
-                ret.append((idm[f], fid))
+                ret.append((fid, idm[f]))
     return ret
 
 
@@ -45,6 +48,9 @@ class FeatureMap:
     def __init__(self, n: int, fromto):
         self.n = n
         self.cvt = {x: y for x, y in fromto}
+        kvs = sorted(self.cvt.items())
+        self.keys = np.array([x[0] for x in kvs], dtype=np.uint64)
+        self.values = np.array([x[1] for x in kvs], dtype=np.uint64)
         self.nzsource = set(self.cvt.keys())
         self.nzdest = set(self.cvt.values())
         assert len(self.nzsource) == len(self.cvt)
@@ -69,14 +75,39 @@ def select_features(genefnames, matrixfnames=None, min_occ_count=2):
     return [FeatureMap(nbc, pairs) for nbc, pairs in zip(nbc, ids)], features
 
 
+def remap_mat(mat, fm, fl):
+    nf = len(fl)
+    mat = sp.coo_matrix(mat)
+    ret = sp.coo_matrix(shape=(mat.shape[0], nf))
+
+
 if __name__ == "__main__":
     import argparse
+    import multiprocessing as mp
+    import minocore
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-count", '-m', type=int, default=2)
     ap.add_argument("paths", nargs='*')
+    ap.add_argument("--prefix", "-p", type=str)
     ap = ap.parse_args()
     loaded_mats = []
     fms, features = select_features(ap.paths, min_occ_count=ap.min_count)
+    matrixpaths = [x.replace("genes.tsv.xz", "matrix.mtx").replace("genes.tsv", "matrix.mtx") for x in ap.paths]
+    with mp.Pool(min(4, len(matrixpaths))) as pool:
+        matrices = pool.map(mmread, matrixpaths)
+    matrices = list(map(lambda x: x.T, matrices))
+    r, c, dat, shape = minocore.merge(matrices, fms, features)
+    megamat = sp.coo_matrix((r, c, dat), shape=shape)
+    megamat.row.tofile(prefix + ".row")
+    megamat.col.tofile(prefix + ".col")
+    megamat.data.tofile(prefix + ".coodata")
+    megamat = sp.csr_matrix(megamat)
+    megamat.indices.tofile(prefix + ".indices")
+    megamat.indptr.tofile(prefix + ".indptr")
+    megamat.data.tofile(prefix + ".data")
+    megamat.shape.tofile(prefix + ".shape")
+    print(megamat.shape)
+    
 
 
-__all__ = ["FeatureMap", "get_ids", "get_id_map", "get_counts", "get_selected_ids", "xopen", "itertools", "mmread", "mmwrite", "select_features"]
+__all__ = ["FeatureMap", "get_ids", "get_id_map", "get_counts", "get_selected_ids", "xopen", "itertools", "mmread", "mmwrite", "select_features", "np"]

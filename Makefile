@@ -55,6 +55,10 @@ else
     OMP_STR:=-fopenmp#-simd
 endif
 
+ifdef LZMA_ARCHIVE
+CXXFLAGS += $(LZMA_ARCHIVE) -llzma -DHAVE_LZMA
+endif
+
 ifdef TBBDIR
 INCLUDE_PATHS+= $(TBBDIR)/include
 LIBPATHS+= $(TBBDIR)/lib

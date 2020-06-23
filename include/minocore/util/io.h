@@ -9,34 +9,45 @@
   #include "bzlib.h"
   #include <boost/iostreams/filter/bzip2.hpp>
   #pragma message("Enabling bzip2 support")
-  #include "./boost/bzip2.cpp"
+  #ifndef EXTERNAL_BOOST_IOSTREAMS
+    #include "./boost/bzip2.cpp"
+  #else
+  #endif
 #else
   #pragma message("Not enabling bzip2 support")
 #endif
 
 #if defined(LZMA_H) || defined(HAVE_LZMA)
   #include "lzma.h"                                                                                                                                                                                                                                                                            
-  #include "./boost/lzma.cpp"
   #include <boost/iostreams/filter/lzma.hpp>                                                                                                                                                                                                                                                   
   #pragma message("Enabling xz support")
+  #ifndef EXTERNAL_BOOST_IOSTREAMS
+    #include "./boost/lzma.cpp"
+  #endif
 #else
-  #pragma message("NOT Enabling xz support")
+  #pragma message("Not Enabling xz support")
 #endif
 
 
 #ifdef ZSTDLIB_API
   #include <boost/iostreams/filter/zstd.hpp>
-  #include "./boost/zstd.cpp"
   #pragma message("Enabling zstd support")
+  #ifndef EXTERNAL_BOOST_IOSTREAMS
+    #include "./boost/zstd.cpp"
+  #endif
 #else
   #pragma message("Not enabling zstd support")
 #endif
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
-#include <boost/algorithm/string/predicate.hpp>
+
+#ifndef EXTERNAL_BOOST_IOSTREAMS
 #include "./boost/gzip.cpp"
 #include "./boost/zlib.cpp"
+#endif
 
 
 namespace minocore {
@@ -46,7 +57,9 @@ namespace util {
 namespace io {
 
 namespace boost_io = boost::iostreams;                                                                       
-auto
+
+static inline
+std::pair<std::unique_ptr<boost_io::filtering_istream>, std::unique_ptr<std::ifstream>>
 xopen(std::string path) {
     std::pair<std::unique_ptr<boost_io::filtering_istream>, std::unique_ptr<std::ifstream>> ret;
     ret.first.reset(new boost_io::filtering_istream);

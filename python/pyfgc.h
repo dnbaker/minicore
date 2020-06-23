@@ -8,6 +8,7 @@
 using namespace minocore;
 namespace py = pybind11;
 void init_smw(py::module &);
+void init_merge(py::module &);
 void init_coreset(py::module &);
 
 using CSType = coresets::CoresetSampler<float, uint32_t>;

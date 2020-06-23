@@ -16,6 +16,8 @@
 #define BOOST_IOSTREAMS_SOURCE 
 #endif
 
+#define BOOST_IOSTREAMS_API static inline
+
 #include <zstd.h>
 
 #include <boost/throw_exception.hpp>
