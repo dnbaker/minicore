@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
             case 'o': outfile = optarg; break;
         }
     }
-    blz::SM<double> finalmat;
+    blz::DM<double> finalmat;
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::vector<blz::SM<double>> submats(paths.size());
     size_t s = 0, nz = 0;
@@ -35,7 +35,6 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "%zu/%zu\n", i, paths.size());
         std::fprintf(stderr, "%s/%d has %zu/%zu and %zu nonzeros\n", paths[i].data(), i, submats[i].rows(), submats[i].columns(), nonZeros(submats[i]));
     }
-    std::fprintf(stderr, "Finished loop\n");
     if(posttranspose) {
         for(auto &mat: submats) {
             std::fprintf(stderr, "transposing matrix\n");
@@ -54,32 +53,19 @@ int main(int argc, char **argv) {
     }
     std::fprintf(stderr, "Expected %zu nonzeros\n", nz);
     finalmat.resize(s, submats.front().columns());
-    finalmat.reserve(nz);
+    finalmat = 0;
     size_t finaloff = 0;
     size_t submatid = 0;
     std::reverse(submats.begin(), submats.end());
     while(submats.size()) {
         auto submat = std::move(submats.back());
         submats.pop_back();
+        submatrix(finalmat, finaloff, 0, submat.rows(), submat.columns()) = submat;
         assert(submat.columns() == finalmat.columns());
-        for(size_t i = 0; i < submat.rows(); ++i) {
-            auto r = row(submat, i);
-            auto rb = r.begin(), re = r.end();
-            std::fprintf(stderr, "[%zu] row %zu/%zu has %zu nonzeros\n", submatid, i, submat.rows(), nonZeros(r));
-            while(rb != re) {
-                assert(rb->index() < finalmat.columns());
-                finalmat.append(i, rb->index(), rb->value()), ++rb;
-            }
-            finalmat.finalize(i + finaloff);
-        }
         finaloff += submat.rows();
         std::fprintf(stderr, "finaloff after mat %zu is %zu\n", submatid + 1, finaloff);
         ++submatid;
     }
-    auto rsums = blaze::sum<blaze::rowwise>(finalmat);
-    auto csums = blaze::sum<blaze::columnwise>(finalmat);
-    std::cerr << "row sums: " << trans(rsums);
-    std::cerr << "col sums: " << csums; // to make them emit on one line.
     std::fprintf(stderr, "Made final mat. Free unused memory\n");
     std::fprintf(stderr, "concatenated mat has %zu rows, %zu columns and %zu nonzeros\n", finalmat.rows(), finalmat.columns(), blaze::nonZeros(finalmat));
     if(empty) {
@@ -100,7 +86,19 @@ int main(int argc, char **argv) {
             }
         }
     }
+    auto rsums = blaze::sum<blaze::rowwise>(finalmat);
+    auto csums = blaze::sum<blaze::columnwise>(finalmat);
+    std::cerr << "row sums: " << trans(rsums);
+    std::cerr << "col sums: " << csums; // to make them emit on one line.
     std::fprintf(stderr, "Making archive at %s\n", outfile);
     blaze::Archive<std::ofstream> arch(outfile);
     arch << finalmat;
+    {
+        blz::SM<double> sm = finalmat;
+        blz::DM<double> dm(std::move(finalmat)); // to destroy
+        if(std::strcmp(outfile, "/dev/stdout")) {
+            blaze::Archive<std::ofstream> arch(std::string(outfile) + ".sparse.blaze");
+            arch << sm;
+        }
+    }
 }

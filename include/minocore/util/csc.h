@@ -218,7 +218,6 @@ blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_
     ret.reserve(nnz);
     std::fprintf(stderr, "nr %zu, nc %zu. Reserved space for %zu nonzero elements\n", nr, cols, nnz);
     std::vector<std::tuple<size_t, size_t, FT>> indices;
-    size_t i = 0;
     std::ptrdiff_t maxr = 0, maxc = 0, col, row;
     for(std::string line;std::getline(ifs, line);) {
         char *s = line.data();
@@ -248,8 +247,8 @@ blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_
     }
     std::fprintf(stderr, "max col: %zd. max row: %zd. Total number of nonzeros: %zu\n", maxc, maxr, indices.size());
     shared::sort(indices.begin(), indices.end());
-#if 0
     size_t ci = 0;
+#if 0
     size_t nzi = 0;
     auto beg = indices.begin(), e = indices.end();
     for(;;) {
