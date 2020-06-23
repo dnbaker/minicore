@@ -3,6 +3,8 @@
 #include "./shared.h"
 #include "./timer.h"
 #include "./blaze_adaptor.h"
+#include "./io.h"
+#include "./exception.h"
 #include "mio/single_include/mio/mio.hpp"
 #include <fstream>
 
@@ -209,8 +211,9 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
     return csc2sparse<FT>(matview, skip_empty);
 }
 
-template<typename FT=float, bool SO=blaze::rowMajor>
-blz::SM<FT, SO> transposed_mtx2sparse(std::ifstream &ifs, size_t cols, size_t nr, size_t nnz) {
+template<typename Stream, typename FT=float, bool SO=blaze::rowMajor>
+blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_t nnz) {
+    std::fprintf(stderr, "Getting transposed matrix\n");
     blz::SM<FT, SO> ret(nr, cols);
     ret.reserve(nnz);
     std::vector<std::tuple<size_t, size_t, FT>> indices(nnz);
@@ -233,16 +236,17 @@ blz::SM<FT, SO> transposed_mtx2sparse(std::ifstream &ifs, size_t cols, size_t nr
     }
     while(ci < nr) ret.finalize(ci++);
     //std::fprintf(stderr, "ret has %zu columns, %zu rows\n", ret.columns(), ret.rows());
-    transpose(ret);
+    //transpose(ret);
     std::fprintf(stderr, "ret has %zu columns, %zu rows after transposition\n", ret.columns(), ret.rows());
     return ret;
 }
 
 template<typename FT=float, bool SO=blaze::rowMajor>
-blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
+blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false)
 {
     std::string line;
-    std::ifstream ifs(prefix);
+    auto [ifsp, fp] = io::xopen(path);
+    auto &ifs = *ifsp;
     do std::getline(ifs, line); while(line.front() == '%');
     char *s;
     size_t columns = std::strtoull(line.data(), &s, 10),
@@ -258,16 +262,14 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
     while(lines--)
     {
         if(!std::getline(ifs, line)) {
-            const char *s = "Error in reading file: unexpected number of lines";
-            std::cerr << s;
-            throw std::runtime_error(s);
+            MN_THROW_RUNTIME("Error in reading file: unexpected number of lines");
         }
         size_t row, col;
         col = std::strtoull(line.data(), &s, 10) - 1;
         row = std::strtoull(s, &s, 10) - 1;
         if(perform_transpose) std::swap(col, row);
         FT cnt = std::atof(s);
-        if(row < lastrow) throw std::runtime_error("Unsorted file");
+        if(row < lastrow) MN_THROW_RUNTIME("Unsorted file");
         else if(row != lastrow) {
             //std::fprintf(stderr, "lastrow %zu has %zu indices\n", row, indices.size());
             std::sort(indices.begin(), indices.end());
@@ -283,22 +285,27 @@ blz::SM<FT, SO> mtx2sparse(std::string prefix, bool perform_transpose=false)
         ret.append(lastrow, idx, cnt);
     }
     while(lastrow < ret.rows()) ret.finalize(lastrow++);
-    if(std::getline(ifs, line)) throw std::runtime_error("Error reading file: too many lines");
+    if(std::getline(ifs, line)) MN_THROW_RUNTIME("Error reading file: too many lines");
     std::fprintf(stderr, "Parsed file of %zu rows/%zu columns\n", ret.rows(), ret.columns());
     return ret;
 }
 
 template<typename MT, bool SO>
-void erase_empty(blaze::Matrix<MT, SO> &mat) {
+std::pair<std::vector<size_t>, std::vector<size_t>>
+erase_empty(blaze::Matrix<MT, SO> &mat) {
+    std::pair<std::vector<size_t>, std::vector<size_t>> ret;
     std::fprintf(stderr, "Before resizing, %zu/%zu\n", (~mat).rows(), (~mat).columns());
     size_t orn = (~mat).rows(), ocn = (~mat).columns();
     auto rs = blaze::evaluate(blaze::sum<blaze::rowwise>(blaze::abs(~mat)));
     auto cs = blaze::evaluate(blaze::sum<blaze::columnwise>(blaze::abs(~mat)));
     auto rsn = blz::functional::indices_if([&rs](auto x) {return rs[x] > 0.;}, rs.size());
     auto csn = blz::functional::indices_if([&cs](auto x) {return cs[x] > 0.;}, cs.size());
+    ret.first.assign(rsn.begin(), rsn.end());
+    ret.second.assign(csn.begin(), csn.end());
     std::fprintf(stderr, "Eliminating %zu empty rows and %zu empty columns\n", orn - rsn.size(), ocn - csn.size());
     ~mat = columns(rows(~mat, rsn), csn);
     std::fprintf(stderr, "After resizing, %zu/%zu\n", (~mat).rows(), (~mat).columns());
+    return ret;
 }
 
 template<typename FT=float, bool SO=blaze::rowMajor, typename IndPtrType, typename IndicesType, typename DataType>

@@ -33,7 +33,10 @@ int main(int argc, char *argv[]) {
     std::ios_base::sync_with_stdio(false);
     if(argc < 3) usage(argv);
     std::ifstream ifs(argv[1]);
-    std::ifstream icsv(argv[2]);
+    auto [ifsp, fp] = util::io::xopen(argv[1]);                                                                 
+    auto &ifs = *ifsp; 
+    auto [ifspcsv, fpcsv] = util::io::xopen(argv[1]);                                                                 
+    auto &icsv = *ifspcsv; 
     std::string opath("/dev/stdout");
     if(argc > 3) opath = argv[3];
 
