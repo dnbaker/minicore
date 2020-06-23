@@ -81,10 +81,10 @@ CXXFLAGS += $(LDFLAGS)
 HEADERS=$(shell find include -name '*.h')
 
 %dbg: src/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz
 
 %dbg: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz
 
 %: src/test/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o -DNDEBUG $(OMP_STR) $@ -pthread
@@ -115,10 +115,10 @@ dae: src/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB
 
 jsdkmeanstest: src/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz
 
 jsdkmeanstestdbg: src/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
@@ -141,12 +141,12 @@ mpi%: src/%.cpp $(wildcard include/minocore/*.h)
 osm2dimacsdbg: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lbz2 -lexpat -o $@
+        $< -lz -lbz2 -lexpat -o $@
 
 osm2dimacs: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
-        $< -lbz2 -lexpat -o $@ -O3 $(OMP_STR) -DNDEBUG
+        $< -lz -lbz2 -lexpat -o $@ -O3 $(OMP_STR) -DNDEBUG
 
 osm2dimacspgf: src/utils/osm2dimacs.cpp
 	$(CXX) $(CXXFLAGS) \
