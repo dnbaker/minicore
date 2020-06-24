@@ -13,6 +13,10 @@ namespace minocore {
 
 namespace util {
 
+static inline bool is_file(std::string path) noexcept {
+    return ::access(path.data(), F_OK) != -1;
+}
+
 template<typename IndPtrType=uint64_t, typename IndicesType=uint64_t, typename DataType=uint32_t>
 struct CSCMatrixView {
     using ElementType = DataType;
@@ -185,6 +189,10 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
     std::string indicesn = prefix + "indices.file";
     std::string datan    = prefix + "data.file";
     std::string shape    = prefix + "shape.file";
+    if(!is_file(indptrn)) throw std::runtime_error(std::string("Missing indptr: ") + indptrn);
+    if(!is_file(indicesn)) throw std::runtime_error(std::string("Missing indices: ") + indicesn);
+    if(!is_file(datan)) throw std::runtime_error(std::string("Missing indptr: ") + datan);
+    if(!is_file(shape)) throw std::runtime_error(std::string("Missing indices: ") + shape);
     std::FILE *ifp = std::fopen(shape.data(), "rb");
     uint32_t dims[2];
     if(std::fread(dims, sizeof(uint32_t), 2, ifp) != 2) throw std::runtime_error("Failed to read dims from file");
@@ -212,76 +220,6 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
     return csc2sparse<FT>(matview, skip_empty);
 }
 
-template<typename Stream, typename FT=float, bool SO=blaze::rowMajor>
-blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_t nnz) {
-    std::fprintf(stderr, "Getting transposed matrix %zu cols and %zu nr, %zu nnz\n", cols, nr, nnz);
-    blz::SM<FT, SO> ret(nr, cols); // Note that this is reversed
-    ret.reserve(nnz);
-    std::fprintf(stderr, "nr %zu, nc %zu. Reserved space for %zu nonzero elements\n", nr, cols, nnz);
-    std::vector<std::tuple<size_t, size_t, FT>> indices;
-    std::ptrdiff_t maxr = 0, maxc = 0, col, row;
-    for(std::string line;std::getline(ifs, line);) {
-        char *s = line.data();
-        if(!s) MN_THROW_RUNTIME("s is null immediately");
-        col = std::strtoll(line.data(), &s, 10) - 1;
-        if(!s) MN_THROW_RUNTIME("s is null after col");
-        row = std::strtoll(s, &s, 10) - 1;
-        if(!s) MN_THROW_RUNTIME("s is null after row");
-        if(size_t(col) > ret.columns()) {
-            MN_THROW_RUNTIME(std::string("col > ret.columns() [") + std::to_string(col) + ']');
-        }
-        if(size_t(row) > ret.rows()) {
-            MN_THROW_RUNTIME(std::string("row > ret.rows() [") + std::to_string(row) + ']');
-        }
-        FT cnt = std::atof(s);
-        indices.emplace_back(row, col, cnt);
-#if 0
-        if(indices.size() == nnz) {
-            std::fprintf(stderr, "Just reached nnz (%zu)\n", nnz);
-        } else if(indices.size() > nnz) {
-            std::fprintf(stderr, "ERROR indices size (%zu) is greater than (%zu)\n", indices.size(), nnz);
-        }
-#endif
-        if(row > maxr) maxr = row;
-        maxc = std::max(maxc, col);
-        maxr = std::max(maxr, row);
-        //assert(size_t(row) < nr || !std::fprintf(stderr, "ret rows: %zu. row ind %zd\n", ret.columns(), row));
-        //assert(size_t(col) < cols || !std::fprintf(stderr, "ret columns: %zu. col ind %zu\n", ret.rows(), col));
-    }
-    shared::sort(indices.begin(), indices.end());
-    size_t ci = 0;
-#if 0
-    size_t nzi = 0;
-    auto beg = indices.begin(), e = indices.end();
-    for(;;) {
-        if(beg == e)
-            break;
-        auto cv = std::get<0>(*beg);
-        while(ci < cv) ret.finalize(ci++);
-        auto it = std::find_if(beg, e, [cv](const auto &x) {return std::get<0>(x) != cv;});
-        std::ptrdiff_t nelem = it - beg;
-        ret.reserve(cv, nelem);
-        for(;beg != it;++beg) {
-            ret.append(cv, std::get<1>(*beg), std::get<2>(*beg));
-        }
-    }
-#else
-    for(const auto [x, y, v]: indices) {
-        //std::fprintf(stderr, "x: %ld\n", x);
-        if(y > ret.columns()) {
-            std::fprintf(stderr, "y %zd > ret col %zd\n", y, ret.columns());
-            std::exit(1);
-        }
-        while(ci < x) ret.finalize(ci++);
-        ret.append(x, y, v);
-    }
-#endif
-    while(ci < ret.rows()) ret.finalize(ci++);
-    //std::fprintf(stderr, "ret has %zu columns, %zu rows\n", ret.columns(), ret.rows());
-    //transpose(ret);
-    std::fprintf(stderr, "ret has %zu columns, %zu rows, %zu nnz after transposition\n", ret.columns(), ret.rows(), nonZeros(ret));
-    return ret;
-}
 
 template<typename FT, typename IT=size_t, bool SO=blaze::rowMajor>
 struct COOElement {
@@ -296,6 +234,7 @@ struct COOElement {
     }
 };
 
+#if 0
 template<typename FT, typename IT=size_t, bool SO=blaze::rowMajor>
 struct COORadixTraits {
     using VT = COOElement<FT, IT, SO>;
@@ -314,6 +253,7 @@ struct COORadixTraits {
             return std::tie(x.y, x.x, x.z) < std::tie(y.y, y.x, y.z);
     }
 };
+#endif
 
 template<typename FT=float, bool SO=blaze::rowMajor, typename IT=size_t>
 blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false) {

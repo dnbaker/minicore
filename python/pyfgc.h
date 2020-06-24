@@ -4,7 +4,6 @@
 #include "aesctr/wy.h"
 #include "minocore/minocore.h"
 #include "minocore/coreset/matrix_coreset.h"
-#include "kspp/ks.h"
 using namespace minocore;
 namespace py = pybind11;
 void init_smw(py::module &);

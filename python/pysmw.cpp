@@ -19,7 +19,7 @@ void init_smw(py::module &m) {
         wrap.perform(func);
     }, py::arg("to_stdout")=false)
     .def("__str__", [](SparseMatrixWrapper &wrap) {
-        std::string msg = ks::sprintf("Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()).data();
-        return msg;
+        char buf[1024];
+        return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
     });
 }
