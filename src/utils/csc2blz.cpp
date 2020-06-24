@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
 #define MAIN(type) do {\
     auto mat = minocore::csc2sparse<type>(prefix);\
     if(empty) minocore::util::erase_empty(mat);\
-    if(transpose) transpose(mat); \
+    if(tx) transpose(mat); \
     std::fprintf(stderr, "parsed matrix\n"); arch << mat;\
     } while(0)
         MAIN(double);
