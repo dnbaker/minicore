@@ -10,7 +10,6 @@ void usage() {
 int main(int argc, char **argv) {
     bool usedouble = false, empty = false;
     std::string prefix;
-    if(argc > 1) prefix = argv[1];
     for(int c;(c = getopt(argc, argv, "edh?"))>= 0;) {
         switch(c) {
             case 'h': usage(); return 1;
@@ -18,6 +17,7 @@ int main(int argc, char **argv) {
             case 'e': empty = true; break;
         }
     }
+    if(argc != optind) prefix = argv[optind];
     blaze::Archive<std::ofstream> arch("out.blaze");
     if(usedouble) {
 #define MAIN(type) do {\

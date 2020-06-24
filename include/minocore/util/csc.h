@@ -250,22 +250,6 @@ blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_
     }
     shared::sort(indices.begin(), indices.end());
     size_t ci = 0;
-#if 0
-    size_t nzi = 0;
-    auto beg = indices.begin(), e = indices.end();
-    for(;;) {
-        if(beg == e)
-            break;
-        auto cv = std::get<0>(*beg);
-        while(ci < cv) ret.finalize(ci++);
-        auto it = std::find_if(beg, e, [cv](const auto &x) {return std::get<0>(x) != cv;});
-        std::ptrdiff_t nelem = it - beg;
-        ret.reserve(cv, nelem);
-        for(;beg != it;++beg) {
-            ret.append(cv, std::get<1>(*beg), std::get<2>(*beg));
-        }
-    }
-#else
     for(const auto [x, y, v]: indices) {
         //std::fprintf(stderr, "x: %ld\n", x);
         if(y > ret.columns()) {
@@ -275,7 +259,6 @@ blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_
         while(ci < x) ret.finalize(ci++);
         ret.append(x, y, v);
     }
-#endif
     while(ci < ret.rows()) ret.finalize(ci++);
     //std::fprintf(stderr, "ret has %zu columns, %zu rows\n", ret.columns(), ret.rows());
     //transpose(ret);
