@@ -37,7 +37,8 @@ CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(
     -DBOOST_NO_AUTO_PTR -fvisibility=hidden -lz
 
 
-EX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
+DEX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
+EX=$(patsubst src/utils/%.cpp,%,$(wildcard src/utils/*.cpp))
 FEX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
 PGEX=$(patsubst %,%pg,$(EX))
 PGFEX=$(patsubst %,%pgf,$(EX))
@@ -112,10 +113,10 @@ mtx%: src/mtx%.cpp $(HEADERS)
 mtx%: src/utils/mtx%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 # -fsanitize=undefined -fsanitize=address
 
-alphaest: src/alphaest.cpp $(wildcard include/minocore/*.h)
+alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
 
-dae: src/alphaest.cpp $(wildcard include/minocore/*.h)
+dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB
 
 jsdkmeanstest: src/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
@@ -126,7 +127,7 @@ jsdkmeanstestdbg: src/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
-hdf2dm: src/hdf2dm.cpp $(wildcard include/minocore/*.h)
+hdf2dm: src/utils/hdf2dm.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(HDFLAGS)
 
 mpi%: src/%.cpp $(wildcard include/minocore/*.h)
