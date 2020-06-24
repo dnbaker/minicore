@@ -137,5 +137,5 @@ void init_merge(py::module &m) {
             nzi += mynnz;
         }
         return std::make_tuple(rows, cols, data, shape);
-    });
+    }, py::arg("matrices"), py::arg("featmaps"), py::arg("features"));
 }
