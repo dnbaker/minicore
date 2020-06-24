@@ -18,6 +18,4 @@
 
 #include "minocore/util/timer.h"
 
-#include "minocore/util/kxsort.h"
-
 #endif /* FGC_UTILITY_H__ */

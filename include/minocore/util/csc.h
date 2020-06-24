@@ -5,7 +5,6 @@
 #include "./blaze_adaptor.h"
 #include "./io.h"
 #include "./exception.h"
-#include "./kxsort.h"
 #include "mio/single_include/mio/mio.hpp"
 #include <fstream>
 
@@ -317,25 +316,26 @@ struct COORadixTraits {
 };
 
 template<typename FT=float, bool SO=blaze::rowMajor, typename IT=size_t>
-blz::SM<FT, SO> mtx2sparse2(std::string path, bool perform_transpose=false) {
+blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false) {
 #ifndef NDEBUG
     TimeStamper ts("Parse mtx metadata");
-#define __TSA__(x) ts.add_event((x))
+#define MNTSA(x) ts.add_event((x))
 #else
-#define __TSA__(x)
+#define MNTSA(x)
 #endif
     std::string line;
     auto [ifsp, fp] = io::xopen(path);
     auto &ifs = *ifsp;
     do std::getline(ifs, line); while(line.front() == '%');
+    char *s;
     size_t nr      = std::strtoull(line.data(), &s, 10),
            columns = std::strtoull(s, &s, 10),
            lines   = std::strtoull(s, nullptr, 10);
-    __TSA__("Reserve space");
+    MNTSA("Reserve space");
     blz::SM<FT> ret(nr, columns);
     ret.reserve(lines);
     std::unique_ptr<COOElement<FT, IT, SO>[]> items(new COOElement<FT, IT, SO>[lines]);
-    __TSA__("Read lines");
+    MNTSA("Read lines");
     size_t i = 0;
     while(std::getline(ifs, line)) {
         if(unlikely(i >= lines)) {
@@ -353,10 +353,11 @@ blz::SM<FT, SO> mtx2sparse2(std::string path, bool perform_transpose=false) {
         std::sprintf(buf, "i (%zu) != expected nnz (%zu). malformatted mtxfile at %s?\n", i, lines, path.data());
         MN_THROW_RUNTIME(buf);
     }
-    __TSA__(std::string("Sort ") + std::to_string(lines) + "items");
+    std::fprintf(stderr, "processed %zu lines\n", lines);
+    MNTSA(std::string("Sort ") + std::to_string(lines) + "items");
     auto it = items.get(), e = items.get() + lines;
-    kx::radix_sort(it, e, COORadixTraits<FT, IT, SO>());
-    __TSA__("Set final matrix");
+    shared::sort(it, e);
+    MNTSA("Set final matrix");
     for(size_t ci = 0;;) {
         if(it != e) {
             static constexpr bool RM = SO == blaze::rowMajor;
@@ -365,12 +366,18 @@ blz::SM<FT, SO> mtx2sparse2(std::string path, bool perform_transpose=false) {
             auto nextit = std::find_if(it, e, [xv](auto x) {
                 if constexpr(RM) return x.x != xv; else return x.y != xv;
             });
-            ret.reserve(nextit - it);
+#ifdef VERBOSE_AF
+            auto diff = nextit - it;
+            std::fprintf(stderr, "x at %d has %zu entries\n", int(it->x), diff);
+            for(std::ptrdiff_t i = 0; i < diff; ++i)
+                std::fprintf(stderr, "item %zu has %zu for y and %g\n", i, (it + i)->y, (it + i)->z);
+#endif
+            ret.reserve(ci, nextit - it);
             for(;it != nextit; ++it) {
                 if constexpr(RM) {
-                    ret.append(xv, it->y, it->z);
+                    ret.append(it->x, it->y, it->z);
                 } else {
-                    ret.append(it->x, xv, it->z);
+                    ret.append(it->x, it->y, it->z);
                 }
             }
         } else {
@@ -379,61 +386,13 @@ blz::SM<FT, SO> mtx2sparse2(std::string path, bool perform_transpose=false) {
         }
     }
     if(perform_transpose) {
-        __TSA__("Perform transpose");
+        MNTSA("Perform transpose");
         blz::transpose(ret);
     }
     return ret;
 }
-#undef __TSA__
+#undef MNTSA
 
-template<typename FT=float, bool SO=blaze::rowMajor>
-blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false)
-{
-    std::string line;
-    auto [ifsp, fp] = io::xopen(path);
-    auto &ifs = *ifsp;
-    do std::getline(ifs, line); while(line.front() == '%');
-    char *s;
-    size_t columns = std::strtoull(line.data(), &s, 10),
-             nr    = std::strtoull(s, &s, 10),
-             lines = std::strtoull(s, nullptr, 10);
-    if(perform_transpose) {
-        return transposed_mtx2sparse(ifs, columns, nr, lines);
-    }
-    blz::SM<FT, SO> ret(nr, columns);
-    std::vector<std::pair<size_t, FT>> indices;
-    size_t lastrow = 0;
-    ret.reserve(lines);
-    while(lines--)
-    {
-        if(!std::getline(ifs, line)) {
-            MN_THROW_RUNTIME("Error in reading file: unexpected number of lines");
-        }
-        size_t row, col;
-        col = std::strtoull(line.data(), &s, 10) - 1;
-        row = std::strtoull(s, &s, 10) - 1;
-        if(perform_transpose) std::swap(col, row);
-        FT cnt = std::atof(s);
-        if(row < lastrow) MN_THROW_RUNTIME("Unsorted file");
-        else if(row != lastrow) {
-            //std::fprintf(stderr, "lastrow %zu has %zu indices\n", row, indices.size());
-            std::sort(indices.begin(), indices.end());
-            for(const auto [idx, cnt]: indices)
-                ret.append(lastrow, idx, cnt);
-            indices.clear();
-            while(lastrow < row) ret.finalize(lastrow++);
-        }
-        indices.emplace_back(col, cnt);
-    }
-    std::sort(indices.begin(), indices.end());
-    for(const auto [idx, cnt]: indices) {
-        ret.append(lastrow, idx, cnt);
-    }
-    while(lastrow < ret.rows()) ret.finalize(lastrow++);
-    if(std::getline(ifs, line)) MN_THROW_RUNTIME("Error reading file: too many lines");
-    std::fprintf(stderr, "Parsed file of %zu rows/%zu columns\n", ret.rows(), ret.columns());
-    return ret;
-}
 
 template<typename MT, bool SO>
 std::pair<std::vector<size_t>, std::vector<size_t>>

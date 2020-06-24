@@ -1,5 +1,6 @@
 #pragma once
 #include "robin-hood-hashing/src/include/robin_hood.h"
+#include "thirdparty/kxsort.h"
 #include "pdqsort/pdqsort.h"
 #include "aesctr/wy.h"
 #include "./macros.h"
@@ -58,10 +59,18 @@ struct Deleter {
     }
 };
 
-template<typename It, typename Cmp=std::less<>>
+template<typename It, typename Cmp=std::less<>,
+         typename=std::enable_if_t<!std::is_integral_v<std::decay_t<decltype(*std::declval<It>())>>>>
 INLINE void sort(It beg, It end, Cmp cmp=Cmp()) {
     pdqsort(beg, end, cmp);
 }
+
+template<typename It,
+         typename=std::enable_if_t<std::is_integral_v<std::decay_t<decltype(*std::declval<It>())>>>>
+INLINE void sort(It beg, It end) {
+    kx::radix_sort(beg, end);
+}
+
 template<typename T>
 struct dumbrange {
     T beg, e_;
