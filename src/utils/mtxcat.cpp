@@ -13,6 +13,7 @@ enum EmitFmt {
 };
 
 int main(int argc, char **argv) {
+    minocore::util::TimeStamper ts("argparse");
     bool transpose = false, posttranspose = false, empty = false;
     const char *outfile = "/dev/stdout";
     EmitFmt fmt = BINARY;
@@ -30,6 +31,7 @@ int main(int argc, char **argv) {
     std::vector<std::string> paths(argv + optind, argv + argc);
     std::vector<blz::SM<double>> submats(paths.size());
     size_t s = 0, nz = 0;
+    ts.add_event("parse matrices");
     OMP_PFOR
     for(unsigned i = 0; i < paths.size(); ++i) {
         submats[i] = minocore::util::mtx2sparse<double>(paths[i], transpose);
@@ -44,12 +46,12 @@ int main(int argc, char **argv) {
     }
     std::fprintf(stderr, "Finished loop\n");
     if(posttranspose) {
-        for(auto &mat: submats) {
-            std::fprintf(stderr, "transposing matrix\n");
-            blaze::transpose(mat);
-            std::fprintf(stderr, "transposed matrix\n");
-        }
+        ts.add_event("transpose matrices");
+        OMP_PFOR
+        for(size_t i = 0; i < submats.size(); ++i)
+            blaze::transpose(submats[i]);
     }
+    ts.add_event("Check matrix sizes");
     std::fprintf(stderr, "Checking column numbers\n");
     for(unsigned i = 0; i < submats.size() - 1; ++i) {
         auto v1 = submats[i].columns(), v2 = submats[i + 1].columns();
@@ -59,57 +61,28 @@ int main(int argc, char **argv) {
             throw std::runtime_error(buf);
         }
     }
+    ts.add_event("Resize and reserve");
     std::fprintf(stderr, "Expected %zu nonzeros\n", nz);
     finalmat.resize(s, submats.front().columns());
     finalmat.reserve(nz);
-    const size_t nc = finalmat.columns();
     size_t finaloff = 0;
-    size_t submatid = 0;
     std::reverse(submats.begin(), submats.end());
+    std::fprintf(stderr, "concatenated mat has %zu rows, %zu columns and %zu nonzeros\n", finalmat.rows(), finalmat.columns(), blaze::nonZeros(finalmat));
+    ts.add_event("Construct final");
     while(submats.size()) {
-        auto submat = std::move(submats.back());
+        submatrix(finalmat, finaloff, 0, submats.back().rows(), submats.back().columns()) = submats.back();
+        finaloff += submats.back().rows();
         submats.pop_back();
-        auto fmat = submatrix(finalmat, finaloff, 0, submat.rows(), submat.columns());
-        std::fprintf(stderr, "submat %zu has %zu/%zu, with %zu nonzeros\n", submatid, submat.rows(), submat.columns(), nonZeros(submat));
-        fmat = submat;
-        assert(submat.columns() == finalmat.columns());
-#if 0
-        for(size_t i = 0; i < submat.rows(); ++i) {
-            auto frow(row(finalmat, i + finaloff));
-            auto srow(row(submat, i));
-            frow = srow;
-            assert(nonZeros(frow) == nonZeros(srow));
-            const auto fmidx = finaloff + i;
-            auto r = row(submat, i);
-            auto rb = r.begin(), re = r.end();
-            auto rnz = nonZeros(r);
-
-            std::fprintf(stderr, "[%zu] row %zu/%zu has %zu nonzeros. Distance: %zd\n", submatid, i + 1, submat.rows(), rnz, std::distance(rb, re));
-            assert(re - rb == std::ptrdiff_t(rnz));
-
-            finalmat.reserve(fmidx, rnz);
-            std::for_each(rb, rb, [&](const auto &tx) {finalmat.append(i, tx.index(), tx.value());});
-            finalmat.finalize(fmidx);
-            assert(nonZeros(row(finalmat, fmidx)) == rnz);
-#if 0
-            for(;rb != re;++rb) {
-                assert(rb->index() < finalmat.columns());
-                finalmat.append(i, rb->index(), rb->value());
-            }
-#endif
-        }
-#endif
-        finaloff += submat.rows();
-        std::fprintf(stderr, "finaloff after mat %zu is %zu\n", submatid + 1, finaloff);
-        ++submatid;
     }
+    ts.add_event("Compute row sums");
     auto rsums = blaze::sum<blaze::rowwise>(finalmat);
+    ts.add_event("Compute column sums");
     auto csums = blaze::sum<blaze::columnwise>(finalmat);
     std::cerr << "row sums: " << trans(rsums);
     std::cerr << "col sums: " << csums; // to make them emit on one line.
-    std::fprintf(stderr, "Made final mat. Free unused memory\n");
-    std::fprintf(stderr, "concatenated mat has %zu rows, %zu columns and %zu nonzeros\n", finalmat.rows(), finalmat.columns(), blaze::nonZeros(finalmat));
+    std::cerr.flush();
     if(empty) {
+        ts.add_event("Remove empty features");
         auto [rows, cols] = minocore::util::erase_empty(finalmat);
         if(rows.size() || cols.size()) {
             std::fprintf(stderr, "concatenated and emptied mat has %zu rows, %zu columns and %zu nonzeros\n", finalmat.rows(), finalmat.columns(), blaze::nonZeros(finalmat));
@@ -128,6 +101,7 @@ int main(int argc, char **argv) {
         }
     }
     std::fprintf(stderr, "Making archive at %s\n", outfile);
+    ts.add_event("Write to disk");
     if(fmt == BINARY) {
         blaze::Archive<std::ofstream> arch(outfile);
         arch << finalmat;

@@ -100,10 +100,12 @@ void init_merge(py::module &m) {
         for(auto fm: featmaps) {
             nr += py::cast<Py_ssize_t>(fm.attr("n"));
             py::dict cvt = fm.attr("cvt");
-            Py_ssize_t features_used = len(cvt);
+            const Py_ssize_t features_used = len(cvt);
             auto &lut = luts.emplace_back(nf, Py_ssize_t(-1));
             for(auto item: cvt) {
-                lut[py::cast<Py_ssize_t>(item.first)] = py::cast<Py_ssize_t>(item.second);
+                const Py_ssize_t key = py::cast<Py_ssize_t>(item.first), v = py::cast<Py_ssize_t>(item.second);
+                std::fprintf(stderr, "K, V: %zd, %zd\n", key, v);
+                lut[key] = v;
             }
         }
         py::array_t<Py_ssize_t> rows, cols;
