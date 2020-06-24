@@ -15,7 +15,6 @@ void usage(char *s) {
     std::exit(1);
 }
 
-#define NOTDENSE 1
 int main(int argc, char *argv[]) {
     unsigned maxnrows = 50000, mincount = 50, k = 50, m = 100;
     unsigned fmt = 0;
@@ -57,8 +56,8 @@ int main(int argc, char *argv[]) {
         }
         ++i;
     }
-    std::fprintf(stderr, "Gathered %zu rows\n", nonemptyrows.size());
-#ifndef NOTDENSE
+    std::fprintf(stderr, "Gathered %zu rows, with %zu columns\n", nonemptyrows.size(), sparsemat.columns());
+#if 0
     blaze::DynamicMatrix<typename decltype(sparsemat)::ElementType> filtered_sparsemat = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
 #else
     decltype(sparsemat) filtered_sparsemat = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());

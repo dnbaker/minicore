@@ -7,16 +7,23 @@ void usage() {
     std::exit(1);
 }
 
+enum EmitFmt {
+    BINARY,
+    COO
+};
+
 int main(int argc, char **argv) {
     bool transpose = false, posttranspose = false, empty = false;
     const char *outfile = "/dev/stdout";
-    for(int c;(c = getopt(argc, argv, "o:eTth?")) >= 0;) {
+    EmitFmt fmt = BINARY;
+    for(int c;(c = getopt(argc, argv, "o:reTth?")) >= 0;) {
         switch(c) {
             case 'h': usage(); break;
             case 't': transpose = true; break;
             case 'T': posttranspose = true; break;
             case 'e': empty = true; break;
             case 'o': outfile = optarg; break;
+            case 'r': fmt = COO; break;
         }
     }
     blz::SM<double> finalmat;
@@ -25,7 +32,7 @@ int main(int argc, char **argv) {
     size_t s = 0, nz = 0;
     OMP_PFOR
     for(unsigned i = 0; i < paths.size(); ++i) {
-        submats[i] = minocore::mtx2sparse<double>(paths[i], transpose);
+        submats[i] = minocore::util::mtx2sparse<double>(paths[i], transpose);
         auto nr = submats[i].rows();
         OMP_ATOMIC
         s += nr;
@@ -55,23 +62,43 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "Expected %zu nonzeros\n", nz);
     finalmat.resize(s, submats.front().columns());
     finalmat.reserve(nz);
+    const size_t nc = finalmat.columns();
     size_t finaloff = 0;
     size_t submatid = 0;
     std::reverse(submats.begin(), submats.end());
     while(submats.size()) {
         auto submat = std::move(submats.back());
         submats.pop_back();
+        auto fmat = submatrix(finalmat, finaloff, 0, submat.rows(), submat.columns());
+        std::fprintf(stderr, "submat %zu has %zu/%zu, with %zu nonzeros\n", submatid, submat.rows(), submat.columns(), nonZeros(submat));
+        fmat = submat;
         assert(submat.columns() == finalmat.columns());
+#if 0
         for(size_t i = 0; i < submat.rows(); ++i) {
+            auto frow(row(finalmat, i + finaloff));
+            auto srow(row(submat, i));
+            frow = srow;
+            assert(nonZeros(frow) == nonZeros(srow));
+            const auto fmidx = finaloff + i;
             auto r = row(submat, i);
             auto rb = r.begin(), re = r.end();
-            std::fprintf(stderr, "[%zu] row %zu/%zu has %zu nonzeros\n", submatid, i, submat.rows(), nonZeros(r));
-            while(rb != re) {
+            auto rnz = nonZeros(r);
+
+            std::fprintf(stderr, "[%zu] row %zu/%zu has %zu nonzeros. Distance: %zd\n", submatid, i + 1, submat.rows(), rnz, std::distance(rb, re));
+            assert(re - rb == std::ptrdiff_t(rnz));
+
+            finalmat.reserve(fmidx, rnz);
+            std::for_each(rb, rb, [&](const auto &tx) {finalmat.append(i, tx.index(), tx.value());});
+            finalmat.finalize(fmidx);
+            assert(nonZeros(row(finalmat, fmidx)) == rnz);
+#if 0
+            for(;rb != re;++rb) {
                 assert(rb->index() < finalmat.columns());
-                finalmat.append(i, rb->index(), rb->value()), ++rb;
+                finalmat.append(i, rb->index(), rb->value());
             }
-            finalmat.finalize(i + finaloff);
+#endif
         }
+#endif
         finaloff += submat.rows();
         std::fprintf(stderr, "finaloff after mat %zu is %zu\n", submatid + 1, finaloff);
         ++submatid;
@@ -101,6 +128,11 @@ int main(int argc, char **argv) {
         }
     }
     std::fprintf(stderr, "Making archive at %s\n", outfile);
-    blaze::Archive<std::ofstream> arch(outfile);
-    arch << finalmat;
+    if(fmt == BINARY) {
+        blaze::Archive<std::ofstream> arch(outfile);
+        arch << finalmat;
+    } else {
+        std::ofstream ofs(outfile);
+        ofs << finalmat;
+    }
 }

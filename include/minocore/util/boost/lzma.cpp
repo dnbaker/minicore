@@ -153,7 +153,7 @@ void lzma_base::init_stream(bool compress)
     memset(s, 0, sizeof(*s));
 
 #ifndef BOOST_IOSTREAMS_LZMA_NO_MULTITHREADED
-    const lzma_mt opt = { 0, threads_, 0, 1000, level_, NULL, LZMA_CHECK_CRC32 };
+    const lzma_mt opt = { 0, threads_, 0, 1000, level_, NULL, LZMA_CHECK_CRC32, LZMA_RESERVED_ENUM, LZMA_RESERVED_ENUM, LZMA_RESERVED_ENUM, 0, 0, 0, 0, 0, 0, 0, 0, nullptr, nullptr, nullptr, nullptr};
 #endif
 
     lzma_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(

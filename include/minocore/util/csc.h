@@ -8,6 +8,7 @@
 #include "mio/single_include/mio/mio.hpp"
 #include <fstream>
 
+
 namespace minocore {
 
 namespace util {
@@ -282,55 +283,116 @@ blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_
     return ret;
 }
 
-template<typename FT=float, bool SO=blaze::rowMajor>
-blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false)
-{
+template<typename FT, typename IT=size_t, bool SO=blaze::rowMajor>
+struct COOElement {
+    IT x, y;
+    FT z;
+    bool operator<(const COOElement &o) const {
+        if constexpr(SO == blaze::rowMajor) {
+            return std::tie(x, y, z) < std::tie(o.x, o.y, o.z);
+        } else {
+            return std::tie(y, x, z) < std::tie(o.y, o.x, o.z);
+        }
+    }
+};
+
+template<typename FT, typename IT=size_t, bool SO=blaze::rowMajor>
+struct COORadixTraits {
+    using VT = COOElement<FT, IT, SO>;
+    static constexpr int nBytes = sizeof(VT);
+    static int kth_byte(const VT &x, int k) {
+        if constexpr(SO == blaze::rowMajor) {
+            return 0xFF & (k < 8 ? (x.x >> (k * 8)): (x.y >> ((k - 8) * 8)) );
+        } else {
+            return 0xFF & (k < 8 ? (x.y >> (k * 8)): (x.x >> ((k - 8) * 8)) );
+        }
+    }
+    static constexpr bool compare(const VT &x, const VT &y) {
+        if constexpr(SO == blaze::rowMajor) 
+            return std::tie(x.x, x.y, x.z) < std::tie(y.x, y.y, y.z);
+        else
+            return std::tie(x.y, x.x, x.z) < std::tie(y.y, y.x, y.z);
+    }
+};
+
+template<typename FT=float, bool SO=blaze::rowMajor, typename IT=size_t>
+blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false) {
+#ifndef NDEBUG
+    TimeStamper ts("Parse mtx metadata");
+#define MNTSA(x) ts.add_event((x))
+#else
+#define MNTSA(x)
+#endif
     std::string line;
     auto [ifsp, fp] = io::xopen(path);
     auto &ifs = *ifsp;
     do std::getline(ifs, line); while(line.front() == '%');
     char *s;
-    std::cerr << "first line: " << line << '\n';
-    size_t columns = std::strtoull(line.data(), &s, 10),
-             nr    = std::strtoull(s, &s, 10),
-             lines = std::strtoull(s, nullptr, 10);
-    if(perform_transpose) {
-        return transposed_mtx2sparse(ifs, columns, nr, lines);
-    }
-    blz::SM<FT, SO> ret(nr, columns);
-    std::vector<std::pair<size_t, FT>> indices;
-    size_t lastrow = 0;
+    size_t nr      = std::strtoull(line.data(), &s, 10),
+           columns = std::strtoull(s, &s, 10),
+           lines   = std::strtoull(s, nullptr, 10);
+    MNTSA("Reserve space");
+    blz::SM<FT> ret(nr, columns);
     ret.reserve(lines);
-    while(lines--)
-    {
-        if(!std::getline(ifs, line)) {
-            MN_THROW_RUNTIME("Error in reading file: unexpected number of lines");
+    std::unique_ptr<COOElement<FT, IT, SO>[]> items(new COOElement<FT, IT, SO>[lines]);
+    MNTSA("Read lines");
+    size_t i = 0;
+    while(std::getline(ifs, line)) {
+        if(unlikely(i >= lines)) {
+            char buf[1024];
+            std::sprintf(buf, "i (%zu) > nnz (%zu). malformatted mtxfile at %s?\n", i, lines, path.data());
+            MN_THROW_RUNTIME(buf);
         }
-        size_t row, col;
-        col = std::strtoull(line.data(), &s, 10) - 1;
-        row = std::strtoull(s, &s, 10) - 1;
-        if(perform_transpose) std::swap(col, row);
-        FT cnt = std::atof(s);
-        if(row < lastrow) MN_THROW_RUNTIME("Unsorted file");
-        else if(row != lastrow) {
-            //std::fprintf(stderr, "lastrow %zu has %zu indices\n", row, indices.size());
-            std::sort(indices.begin(), indices.end());
-            for(const auto [idx, cnt]: indices)
-                ret.append(lastrow, idx, cnt);
-            indices.clear();
-            while(lastrow < row) ret.finalize(lastrow++);
+        char *s;
+        auto x = std::strtoull(line.data(), &s, 10) - 1;
+        auto y = std::strtoull(s, &s, 10) - 1;
+        items[i++] = {x, y, static_cast<FT>(std::atof(s))};
+    }
+    if(i != lines) {
+        char buf[1024];
+        std::sprintf(buf, "i (%zu) != expected nnz (%zu). malformatted mtxfile at %s?\n", i, lines, path.data());
+        MN_THROW_RUNTIME(buf);
+    }
+    std::fprintf(stderr, "processed %zu lines\n", lines);
+    MNTSA(std::string("Sort ") + std::to_string(lines) + "items");
+    auto it = items.get(), e = items.get() + lines;
+    shared::sort(it, e);
+    MNTSA("Set final matrix");
+    for(size_t ci = 0;;) {
+        if(it != e) {
+            static constexpr bool RM = SO == blaze::rowMajor;
+            const auto xv = RM ? it->x: it->y;
+            while(ci < xv) ret.finalize(ci++);
+            auto nextit = std::find_if(it, e, [xv](auto x) {
+                if constexpr(RM) return x.x != xv; else return x.y != xv;
+            });
+#ifdef VERBOSE_AF
+            auto diff = nextit - it;
+            std::fprintf(stderr, "x at %d has %zu entries\n", int(it->x), diff);
+            for(std::ptrdiff_t i = 0; i < diff; ++i)
+                std::fprintf(stderr, "item %zu has %zu for y and %g\n", i, (it + i)->y, (it + i)->z);
+#endif
+            ret.reserve(ci, nextit - it);
+            for(;it != nextit; ++it) {
+                if constexpr(RM) {
+                    ret.append(it->x, it->y, it->z);
+                } else {
+                    ret.append(it->x, it->y, it->z);
+                }
+            }
+        } else {
+            for(const size_t end = SO == blaze::rowMajor ? nr: columns;ci < end; ret.finalize(ci++));
+            break;
         }
-        indices.emplace_back(col, cnt);
     }
-    std::sort(indices.begin(), indices.end());
-    for(const auto [idx, cnt]: indices) {
-        ret.append(lastrow, idx, cnt);
+    if(perform_transpose) {
+        MNTSA("Perform transpose");
+        blz::transpose(ret);
     }
-    while(lastrow < ret.rows()) ret.finalize(lastrow++);
-    if(std::getline(ifs, line)) MN_THROW_RUNTIME("Error reading file: too many lines");
-    std::fprintf(stderr, "Parsed file of %zu rows/%zu columns\n", ret.rows(), ret.columns());
     return ret;
 }
+#undef MNTSA
+
 
 template<typename MT, bool SO>
 std::pair<std::vector<size_t>, std::vector<size_t>>
