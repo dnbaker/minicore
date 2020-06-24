@@ -14,11 +14,11 @@ int main(int argc, char *argv[]) {
         out = argv[optind + 1];
     blaze::Archive<std::ofstream> ret(out);
     if(use_float) {
-        auto mat = minocore::mtx2sparse<float>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
+        auto mat = minocore::util::mtx2sparse2<float>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
         if(empty) minocore::util::erase_empty(mat);
         ret << mat;
     } else {
-        auto mat = minocore::mtx2sparse<double>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
+        auto mat = minocore::util::mtx2sparse2<double>(argc == 1 ? "/dev/stdin": (char *)argv[optind]);
         if(empty) minocore::util::erase_empty(mat);
         ret << mat;
     }

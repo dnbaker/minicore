@@ -5,8 +5,10 @@
 #include "./blaze_adaptor.h"
 #include "./io.h"
 #include "./exception.h"
+#include "./kxsort.h"
 #include "mio/single_include/mio/mio.hpp"
 #include <fstream>
+
 
 namespace minocore {
 
@@ -282,6 +284,108 @@ blz::SM<FT, SO> transposed_mtx2sparse(Stream &ifs, size_t cols, size_t nr, size_
     return ret;
 }
 
+template<typename FT, typename IT=size_t, bool SO=blaze::rowMajor>
+struct COOElement {
+    IT x, y;
+    FT z;
+    bool operator<(const COOElement &o) const {
+        if constexpr(SO == blaze::rowMajor) {
+            return std::tie(x, y, z) < std::tie(o.x, o.y, o.z);
+        } else {
+            return std::tie(y, x, z) < std::tie(o.y, o.x, o.z);
+        }
+    }
+};
+
+template<typename FT, typename IT=size_t, bool SO=blaze::rowMajor>
+struct COORadixTraits {
+    using VT = COOElement<FT, IT, SO>;
+    static constexpr int nBytes = sizeof(VT);
+    static int kth_byte(const VT &x, int k) {
+        if constexpr(SO == blaze::rowMajor) {
+            return 0xFF & (k < 8 ? (x.x >> (k * 8)): (x.y >> ((k - 8) * 8)) );
+        } else {
+            return 0xFF & (k < 8 ? (x.y >> (k * 8)): (x.x >> ((k - 8) * 8)) );
+        }
+    }
+    static constexpr bool compare(const VT &x, const VT &y) {
+        if constexpr(SO == blaze::rowMajor) 
+            return std::tie(x.x, x.y, x.z) < std::tie(y.x, y.y, y.z);
+        else
+            return std::tie(x.y, x.x, x.z) < std::tie(y.y, y.x, y.z);
+    }
+};
+
+template<typename FT=float, bool SO=blaze::rowMajor, typename IT=size_t>
+blz::SM<FT, SO> mtx2sparse2(std::string path, bool perform_transpose=false) {
+#ifndef NDEBUG
+    TimeStamper ts("Parse mtx metadata");
+#define __TSA__(x) ts.add_event((x))
+#else
+#define __TSA__(x)
+#endif
+    std::string line;
+    auto [ifsp, fp] = io::xopen(path);
+    auto &ifs = *ifsp;
+    do std::getline(ifs, line); while(line.front() == '%');
+    size_t nr      = std::strtoull(line.data(), &s, 10),
+           columns = std::strtoull(s, &s, 10),
+           lines   = std::strtoull(s, nullptr, 10);
+    __TSA__("Reserve space");
+    blz::SM<FT> ret(nr, columns);
+    ret.reserve(lines);
+    std::unique_ptr<COOElement<FT, IT, SO>[]> items(new COOElement<FT, IT, SO>[lines]);
+    __TSA__("Read lines");
+    size_t i = 0;
+    while(std::getline(ifs, line)) {
+        if(unlikely(i >= lines)) {
+            char buf[1024];
+            std::sprintf(buf, "i (%zu) > nnz (%zu). malformatted mtxfile at %s?\n", i, lines, path.data());
+            MN_THROW_RUNTIME(buf);
+        }
+        char *s;
+        auto x = std::strtoull(line.data(), &s, 10) - 1;
+        auto y = std::strtoull(s, &s, 10) - 1;
+        items[i++] = {x, y, static_cast<FT>(std::atof(s))};
+    }
+    if(i != lines) {
+        char buf[1024];
+        std::sprintf(buf, "i (%zu) != expected nnz (%zu). malformatted mtxfile at %s?\n", i, lines, path.data());
+        MN_THROW_RUNTIME(buf);
+    }
+    __TSA__(std::string("Sort ") + std::to_string(lines) + "items");
+    auto it = items.get(), e = items.get() + lines;
+    kx::radix_sort(it, e, COORadixTraits<FT, IT, SO>());
+    __TSA__("Set final matrix");
+    for(size_t ci = 0;;) {
+        if(it != e) {
+            static constexpr bool RM = SO == blaze::rowMajor;
+            const auto xv = RM ? it->x: it->y;
+            while(ci < xv) ret.finalize(ci++);
+            auto nextit = std::find_if(it, e, [xv](auto x) {
+                if constexpr(RM) return x.x != xv; else return x.y != xv;
+            });
+            ret.reserve(nextit - it);
+            for(;it != nextit; ++it) {
+                if constexpr(RM) {
+                    ret.append(xv, it->y, it->z);
+                } else {
+                    ret.append(it->x, xv, it->z);
+                }
+            }
+        } else {
+            for(const size_t end = SO == blaze::rowMajor ? nr: columns;ci < end; ret.finalize(ci++));
+            break;
+        }
+    }
+    if(perform_transpose) {
+        __TSA__("Perform transpose");
+        blz::transpose(ret);
+    }
+    return ret;
+}
+#undef __TSA__
+
 template<typename FT=float, bool SO=blaze::rowMajor>
 blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false)
 {
@@ -290,7 +394,6 @@ blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false)
     auto &ifs = *ifsp;
     do std::getline(ifs, line); while(line.front() == '%');
     char *s;
-    std::cerr << "first line: " << line << '\n';
     size_t columns = std::strtoull(line.data(), &s, 10),
              nr    = std::strtoull(s, &s, 10),
              lines = std::strtoull(s, nullptr, 10);

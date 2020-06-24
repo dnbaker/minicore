@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     size_t s = 0, nz = 0;
     OMP_PFOR
     for(unsigned i = 0; i < paths.size(); ++i) {
-        submats[i] = minocore::mtx2sparse<double>(paths[i], transpose);
+        submats[i] = minocore::util::mtx2sparse2<double>(paths[i], transpose);
         auto nr = submats[i].rows();
         OMP_ATOMIC
         s += nr;
