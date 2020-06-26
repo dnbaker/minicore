@@ -6,21 +6,7 @@ import scipy.sparse as sp
 from scipy.io import mmread, mmwrite
 
 def _ft(x):
-    tmp = {np.int64: "i64", np.uint64: "u64", np.int32: "i32", np.uint32: "u32", np.double: "f64", np.float: "f32"}
-    if x in tmp:
-        return tmp[x]
-
-    lines = '''
- np.dtype("int64")	 "i64"
- np.dtype("u64")	 "u64"
- np.dtype("int32")	 "i32"
- np.dtype("uint32")	 "u32"
- np.dtype("double")	 "f64"
- np.dtype("float32")	 "f32"'''.strip().split('\n')
-    for line in lines:
-        toks = line.strip().split()
-        if x is eval(toks[0]): return toks[1]
-    raise Exception("Failed")
+    return ""
     
 
 

@@ -93,15 +93,13 @@ Py_ssize_t count_nonzeros(py::object mat, Py_ssize_t ncoo, const std::vector<Py_
 }
 
 template <typename IT1, typename IT2, typename FT1, typename IT3, typename IT4, typename FT2>
-Py_ssize_t update_all(const IT1 *srcrow, const IT2 *srccol, const FT1 *srcdat, IT3 *destrow, IT4 *destcol, FT2 *destdat, size_t nzi,
+Py_ssize_t update_all(const IT1 *srcrow, const IT2 *srccol, const FT1 *srcdat, IT3 *destrow, IT4 *destcol, FT2 *destdat, const size_t nzi,
                 Py_ssize_t ncoo, const std::vector<Py_ssize_t> &indices) {
     Py_ssize_t ret = 0;
-#if 0
     destdat += nzi;
     destrow += nzi;
     destcol += nzi;
-#endif
-#ifndef NDEBUG
+#if 0
         if(destrow % sizeof(*destrow)) throw std::runtime_error(std::string("Unaligned destrow in ") + __PRETTY_FUNCTION__);
         if(destcol % sizeof(*destcol)) throw std::runtime_error(std::string("Unaligned destcol in ") + __PRETTY_FUNCTION__);
         if(destdat % sizeof(*destdat)) throw std::runtime_error(std::string("Unaligned destdat in ") + __PRETTY_FUNCTION__);
@@ -109,7 +107,7 @@ Py_ssize_t update_all(const IT1 *srcrow, const IT2 *srccol, const FT1 *srcdat, I
     for(Py_ssize_t i = 0; i < ncoo; ++i) {
         std::fprintf(stderr, "[%s] %zd/%zd. Input triplet: (%d, %d, %g)\n",
                      __PRETTY_FUNCTION__, i + 1, ncoo, int(srcrow[i]), int(srccol[i]), double(srcdat[i]));
-#ifndef NDEBUG
+#if 0
         if(srcrow % sizeof(*srcrow)) throw std::runtime_error(std::string("Unaligned srcrow in ") + __PRETTY_FUNCTION__);
         if(srccol % sizeof(*srccol)) throw std::runtime_error(std::string("Unaligned srccol in ") + __PRETTY_FUNCTION__);
         if(srcdat % sizeof(*srcdat)) throw std::runtime_error(std::string("Unaligned srcdat in ") + __PRETTY_FUNCTION__);
@@ -123,16 +121,11 @@ Py_ssize_t update_all(const IT1 *srcrow, const IT2 *srccol, const FT1 *srcdat, I
         }
         std::fprintf(stderr, "destcol %d from  %d\n", int(f), int(srcid));
         auto v = srcdat[i];
-        if(v >= static_cast<FT1>(0)) {
-            std::fprintf(stderr, "Remapping original %d to %d, %zd so far\n", int(srcrow[i]), int(f), ret + 1);
-            destdat[nzi] = v;
-            destrow[nzi] = srcrow[i];
-            destcol[nzi] = f;
-            ++nzi;
-            ++ret;
-        } else {
-            std::fprintf(stderr, "v %g was negative\n", double(v));
-        }
+        std::fprintf(stderr, "Remapping original %d to %d, %zd so far\n", int(srcrow[i]), int(f), ret + 1);
+        destdat[ret] = v;
+        destrow[ret] = srcrow[i];
+        destcol[ret] = f;
+        ++ret;
     }
     return ret;
 }

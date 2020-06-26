@@ -40,7 +40,7 @@ def get_selected_ids(idc, idm, features):
     for fid, f in enumerate(features):
         if f in idm:
             if idc[f] == 1:
-                ret.append((fid, idm[f]))
+                ret.append((idm[f], fid))
     return ret
 
 
