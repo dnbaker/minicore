@@ -83,7 +83,7 @@ def cpp_flag(compiler):
                        'is needed!')
 
 
-extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1"]
+extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1", '-fsanitize=address']
 
 class BuildExt(build_ext):
     """A custom build extension for adding compiler-specific options."""

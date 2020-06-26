@@ -31,7 +31,7 @@ def get_id_map(x):
     ret = {}
     for line in xopen(x):
         l = line.split()
-        ret[l[1]] = int(l[0])
+        ret[l[1]] = int(l[0]) - 1
     return ret
 
 
@@ -48,7 +48,9 @@ class FeatureMap:
     def __init__(self, n: int, fromto):
         self.n = n
         self.cvt = {x: y for x, y in fromto}
-        kvs = sorted(self.cvt.items())
+        kvs = sorted(fromto)
+        print("fromto: ", fromto)
+        print("kvs: ", kvs)
         self.keys = np.array([x[0] for x in kvs], dtype=np.uint64)
         self.values = np.array([x[1] for x in kvs], dtype=np.uint64)
         self.nzsource = set(self.cvt.keys())
@@ -72,7 +74,7 @@ def select_features(genefnames, matrixfnames=None, min_occ_count=2):
     features = sorted(x for x, y in Counter(itertools.chain.from_iterable(gene_lists)).items() if y >= min_occ_count)
     f2id = dict(zip(features, range(len(features))))
     ids = [get_selected_ids(c, idmap, features) for c, idmap in zip(counts, idm)]
-    return [FeatureMap(nbc, pairs) for nbc, pairs in zip(nbc, ids)], features
+    return [FeatureMap(nbc, pairs) for nbc, pairs in zip(nbc, ids)], features, f2id
 
 
 def remap_mat(mat, fm, fl):
@@ -91,11 +93,15 @@ if __name__ == "__main__":
     ap.add_argument("--prefix", "-p", type=str)
     ap = ap.parse_args()
     loaded_mats = []
-    fms, features = select_features(ap.paths, min_occ_count=ap.min_count)
+    fms, features, fidmap = select_features(ap.paths, min_occ_count=ap.min_count)
     matrixpaths = [x.replace("genes.tsv.xz", "matrix.mtx").replace("genes.tsv", "matrix.mtx") for x in ap.paths]
-    with mp.Pool(min(4, len(matrixpaths))) as pool:
-        matrices = pool.map(mmread, matrixpaths)
-    matrices = list(map(lambda x: x.T, matrices))
+    #with mp.Pool(min(4, len(matrixpaths))) as pool:
+    #    matrices = pool.map(mmread, matrixpaths)
+    matrices = list(map(lambda x: mmread(x).T, matrixpaths))
+    for mat in matrices:
+        mat.row = mat.row.astype(np.uint32)
+        mat.col = mat.col.astype(np.uint32)
+        mat.data = mat.data.astype(double)
     r, c, dat, shape = minocore.merge(matrices, fms, features)
     megamat = sp.coo_matrix((r, c, dat), shape=shape)
     megamat.row.tofile(prefix + ".row")
