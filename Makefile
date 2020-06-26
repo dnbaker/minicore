@@ -91,7 +91,7 @@ HEADERS=$(shell find include -name '*.h')
 %dbg: src/tests/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz
 
-%: src/test/%.cpp $(HEADERS)
+%: src/tests/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o -DNDEBUG $(OMP_STR) $@ -pthread
 
 printlibs:
@@ -119,10 +119,10 @@ alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
 dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB
 
-jsdkmeanstest: src/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
+jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz
 
-jsdkmeanstestdbg: src/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
+jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz
 
 

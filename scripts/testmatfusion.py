@@ -6,7 +6,7 @@ import scipy.sparse as sp
 from scipy.io import mmread, mmwrite
 
 def _ft(x):
-    return ""
+    return x.dtype.itemsize
     
 
 
