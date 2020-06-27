@@ -4,7 +4,6 @@
 #include <thread>
 #include "minocore/util/blaze_adaptor.h"
 #include <cassert>
-#include "fastiota/fastiota_ho.h"
 #include "minocore/util/oracle.h"
 #include "boost/iterator/transform_iterator.hpp"
 
@@ -41,7 +40,7 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
     std::vector<IT> minindices(npoints, IT(-1)); // indices to which points are assigned
     size_t nr = npoints; // Manually managing count
     std::unique_ptr<IT[]> R(new IT[npoints]);
-    fastiota::iota(R.get(), npoints, 0);
+    std::iota(R.get(), R.get() + npoints, 0);
     std::vector<IT> F;
     shared::flat_hash_set<IT> tmp;
     std::vector<IT> current_batch;
