@@ -262,7 +262,7 @@ int m2ccore(std::string in, std::string out, Opts &opts)
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
     std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
     auto &ts = *opts.stamper_;
-    ts.add_event("Parse matrix\n");
+    ts.add_event("Parse matrix");
     auto tstart = std::chrono::high_resolution_clock::now();
     blz::SM<FT> sm;
     if(opts.load_csr) {
@@ -279,7 +279,7 @@ int m2ccore(std::string in, std::string out, Opts &opts)
     std::tuple<std::vector<CType<FT>>, std::vector<uint32_t>, CType<FT>> hardresult;
     std::tuple<std::vector<CType<FT>>, blz::DM<FT>, CType<FT>> softresult;
 
-    ts.add_event("Initial solution\n");
+    ts.add_event("Initial solution");
     switch(opts.dis) {
         case dist::L1: case dist::TVD: {
             assert(min(sm) >= 0.);
