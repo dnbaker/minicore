@@ -93,10 +93,12 @@ class Run:
         if self.of and self.cmd == "GREEDY":
             assert 1. >= self.of  >= 0., f"{self.of} out of range"
             cmd = cmd + f" -O{of} "
+        pbs = " -B " if self.pb else ""
         if self.pb:
             print("parsing blaze")
-            cnd = cmd + " -B "
-        cmd = f"{cmd} {path} {dest} &> {uuid.uuid1()}.log"
+        cmd = f"{cmd} {pbs} {path} {dest} &> {uuid.uuid1()}.log"
+        if self.pb and " -B " not in cmd:
+            raise Exception("S")
         if self.timefunc:
             cmd = f"{self.timefunc} -v {cmd}"
         #print("About to call '%s'" % cmd)
