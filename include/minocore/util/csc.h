@@ -205,9 +205,9 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
         matview((const IndPtrType *)indptr.data(), (const IndicesType *)indices.data(),
                 (const DataType *)data.data(), indices.size() / sizeof(IndicesType),
                  nfeat, nsamples);
-    std::fprintf(stderr, "indptr size: %zu\n", indptr.size() / sizeof(IndPtrType));
-    std::fprintf(stderr, "indices size: %zu\n", indices.size() / sizeof(IndicesType));
-    std::fprintf(stderr, "data size: %zu\n", data.size() / sizeof(DataType));
+    std::fprintf(stderr, "[%s] indptr size: %zu\n", __PRETTY_FUNCTION__, indptr.size() / sizeof(IndPtrType));
+    std::fprintf(stderr, "[%s] indices size: %zu\n", __PRETTY_FUNCTION__, indices.size() / sizeof(IndicesType));
+    std::fprintf(stderr, "[%s] data size: %zu\n", __PRETTY_FUNCTION__, data.size() / sizeof(DataType));
 #ifndef MADV_REMOVE
 #  define MADV_FLAGS (MADV_DONTNEED | MADV_FREE)
 #else
