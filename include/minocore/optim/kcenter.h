@@ -266,6 +266,7 @@ solve_kcenter(blaze::Matrix<MT, SO> &matrix, const Norm &norm, RNG &rng, size_t 
 {
     auto &_mat = ~matrix;
     auto rit = blz::rowiterator(_mat);
+    return solve_kcenter(rit.begin(), rit.end(), norm, rng, k, eps, gamma, nrep);
     return solve_kcenter<decltype(rit.begin()), FT>(rit.begin(), rit.end(), norm, rng, k, eps, gamma, nrep);
 }
 

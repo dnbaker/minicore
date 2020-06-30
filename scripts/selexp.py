@@ -1,5 +1,8 @@
 import sys
 import math
+import uuid
+from subprocess import check_call
+
 
 DISTS = {
     'L1': '1', 'L2': '2', 'SQRL2': 'S', 'MKL': 'M',
@@ -73,7 +76,7 @@ class Run:
             r = self.r
         if r:
             return list(map(
-                lambda x: self.call(path, f"{dest}.{x}", seed=seed+x), r))
+                lambda x: self.call(path, f"{dest}.{x}", seed=seed+x, r=None), r))
         if not seed:
             seed = self.seed
         if not dest:
@@ -91,14 +94,14 @@ class Run:
             assert 1. >= self.of  >= 0., f"{self.of} out of range"
             cmd = cmd + f" -O{of} "
         if self.pb:
+            print("parsing blaze")
             cnd = cmd + " -B "
-        cmd = f"{cmd} {path} {dest}"
+        cmd = f"{cmd} {path} {dest} &> {uuid.uuid1()}.log"
         if self.timefunc:
             cmd = f"{self.timefunc} -v {cmd}"
         #print("About to call '%s'" % cmd)
         #print("dest", dest, "path", path)
-        p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
-        return tuple(p.communicate())
+        check_call(cmd, shell=True)
 
 
 
@@ -146,46 +149,30 @@ if __name__ == "__main__":
             ret = []
             if s:
                 for g in s:
-                    r = Run(cmd=with_cmd, key=m, k=k, path=path, dest=md, gammabeta=g, seed=args.seed, prior="GAMMA_BETA", lloyd_iter=li, threads=threads, of=lf, timefunc=tf, pb=pb)
-                    tups = r.call(path=path, dest=md, r=rng)
-                    for x, tup in zip(rng, tups):
-                        #print(tup, len(tup))
-                        with open(md + f"{g}.iter{x}.log", "wb") as f:
-                            set(map(f.write, tup))
-                    ret += tups
+                    runner = Run(cmd=with_cmd, key=m, k=k, path=path, dest=md, gammabeta=g, seed=args.seed, prior="GAMMA_BETA", lloyd_iter=li, threads=threads, of=lf, timefunc=tf, pb=pb)
+                    print("Callign runners")
+                    runner.call(path=path, dest=md, r=rng)
             else:
-                r = Run(cmd=with_cmd, key=m, k=k, seed=args.seed, lloyd_iter=li, threads=threads, of=lf, timefunc=tf, pb=pb)
-                tups = r.call(path=path, dest=md, r=range(1))
-                print(tups)
-                for x, tup in zip(range(1), tups):
-                    with open(md + f".{x}.log", "wb") as f:
-                        set(map(f.write, tup))
-                ret += tups
-            return ret
+                runner = Run(cmd=with_cmd, key=m, k=k, seed=args.seed, lloyd_iter=li, threads=threads, of=lf, timefunc=tf, pb=pb)
+                runner.call(path=path, dest=md)
         if cmds[0]:
             print("Doing Greedy", file=sys.stderr)
             if of:
-                ret += perform_run("GREEDY", md=mydest + "_GREEDY_OUTLIERS_%f_" % of, lf=of)
-            ret += perform_run("GREEDY", md=mydest + "_GREEDY", lf=0.)
+                perform_run("GREEDY", md=mydest + "_GREEDY_OUTLIERS_%f_" % of, lf=of)
+            perform_run("GREEDY", md=mydest + "_GREEDY", lf=0.)
         if cmds[1]:
             print("Doing D2", file=sys.stderr)
-            ret += perform_run("D2", md=mydest + "_D2")
+            perform_run("D2", md=mydest + "_D2")
         if cmds[3]:
             print("Doing CLUSTER", file=sys.stderr)
-            ret += perform_run("CLUSTER", md=mydest + "_CLUSTER")
+            perform_run("CLUSTER", md=mydest + "_CLUSTER")
+        '''
         if cmds[2]:
             tmpli = li
             li = 1
             ret += perform_run("CLUSTER", md=mydest + "_CLUSTER_1_ITER")
             li = tmpli
-    ulog = lf + ".complete.log"
-    olog = lf + ".out.log"
-    elog = lf + ".err.log"
-    ufp, ofp, efp = map(lambda x: open(x, "w"), (ulog, olog, elog))
-    for out, err in map(lambda x: (x[0].decode(), x[1].decode()), ret):
-        ufp.write(out + err)
-        ofp.write(out)
-        efp.write(err)
+        '''
     sys.exit(0)
 
 
