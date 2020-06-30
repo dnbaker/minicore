@@ -15,7 +15,7 @@ auto &geomedian(const blz::Matrix<MT, SO> &mat, blz::DenseVector<VT, !SO> &dv, d
     //
     using FT = typename std::decay_t<decltype(~mat)>::ElementType;
     const auto &_mat = ~mat;
-    std::fprintf(stderr, "rows: %zu. col: %zu\n", _mat.rows(), _mat.columns());
+    //std::fprintf(stderr, "[geomedian] rows: %zu. col: %zu\n", _mat.rows(), _mat.columns());
     if(_mat.rows() == 1) {
         ~dv = row(_mat, 0);
         return dv;

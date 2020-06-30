@@ -37,17 +37,14 @@ struct bicriteria_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<st
 // \gamma = z / n
 */
 
-template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
+
+template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 bicriteria_result_t<IT, FT>
-kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
-                   double gamma=0.001, size_t t = 100, double eta=0.01,
-                   const Norm &norm=Norm())
+kcenter_bicriteria(const Oracle &oracle, size_t np, RNG &rng, size_t, double eps,
+                   double gamma=0.001, size_t t = 100, double eta=0.01)
 {
-    auto dm = make_index_dm(first, norm);
     // Step 1: constants
-    assert(end > first);
-    size_t np = end - first;
     const size_t z = std::ceil(gamma * np);
     std::fprintf(stderr, "z: %zu\n", z);
     size_t farthestchunksize = std::ceil((1 + eps) * z),
@@ -81,11 +78,11 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
     #pragma omp parallel for reduction(merge: pq)
 #endif
     for(IT i = 0; i < np; ++i) {
-        double dist = dm(fv, i);
+        double dist = oracle(fv, i);
         double newdist;
         IT label = 0; // This label is an index into the ret vector, rather than the actual index
         for(size_t j = 1, e = ret.size(); j < e; ++j) {
-            if((newdist = dm(i, ret[j])) < dist) {
+            if((newdist = oracle(i, ret[j])) < dist) {
                 label = j;
                 dist = newdist;
             }
@@ -136,7 +133,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
             double newdist;
             IT label = labels[i];
             for(size_t j = 0; j < rsi; ++j) {
-                if((newdist = dm(i, rsp[j])) < dist)
+                if((newdist = oracle(i, rsp[j])) < dist)
                     dist = newdist, label = rsp[j];
             }
             distances[i] = dist;
@@ -158,8 +155,20 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
     // center ids, label assignments for all points besides outliers, outliers, and the distance of the closest excluded point
 } // kcenter_bicriteria
 
+template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
+         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
+bicriteria_result_t<IT, FT>
+kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
+                   double gamma=0.001, size_t t = 100, double eta=0.01,
+                   const Norm &norm=Norm())
+{
+    auto dm = make_index_dm(first, norm);
+    return kcenter_bicriteria(dm, end - first, rng, size_t(), eps, gamma, t, eta);
+}
+
 
 // Algorithm 3 (coreset construction)
+// Iterator version
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 coresets::IndexCoreset<IT, FT>
@@ -210,6 +219,49 @@ kcenter_coreset_outliers(Iter first, Iter end, RNG &rng, size_t k, double eps=0.
     }
     return ret;
 }
+
+// Oracle version
+template<typename Oracle, typename FT=double,
+         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
+coresets::IndexCoreset<IT, FT>
+kcenter_coreset_outliers(const Oracle &oracle, size_t np, RNG &rng, size_t k, double eps=0.1, double mu=.5,
+                double rho=1.5,
+                double gamma=0.001, double eta=0.01) {
+    size_t L = std::ceil(std::pow(2. / mu, rho) * k);
+    size_t nrounds = std::ceil((L + std::sqrt(L)) / (1. - eta));
+    auto bic = kcenter_bicriteria<Oracle, FT>(oracle, np, rng, k, eps,
+                                            gamma, nrounds, eta);
+    double rtilde = bic.outlier_threshold();
+    std::fprintf(stderr, "outlier threshold: %f\n", rtilde);
+    auto &centers = bic.centers();
+    auto &labels = bic.labels();
+    auto &outliers = bic.outliers();
+    coresets::flat_hash_map<IT, uint32_t> counts;
+    counts.reserve(centers.size());
+    size_t i = 0;
+    SK_UNROLL_8
+    do ++counts[labels[i++]]; while(i < np);
+    coresets::IndexCoreset<IT, FT> ret(centers.size() + outliers.size());
+    std::fprintf(stderr, "ret size: %zu. centers size: %zu. counts size %zu. outliers size: %zu\n", ret.size(), centers.size(), counts.size(), outliers.size());
+    for(i = 0; i < outliers.size(); ++i) {
+        assert(outliers[i].second < np);
+        ret.indices_[i] = outliers[i].second;
+        ret.weights_[i] = 1.;
+    }
+    for(const auto &pair: counts) {
+        assert(pair.first < np);
+        ret.weights_[i] = pair.second;
+        ret.indices_[i] = pair.first;
+        ++i;
+    }
+    assert(i == ret.size());
+    for(size_t i = 0; i < ret.indices_.size(); ++i) {
+        assert(ret.indices_[i] < np);
+    }
+    return ret;
+}
+
+
 } // namespace outliers
 using outliers::kcenter_coreset_outliers;
 using outliers::kcenter_bicriteria;

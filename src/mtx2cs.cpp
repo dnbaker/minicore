@@ -18,6 +18,7 @@ void usage() {
                          "Default: cluster\n"
                          "-G: use greedy farthest-point selection (k-center 2-approximation)\n"
                          "-l: use D2 sampling\n"
+                         "-7: use k-center coreset for clustering in doubling metrics\n"
                          "-O: outlier fraction to use for k-center clustering with outliers -G. Implies -G\n"
                         "\n\n\n"
                          "=== General/Formatting ===\n"
@@ -146,6 +147,64 @@ int m2d2core(std::string in, std::string out, Opts &opts)
 }
 
 
+#if 0
+template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
+         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
+coresets::IndexCoreset<IT, FT>
+kcenter_coreset_outliers(Iter first, Iter end, RNG &rng, size_t k, double eps=0.1, double mu=.5,
+                double rho=1.5,
+                double gamma=0.001, double eta=0.01, const Norm &norm=Norm()) {
+    // rho is 'D' for R^D (http://www.wisdom.weizmann.ac.il/~robi/teaching/2014b-SeminarGeometryAlgorithms/lecture1.pdf)
+    // in Euclidean space, as worst-case, but usually better in real data with structure.
+    assert(mu > 0. && mu <= 1.);
+    const size_t np = end - first;
+#endif
+
+template<typename FT>
+int m2kccs(std::string in, std::string out, Opts &opts)
+{
+    auto &ts = *opts.stamper_;
+    std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
+    std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
+    ts.add_event("Parse matrix");
+    blz::SM<FT> sm;
+    opts.stamper_->add_event("load matrix");
+    if(opts.load_csr) {
+        std::fprintf(stderr, "Trying to load from csr\n");
+        sm = csc2sparse<FT>(in);
+    } else if(opts.load_blaze) {
+        std::fprintf(stderr, "Trying to load from blaze\n");
+        blaze::Archive<std::ifstream> arch(in);
+        arch >> sm;
+    } else {
+        std::fprintf(stderr, "Trying to load from mtx\n");
+        sm = mtx2sparse<FT>(in, opts.transpose_data);
+    }
+    std::fprintf(stderr, "Loaded\n");
+
+    blz::DV<FT, blz::rowVector> pc(1);
+    blz::DV<FT, blz::rowVector> *pcp = nullptr;
+    pcp = &pc;
+    if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
+    else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
+    if(opts.prior != dist::NONE)
+        pcp = &pc;
+    ts.add_event("Set up applicator + caching");
+    auto app = jsd::make_probdiv_applicator(sm, opts.dis, opts.prior, pcp);
+    std::fprintf(stderr, "made applicator\n");
+    ts.add_event("D^2 sampling");
+    std::mt19937_64 mt(opts.seed);
+    std::vector<uint32_t> centers;
+    auto kccs = kcenter_coreset_outliers(app, app.size(), mt, opts.k, opts.eps, 0.1, 1.5, opts.outlier_fraction);
+    std::FILE *ofp;
+    if(!(ofp = std::fopen((out + ".centers").data(), "w"))) throw 1;
+    for(size_t i = 0; i < kccs.size(); ++i) {
+        std::fprintf(ofp, "%u\t%g\n", kccs.indices_[i], kccs.weights_[i]);
+    }
+    std::fclose(ofp);
+    return 0;
+}
+
 template<typename FT>
 int m2greedycore(std::string in, std::string out, Opts &opts)
 {
@@ -203,7 +262,7 @@ int m2ccore(std::string in, std::string out, Opts &opts)
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
     std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
     auto &ts = *opts.stamper_;
-    ts.add_event("Parse matrix\n");
+    ts.add_event("Parse matrix");
     auto tstart = std::chrono::high_resolution_clock::now();
     blz::SM<FT> sm;
     if(opts.load_csr) {
@@ -220,7 +279,7 @@ int m2ccore(std::string in, std::string out, Opts &opts)
     std::tuple<std::vector<CType<FT>>, std::vector<uint32_t>, CType<FT>> hardresult;
     std::tuple<std::vector<CType<FT>>, blz::DM<FT>, CType<FT>> softresult;
 
-    ts.add_event("Initial solution\n");
+    ts.add_event("Initial solution");
     switch(opts.dis) {
         case dist::L1: case dist::TVD: {
             assert(min(sm) >= 0.);
@@ -310,7 +369,8 @@ int m2ccore(std::string in, std::string out, Opts &opts)
 enum ResultType {
     CORESET,
     GREEDY_SELECTION,
-    D2_SAMPLING
+    D2_SAMPLING,
+    DOUBLING_METRIC_CORESET
 };
 
 int main(int argc, char **argv) {
@@ -321,7 +381,7 @@ int main(int argc, char **argv) {
     std::string inpath, outpath;
     [[maybe_unused]] bool use_double = true;
     ResultType rt = ResultType::CORESET;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:O:uURlGHiIYQbFVPBdjJxSMT12NCDfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:O:uURlGHiIYQbFVP7BdjJxSMT12NCDfh?")) >= 0;) {
         switch(c) {
             case 'p': OMP_ONLY(omp_set_num_threads(std::atoi(optarg));) break;
             case 'h': case '?': usage();          break;
@@ -349,6 +409,7 @@ int main(int argc, char **argv) {
             case 'E': opts.sm = coresets::LBK; break;
 
             case 'G': rt = ResultType::GREEDY_SELECTION; break;
+            case '7': rt = ResultType::DOUBLING_METRIC_CORESET; break;
             case 'O': opts.outlier_fraction = std::atof(optarg); break;
 			case 'l': rt = ResultType::D2_SAMPLING; break;
 
@@ -397,6 +458,9 @@ int main(int argc, char **argv) {
         case CORESET:
             return use_double ? m2ccore<double>(inpath, outpath, opts)
                               : m2ccore<float>(inpath, outpath, opts);
+        case DOUBLING_METRIC_CORESET:
+            return use_double ? m2kccs<double>(inpath, outpath, opts)
+                              : m2kccs<float>(inpath, outpath, opts);
 #else
 	case CORESET: 	       return m2ccore<double>(inpath, outpath, opts);
 	case GREEDY_SELECTION: return m2greedycore<double>(inpath, outpath, opts);
