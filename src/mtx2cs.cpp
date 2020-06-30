@@ -71,7 +71,7 @@ int m2d2core(std::string in, std::string out, Opts &opts)
         std::fprintf(stderr, "Trying to load from csr\n");
         sm = csc2sparse<FT>(in);
     } else if(opts.load_blaze) {
-        std::fprintf(stderr, "Trying to load from blaze\n");
+        std::fprintf(stderr, "Trying to load from blaze %s\n", in.data());
         blaze::Archive<std::ifstream> arch(in);
         arch >> sm;
     } else {
@@ -159,7 +159,7 @@ int m2greedycore(std::string in, std::string out, Opts &opts)
         std::fprintf(stderr, "Trying to load from csr\n");
         sm = csc2sparse<FT>(in);
     } else if(opts.load_blaze) {
-        std::fprintf(stderr, "Trying to load from blaze\n");
+        std::fprintf(stderr, "Trying to load from blaze %s\n", in.data());
         blaze::Archive<std::ifstream> arch(in);
         arch >> sm;
     } else {
@@ -210,7 +210,7 @@ int m2ccore(std::string in, std::string out, Opts &opts)
         std::fprintf(stderr, "Trying to load from csr\n");
         sm = csc2sparse<FT>(in);
     } else if(opts.load_blaze) {
-        std::fprintf(stderr, "Trying to load from blaze\n");
+        std::fprintf(stderr, "Trying to load from blaze %s\n", in.data());
         blaze::Archive<std::ifstream> arch(in);
         arch >> sm;
     } else {
