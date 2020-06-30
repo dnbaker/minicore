@@ -105,14 +105,17 @@ kcenter_greedy_2approx(Oracle &oracle, const size_t np, size_t k, RNG &rng)
     if(k == 2) return centers;
 
     while(centers.size() < k) {
-        FT bestcost = std::numeric_limits<FT>::min();
-        IT bestind = 0;
         OMP_PFOR
         for(IT i = 0; i < np; ++i) {
             if(!distances[i]) continue;
             auto v = oracle(i, newc);
             distances[i] = std::min(v, distances[i]);
-            if(v > bestcost) {
+        }
+        FT bestcost = -std::numeric_limits<FT>::max();
+        IT bestind = -1;
+        OMP_PFOR
+        for(IT i = 0; i < np; ++i) {
+            if(auto v = distances[i];v > bestcost) {
                 OMP_ONLY(if(v > bestcost))
                 {
                     OMP_CRITICAL
@@ -124,9 +127,10 @@ kcenter_greedy_2approx(Oracle &oracle, const size_t np, size_t k, RNG &rng)
             }
         }
         newc = bestind;
-        assert(bestind == std::max_element(distances.begin(), distances.end()) - distances.begin());
 #ifndef NDEBUG
-        std::fprintf(stderr, "Current max: %g\n", *std::max_element(distances.begin(), distances.end()));
+        auto ind = std::max_element(distances.begin(), distances.end()) - distances.begin();
+        std::fprintf(stderr, "Current max: %g/%zu, compared to what should be best, %g/%zu\n", double(distances[ind]), size_t(ind), double(distances[bestind]), size_t(bestind));
+        assert(bestind == ind || distances[ind] == distances[bestind]);
 #endif
         centers.push_back(newc);
         distances[newc] = 0.;
