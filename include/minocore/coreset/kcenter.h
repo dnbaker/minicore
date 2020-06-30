@@ -7,46 +7,10 @@ namespace coresets {
 namespace outliers {
 
 /*
-// All algorithms in this namespace are from:
+// Algorithms in this namespace are primarily
 // Greedy Strategy Works for k-Center Clustering with Outliers and Coreset Construction
 // Hu Ding, Haikuo Yu, Zixiu Wang
 */
-
-template<typename IT=std::uint32_t, typename FT=float, typename Container=std::vector<std::pair<FT, IT>>,
-         typename Cmp=std::greater<>>
-struct fpq: public std::priority_queue<std::pair<FT, IT>, Container, Cmp> {
-    // priority queue providing access to underlying constainer with getc()
-    // , a reserve function and that defaults to std::greater<> for farthest points.
-    using super = std::priority_queue<std::pair<FT, IT>, Container, Cmp>;
-    using value_type = std::pair<FT, IT>;
-
-    IT size_;
-    fpq(IT size=0): size_(size) {reserve(size);}
-    fpq(const fpq &o) = default;
-    void reserve(size_t n) {this->c.reserve(n);}
-    auto &getc() {return this->c;}
-    const auto &getc() const {return this->c;}
-    void update(const fpq &o) {
-        for(const auto v: o.getc())
-            add(v);
-    }
-    void add(const value_type v) {
-        if(this->size() < size_) this->push(v);
-        else if(v > this->top()) {
-            this->pop();
-            this->push(v);
-        }
-    }
-    void add(FT val, IT index) {
-        if(this->size() < size_) {
-            this->push(value_type(val, index));
-        } else if(val > this->top().first) {
-            this->pop();
-            this->push(value_type(val, index));
-        }
-    }
-};
-
 
 
 template<typename IT, typename FT>
@@ -64,7 +28,9 @@ struct bicriteria_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<st
 };
 
 /*
-// Algorithm 1 from the above DYW paper
+// Algorithm 1 from:
+// Greedy Strategy Works for k-Center Clustering with Outliers and Coreset Construction
+// Hu Ding, Haikuo Yu, Zixiu Wang
 // Z = # outliers
 // \mu = quality of coreset
 // size of coreset: 2z + O((2/\mu)^p k)
@@ -145,13 +111,8 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
                 rsp[rsi++] = index;
         } while(rsi < samplechunksize);
         // random_samples now contains indexes *into pq*
-        assert(pq.getc().data());
         std::transform(rsp, rsp + rsi, rsp,
-            [pqi=pq.getc().data()](auto x) {
-            return pqi[x].second;
-        });
-        for(size_t i = 0; i < rsi; ++i)
-            assert(rsp[i] < np);
+                       [&](auto x) {return pq[x].second;});
         // random_samples now contains indexes *into original dataset*
 
         // Insert into solution
@@ -189,101 +150,14 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
     bicret.centers() = std::move(ret);
     bicret.labels() = std::move(labels);
     bicret.outliers() = std::move(pq.getc());
+#ifndef NDEBUG
     std::fprintf(stderr, "outliers size: %zu\n", bicret.outliers().size());
+#endif
     std::get<3>(bicret) = minmaxdist;
     return bicret;
     // center ids, label assignments for all points besides outliers, outliers, and the distance of the closest excluded point
 } // kcenter_bicriteria
 
-/*
-// Algorithm 2 from the above DYW paper
-// Z = # outliers
-// \gamma = z / n
-*/
-
-template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
-         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-std::vector<IT>
-kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double eps,
-                                double gamma=0.001,
-                                const Norm &norm=Norm())
-{
-    auto dm = make_index_dm(first, norm);
-    const size_t np = end - first;
-    size_t farthestchunksize = std::ceil((1. + eps) * gamma * np);
-    if(farthestchunksize > np) farthestchunksize = np;
-    fpq<IT, FT> pq(farthestchunksize);
-    //pq.reserve(farthestchunksize + 1);
-    std::vector<IT> ret;
-    std::vector<FT> distances(np, std::numeric_limits<FT>::max());
-    ret.reserve(k);
-    auto newc = rng() % np;
-    ret.push_back(newc);
-    do {
-        //const auto &newel = first[newc];
-        // Fill pq
-#ifdef _OPENMP
-    #pragma omp declare reduction (merge : fpq<IT, FT> : omp_out.update(omp_in)) initializer(omp_priv(omp_orig))
-    #pragma omp parallel for reduction(merge: pq)
-#endif
-        for(IT i = 0; i < np; ++i) {
-            double dist = distances[i];
-            if(dist == 0.) continue;
-            double newdist;
-            if((newdist = dm(i, newc)) < dist)
-                dist = newdist;
-            distances[i] = dist;
-            pq.add(dist, i);
-        }
-
-        // Sample point
-        newc = pq.getc()[rng() % farthestchunksize].second;
-        assert(newc < np);
-        ret.push_back(newc);
-        pq.getc().clear();
-    } while(ret.size() < k);
-    return ret;
-}// kcenter_greedy_2approx_outliers
-
-template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
-         typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-std::vector<IT>
-kcenter_greedy_2approx_outliers(Oracle &oracle, size_t np, RNG &rng, size_t k, double eps,
-                                double gamma=0.001)
-{
-    size_t farthestchunksize = std::ceil((1. + eps) * gamma * np);
-    fpq<IT, FT> pq(farthestchunksize);
-    //pq.reserve(farthestchunksize + 1);
-    std::vector<IT> ret;
-    std::vector<FT> distances(np, std::numeric_limits<FT>::max());
-    ret.reserve(k);
-    auto newc = rng() % np;
-    ret.push_back(newc);
-    do {
-        //const auto &newel = first[newc];
-        // Fill pq
-#ifdef _OPENMP
-    #pragma omp declare reduction (merge : fpq<IT, FT> : omp_out.update(omp_in)) initializer(omp_priv(omp_orig))
-    #pragma omp parallel for reduction(merge: pq)
-#endif
-        for(IT i = 0; i < np; ++i) {
-            double dist = distances[i];
-            if(dist == 0.) continue;
-            double newdist;
-            if((newdist = oracle(i, newc)) < dist)
-                dist = newdist;
-            distances[i] = dist;
-            pq.add(dist, i);
-        }
-
-        // Sample point
-        newc = pq.getc()[rng() % farthestchunksize].second;
-        assert(newc < np);
-        ret.push_back(newc);
-        pq.getc().clear();
-    } while(ret.size() < k);
-    return ret;
-}// kcenter_greedy_2approx_outliers
 
 // Algorithm 3 (coreset construction)
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
@@ -338,9 +212,9 @@ kcenter_coreset_outliers(Iter first, Iter end, RNG &rng, size_t k, double eps=0.
 }
 } // namespace outliers
 using outliers::kcenter_coreset_outliers;
-using outliers::kcenter_greedy_2approx_outliers;
+using outliers::kcenter_bicriteria;
 } // namespace coresets
-using coresets::outliers::kcenter_greedy_2approx_outliers;
+using coresets::kcenter_coreset_outliers;
 
 } // namespace minocore
 

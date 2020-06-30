@@ -49,6 +49,11 @@ struct Opts {
 
 
 /*
+ * get_initial_centers:
+ * Samples points in proportion to their cost, as evaluated by norm(x, y).
+ * For squared L2 distance, mu-similar Bregman divergences, and some other functions,
+ * this produces an log(k)-approximate solution.
+ *
  * TODO: perform 1 or 2 rounds of EM before saving costs, which might be a better heuristic
  */
 template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm>

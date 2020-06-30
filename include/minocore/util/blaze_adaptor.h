@@ -14,7 +14,7 @@ extern "C" {
 #include "./Inf2Zero.h"
 
 namespace blz {
-using blaze::unchecked;
+
 
 // These blaze adaptors exist for the purpose of
 // providing a pair of iterators.
@@ -95,16 +95,24 @@ struct column_iterator_t {
 
 template<typename MatType>
 struct RowViewer {
-    const row_iterator_t<MatType> start_, end_;
+    row_iterator_t<MatType> start_, end_;
     RowViewer(MatType &mat): start_(0, mat), end_(mat.rows(), mat) {}
     auto begin() const {return start_;}
     auto end()   const {return end_;}
+    template<size_t I>
+    auto &get() const {
+        if constexpr(I == 0) {
+            return start_;
+        } else {
+            return end_;
+        }
+    }
 };
 
 
 template<typename MatType>
 struct ColumnViewer {
-    const column_iterator_t<MatType> start_, end_;
+    column_iterator_t<MatType> start_, end_;
     ColumnViewer(MatType &mat): start_(0, mat), end_(mat.columns(), mat) {}
     auto begin() const {return start_;}
     auto end()   const {return end_;}
@@ -570,3 +578,44 @@ using functional::indices_if;
 
 
 } // namespace blz
+
+
+namespace std {
+
+#define OLOAD(MAT, N)\
+   template<typename this_type> struct tuple_element<N, MAT<this_type>> {\
+        using type = decltype(std::declval<MAT<this_type>>().get<N>());\
+   };
+   template<size_t N, typename MatrixType>
+   struct tuple_element<N, blz::ColumnViewer<MatrixType>> {
+       using type = std::decay_t<decltype(std::declval<blz::ColumnViewer<MatrixType>>().template get<N>())>;
+   };
+   template<size_t N, typename MatrixType>
+   struct tuple_element<N, blz::RowViewer<MatrixType>> {
+       using type = std::decay_t<decltype(std::declval<blz::RowViewer<MatrixType>>().template get<N>())>;
+   };
+#if 0
+   template<typename this_type> struct tuple_element<0,blz::ConstColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<0,blz::ColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<0,blz::ConstRowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<0,blz::RowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<1,blz::ConstColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<1,blz::ColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<1,blz::ConstRowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
+   template<typename this_type> struct tuple_element<1,blz::RowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
+#endif
+
+   template<typename this_type> struct tuple_size<blz::RowViewer<this_type>> : public std::integral_constant<size_t,2> {};
+   template<typename this_type> struct tuple_size<blz::ColumnViewer<this_type>>: public std::integral_constant<size_t,2> {};
+   template<int I, typename Mat>
+   decltype(auto) get(const blz::RowViewer<Mat> &x) {
+        return x.get();
+   }
+   template<int I, typename Mat>
+   decltype(auto) get(const blz::ConstRowViewer<Mat> &x) {return x.get();}
+   template<int I, typename Mat>
+   decltype(auto) get(const blz::ColumnViewer<Mat> &x) {return x.get();}
+   template<int I, typename Mat>
+   decltype(auto) get(const blz::ConstColumnViewer<Mat> &x) {return x.get();}
+} // namespace std
+

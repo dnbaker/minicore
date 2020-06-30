@@ -92,7 +92,7 @@ HEADERS=$(shell find include -name '*.h')
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz
 
 %: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o -DNDEBUG $(OMP_STR) $@ -pthread
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(OMP_STR)
 
 printlibs:
 	echo $(LIBPATHS)
