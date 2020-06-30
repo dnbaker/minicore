@@ -124,6 +124,7 @@ kcenter_greedy_2approx(Oracle &oracle, const size_t np, size_t k, RNG &rng)
             }
         }
         newc = bestind;
+        assert(bestind == std::max_element(distances.begin(), distances.end()) - distances.begin());
 #ifndef NDEBUG
         std::fprintf(stderr, "Current max: %g\n", *std::max_element(distances.begin(), distances.end()));
 #endif
