@@ -334,7 +334,6 @@ static void print_measures() {
         REVERSE_POISSON,
         UWLLR,
         TOTAL_VARIATION_DISTANCE,
-        WASSERSTEIN,
         PSD,
         PSM,
         ITAKURA_SAITO,
