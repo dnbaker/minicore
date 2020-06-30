@@ -14,6 +14,9 @@ enum DT {
     U64
 };
 
+#define xstr(s) str(s)
+#define str(s) #s
+
 int main(int argc, char **argv) {
     bool usefloat = false, empty = false, tx = false, ip64 = true, id64 = true, use32 = false;
     std::string prefix, outpath = "out.blz";
@@ -34,6 +37,7 @@ int main(int argc, char **argv) {
     }
     blaze::Archive<std::ofstream> arch(outpath);
 #define MAIN(type, ip, id) do {\
+    std::cerr << xstr(type) << ", " << xstr(ip) << ", " << xstr(id) << '\n';\
     auto mat = minocore::csc2sparse<type, ip, id>(prefix);\
     if(empty) minocore::util::erase_empty(mat);\
     if(tx) transpose(mat); \
@@ -43,7 +47,7 @@ int main(int argc, char **argv) {
     switch((usefloat << 3) | (use32 << 2) | (ip64 << 1) | id64) {
         case 0:  MAIN(uint64_t, uint32_t, uint32_t); break;
         case 1:  MAIN(uint64_t, uint32_t, uint64_t); break;
-        case 2:  MAIN(uint64_t, uint64_t, uint32_t); break;
+        case 2:  MAIN(uint64_t, uint32_t, uint32_t); break;
         case 3:  MAIN(uint64_t, uint64_t, uint64_t); break;
         case 4:  MAIN(uint32_t, uint32_t, uint32_t); break;
         case 5:  MAIN(uint32_t, uint32_t, uint64_t); break;
