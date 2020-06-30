@@ -164,6 +164,9 @@ template<typename FT>
 int m2kccs(std::string in, std::string out, Opts &opts)
 {
     auto &ts = *opts.stamper_;
+    if(opts.outlier_fraction == 0.) {
+        std::fprintf(stderr, "note: outlier fraction is 0. Gathering coreset for k-center with outliers is less meaningful without a parameter.");
+    }
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
     std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
     ts.add_event("Parse matrix");
@@ -465,6 +468,7 @@ int main(int argc, char **argv) {
 	case CORESET: 	       return m2ccore<double>(inpath, outpath, opts);
 	case GREEDY_SELECTION: return m2greedycore<double>(inpath, outpath, opts);
 	case D2_SAMPLING:      return m2d2core<double>(inpath, outpath, opts);
+    case DOUBLING_METRIC_CORESET: return m2kccs<double>(inpath, outpath, opts);
 #endif
 	default: HEDLEY_UNREACHABLE();
     }
