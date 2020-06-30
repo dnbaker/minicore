@@ -163,7 +163,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
                    const Norm &norm=Norm())
 {
     auto dm = make_index_dm(first, norm);
-    return kcenter_bicriteria(dm, end - first, rng, size_t(), eps, gamma, t, eta, norm);
+    return kcenter_bicriteria(dm, end - first, rng, size_t(), eps, gamma, t, eta);
 }
 
 
