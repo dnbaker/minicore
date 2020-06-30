@@ -225,7 +225,7 @@ kcenter_greedy_2approx_outliers(Oracle &oracle, size_t np, RNG &rng, size_t k, d
 }// kcenter_greedy_2approx_outliers
 
 
-template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm>
 std::vector<IT>
 solve_kcenter(Iter first, Iter end, const Norm &norm, RNG &rng, size_t k=50, double eps=1.,
@@ -255,18 +255,18 @@ solve_kcenter(Iter first, Iter end, const Norm &norm, RNG &rng, size_t k=50, dou
                  std::tie(ret, currentcost) = std::move(std::tie(ret2, newcost));
         }
     }
-    return kcenter_greedy_2approx_outliers(first, end, rng, k, eps, gamma, norm);
+    return kcenter_greedy_2approx_outliers<Iter, FT>(first, end, rng, k, eps, gamma, norm);
 }
 
-template<typename MT, typename FT=shared::ContainedTypeFromIterator<Iter>,
-         typename IT=std::uint32_t, typename RNG, typename Norm>
+template<typename MT, typename FT=double,
+         typename IT=std::uint32_t, typename RNG, typename Norm, bool SO>
 std::vector<IT>
 solve_kcenter(blaze::Matrix<MT, SO> &matrix, const Norm &norm, RNG &rng, size_t k=50, double eps=1.,
               double gamma=0, int nrep=0)
 {
     auto &_mat = ~matrix;
-    auto rit = lz::rowiterator(_mat);
-    return solve_kcenter(rit.begin(), rit.end(), norm, rng, k, eps, gamma, nrep);
+    auto rit = blz::rowiterator(_mat);
+    return solve_kcenter<decltype(rit.begin()), FT>(rit.begin(), rit.end(), norm, rng, k, eps, gamma, nrep);
 }
 
 } // coresets
