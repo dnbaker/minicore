@@ -33,6 +33,7 @@ script:
   - ./geomedtestdbg
   - ./sparsepriortestdbg
   - ./istestdbg
+  - ./msvdbg
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:

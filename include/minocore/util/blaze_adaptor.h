@@ -592,27 +592,32 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType 
         cv.reset(new CustomVector<WeightType, unaligned, unpadded, SO>(const_cast<WeightType *>(weights), _mat.rows()));
     for(;;) {
         if(cv) {
-#if 0
-            OMP_PFOR
-            for(size_t i = 0; i < _mat.rows(); ++i) {
-                costs[i] = blz::l2Norm(row(~mat, i, blz::unchecked) - ~dv);
-            }
+            blaze::DynamicMatrix<double> exp = expand(~dv, _mat.rows());
+            std::fprintf(stderr, "mat shape:%zu/%zu. expanded dv: %zu/%zu\n", _mat.rows(), _mat.columns(), exp.rows(), exp.columns());
+            costs = sum<rowwise>(blz::pow(_mat - expand(~dv, _mat.rows()), 2));
+            auto mn = blaze::min(costs), mx = blaze::max(costs);
+            std::fprintf(stderr, "costs: sum of squared distances is %g, min/max are %g/%g\n", blz::sum(costs), mn, mx);
+            costs = sqrt(costs);
+            mn = blaze::min(costs), mx = blaze::max(costs);
+            std::fprintf(stderr, "costs: sum of sqrt(sum of squared distances) is %g, min/max are %g/%g\n", blz::sum(costs), mn, mx);
             costs *= *cv;
-#else
-            costs = (*cv) * sqrt(sum<rowwise>(pow(_mat - expand(~dv, _mat.rows()), 2)));
-#endif
+            mn = blaze::min(costs), mx = blaze::max(costs);
+            std::fprintf(stderr, "costs: weighted sqrt(sum of squared distances)is %g, min/max are %g/%g\n", blz::sum(costs), mn, mx);
         } else {
-#if 0
+            auto exp = expand(~dv, _mat.rows());
+#if 1
+            costs.resize(_mat.rows());
             OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i) {
-                costs[i] = blz::l2Norm(row(~mat, i, blz::unchecked) - ~dv);
+                costs[i] = blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
             }
 #else
-            costs = sqrt(sum<rowwise>(blz::pow(_mat - expand(~dv, _mat.rows()), 2)));
+            costs = sqrt(sum<rowwise>(blz::pow(_mat - exp, 2))); // pow2 seems broken
 #endif
         }
         FT current_cost = sum(costs);
         FT dist;
+        std::fprintf(stderr, "Current cost: %g.\n", current_cost);
         if((dist = std::abs(prevcost - current_cost)) < eps) break;
         if(unlikely(std::isnan(dist))) {
             std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
@@ -628,7 +633,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType 
 }
 template<typename MT, bool SO, typename VT>
 auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=1e-8) {
-    return geomedian<MT, SO, VT, blz::ElementType_t<MT>>(mat, dv, nullptr, eps);
+    return geomedian<MT, SO, VT, blz::ElementType_t<MT>>(mat, dv, static_cast<blaze::ElementType_t<MT> *>(nullptr), eps);
 }
 
 } // namespace blz

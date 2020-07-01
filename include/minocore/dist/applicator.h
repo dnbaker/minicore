@@ -11,7 +11,7 @@
 
 namespace minocore {
 
-namespace jsd {
+namespace cmp {
 
 using namespace blz;
 using namespace blz::distance;
@@ -1523,7 +1523,10 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
     return cs;
 }
 
-} // jsd
+} // namespace cmp
+
+namespace jsd = cmp; // until code change is complete.
+
 using jsd::DissimilarityApplicator;
 using jsd::make_d2_coreset_sampler;
 using jsd::make_kmc2;
