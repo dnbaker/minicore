@@ -594,7 +594,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=
         cv.reset(new CustomVector<FT, unaligned, unpadded, SO>(const_cast<FT *>(weights), _mat.rows()));
     for(;;) {
         if(cv) {
-#if 1
+#if 0
             OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i) {
                 costs[i] = blz::l2Norm(row(~mat, i, blz::unchecked) - ~dv);
@@ -604,7 +604,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=
             costs = (*cv) * sqrt(sum<rowwise>(pow(_mat - expand(~dv, _mat.rows()), 2)));
 #endif
         } else {
-#if 1
+#if 0
             OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i) {
                 costs[i] = blz::l2Norm(row(~mat, i, blz::unchecked) - ~dv);
@@ -618,7 +618,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=
         if((dist = std::abs(prevcost - current_cost)) < eps) break;
         if(unlikely(std::isnan(dist))) {
             std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
-            std::exit(1);
+            break;
         }
         ++iternum;
         costs = 1. / costs;
