@@ -593,7 +593,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=
     if(weights)
         cv.reset(new CustomVector<FT, unaligned, unpadded, SO>(const_cast<FT *>(weights), _mat.rows()));
     for(;;) {
-        if(cv)
+        if(cv) {
 #if 1
             OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i) {
@@ -603,7 +603,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=
 #else
             costs = (*cv) * sqrt(sum<rowwise>(pow(_mat - expand(~dv, _mat.rows()), 2)));
 #endif
-        else {
+        } else {
 #if 1
             OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i) {

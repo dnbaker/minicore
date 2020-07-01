@@ -318,7 +318,7 @@ public:
         } else if constexpr(constexpr_measure == PSL2) {
             ret = blaze::sqrNorm(i - o);
         } else if constexpr(constexpr_measure == PL2) {
-            ret = l2Norm(i - o);
+            ret = p_l2norm(i, o);
         } else if constexpr(constexpr_measure == JSD) {
             if(cp) {
                 ret = jsd(i, o, *cp);
@@ -383,7 +383,7 @@ public:
         } else if constexpr(constexpr_measure == L2) {
             ret = l2Norm(weighted_row(i) - o);
         } else if constexpr(constexpr_measure == PL2) {
-            ret = l2Norm(row(i) - o);
+            ret = p_l2norm(i, o);
         } else if constexpr(constexpr_measure == SQRL2) {
             ret = blaze::sqrNorm(weighted_row(i) - o);
             //std::fprintf(stderr, "SQRL2 between row %zu and row starting at %p is %g\n", i, (void *)&*o.begin(), ret);
@@ -461,7 +461,7 @@ public:
         } else if constexpr(constexpr_measure == L2) {
             ret = l2Norm(weighted_row(i) - weighted_row(j));
         } else if constexpr(constexpr_measure == PL2) {
-            ret = l2Norm(row(i) - row(j));
+            ret = p_l2norm(i, j);
         } else if constexpr(constexpr_measure == SQRL2) {
             ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j));
         } else if constexpr(constexpr_measure == PSL2) {
@@ -755,6 +755,32 @@ public:
             ret = blaze::sum(div - blaze::log(div)) - row(i).size();
         }
         return ret;
+    }
+
+
+    VERBOSE_ONLY(static bool warning_emitted = false;)
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>> >
+    FT p_l2norm(size_t i, const OT &o) const {
+#ifdef VERBOSE_AF
+        if constexpr(IS_SPARSE) {
+            if(prior_data_ && !warning_emitted) {
+                warning_emitted = true;
+                std::fprintf(stderr, "Note: p_l2norm with a prior is not specialized.\n");
+            }
+        }
+#endif
+        return blz::l2Norm(row(i) - o);
+    }
+    FT p_l2norm(size_t i, size_t j) const {
+#ifdef VERBOSE_AF
+        if constexpr(IS_SPARSE) {
+            if(prior_data_ && !warning_emitted) {
+                warning_emitted = true;
+                std::fprintf(stderr, "Note: p_l2norm with a prior is not specialized.\n");
+            }
+        }
+#endif
+        return blz::l2Norm(row(i) - row(j));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>> >
     FT itakura_saito(const OT &o, size_t i) const {
@@ -1296,17 +1322,11 @@ private:
             for(size_t i = 0; i < data_.rows(); ++i) {
                 if(prior_data_ && IS_SPARSE) {
                     auto &pd = *prior_data_;
-                    double s = 0.;
-                    auto r = weighted_row(i);
-                    auto getv = [&](size_t x) {return pd.size() == 1 ? pd[0]: pd[x];};
-                    auto myrs = row_sums_[i];
-                    auto psum = prior_sum_;
-                    auto totalsum = psum + myrs;
-                    auto rsi = 1. / totalsum;
-                    blz::DV<double, blz::rowVector> tmp = r * myrs;
+                    auto rsi = 1. / (prior_sum_ + row_sums_[i]);
+                    blz::DV<double, blz::rowVector> tmp = weighted_row(i);
                     if(pd.size() == 1) tmp += pd[0];
                     else               tmp += pd;
-                    pl2norm_cache_->operator[](i)  = 1. / blaze::l2Norm(tmp / blz::sum(tmp));
+                    pl2norm_cache_->operator[](i)  = 1. / blaze::l2Norm(tmp * rsi);
                 } else {
                     pl2norm_cache_->operator[](i)  = 1. / blaze::l2Norm(weighted_row(i));
                 }
