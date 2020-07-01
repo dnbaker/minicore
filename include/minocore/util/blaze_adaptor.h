@@ -594,9 +594,24 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=
         cv.reset(new CustomVector<FT, unaligned, unpadded, SO>(const_cast<FT *>(weights), _mat.rows()));
     for(;;) {
         if(cv)
+#if 1
+            OMP_PFOR
+            for(size_t i = 0; i < _mat.rows(); ++i) {
+                costs[i] = blz::l2Norm(row(~mat, i, blz::unchecked) - ~dv);
+            }
+            costs *= *cv;
+#else
             costs = (*cv) * sqrt(sum<rowwise>(pow(_mat - expand(~dv, _mat.rows()), 2)));
+#endif
         else {
-            costs = sqrt(sum<rowwise>(pow(_mat - expand(~dv, _mat.rows()), 2)));
+#if 1
+            OMP_PFOR
+            for(size_t i = 0; i < _mat.rows(); ++i) {
+                costs[i] = blz::l2Norm(row(~mat, i, blz::unchecked) - ~dv);
+            }
+#else
+            costs = sqrt(sum<rowwise>(blz::pow(_mat - expand(~dv, _mat.rows()), 2)));
+#endif
         }
         FT current_cost = sum(costs);
         FT dist;

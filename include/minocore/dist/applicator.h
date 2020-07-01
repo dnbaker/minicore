@@ -205,7 +205,11 @@ public:
         return cosine_similarity(j, o);
     }
     FT pcosine_similarity(size_t i, size_t j) const {
-        return blaze::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
+        if(pl2norm_cache_) {
+            return blaze::dot(row(i), row(j)) * pl2norm_cache_->operator[](i) * pl2norm_cache_->operator[](j);
+        } else {
+            return blaze::dot(row(i), row(j)) / (blz::l2Norm(row(i)) * blz::l2Norm(row(j)));
+        }
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT pcosine_similarity(size_t j, const OT &o) const {
@@ -1273,11 +1277,10 @@ private:
             OMP_PFOR
             for(size_t i = 0; i < data_.rows(); ++i) {
                 if(prior_data_ && IS_SPARSE) {
+                    auto &pd = *prior_data_;
                     double s = 0.;
                     auto r = weighted_row(i);
-                    auto getv = [&,iss=prior_data_->size() == 1](size_t x) {
-                        return (*prior_data_)[iss ? size_t(0): x];
-                    };
+                    auto getv = [&](size_t x) {return pd.size() == 1 ? pd[0]: pd[x];};
                     for(size_t i = 0; i < data_.columns(); ++i) {
                         s += std::pow(r[i] + getv(i), 2);
                     }
@@ -1292,16 +1295,18 @@ private:
             OMP_PFOR
             for(size_t i = 0; i < data_.rows(); ++i) {
                 if(prior_data_ && IS_SPARSE) {
+                    auto &pd = *prior_data_;
                     double s = 0.;
-                    auto r = row(i);
-                    auto getv = [&,iss=prior_data_->size() == 1](size_t x) {
-                        return (*prior_data_)[iss ? size_t(0): x];
-                    };
-                    auto rsi = 1. / row_sums_[i];
-                    for(size_t i = 0; i < data_.columns(); ++i) {
-                        s += std::pow(r[i] + getv(i) * rsi, 2);
-                    }
-                    pl2norm_cache_->operator[](i)  = 1. / std::sqrt(s);
+                    auto r = weighted_row(i);
+                    auto getv = [&](size_t x) {return pd.size() == 1 ? pd[0]: pd[x];};
+                    auto myrs = row_sums_[i];
+                    auto psum = prior_sum_;
+                    auto totalsum = psum + myrs;
+                    auto rsi = 1. / totalsum;
+                    blz::DV<double, blz::rowVector> tmp = r * myrs;
+                    if(pd.size() == 1) tmp += pd[0];
+                    else               tmp += pd;
+                    pl2norm_cache_->operator[](i)  = 1. / blaze::l2Norm(tmp / blz::sum(tmp));
                 } else {
                     pl2norm_cache_->operator[](i)  = 1. / blaze::l2Norm(weighted_row(i));
                 }
