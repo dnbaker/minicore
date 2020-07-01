@@ -86,10 +86,10 @@ CXXFLAGS += $(LDFLAGS)
 HEADERS=$(shell find include -name '*.h')
 
 %dbg: src/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS)
 
 %dbg: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS)
 
 %: src/tests/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(OMP_STR)
@@ -126,10 +126,10 @@ dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB
 
 jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz $(LDFLAGS)
 
 jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz $(LDFLAGS)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp

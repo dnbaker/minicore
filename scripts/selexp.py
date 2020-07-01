@@ -1,6 +1,7 @@
 import sys
 import math
 import uuid
+import subprocess
 from subprocess import check_call
 
 
@@ -31,7 +32,7 @@ for k in ("JSM", "JSD", "HELLINGER", "MKL", "REVERSE_MKL", "ITAKURA_SAITO"):
     
 
 PRIORS = {"DIRICHLET", "NONE", "GAMMA_BETA"}
-COMMAND = {"GREEDY": " -G ", "D2": " -l ", "CLUSTER": ""}
+COMMAND = {"GREEDY": " -G ", "D2": " -l ", "CLUSTER": "", "DOUBLINGCS": " -7 "}
 SENSES = {"FL": " -F ", "VX": " -V ", "BFL": "", "LBK": ' -E '}
 
 
@@ -103,7 +104,10 @@ class Run:
             cmd = f"{self.timefunc} -v {cmd}"
         #print("About to call '%s'" % cmd)
         #print("dest", dest, "path", path)
-        check_call(cmd, shell=True)
+        try:
+            check_call(cmd, shell=True)
+        except subprocess.CalledProcessError as e:
+            print("Failed to call '%s', continuing" % cmd, file=sys.stderr)
 
 
 
@@ -165,6 +169,9 @@ if __name__ == "__main__":
         if cmds[1]:
             print("Doing D2", file=sys.stderr)
             perform_run("D2", md=mydest + "_D2")
+        if cmds[1]:
+            print("Doing DOUBLINGCS", file=sys.stderr)
+            perform_run("DOUBLINGCS", md=mydest + "_DOUBLINGCS")
         if cmds[3]:
             print("Doing CLUSTER", file=sys.stderr)
             perform_run("CLUSTER", md=mydest + "_CLUSTER")
