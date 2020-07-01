@@ -576,6 +576,43 @@ auto columns_if(const M &mat, const F &func) {
 } // namespace blz::functional
 using functional::indices_if;
 
+// Solve geometric median for a set of points.
+template<typename MT, bool SO, typename VT, typename WeightType=const typename MT::ElementType>
+auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=1e-8,
+                WeightType *weights=nullptr)
+{
+    if((~mat).rows() == 1) return ~dv = row((~mat), 0);
+    const auto &_mat = ~mat;
+    ~dv = mean<columnwise>(_mat);
+    using FT = typename std::decay_t<decltype(~mat)>::ElementType;
+    FT prevcost = std::numeric_limits<FT>::max();
+    size_t iternum = 0;
+    assert((~dv).size() == (~mat).columns());
+    DV<FT, SO> costs;
+    std::unique_ptr<CustomVector<FT, unaligned, unpadded, SO>> cv;
+    if(weights)
+        cv.reset(new CustomVector<FT, unaligned, unpadded, SO>(const_cast<FT *>(weights), _mat.rows()));
+    for(;;) {
+        if(cv)
+            costs = (*cv) * sqrt(sum<rowwise>(pow(_mat - expand(~dv, _mat.rows()), 2)));
+        else {
+            costs = sqrt(sum<rowwise>(pow(_mat - expand(~dv, _mat.rows()), 2)));
+        }
+        FT current_cost = sum(costs);
+        FT dist;
+        if((dist = std::abs(prevcost - current_cost)) < eps) break;
+        if(unlikely(std::isnan(dist))) {
+            std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+            std::exit(1);
+        }
+        ++iternum;
+        costs = 1. / costs;
+        costs *= 1. / blaze::sum(costs);
+        ~dv = trans(costs) * ~mat;
+        prevcost = current_cost;
+    }
+    return ~dv;
+}
 
 } // namespace blz
 

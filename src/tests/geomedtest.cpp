@@ -41,7 +41,7 @@ int main(int c, char **a) {
     randomize(m);
     m = pow(abs(m), -1.2);
     blaze::DynamicVector<float, blaze::rowVector> v, v2(dim), v3(dim);
-    minocore::coresets::geomedian(m, v);
+    blz::geomedian(m, v);
     auto l1_start = t();
     minocore::coresets::l1_median(m, v2);
     auto l1_stop = t();

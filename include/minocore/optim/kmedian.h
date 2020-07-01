@@ -8,54 +8,6 @@ namespace minocore {
 namespace coresets {
 using namespace blz;
 
-template<typename MT, bool SO, typename VT, typename WeightType=const typename MT::ElementType>
-auto &geomedian(const blz::Matrix<MT, SO> &mat, blz::DenseVector<VT, !SO> &dv, double eps=1e-8,
-                WeightType *weights=nullptr) {
-    // Solve geometric median for a set of points.
-    //
-    using FT = typename std::decay_t<decltype(~mat)>::ElementType;
-    const auto &_mat = ~mat;
-    //std::fprintf(stderr, "[geomedian] rows: %zu. col: %zu\n", _mat.rows(), _mat.columns());
-    if(_mat.rows() == 1) {
-        ~dv = row(_mat, 0);
-        return dv;
-    }
-    ~dv = blz::mean<blz::columnwise>(_mat);
-    FT prevcost = std::numeric_limits<FT>::max();
-    size_t iternum = 0;
-    assert((~dv).size() == (~mat).columns());
-    blz::DV<FT, SO> costs;
-    std::unique_ptr<blz::CustomVector<FT, blz::unaligned, blz::unpadded, SO>> cv;
-    if(weights)
-        cv.reset(new blz::CustomVector<FT, blz::unaligned, blz::unpadded, SO>(const_cast<FT *>(weights), _mat.rows()));
-    for(;;) {
-        if(cv)
-            costs = (*cv) * blz::sqrt(blz::sum<blz::rowwise>(blz::pow(_mat - blz::expand(~dv, _mat.rows()), 2)));
-        else {
-#ifndef NDEBUG
-            costs = blz::sum<blz::rowwise>(blz::pow(_mat - blz::expand(~dv, _mat.rows()), 2));
-            for(unsigned i = 0; i < costs.size(); ++i) {
-                assert(costs[i] >= 0. || !std::fprintf(stderr, "cost %u (%g) < 0\n", i, costs[i]));
-            }
-#endif
-            costs = blz::sqrt(blz::sum<blz::rowwise>(blz::pow(_mat - blz::expand(~dv, _mat.rows()), 2)));
-        }
-        FT current_cost = blz::sum(costs);
-        FT dist;
-        if((dist = std::abs(prevcost - current_cost)) < eps) break;
-        if(unlikely(std::isnan(dist))) {
-            std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
-            std::exit(1);
-        }
-        std::fprintf(stderr, "dist %0.8g at iternum %zu to cost %0.12g\n", dist, iternum, current_cost);
-        ++iternum;
-        costs = 1. / costs;
-        costs *= 1. / blaze::sum(costs);
-        ~dv = trans(costs) * ~mat;
-        prevcost = current_cost;
-    }
-    return dv;
-}
 
 namespace detail {
 

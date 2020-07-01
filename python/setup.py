@@ -45,7 +45,9 @@ include_dirs=[
 ext_modules = [
     Extension(
         'pyfgc',
-        ['pyfgc.cpp', 'pycs.cpp', 'pysmw.cpp', 'pymerge.cpp', "../include/minocore/util/boost/zlib.cpp", "../include/minocore/util/boost/gzip.cpp"],
+        glob('*.cpp') + [
+         "../include/minocore/util/boost/zlib.cpp", "../include/minocore/util/boost/gzip.cpp"
+         ],
         include_dirs=include_dirs,
         language='c++',
         extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"]
@@ -83,7 +85,7 @@ def cpp_flag(compiler):
                        'is needed!')
 
 
-extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1", '-fsanitize=address']
+extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1"]
 
 class BuildExt(build_ext):
     """A custom build extension for adding compiler-specific options."""
@@ -125,8 +127,8 @@ setup(
     version=__version__,
     author='Daniel Baker',
     author_email='dnb@cs.jhu.edu',
-    url='https://github.com/dnbaker/pyfgc',
-    description='A python module for stuff',
+    url='https://github.com/dnbaker/minocore',
+    description='A python module for coresets',
     long_description='',
     ext_modules=ext_modules,
     install_requires=['pybind11>=2.4'],

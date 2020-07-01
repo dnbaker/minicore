@@ -54,7 +54,7 @@ l2_sum_core(blz::SM<FT> &mat, std::string out, Opts &opts) {
             if(!submat.rows())
                 sa.pushBack(i);
             else
-                coresets::geomedian(submat, centers[i]);
+                blz::geomedian(submat, centers[i]);
         }
         // Set centers
         if(sa.size()) {
