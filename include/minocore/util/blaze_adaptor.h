@@ -577,21 +577,19 @@ auto columns_if(const M &mat, const F &func) {
 using functional::indices_if;
 
 // Solve geometric median for a set of points.
-template<typename MT, bool SO, typename VT, typename WeightType=const typename MT::ElementType>
-auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=1e-8,
-                WeightType *weights=nullptr)
+template<typename MT, bool SO, typename VT, typename WeightType>
+auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType *weights, double eps=1e-8)
 {
     if((~mat).rows() == 1) return ~dv = row((~mat), 0);
     const auto &_mat = ~mat;
-    ~dv = mean<columnwise>(_mat);
     using FT = typename std::decay_t<decltype(~mat)>::ElementType;
     FT prevcost = std::numeric_limits<FT>::max();
     size_t iternum = 0;
     assert((~dv).size() == (~mat).columns());
     DV<FT, SO> costs;
-    std::unique_ptr<CustomVector<FT, unaligned, unpadded, SO>> cv;
+    std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
     if(weights)
-        cv.reset(new CustomVector<FT, unaligned, unpadded, SO>(const_cast<FT *>(weights), _mat.rows()));
+        cv.reset(new CustomVector<WeightType, unaligned, unpadded, SO>(const_cast<WeightType *>(weights), _mat.rows()));
     for(;;) {
         if(cv) {
 #if 0
@@ -627,6 +625,10 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=
         prevcost = current_cost;
     }
     return ~dv;
+}
+template<typename MT, bool SO, typename VT>
+auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=1e-8) {
+    return geomedian<MT, SO, VT, blz::ElementType_t<MT>>(mat, dv, nullptr, eps);
 }
 
 } // namespace blz
