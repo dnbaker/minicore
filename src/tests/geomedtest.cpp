@@ -40,8 +40,13 @@ int main(int c, char **a) {
     blaze::setSeed(0);
     randomize(m);
     m = pow(abs(m), -1.2);
-    blaze::DynamicVector<float, blaze::rowVector> v(dim), v2(dim), v3(dim);
+    blaze::DynamicVector<float, blaze::rowVector> v(dim), v2(dim), v3(dim), v4(dim);
     blz::geomedian(m, v);
+    auto weights = blaze::evaluate(blaze::generate<blaze::rowVector>(nr, [](auto){return .001;}));
+    blz::geomedian(m, v4, weights.data());
+    auto diff = blz::l2Norm(v4 - v);
+    std::fprintf(stderr, "diff between weighted and unweighted: %g. norms: %g, %g\n", diff, blz::l2Norm(v4), blz::l2Norm(v));
+    assert(diff < 1e-6 * std::max(blz::l2Norm(v4), blz::l2Norm(v)));
     auto l1_start = t();
     minocore::coresets::l1_median(m, v2);
     auto l1_stop = t();
