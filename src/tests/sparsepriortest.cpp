@@ -16,5 +16,7 @@ int main() {
     double v2 = app2(0, 1);
     static constexpr double correct2 = 0.2307775339934756;
     assert(std::abs(correct2 - v2) < 1e-10);
+    auto app3 = minocore::make_probdiv_applicator(cm2, blz::MKL, minocore::jsd::DIRICHLET);
+    app3(0, 1);
     //std::fprintf(stderr, "difference: %0.12g\n", correct2 - v2);
 }
