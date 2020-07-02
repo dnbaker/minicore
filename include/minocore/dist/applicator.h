@@ -1008,8 +1008,9 @@ public:
         return std::max(ret, FT(0.));
     }
     FT uwllr(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) {
-            return __uwllr_sparse_prior(i, j);
+        if constexpr(IS_SPARSE) {
+            if(prior_data_) 
+                __uwllr_sparse_prior(i, j);
         }
         const auto lhn = row_sums_[i], rhn = row_sums_[j];
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
