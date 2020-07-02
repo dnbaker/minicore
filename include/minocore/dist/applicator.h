@@ -554,6 +554,7 @@ public:
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); return 0.;
             default: __builtin_unreachable();
         }
+        return ret;
     }
     template<typename OT, typename CacheT=OT, typename=std::enable_if_t<!std::is_integral_v<OT> > >
     INLINE FT operator()(size_t i, const OT &o, const CacheT *cache=static_cast<CacheT *>(nullptr)) const {
@@ -678,7 +679,7 @@ public:
                 std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%zu\n", i, j);
                 throw std::runtime_error(buf);
             }
-            auto do_inc = [&](auto x) {ret += x - std::log(x);};
+            auto do_inc = [&](auto x) ALWAYS_INLINE {ret += x - std::log(x);};
             const size_t dim = data_.columns();
             auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
             auto lhi = 1. / lhn, rhi = 1. / rhn;
@@ -688,17 +689,17 @@ public:
                 const auto lhrsi = mul / lhn, rhrsi = mul / rhn;
                 ret = -static_cast<FT>(dim); // To account for -1 in IS distance.
                 const auto shared_zero = merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
-                    [&](auto, auto x, auto y) {do_inc((x + lhrsi) / (y + rhrsi));},
-                    [&](auto, auto x) {do_inc((x + lhrsi) * rhn);},
-                    [&](auto, auto y) {do_inc(lhrsi / (y + rhrsi));});
+                    [&](auto, auto x, auto y) ALWAYS_INLINE {do_inc((x + lhrsi) / (y + rhrsi));},
+                    [&](auto, auto x) ALWAYS_INLINE {do_inc((x + lhrsi) * rhn);},
+                    [&](auto, auto y) ALWAYS_INLINE {do_inc(lhrsi / (y + rhrsi));});
                 const auto lhrsirhnp = lhrsi * rhn;
                 ret += shared_zero * (lhrsirhnp - std::log(lhrsirhnp)); // Account for shared-zero positions
             } else {
                 auto &pd(*prior_data_);
                 merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
-                    [&](auto idx, auto x, auto y) {do_inc((x + pd[idx] * lhi) / (y + pd[idx] * rhi));},
-                    [&](auto idx, auto x) {do_inc((x + pd[idx] * lhi) / (pd[idx] * rhi));},
-                    [&](auto idx, auto y) {do_inc(pd[idx] * lhi / (y + pd[idx] * rhi));});
+                    [&](auto idx, auto x, auto y) ALWAYS_INLINE {do_inc((x + pd[idx] * lhi) / (y + pd[idx] * rhi));},
+                    [&](auto idx, auto x) ALWAYS_INLINE {do_inc((x + pd[idx] * lhi) / (pd[idx] * rhi));},
+                    [&](auto idx, auto y) ALWAYS_INLINE {do_inc(pd[idx] * lhi / (y + pd[idx] * rhi));});
             }
         } else {
             auto div = blaze::evaluate(row(i) / row(j));
@@ -715,17 +716,36 @@ public:
                 std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%p\n", i, (void *)&o);
                 throw std::runtime_error(buf);
             }
-            ret = -std::numeric_limits<FT>::max();
-            throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+            auto do_inc = [&](auto x) ALWAYS_INLINE {ret += x - std::log(x);};
+            const size_t dim = data_.columns();
+            auto lhn = row_sums_[i] + prior_sum_, rhn = blz::sum(o) + prior_sum_;
+            auto lhi = 1. / lhn, rhi = 1. / rhn;
+            auto lhr(row(i));
+            ret = -static_cast<FT>(dim); // To account for -1 in IS distance.
+            if(prior_data_->size() == 1) {
+                const auto mul = prior_data_->operator[](0);
+                const auto lhrsi = mul / lhn, rhrsi = mul / rhn;
+                const auto shared_zero = merge::for_each_by_case(dim, lhr.begin(), lhr.end(), o.begin(), o.end(),
+                    [&](auto, auto x, auto y) ALWAYS_INLINE {do_inc((x + lhrsi) / (y + rhrsi));},
+                    [&](auto, auto x) ALWAYS_INLINE {do_inc((x + lhrsi) * rhn);},
+                    [&](auto, auto y) ALWAYS_INLINE {do_inc(lhrsi / (y + rhrsi));});
+                const auto lhrsirhnp = lhrsi * rhn;
+                ret += shared_zero * (lhrsirhnp - std::log(lhrsirhnp)); // Account for shared-zero positions
+            } else {
+                auto &pd(*prior_data_);
+                merge::for_each_by_case(dim, lhr.begin(), lhr.end(), o.begin(), o.end(),
+                    [&](auto idx, auto x, auto y) ALWAYS_INLINE {do_inc((x + pd[idx] * lhi) / (y + pd[idx] * rhi));},
+                    [&](auto idx, auto x) ALWAYS_INLINE {do_inc((x + pd[idx] * lhi) / (pd[idx] * rhi));},
+                    [&](auto idx, auto y) ALWAYS_INLINE {do_inc(pd[idx] * lhi / (y + pd[idx] * rhi));},
+                    [&](auto idx) ALWAYS_INLINE {do_inc(lhi * rhn);});
+            }
         } else {
-            auto div = row(i) / o;
-            ret = blaze::sum(div - blaze::log(div)) - row(i).size();
+            auto div = blaze::evaluate(row(i) / o);
+            ret = blaze::sum(div - blaze::log(o)) - row(i).size();
         }
         return ret;
     }
 
-
-    VERBOSE_ONLY(static bool warning_emitted = false;)
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>> >
     FT p_l2norm(size_t i, const OT &o) const {
 #ifdef VERBOSE_AF
@@ -795,19 +815,19 @@ public:
                 const auto lhrsimul = lhrsi * prior_data_->operator[](0);
                 const auto rhrsimul = rhrsi * prior_data_->operator[](0);
                 const auto bothsimul = lhrsimul + rhrsimul;
-                auto dox = [&,bothsimul](auto x) {
+                auto dox = [&,bothsimul](auto x) ALWAYS_INLINE {
                     x += bothsimul;
                     ret -= x * std::log(.5 * x);
                 };
-                auto single_func = [&](auto, auto lhs) {dox(lhs);};
+                auto single_func = [&](auto, auto lhs) ALWAYS_INLINE {dox(lhs);};
                 auto shared_zeros = merge::for_each_by_case(dim, lhit, lhe, rhit, rhe,
-                    [&](auto, auto lhs, auto rhs) {dox(lhs + rhs);},
+                    [&](auto, auto lhs, auto rhs) ALWAYS_INLINE {dox(lhs + rhs);},
                     single_func, single_func);
                 ret -= shared_zeros * (bothsimul * std::log(.5 * (bothsimul)));
             } else {
                 // This could later be accelerated, but that kind of caching is more complicated.
                 const auto &pd = *prior_data_;
-                auto dox = [&](auto x) {ret -= x * std::log(.5 * x);};
+                auto dox = [&](auto x) ALWAYS_INLINE {ret -= x * std::log(.5 * x);};
                 auto single_func = [&](auto idx, auto val) {dox(val + pd[idx] * bothsi);};
                 merge::for_each_by_case(dim, lhit, lhe, rhit, rhe,
                     [&](auto idx, auto lhs, auto rhs) {dox(lhs + rhs + pd[idx] * bothsi);},
@@ -850,16 +870,16 @@ public:
                     const FT rhincl = std::log(rhinc);
                     const FT empty_contrib = -lhinc * rhincl;
                     auto nz = merge::for_each_by_case(dim, lhit, lhe, rhit, rhe,
-                        [&](auto, auto xval, auto yval) {ret -= (xval + lhinc) + std::log(yval + rhinc);},
-                        [&](auto, auto xval) {ret -= (xval + lhinc) * rhincl;},
-                        [&](auto, auto yval) {ret -= lhinc * std::log(yval + rhinc);});
+                        [&](auto, auto xval, auto yval) ALWAYS_INLINE {ret -= (xval + lhinc) + std::log(yval + rhinc);},
+                        [&](auto, auto xval) ALWAYS_INLINE  {ret -= (xval + lhinc) * rhincl;},
+                        [&](auto, auto yval) ALWAYS_INLINE  {ret -= lhinc * std::log(yval + rhinc);});
                     ret += empty_contrib * nz;
                 } else { // if(single_value) / else
                     merge::for_each_by_case(dim, lhit, lhe, rhit, rhe,
-                        [&](auto idx, auto xval, auto yval) {ret -= (xval + lhrsi * pd[idx]) * std::log(yval + rhrsi * pd[idx]);},
-                        [&](auto idx, auto xval) {ret -= (xval + lhrsi * pd[idx]) * std::log(rhrsi * pd[idx]);},
-                        [&](auto idx, auto yval) {ret -= lhrsi * pd[idx] * std::log(yval + rhrsi * pd[idx]);},
-                        [&](auto idx) {ret -= lhrsi * pd[idx] * std::log(rhrsi * pd[idx]);});
+                        [&](auto idx, auto xval, auto yval) ALWAYS_INLINE {ret -= (xval + lhrsi * pd[idx]) * std::log(yval + rhrsi * pd[idx]);},
+                        [&](auto idx, auto xval) ALWAYS_INLINE {ret -= (xval + lhrsi * pd[idx]) * std::log(rhrsi * pd[idx]);},
+                        [&](auto idx, auto yval) ALWAYS_INLINE {ret -= lhrsi * pd[idx] * std::log(yval + rhrsi * pd[idx]);},
+                        [&](auto idx) ALWAYS_INLINE {ret -= lhrsi * pd[idx] * std::log(rhrsi * pd[idx]);});
                 }
                 return ret + __getjsc(i);
             }
@@ -890,9 +910,9 @@ public:
                     size_t ind = 0;
                     if constexpr(blz::IsSparseVector_v<OT>) {
                         auto sharedz = merge::for_each_by_case(dim, rb, re, o.begin(), o.end(),
-                            [&](auto idx, auto x, auto y) {ret -= (x + rsaimul) * std::log(orsaimul + y);},
-                            [&](auto idx, auto x) {ret -= (x + rsaimul) * lorsaimul;},
-                            [&](auto idx, auto y) {ret -= rsaimul * std::log(orsaimul + y);});
+                            [&](auto idx, auto x, auto y) ALWAYS_INLINE {ret -= (x + rsaimul) * std::log(orsaimul + y);},
+                            [&](auto idx, auto x) ALWAYS_INLINE {ret -= (x + rsaimul) * lorsaimul;},
+                            [&](auto idx, auto y) ALWAYS_INLINE {ret -= rsaimul * std::log(orsaimul + y);});
                         ret -= sharedz * rsaimul * lorsaimul;
                     } else {
                         while(rb != re) {
@@ -989,7 +1009,7 @@ public:
     }
     FT uwllr(size_t i, size_t j) const {
         if(IS_SPARSE && prior_data_) {
-            std::fprintf(stderr, "note: uwllr with prior is slightly incorrect due to the sparsity-destroying nature of the prior.\n");
+            return __uwllr_sparse_prior(i, j);
         }
         const auto lhn = row_sums_[i], rhn = row_sums_[j];
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
@@ -1007,8 +1027,12 @@ public:
         return 0.;
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
-    FT uwllr(size_t, const OT &) const {
-        throw TODOError("llr is not implemented for this.");
+    FT uwllr(size_t i, const OT &o) const {
+        if constexpr(IS_SPARSE) {
+            if(prior_data_) {
+                
+            }
+        }
         return 0.;
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
@@ -1190,6 +1214,43 @@ private:
     INLINE FT __getlsc(size_t index) const {
         return __getjsc(index) * row_sums_->operator[](index);
     }
+    template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>> >
+    FT __llr_sparse_prior(size_t i, const OT &o) const {
+        assert(IS_SPARSE);
+        auto lhr(row(i));
+        const auto lhn = row_sums_[i] + prior_sum_, rhn = blz::sum(o);
+        const auto lhrsi = 1. / lhn, rhrsi = 1. / rhn;
+        const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+        const auto &pd(*prior_data_);
+        FT ret = lhn * __getjsc(i);
+        if(pd.size() == 1) {
+            const auto pv = pd[0], pv2 = pv * 2;
+            const auto lhrsimul = lhrsi * pv;
+            const auto rhrsimul = rhrsi * pv;
+            size_t shared_zero = merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), o.begin(), o.end(),
+                [&](auto, auto x, auto y) {
+                    const auto xcontr = lhn * x + pv;
+                    const auto ycontr = rhn * y + pv;
+                    const auto nlogv = -std::log(lambda * (x + lhrsimul) + m1l * (y + rhrsimul));
+                    ret += xcontr * nlogv + ycontr * (std::log(y + rhrsimul) + nlogv);
+#if 0
+                    ret -= (xcontr + ycontr) * logv;
+                    ret += ycontr * std::log(y + rhrsimul);
+#endif
+                },
+                [&](auto, auto x) {ret -= (lhn * x + pv2) * std::log(lambda * (x + lhrsimul) + m1l * rhrsimul);},
+                [&](auto, auto y) {
+                    ret -= (rhn * y + pv2) * std::log(lambda * lhrsimul + m1l * (y + rhrsimul));
+                    ret += (lhn * y + pv) * std::log(y + rhrsimul);
+                });
+            auto prod1 = -pv2 * std::log(lambda * lhrsimul + m1l * rhrsimul); // from normal derivation
+            auto prod2 = pv * std::log(rhrsi); // from o's self-contributions
+            ret += shared_zero * (prod1 + prod2);
+        } else {
+            throw NotImplementedError("llr sparse prior, external data");
+        }
+        return std::max(ret, FT(0.));
+    }
     FT __llr_sparse_prior(size_t i, size_t j) const {
         assert(IS_SPARSE);
         auto lhr(row(i)), rhr(row(j));
@@ -1213,6 +1274,35 @@ private:
                 [&](auto idx, auto x) {ret -= (lhn * x + pd[idx] * 2.) * std::log(lambda * (x + pd[idx] * lhrsi) + m1l * pd[idx] * rhrsi);},
                 [&](auto idx, auto y) {ret -= (rhn * y + pd[idx] * 2.) * std::log(lambda * pd[idx] * lhrsi + m1l * (y + pd[idx] * rhrsi));},
                 [&](auto idx) {ret -= (pd[idx] * 2.) * std::log(lambda * pd[idx] * lhrsi + m1l * (pd[idx] * rhrsi));});
+        }
+        return std::max(ret, FT(0.));
+    }
+    FT __uwllr_sparse_prior(size_t i, size_t j) const {
+        assert(IS_SPARSE);
+        auto lhr(row(i)), rhr(row(j));
+        const auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
+        const auto bothn = lhn + rhn;
+        const auto lhrsi = 1. / lhn, rhrsi = 1. / rhn;
+        const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+        const auto &pd(*prior_data_);
+        FT ret = lambda * __getjsc(i) + m1l * __getjsc(j);
+        if(pd.size() == 1) {
+            const auto pv = pd[0];
+            const auto lhrsimul = lhrsi * pv;
+            const auto rhrsimul = rhrsi * pv;
+            const auto bothsimul = lambda * lhrsimul + m1l * rhrsimul;
+            size_t shared_zero = merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
+                [&](auto, auto x, auto y) {ret -= (x + y + bothsimul) * std::log(lambda * (x + lhrsimul) + m1l * (y + rhrsimul));},
+                [&](auto, auto x) {ret -= (x + bothsimul) * std::log(lambda * (x + lhrsimul) + m1l * rhrsimul);},
+                [&](auto, auto y) {ret -= (y + bothsimul) * std::log(lambda * lhrsimul + m1l * (y + rhrsimul));});
+            ret -= shared_zero * bothsimul * std::log(bothsimul);
+        } else {
+            const auto bothsi2 = 2. / bothn; // Because the prior is added two both left and right hand side
+            merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
+                [&](auto idx, auto x, auto y) {ret -= (x + y + pd[idx] * bothsi2) * std::log(lambda * (x + pd[idx] * lhrsi) + m1l * (y + pd[idx] * rhrsi));},
+                [&](auto idx, auto x) {ret -= (x + pd[idx] * bothsi2) * std::log(lambda * (x + pd[idx] * lhrsi) + m1l * pd[idx] * rhrsi);},
+                [&](auto idx, auto y) {ret -= (y + pd[idx] * bothsi2) * std::log(lambda * pd[idx] * lhrsi + m1l * (y + pd[idx] * rhrsi));},
+                [&](auto idx) {ret -= (pd[idx] * bothsi2) * std::log(pd[idx] * (lambda * lhrsi + m1l * rhrsi));});
         }
         return std::max(ret, FT(0.));
     }

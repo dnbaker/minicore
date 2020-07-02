@@ -46,9 +46,9 @@ int main(int argc, char *argv[]) {
     jsd.set_distance_matrix(utdm);
     std::cout << utdm << '\n';
     blz::DynamicMatrix<FLOAT_TYPE> jsd_bnj(first25.rows(), first25.rows(), 0.);
-    jsd.set_distance_matrix(jsd_bnj, jsd::JSM, true);
+    jsd.set_distance_matrix(jsd_bnj, blz::UWLLR, true);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
-    std::fprintf(stderr, "min/max jsm: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
+    std::fprintf(stderr, "min/max UWLLR: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     jsd.set_distance_matrix(jsd_bnj, jsd::JSD, true);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
     std::fprintf(stderr, "min/max jsd: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));

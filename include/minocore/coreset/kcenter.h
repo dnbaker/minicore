@@ -109,7 +109,7 @@ kcenter_bicriteria(const Oracle &oracle, size_t np, RNG &rng, size_t, double eps
         } while(rsi < samplechunksize);
         // random_samples now contains indexes *into pq*
         std::transform(rsp, rsp + rsi, rsp,
-                       [&](auto x) {return pq[x].second;});
+                       [&](auto x) ALWAYS_INLINE {return pq[x].second;});
         // random_samples now contains indexes *into original dataset*
 
         // Insert into solution

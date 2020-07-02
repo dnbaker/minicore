@@ -30,6 +30,11 @@
 #endif
 
 
+#ifndef ALWAYS_INLINE
+#define ALWAYS_INLINE [[always_inline]]
+#endif
+
+
 // OpenMP
 
 #ifdef _OPENMP

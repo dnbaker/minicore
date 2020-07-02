@@ -87,11 +87,6 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
                 std::partial_sum(R.get(), R.get() + nr, cdf.get(), [weights](auto csum, auto newv) {
                     return csum + weights[newv];
                 });
-#if 0
-                for(size_t i = 0; i < nr; ++i) {
-                    std::fprintf(stderr, "%zu|%g|%g%%\n", i, cdf[i], cdf[i] * 100. / cdf[nr - 1]);
-                }
-#endif
                 if(cdf[nr - 1] <= nperround) {
                     //std::fprintf(stderr, "Adding the rest, nr = %zu, cdf[nr - 1] = %g\n", nr, cdf[nr - 1]);
                     for(IT i = 0; i < nr; ++i) tmp.insert(i);
@@ -106,14 +101,7 @@ oracle_thorup_d(const Oracle &oracle, size_t npoints, unsigned k, const WFT *wei
                         weight_so_far += weights[R[ind]];
                         //std::fprintf(stderr, "tmp size after growing: %zu. nr: %zu. sample count: %zu. Current weight: %g. Desired weight: %zu\n", tmp.size(), nr, sample_count, weight_so_far, size_t(nperround));
                     }
-#if 0
-                    std::fprintf(stderr, "Took %zu samples to get %zu items of total weight %g\n", sample_count, tmp.size(), weight_so_far);
-#endif
                 }
-#if 0
-                std::fprintf(stderr, "Sampled %zu items of total weight %0.12g\n", tmp.size(),
-                             std::accumulate(tmp.begin(), tmp.end(), 0., [&](auto y, auto x) {return y + weights[R[x]];}));
-#endif
             }
             // Update F, R, and mincosts/minindices
             current_batch.assign(tmp.begin(), tmp.end());

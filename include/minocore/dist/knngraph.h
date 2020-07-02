@@ -22,7 +22,7 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
     std::vector<packed::pair<FT, IT>> ret(k * np);
     std::vector<unsigned> in_set(np);
     const bool measure_is_sym = blz::detail::is_symmetric(measure);
-    const bool measure_is_dist = measure_is_dist;
+    const bool measure_is_dist = blz::detail::is_dissimilarity(measure);
     std::unique_ptr<std::mutex[]> locks;
     OMP_ONLY(locks.reset(new std::mutex[np]);)
 
@@ -39,7 +39,7 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
                     std::make_heap(ret.data() + i * k, ret.data() + (i + 1) * k, std::greater<void>());
             }
         } else {
-            auto cmp = [&](auto d) {return measure_is_dist ? (ret[i * k].first > d) : (ret[i * k].first < d);};
+            auto cmp = [&](auto d) {return (ret[i * k].first < d) ^ measure_is_dist;};
             auto pushpop = [&](auto d) {
                 auto startp = &ret[i * k];
                 auto stopp = startp + k;

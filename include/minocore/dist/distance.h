@@ -354,7 +354,7 @@ static constexpr bool is_valid_measure(DissimilarityMeasure measure) {
         case L1: case L2: case SQRL2: case JSM: case JSD: case MKL:
         case POISSON: case HELLINGER: case BHATTACHARYYA_METRIC:
         case BHATTACHARYYA_DISTANCE: case TOTAL_VARIATION_DISTANCE:
-        case LLR: case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO:
+        case UWLLR: case LLR: case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO:
         case ITAKURA_SAITO: case COSINE_DISTANCE: case PROBABILITY_COSINE_DISTANCE:
         case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
         case EMD: case WEMD: case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
