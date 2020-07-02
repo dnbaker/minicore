@@ -42,7 +42,7 @@ int main(int c, char **a) {
     m = pow(abs(m), -1.2);
     blaze::DynamicVector<float, blaze::rowVector> v(dim), v2(dim), v3(dim), v4(dim);
     blz::geomedian(m, v);
-    auto weights = blaze::evaluate(blaze::generate<blaze::rowVector>(nr, [](auto){return .001;}));
+    auto weights = blaze::evaluate(blaze::generate<blaze::rowVector>(nr, [](auto){return 8.;}));
     blz::geomedian(m, v4, weights.data());
     auto diff = blz::l2Norm(v4 - v);
     std::fprintf(stderr, "diff between weighted and unweighted: %g. norms: %g, %g\n", diff, blz::l2Norm(v4), blz::l2Norm(v));
