@@ -309,7 +309,7 @@ public:
     INLINE FT call(OT &o, size_t i, CacheT *cp=static_cast<CacheT *>(nullptr)) const {
         FT ret;
         if constexpr(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
-            ret = discrete_total_variation_distance(o, row(i));
+            ret = tvd(o, i);
         } else if constexpr(constexpr_measure == L1) {
             ret = l1Norm(weighted_row(i) - o);
         } else if constexpr(constexpr_measure == L2) {
@@ -378,7 +378,7 @@ public:
         FT ret;
         assert(i < this->data().rows());
         if constexpr(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
-            ret = discrete_total_variation_distance(row(i), o);
+            ret = tvd(i, o);
         } else if constexpr(constexpr_measure == L1) {
             ret = l1Norm(weighted_row(i) - o);
         } else if constexpr(constexpr_measure == L2) {
@@ -456,7 +456,7 @@ public:
     INLINE FT call(size_t i, size_t j) const {
         FT ret;
         if constexpr(constexpr_measure == TOTAL_VARIATION_DISTANCE) {
-            ret = discrete_total_variation_distance(row(i), row(j));
+            ret = tvd(i, j);
         } else if constexpr(constexpr_measure == L1) {
             ret = l1Norm(weighted_row(i) - weighted_row(j));
         } else if constexpr(constexpr_measure == L2) {
@@ -652,25 +652,6 @@ public:
         return make_distance_matrix(measure_);
     }
 
-#if 0
-    template<typename F1, typename F2, typename F3, typename F4>
-    void generic_sparse_uniform_prior(size_t i, size_t j, const F1 &fshare, const F2 &lho, const F3 &rho, const F4 &sharedz) const {
-        size_t ci = 0;
-        auto lhr = row(i), rhr = row(j);
-        auto lhit = lhr.begin(), lhe = lhr.end(), rhit = rhr.begin(), rhe = rhr.end();
-        unsigned shared_zeros = 0;
-        size_t nextindex;
-        for(;;) {
-            switch(((lhit == lhe) << 1) | (rhit == rhe)) {
-                case 0: {
-                    auto lhi = lhit->index(), rhi = rhit->index();
-                    nextindex = std::min(lhi, rhi);
-                }
-            }
-        }
-    }
-#endif
-
     FT itakura_saito(size_t i, size_t j) const {
         FT ret;
         if constexpr(IS_SPARSE) {
@@ -745,6 +726,71 @@ public:
             ret = blaze::sum(row(i) / div - blaze::log(div)) - data_.columns();
         }
         return ret;
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_arithmetic_v<OT>>>
+    FT tvd(size_t i, const OT &ot) const {
+        return discrete_total_variation_distance(row(i), ot);
+    }
+    template<typename OT, typename=std::enable_if_t<!std::is_arithmetic_v<OT>>>
+    FT tvd(const OT &ot, size_t i) const {
+        return discrete_total_variation_distance(ot, row(i));
+    }
+    FT tvd(size_t i, size_t j) const {
+        if constexpr(IS_SPARSE) {
+            if(prior_data_) {
+                return __tvd_sparse_prior(i, j);
+            }
+        }
+        return blz::distance::discrete_total_variation_distance(row(i), row(j));
+    }
+
+    template<typename OT, typename=std::enable_if_t<!std::is_arithmetic_v<OT>>>
+    FT __tvd_sparse_prior(size_t i, const OT &ot) const {
+        assert(prior_data_);
+        const auto &pd(*prior_data_);
+        auto lhr(row(i));
+        FT ret = 0;
+        const auto lhi = 1. / (row_sums_[i] + prior_sum_);
+        if(pd.size() == 1) {
+            const auto pv = pd[0], lhv = pv * lhi;
+            size_t sharedzeros = merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), ot.begin(), ot.end(),
+                [&](auto, auto x, auto y) ALWAYS_INLINE {ret += std::abs(x - y + lhv);},
+                [&](auto, auto x) ALWAYS_INLINE {ret += std::abs(x + lhv);},
+                [&](auto, auto y) ALWAYS_INLINE {ret += std::abs(lhv - y);});
+            ret += sharedzeros * std::abs(lhv);
+        } else {
+            merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), ot.begin(), ot.end(),
+                [&](auto ind, auto x, auto y) ALWAYS_INLINE {ret += std::abs(x - y + pd[ind] * lhi);},
+                [&](auto ind, auto x) ALWAYS_INLINE {ret += std::abs(x + pd[ind] * lhi);},
+                [&](auto ind, auto y) ALWAYS_INLINE {ret += std::abs(lhi * pd[ind] - y);},
+                [&](auto ind) ALWAYS_INLINE {ret += std::abs(lhi * pd[ind]);}
+            );
+        }
+        return ret *= .5;
+    }
+    FT __tvd_sparse_prior(size_t i, size_t j) const {
+        assert(prior_data_);
+        const auto &pd(*prior_data_);
+        auto lhr(row(i)), rhr(row(j));
+        FT ret = 0;
+        if(pd.size() == 1) {
+            const auto pv = pd[0];
+            const auto lhv = pv / (row_sums_[i] + prior_sum_), rhv = pv / (row_sums_[j] + prior_sum_), bhv = lhv - rhv;
+            size_t sharedzeros = merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
+                [&](auto, auto x, auto y) ALWAYS_INLINE {ret += std::abs(x - y + bhv);},
+                [&](auto, auto x) ALWAYS_INLINE {ret += std::abs(x + bhv);},
+                [&](auto, auto y) ALWAYS_INLINE {ret += std::abs(bhv - y);});
+            ret += sharedzeros * std::abs(bhv);
+        } else {
+            const auto lhi = 1. / (row_sums_[i] + prior_sum_), rhi = 1. / (row_sums_[j] + prior_sum_), bhi = lhi - rhi;
+            merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
+                [&](auto ind, auto x, auto y) ALWAYS_INLINE {ret += std::abs(x - y + pd[ind] * bhi);},
+                [&](auto ind, auto x) ALWAYS_INLINE {ret += std::abs(x + pd[ind] * bhi);},
+                [&](auto ind, auto y) ALWAYS_INLINE {ret += std::abs(bhi * pd[ind] - y);},
+                [&](auto ind) ALWAYS_INLINE {ret += std::abs(bhi * pd[ind]);}
+            );
+        }
+        return ret *= .5;
     }
 
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>> >
@@ -898,14 +944,10 @@ public:
                     auto r = row(i);
                     const size_t dim = r.size();
                     auto rb = r.begin(), re = r.end();
-                    auto rs = row_sums_[i];
-                    auto rsa = rs + prior_sum_;
-                    auto orsa = osum + prior_sum_;
-                    auto rsai = 1. / rsa;
-                    auto orsai = 1. / orsa;
+                    auto rsai = 1. / (row_sums_[i] + prior_sum_);
+                    auto orsai = 1. / (osum + prior_sum_);
                     const auto pv = pd[0];
-                    auto rsaimul = rsai * pv;
-                    auto orsaimul = orsai * pv;
+                    const auto rsaimul = rsai * pv, orsaimul = orsai * pv;
                     auto lorsaimul = std::log(orsaimul);
                     FT ret = 0;
                     size_t ind = 0;
@@ -1011,7 +1053,7 @@ public:
     FT uwllr(size_t i, size_t j) const {
         if constexpr(IS_SPARSE) {
             if(prior_data_) 
-                __uwllr_sparse_prior(i, j);
+                return __uwllr_sparse_prior(i, j);
         }
         const auto lhn = row_sums_[i], rhn = row_sums_[j];
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
@@ -1045,7 +1087,7 @@ public:
     FT uwllr(size_t i, const OT &o, const OT2 &olog) const {
         if constexpr(IS_SPARSE) {
             if(prior_data_) {
-                return __uwllr_sparse_prior(row(i), o);
+                return __uwllr_sparse_prior(row(i), o, olog);
             }
         }
         const auto lhn = row_sums_[i], rhn = blz::sum(o);
@@ -1331,7 +1373,7 @@ private:
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
         const auto &pd(*prior_data_);
         auto olog = blaze::evaluate(blz::log(o));
-        FT ret = lambda * __getjsc(i) + m1l * blz::dot(blaze::log(o), o);
+        FT ret = lambda * __getjsc(i) + m1l * blz::dot(olog, o);
         if(pd.size() == 1) {
             const auto pv = pd[0];
             const auto lhrsimul = lhrsi * pv;
@@ -1349,6 +1391,40 @@ private:
             const auto bothsi2 = 2. / bothn; // Because the prior is added two both left and right hand side
             merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
                 [&](auto idx, auto x, auto y) {ret -= (x + y * rhrsi + pd[idx] * bothsi2) * std::log(lambda * (x + pd[idx] * lhrsi) + m1l * (y * rhrsi + pd[idx] * rhrsi));},
+                [&](auto idx, auto x) {ret -= (x + pd[idx] * bothsi2) * std::log(lambda * (x + pd[idx] * lhrsi) + m1l * pd[idx] * rhrsi);},
+                [&](auto idx, auto y) {ret -= (y * rhrsi + pd[idx] * bothsi2) * std::log(lambda * pd[idx] * lhrsi + m1l * (y * rhrsi + pd[idx] * rhrsi));},
+                [&](auto idx) {ret -= (pd[idx] * bothsi2) * std::log(pd[idx] * (lambda * lhrsi + m1l * rhrsi));});
+        }
+        return std::max(ret, FT(0.));
+    }
+    template<typename OT, typename OT2, typename=std::enable_if_t<!std::is_arithmetic_v<OT>>>
+    FT __uwllr_sparse_prior(size_t i, const OT &o, const OT2 &olog) const {
+        assert(IS_SPARSE);
+        auto lhr(row(i));
+        auto &rhr = o;
+        const auto lhn = row_sums_[i] + prior_sum_, rhn = blz::sum(o) + prior_sum_;
+        const auto bothn = lhn + rhn;
+        const auto lhrsi = 1. / lhn, rhrsi = 1. / rhn;
+        const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
+        const auto &pd(*prior_data_);
+        FT ret = lambda * __getjsc(i) + m1l * blz::dot(olog, o);
+        if(pd.size() == 1) {
+            const auto pv = pd[0];
+            const auto lhrsimul = lhrsi * pv;
+            const auto rhrsimul = rhrsi * pv;
+            const auto bothsimul = lambda * lhrsimul + m1l * rhrsimul;
+            size_t shared_zero = merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
+                [&](auto, auto x, auto y) {ret -= (x + y * rhrsi + bothsimul) * std::log(lambda * (x + lhrsimul) + m1l * (y * rhrsi + rhrsimul));},
+                [&](auto, auto x) {ret -= (x + bothsimul) * std::log(lambda * (x + lhrsimul) + m1l * rhrsimul);},
+                [&](auto, auto y) {
+                    auto yv = y * rhrsi;
+                    ret -= (yv + bothsimul) * std::log(lambda * lhrsimul + m1l * (y * rhrsi + rhrsimul));
+                });
+            ret -= shared_zero * bothsimul * std::log(bothsimul);
+        } else {
+            const auto bothsi2 = 2. / bothn; // Because the prior is added two both left and right hand side
+            merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
+                [&](auto idx, auto x, auto y) {ret -= (x + y * rhrsi + pd[idx] * bothsi2) * std::log(lambda * (x + pd[idx] * lhrsi) + m1l * ((y + pd[idx]) * rhrsi));},
                 [&](auto idx, auto x) {ret -= (x + pd[idx] * bothsi2) * std::log(lambda * (x + pd[idx] * lhrsi) + m1l * pd[idx] * rhrsi);},
                 [&](auto idx, auto y) {ret -= (y * rhrsi + pd[idx] * bothsi2) * std::log(lambda * pd[idx] * lhrsi + m1l * (y * rhrsi + pd[idx] * rhrsi));},
                 [&](auto idx) {ret -= (pd[idx] * bothsi2) * std::log(pd[idx] * (lambda * lhrsi + m1l * rhrsi));});

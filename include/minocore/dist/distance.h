@@ -314,6 +314,7 @@ static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
         default: return prob2str(d);
     }
 }
+
 static void print_measures() {
     std::set<DissimilarityMeasure> measures {
         L1,
@@ -328,7 +329,7 @@ static void print_measures() {
         BHATTACHARYYA_DISTANCE,
         TOTAL_VARIATION_DISTANCE,
         LLR,
-        //OLLR,
+        UWLLR,
         //EMD,
         REVERSE_MKL,
         REVERSE_POISSON,
