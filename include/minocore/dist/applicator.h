@@ -1338,16 +1338,19 @@ private:
             const auto rhrsimul = rhrsi * pv;
             const auto bothsimul = lambda * lhrsimul + m1l * rhrsimul;
             size_t shared_zero = merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
-                [&](auto, auto x, auto y) {ret -= (x + y + bothsimul) * std::log(lambda * (x + lhrsimul) + m1l * (y + rhrsimul));},
+                [&](auto, auto x, auto y) {ret -= (x + y * rhrsi + bothsimul) * std::log(lambda * (x + lhrsimul) + m1l * (y * rhrsi + rhrsimul));},
                 [&](auto, auto x) {ret -= (x + bothsimul) * std::log(lambda * (x + lhrsimul) + m1l * rhrsimul);},
-                [&](auto, auto y) {ret -= (y + bothsimul) * std::log(lambda * lhrsimul + m1l * (y + rhrsimul));});
+                [&](auto, auto y) {
+                    auto yv = y * rhrsi;
+                    ret -= (yv + bothsimul) * std::log(lambda * lhrsimul + m1l * (y * rhrsi + rhrsimul));
+                });
             ret -= shared_zero * bothsimul * std::log(bothsimul);
         } else {
             const auto bothsi2 = 2. / bothn; // Because the prior is added two both left and right hand side
             merge::for_each_by_case(lhr.size(), lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
-                [&](auto idx, auto x, auto y) {ret -= (x + y + pd[idx] * bothsi2) * std::log(lambda * (x + pd[idx] * lhrsi) + m1l * (y + pd[idx] * rhrsi));},
+                [&](auto idx, auto x, auto y) {ret -= (x + y * rhrsi + pd[idx] * bothsi2) * std::log(lambda * (x + pd[idx] * lhrsi) + m1l * (y * rhrsi + pd[idx] * rhrsi));},
                 [&](auto idx, auto x) {ret -= (x + pd[idx] * bothsi2) * std::log(lambda * (x + pd[idx] * lhrsi) + m1l * pd[idx] * rhrsi);},
-                [&](auto idx, auto y) {ret -= (y + pd[idx] * bothsi2) * std::log(lambda * pd[idx] * lhrsi + m1l * (y + pd[idx] * rhrsi));},
+                [&](auto idx, auto y) {ret -= (y * rhrsi + pd[idx] * bothsi2) * std::log(lambda * pd[idx] * lhrsi + m1l * (y * rhrsi + pd[idx] * rhrsi));},
                 [&](auto idx) {ret -= (pd[idx] * bothsi2) * std::log(pd[idx] * (lambda * lhrsi + m1l * rhrsi));});
         }
         return std::max(ret, FT(0.));
