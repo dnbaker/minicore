@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
 #else
     decltype(sparsemat) filtered_sparsemat = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
 #endif
-    auto full_jsm = minocore::jsd::make_probdiv_applicator(filtered_sparsemat, /*dis=*/blz::distance::JSD, /*prior=*/blz::distance::DIRICHLET);
+    auto full_jsm = minocore::jsd::make_probdiv_applicator(filtered_sparsemat, /*dis=*/minocore::distance::JSD, /*prior=*/minocore::distance::DIRICHLET);
     minocore::util::Timer timer("k-means");
     auto kmppdat = minocore::jsd::make_kmeanspp(full_jsm, k);
     timer.report();
