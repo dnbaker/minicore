@@ -16,7 +16,7 @@ int main() {
             cm.set(i, div.mod(rng()), rng() % 128u);
         }
     }
-    auto app = make_probdiv_applicator(cm, blz::ITAKURA_SAITO, blz::DIRICHLET);
+    auto app = make_probdiv_applicator(cm, distance::ITAKURA_SAITO, minocore::distance::DIRICHLET);
     OMP_PFOR
     for(size_t i = 0; i < nsamp; ++i) {
         std::fprintf(stderr, "Processing row %zu\n", i + 1);
