@@ -421,9 +421,6 @@ INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::Spar
     return norm##Norm(~rhs - trans(~lhs));\
 }\
 
-inline namespace distance {
-
-
 DECL_DIST(l1)
 DECL_DIST(l2)
 DECL_DIST(sqr)
@@ -544,8 +541,6 @@ struct SqrNormFunctor: public BaseDist {
 };
 template<>
 struct SqrNormFunctor<L2Norm>: public sqrL2Norm {};
-} // inline namespace distance
-
 
 namespace functional {
 

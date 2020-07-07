@@ -6,7 +6,7 @@
 
 using namespace minocore;
 
-namespace dist = blz::distance;
+namespace dist = minocore::distance;
 
 using minocore::util::timediff2ms;
 

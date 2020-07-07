@@ -34,6 +34,7 @@ script:
   - ./sparsepriortestdbg
   - ./istestdbg
   - ./msvdbg
+  - ./knntestdbg
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:

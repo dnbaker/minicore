@@ -54,12 +54,12 @@ Py_ssize_t count_nonzeros(const IT1 *srcrow, const IT2 *srccol, const FT1 *srcda
     for(Py_ssize_t i = 0; i < ncoo; ++i) {
         std::cerr << "Getting idx " << i << '\n';
         auto idx = srccol[i];
-        std::fprintf(stderr, "Getting ii (%p + %zu) (integer size: %zu)\n", (void *)indices.data(), idx, sizeof(IT2));
+        //std::fprintf(stderr, "Getting ii (%p + %zu) (integer size: %zu)\n", (void *)indices.data(), idx, sizeof(IT2));
         auto ii = indices.at(idx);
         auto v = srcdat[i];
-        std::fprintf(stderr, "ii: %zd. value there: %g\n", ii, double(v));
+        //std::fprintf(stderr, "ii: %zd. value there: %g\n", ii, double(v));
         if(ii >= 0) {
-            std::fprintf(stderr, "ii (%zd) > 0\n", ii);
+            //std::fprintf(stderr, "ii (%zd) > 0\n", ii);
             ++ret;
         }
     }

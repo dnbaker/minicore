@@ -21,8 +21,8 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
     const jsd::DissimilarityMeasure measure = app.get_measure();
     std::vector<packed::pair<FT, IT>> ret(k * np);
     std::vector<unsigned> in_set(np);
-    const bool measure_is_sym = blz::detail::is_symmetric(measure);
-    const bool measure_is_dist = blz::detail::is_dissimilarity(measure);
+    const bool measure_is_sym = distance::is_symmetric(measure);
+    const bool measure_is_dist = distance::is_dissimilarity(measure);
     std::unique_ptr<std::mutex[]> locks;
     OMP_ONLY(locks.reset(new std::mutex[np]);)
 
@@ -78,7 +78,7 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
                 update_fwd(d, j, i);
             }
             perform_sort(ptr);
-            std::fprintf(stderr, "[Symmetric:%s] Completed %zu/%zu\n", blz::detail::prob2str(measure), i + 1, np);
+            std::fprintf(stderr, "[Symmetric:%s] Completed %zu/%zu\n", dist::prob2str(measure), i + 1, np);
         }
     } else {
         OMP_PFOR
@@ -87,7 +87,7 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
                 update_fwd(app(i, j), i, j);
             }
             perform_sort(ptr);
-            std::fprintf(stderr, "[Asymmetric:%s] Completed %zu/%zu\n", blz::detail::prob2str(measure), i + 1, np);
+            std::fprintf(stderr, "[Asymmetric:%s] Completed %zu/%zu\n", dist::prob2str(measure), i + 1, np);
         }
     }
     std::fprintf(stderr, "Created knn graph for k = %u and %zu points\n", k, np);
@@ -112,7 +112,7 @@ make_knns_by_lsh(const jsd::DissimilarityApplicator<MatrixType> &app, hash::LSHT
     const jsd::DissimilarityMeasure measure = app.get_measure();
     std::vector<packed::pair<FT, IT>> ret(k * np);
     std::vector<unsigned> in_set(np);
-    const bool measure_is_sym = blz::detail::is_symmetric(measure);
+    const bool measure_is_sym = dist::is_symmetric(measure);
     const bool measure_is_dist = measure_is_dist;
     std::unique_ptr<std::mutex[]> locks;
     OMP_ONLY(locks.reset(new std::mutex[np]);)
@@ -189,31 +189,35 @@ auto knns2graph(const std::vector<packed::pair<FT, IT>> &knns, size_t np, bool m
     MINOCORE_REQUIRE(knns.size() % np == 0, "sanity");
     MINOCORE_REQUIRE(knns.size(), "nonempty");
     unsigned k = knns.size() / np;
+    MINOCORE_REQUIRE(knns.size() == np * k, "sanity");
+    std::cerr << "k: " << k << "knns: " << knns.size() << (mutual ? "mutual" : "absolute") << '\n';
     graph::Graph<boost::undirectedS, FT> ret(np);
+    std::fprintf(stderr, "produced graph\n");
     for(size_t i = 0; i < np; ++i) {
         auto p = &knns[i * k];
         SK_UNROLL_8
         for(unsigned j = 0; j < k; ++j) {
             if(mutual) {
                 if(symmetric) {
-                    if(p[j].first > knns[k * (p[j].second + 1) * k - 1].first)
+                    if(p[j].first > knns[k * (p[j].second + 1) - 1].first)
                         continue;
                 } else {
                     // More expensive (O(k) vs O(1)), but does not require the assumption of symmetry.
-                    auto start = knns.data() + p[j].second * k, stop = start + k;
-                    if(std::find_if(start, stop, [i](auto x) {return x.second == i;})== stop)
+                    if(auto start = knns.data() + p[j].second * k, stop = start + k;
+                       std::find_if(start, stop, [i](auto x) {return x.second == i;}) == stop)
                         continue;
                 }
             }
             boost::add_edge(i, static_cast<size_t>(p[j].second), p[j].first, ret);
         }
+        std::fprintf(stderr, "%zu/%zu\n", i + 1, np);
     }
     return ret;
 }
 
 template<typename IT=uint32_t, typename MatrixType>
 auto make_knn_graph(const jsd::DissimilarityApplicator<MatrixType> &app, unsigned k, bool mutual=true) {
-    return knns2graph(make_knns(app, k), app.size(), mutual, blz::detail::is_symmetric(app.get_measure()));
+    return knns2graph(make_knns(app, k), app.size(), mutual, dist::is_symmetric(app.get_measure()));
 }
 
 template<typename IT=uint32_t, typename Graph>

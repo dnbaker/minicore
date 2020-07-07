@@ -8,7 +8,7 @@ namespace minocore {
 template<typename FT>
 using CType = blz::DV<FT, blz::rowVector>;
 
-namespace dist = ::blz::distance;
+namespace dist = ::minocore::distance;
 
 struct Opts {
     size_t kmc2_rounds = 0;

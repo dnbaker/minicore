@@ -13,10 +13,11 @@
 
 #include "boost/iterator/transform_iterator.hpp"
 
-namespace blz {
+namespace minocore {
 
-inline namespace distance {
+namespace distance {
 
+using namespace blz;
 
 
 
@@ -315,41 +316,40 @@ static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
     }
 }
 
+static constexpr DissimilarityMeasure USABLE_MEASURES []  {
+    L1,
+    L2,
+    SQRL2,
+    JSM,
+    JSD,
+    MKL,
+    POISSON,
+    HELLINGER,
+    BHATTACHARYYA_METRIC,
+    BHATTACHARYYA_DISTANCE,
+    TOTAL_VARIATION_DISTANCE,
+    LLR,
+    UWLLR,
+    REVERSE_MKL,
+    REVERSE_POISSON,
+    ITAKURA_SAITO,
+    REVERSE_ITAKURA_SAITO,
+    COSINE_DISTANCE,
+    COSINE_SIMILARITY,
+    PL2,
+    PSL2
+    // Absent:
+    // EMD/WEMB -- lacking proper evaluation
+    // PROBABILITY_COSINE_DISTANCE/PROBABILITY_COSINE_SIMILARITY -- extensions to this space are not complete.
+    // ORACLE_METRIC/ORACLE_PSEUDOMETRIC, as they are placeholders
+};
+
 static void print_measures() {
-    std::set<DissimilarityMeasure> measures {
-        L1,
-        L2,
-        SQRL2,
-        JSM,
-        JSD,
-        MKL,
-        POISSON,
-        HELLINGER,
-        BHATTACHARYYA_METRIC,
-        BHATTACHARYYA_DISTANCE,
-        TOTAL_VARIATION_DISTANCE,
-        LLR,
-        UWLLR,
-        //EMD,
-        REVERSE_MKL,
-        REVERSE_POISSON,
-        UWLLR,
-        TOTAL_VARIATION_DISTANCE,
-        PSD,
-        PSM,
-        ITAKURA_SAITO,
-        REVERSE_ITAKURA_SAITO,
-        COSINE_DISTANCE,
-        COSINE_SIMILARITY,
-        PROBABILITY_COSINE_DISTANCE,
-        PROBABILITY_COSINE_SIMILARITY,
-        PL2,
-        PSL2
-    };
-    for(const auto measure: measures) {
+    for(const auto measure: USABLE_MEASURES) {
         std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
     }
 }
+
 static constexpr bool is_valid_measure(DissimilarityMeasure measure) {
     switch(measure) {
         case L1: case L2: case SQRL2: case JSM: case JSD: case MKL:
@@ -359,26 +359,13 @@ static constexpr bool is_valid_measure(DissimilarityMeasure measure) {
         case ITAKURA_SAITO: case COSINE_DISTANCE: case PROBABILITY_COSINE_DISTANCE:
         case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
         case EMD: case WEMD: case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
-        case PL2: case PSL2:
-        return true;
+        case PL2: case PSL2: return true;
         default: ;
     }
     return false;
 }
 } // detail
 
-
-/*
- *
- * Use https://people.eecs.berkeley.edu/~jordan/courses/260-spring10/other-readings/chapter8.pdf
- * to derive KL, Jensen-Shannon divergences + JS distances (sqrt(JS))
- * for the full exponential family of distributions.
- * Currently, what I have is the multinomial, but this also applies to Poisson.
- * See https://en.wikipedia.org/wiki/Exponential_family
- * TODO:
- * These include:
- * Bernoulli, binomial, Poisson, chi-squared, Laplace, normal, lognormal, inverse gaussian, gamma,
- */
 
 template<typename FT, bool SO>
 auto logsumexp(const blaze::DenseVector<FT, SO> &x) {
@@ -731,17 +718,10 @@ auto discrete_total_variation_distance(const blz::Vector<VT, SO> &lhs, const blz
     return ElementType_t<CommonType_t<VT, VT2>>(0.5) * blz::l1Norm(~lhs - ~rhs);
 }
 
-#if 0
-template<typename VT, typename VT2, bool SO>
-auto witten_poisson_dissimilarity(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs, ) {
-
-}
-#endif
-
 } // distance
 
-} // namespace blz
+} // namespace minocore
 
-namespace dist = blz::distance;
+namespace dist = minocore::distance;
 
 #endif // FGC_DISTANCE_AND_MEANING_H__

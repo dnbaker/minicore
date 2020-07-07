@@ -15,7 +15,7 @@ namespace minocore {
 namespace cmp {
 
 using namespace blz;
-using namespace blz::distance;
+using namespace minocore::distance;
 
 
 template<typename MatrixType, typename ElementType=blaze::ElementType_t<MatrixType>>
@@ -57,7 +57,7 @@ public:
         data_(ref), measure_(measure)
     {
         prep(prior, c);
-        MINOCORE_REQUIRE(dist::detail::is_valid_measure(measure_), "measure_ must be valid");
+        MINOCORE_REQUIRE(dist::is_valid_measure(measure_), "measure_ must be valid");
     }
     /*
      * Sets distance matrix, under measure_ (if not provided)
@@ -167,7 +167,7 @@ public:
             case PROBABILITY_COSINE_SIMILARITY:
                                            set_distance_matrix<MatType, PROBABILITY_COSINE_SIMILARITY>(m, symmetrize); break;
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); throw std::invalid_argument("Placeholders");
-            default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + dist::detail::prob2str(measure));
+            default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + dist::prob2str(measure));
         }
     }
     template<typename OFT=FT>
@@ -741,7 +741,7 @@ public:
                 return __tvd_sparse_prior(i, j);
             }
         }
-        return blz::distance::discrete_total_variation_distance(row(i), row(j));
+        return distance::discrete_total_variation_distance(row(i), row(j));
     }
 
     template<typename OT, typename=std::enable_if_t<!std::is_arithmetic_v<OT>>>
@@ -1147,8 +1147,8 @@ private:
                 if constexpr(blaze::IsDenseMatrix_v<MatrixType>) {
                     if(prior == NONE) {
                         r += 1e-50;
-                        if(dist::detail::expects_nonnegative(measure_) && blaze::min(r) < 0.)
-                            throw std::invalid_argument(std::string("Measure ") + dist::detail::prob2str(measure_) + " expects nonnegative data");
+                        if(dist::expects_nonnegative(measure_) && blaze::min(r) < 0.)
+                            throw std::invalid_argument(std::string("Measure ") + dist::prob2str(measure_) + " expects nonnegative data");
                     }
                 }
                 FT div = countsum;
@@ -1161,7 +1161,7 @@ private:
             }
         }
 
-        if(dist::detail::needs_logs(measure_)) {
+        if(dist::needs_logs(measure_)) {
             if constexpr(IS_CSC_VIEW) {
                 logdata_ = CacheMatrixType(data_.rows(), data_.columns());
                 logdata_.reserve(data_.nnz());
@@ -1174,7 +1174,7 @@ private:
                 logdata_ = CacheMatrixType(neginf2zero(log(data_)));
             }
         }
-        if(dist::detail::needs_sqrt(measure_)) {
+        if(dist::needs_sqrt(measure_)) {
             if constexpr(IS_CSC_VIEW) {
                 sqrdata_ = CacheMatrixType(data_.rows(), data_.columns());
                 sqrdata_.reserve(data_.nnz());
@@ -1187,7 +1187,7 @@ private:
                 sqrdata_ = CacheMatrixType(blaze::sqrt(data_));
             }
         }
-        if(dist::detail::needs_l2_cache(measure_)) {
+        if(dist::needs_l2_cache(measure_)) {
             l2norm_cache_.reset(new VecT(data_.rows()));
             OMP_PFOR
             for(size_t i = 0; i < data_.rows(); ++i) {
@@ -1205,7 +1205,7 @@ private:
                 }
             }
         }
-        if(dist::detail::needs_probability_l2_cache(measure_)) {
+        if(dist::needs_probability_l2_cache(measure_)) {
             pl2norm_cache_.reset(new VecT(data_.rows()));
             OMP_PFOR
             for(size_t i = 0; i < data_.rows(); ++i) {

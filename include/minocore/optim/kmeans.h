@@ -19,7 +19,7 @@ namespace coresets {
 
 
 using std::partial_sum;
-using blz::distance::sqrL2Norm;
+using blz::sqrL2Norm;
 
 
 
