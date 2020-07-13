@@ -10,7 +10,7 @@ namespace dist = minocore::distance;
 
 using minocore::util::timediff2ms;
 
-Opts opts;
+SumOpts opts;
 
 void usage() {
     std::fprintf(stderr, "mtx2coreset <flags> [input file=""] [output_dir=mtx2coreset_output]\n"
@@ -60,7 +60,7 @@ void usage() {
 }
 
 template<typename FT>
-int m2d2core(std::string in, std::string out, Opts &opts)
+int m2d2core(std::string in, std::string out, SumOpts &opts)
 {
     auto &ts = *opts.stamper_;
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
@@ -161,7 +161,7 @@ kcenter_coreset_outliers(Iter first, Iter end, RNG &rng, size_t k, double eps=0.
 #endif
 
 template<typename FT>
-int m2kccs(std::string in, std::string out, Opts &opts)
+int m2kccs(std::string in, std::string out, SumOpts &opts)
 {
     auto &ts = *opts.stamper_;
     if(opts.outlier_fraction == 0.) {
@@ -209,7 +209,7 @@ int m2kccs(std::string in, std::string out, Opts &opts)
 }
 
 template<typename FT>
-int m2greedycore(std::string in, std::string out, Opts &opts)
+int m2greedycore(std::string in, std::string out, SumOpts &opts)
 {
     auto &ts = *opts.stamper_;
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
@@ -260,7 +260,7 @@ int m2greedycore(std::string in, std::string out, Opts &opts)
 
 
 template<typename FT>
-int m2ccore(std::string in, std::string out, Opts &opts)
+int m2ccore(std::string in, std::string out, SumOpts &opts)
 {
     std::fprintf(stderr, "[%s] Starting main\n", __PRETTY_FUNCTION__);
     std::fprintf(stderr, "Parameters: %s\n", opts.to_string().data());
@@ -316,7 +316,7 @@ int m2ccore(std::string in, std::string out, Opts &opts)
             break;
         }
         default: {
-            std::fprintf(stderr, "%d/%s not supported\n", (int)opts.dis, blz::detail::prob2desc(opts.dis));
+            std::fprintf(stderr, "%d/%s not supported\n", (int)opts.dis, minocore::distance::prob2desc(opts.dis));
             throw NotImplementedError("Not yet");
         }
     }

@@ -39,7 +39,7 @@ struct IndexPQ: public std::priority_queue<std::pair<CI, IT>, std::vector<std::p
 
 template<typename FT>
 std::tuple<std::vector<blz::DV<FT, blz::rowVector>>, std::vector<uint32_t>, blz::DV<FT, blz::rowVector>>
-l1_sum_core(blz::SM<FT> &mat, std::string out, Opts &opts) {
+l1_sum_core(blz::SM<FT> &mat, std::string out, SumOpts &opts) {
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     std::vector<uint32_t> indices, asn;
     blz::DV<FT, blz::rowVector> costs;

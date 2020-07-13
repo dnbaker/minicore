@@ -10,7 +10,7 @@ using CType = blz::DV<FT, blz::rowVector>;
 
 namespace dist = ::minocore::distance;
 
-struct Opts {
+struct SumOpts {
     size_t kmc2_rounds = 0;
     // If nonzero, performs KMC2 with m kmc2_rounds as chain length
     // Otherwise, performs standard D2 sampling
@@ -42,11 +42,29 @@ struct Opts {
         std::sprintf(buf.data(), fmt, k, (int)sm, size_t(seed), gamma, (int)prior, dist::prior2desc(prior), extra_sample_tries, coreset_samples, eps, (int)dis, dist::detail::prob2str(dis), softstr, dmsstr);
         return buf;
     }
-    Opts(Opts &&) = default;
-    Opts(const Opts &) = delete;
-    Opts() {}
+    SumOpts(SumOpts &&) = default;
+    SumOpts(const SumOpts &) = delete;
+    SumOpts() {}
+    SumOpts(dist::DissimilarityMeasure measure, unsigned k=10, double prior_value=0., coresets::SensitivityMethod sm=coresets::BFL,
+            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false): dis(measure), prior(prior_value == 0. ? dist::NONE: prior_value == 1. ? dist::DIRICHLET: dist::GAMMA_BETA), gamma(prior_value), k(k),
+            lloyd_max_rounds(max_rounds),
+            sm(sm),
+            soft(soft),
+            outlier_fraction(outlier_fraction)
+    {
+    }
+    SumOpts(int measure, unsigned k=10, double prior_value=0., std::string sm="BFL",
+            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false)
+            : SumOpts((dist::DissimilarityMeasure)measure, k, prior_value, coresets::str2sm(sm), outlier_fraction, max_rounds, soft) {}
+    SumOpts(int measure, unsigned k=10, double prior_value=0., int smi=static_cast<int>(minocore::coresets::BFL),
+            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false)
+        : SumOpts((dist::DissimilarityMeasure)measure, k, prior_value, static_cast<coresets::SensitivityMethod>(smi), outlier_fraction, max_rounds, soft) {}
+    SumOpts(std::string msr, unsigned k=10, double prior_value=0., int smi=static_cast<int>(minocore::coresets::BFL),
+            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false)
+           : SumOpts(dist::str2msr(msr), k, prior_value, static_cast<coresets::SensitivityMethod>(smi), outlier_fraction, max_rounds, soft) {}
+    SumOpts(std::string msr, unsigned k=10, double prior_value=0., std::string sm="BFL", double outlier_fraction=0., size_t max_rounds=1000, bool soft=false)
+        : SumOpts(dist::str2msr(msr), k, prior_value, coresets::str2sm(sm), outlier_fraction, max_rounds, soft) {}
 };
-
 
 /*
  * get_initial_centers:

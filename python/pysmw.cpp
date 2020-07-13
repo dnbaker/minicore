@@ -2,6 +2,7 @@
 #include "pyfgc.h"
 #include <sstream>
 
+
 void init_smw(py::module &m) {
     py::class_<SparseMatrixWrapper>(m, "SparseMatrixWrapper")
     .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=false)
@@ -48,4 +49,20 @@ void init_smw(py::module &m) {
             std::fprintf(stderr, "%d\t%s\t%s\n", static_cast<int>(_m), prob2str(_m), prob2desc(_m));
         }
     });
+    m.def("mdict", []() {
+        py::dict ret;
+        for(const auto d: dist::USABLE_MEASURES) {
+            ret[dist::prob2str(d)] = static_cast<Py_ssize_t>(d);
+        }
+        return ret;
+    });
+    py::class_<SumOpts>(m, "sumopts")
+    .def(py::init<std::string, Py_ssize_t, double, std::string, double, Py_ssize_t, bool>(), py::arg("measure"), py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+        py::arg("soft") = false)
+    .def(py::init<int, Py_ssize_t, double, std::string, double, Py_ssize_t, bool>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+        py::arg("soft") = false)
+    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+        py::arg("soft") = false)
+    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+        py::arg("soft") = false);
 }

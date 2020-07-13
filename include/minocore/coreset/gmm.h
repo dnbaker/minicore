@@ -1,7 +1,7 @@
 #pragma once
 #ifndef FGC_GMM_H__
 #define FGC_GMM_H__
-#include "optim/kmeans.h"
+#include "minocore/optim/kmeans.h"
 
 namespace minocore {
 

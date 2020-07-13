@@ -44,7 +44,15 @@ enum SensitivityMethod: int {
     LBK=LUCIC_BACHEM_KRAUSE
 };
 
-static const char *sm2str(SensitivityMethod sm) {
+static constexpr const SensitivityMethod CORESET_CONSTRUCTIONS [] {
+    BRAVERMAN_FELDMAN_LANG,
+    FELDMAN_LANGBERG,
+    LUCIC_FAULKNER_KRAUSE_FELDMAN,
+    VARADARAJAN_XIAO,
+    LUCIC_BACHEM_KRAUSE
+};
+
+static constexpr const char *sm2str(SensitivityMethod sm) {
     switch(sm) {
         case BFL:  return "BFL";
         case VX:   return "VX";
@@ -54,6 +62,15 @@ static const char *sm2str(SensitivityMethod sm) {
     }
     return "UNKNOWN";
 }
+
+static constexpr SensitivityMethod str2sm(const char *s) {
+    for(const auto sm: CORESET_CONSTRUCTIONS) if(std::strcmp(sm2str(sm), s) == 0) return sm;
+    return BRAVERMAN_FELDMAN_LANG;
+}
+static inline SensitivityMethod str2sm(const std::string &s) {
+    return str2sm(s.data());
+}
+
 using namespace std::literals;
 
 template<typename IT, typename FT>

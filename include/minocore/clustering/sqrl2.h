@@ -6,7 +6,7 @@ namespace minocore {
 
 template<typename FT>
 auto 
-kmeans_sum_core(blz::SM<FT> &mat, std::string out, Opts &opts) {
+kmeans_sum_core(blz::SM<FT> &mat, std::string out, SumOpts &opts) {
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     std::vector<uint32_t> indices, asn;
     blz::DV<FT, blz::rowVector> costs;

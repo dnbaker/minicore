@@ -178,6 +178,7 @@ Py_ssize_t filtered_nonzeros(py::handle matrix, const std::vector<Py_ssize_t> &i
 
 void init_merge(py::module &m) {
     m.def("merge", [](py::list matrices, py::list featmaps, py::list features) {
+        std::fprintf(stderr, "[%s] Warning: this is in very shaky condition. Expect it to not work.\n", __PRETTY_FUNCTION__);
         assert(matrices.size() == featmaps.size());
         const Py_ssize_t nf = features.size();
         std::vector<std::vector<Py_ssize_t>> luts;

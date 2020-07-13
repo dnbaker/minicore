@@ -344,6 +344,11 @@ static constexpr DissimilarityMeasure USABLE_MEASURES []  {
     // ORACLE_METRIC/ORACLE_PSEUDOMETRIC, as they are placeholders
 };
 
+static inline DissimilarityMeasure str2msr(const std::string &s) {
+    for(const auto sm: USABLE_MEASURES) if(s == prob2str(sm)) return sm;
+    throw std::invalid_argument(s);
+}
+
 static void print_measures() {
     for(const auto measure: USABLE_MEASURES) {
         std::fprintf(stderr, "Code: %d. Description: '%s'. Short name: '%s'\n", measure, prob2desc(measure), prob2str(measure));
