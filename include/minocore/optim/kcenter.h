@@ -50,7 +50,7 @@ kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Nor
         if(v > maxdist) { OMP_CRITICAL { if(v > maxdist) maxdist = v, bestind = i;} }
     }
     assert(distances[newc] == 0.);
-    if(k == 1) return centers;
+    if(k == 1) return std::make_pair(centers, distances);
     centers[1] = newc = bestind;
     distances[newc] = 0.;
 
