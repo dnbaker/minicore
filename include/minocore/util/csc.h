@@ -247,7 +247,7 @@ struct COORadixTraits {
         }
     }
     static constexpr bool compare(const VT &x, const VT &y) {
-        if constexpr(SO == blaze::rowMajor) 
+        if constexpr(SO == blaze::rowMajor)
             return std::tie(x.x, x.y, x.z) < std::tie(y.x, y.y, y.z);
         else
             return std::tie(x.y, x.x, x.z) < std::tie(y.y, y.x, y.z);
@@ -354,7 +354,7 @@ erase_empty(blaze::Matrix<MT, SO> &mat) {
 }
 
 template<typename FT=float, bool SO=blaze::rowMajor, typename IndPtrType, typename IndicesType, typename DataType>
-blz::SM<FT, SO> csc2sparse(const IndPtrType *indptr, const IndicesType *indices, const DataType *data, 
+blz::SM<FT, SO> csc2sparse(const IndPtrType *indptr, const IndicesType *indices, const DataType *data,
                            size_t nnz, size_t nfeat, uint32_t nitems) {
     return csc2sparse<FT, SO>(CSCMatrixView<IndPtrType, IndicesType, DataType>(indptr, indices, data, nnz, nfeat, nitems));
 }

@@ -39,10 +39,10 @@ size_t for_each_by_case(const size_t n, IT1 start1, IT1 stop1, IT2 start2, IT2 s
                 }
                 break;
             case 2:
-                nextind = start1->index(); lhfunc(nextind, start1->value()); ++start1; 
+                nextind = start1->index(); lhfunc(nextind, start1->value()); ++start1;
                 break;
             case 1:
-                nextind = start2->index(); rhfunc(nextind, start2->value()); ++start2; 
+                nextind = start2->index(); rhfunc(nextind, start2->value()); ++start2;
                 break;
             case 0: nextind = n; break;
             default: __builtin_unreachable();
@@ -72,10 +72,10 @@ void for_each_by_case(const size_t n, IT1 start1, IT1 stop1, IT2 start2, IT2 sto
                 }
                 break;
             case 2:
-                nextind = start1->index(); lhfunc(nextind, start1->value()); ++start1; 
+                nextind = start1->index(); lhfunc(nextind, start1->value()); ++start1;
                 break;
             case 1:
-                nextind = start2->index(); rhfunc(nextind, start2->value()); ++start2; 
+                nextind = start2->index(); rhfunc(nextind, start2->value()); ++start2;
                 break;
             case 0: nextind = n; break;
             default: __builtin_unreachable();

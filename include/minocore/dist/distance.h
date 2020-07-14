@@ -147,21 +147,21 @@ static constexpr INLINE bool needs_logs(DissimilarityMeasure d)  {
     return false;
 }
 
-static constexpr INLINE bool use_scaled_centers(DissimilarityMeasure measure) {                         
+static constexpr INLINE bool use_scaled_centers(DissimilarityMeasure measure) {
     // Whether centers should be produced as being not normalized by row sums
     // compared to default behavior
-    switch(measure) {                                                                                  
-        case LLR:                                                                                
-        case OLLR:                                                                               
-        case UWLLR:                                                                              
-        case L1:                                                                                 
-        case SQRL2:                                                                              
-        case L2:                                                                                 
-        case COSINE_DISTANCE:                                                                    
-        case WEMD:                                                                               
-           return true;                                                                                
-        default: return false;                                                                         
-    }                                                                                                  
+    switch(measure) {
+        case LLR:
+        case OLLR:
+        case UWLLR:
+        case L1:
+        case SQRL2:
+        case L2:
+        case COSINE_DISTANCE:
+        case WEMD:
+           return true;
+        default: return false;
+    }
 }
 
 static constexpr INLINE bool is_probability(DissimilarityMeasure d)  {

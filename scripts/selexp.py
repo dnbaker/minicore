@@ -29,7 +29,7 @@ for k in VANILLA_METRICS:
 
 for k in ("JSM", "JSD", "HELLINGER", "MKL", "REVERSE_MKL", "ITAKURA_SAITO"):
     PRIORDICT[k] = [1e-4, 1e-2, 1]
-    
+
 
 PRIORS = {"DIRICHLET", "NONE", "GAMMA_BETA"}
 COMMAND = {"GREEDY": " -G ", "D2": " -l ", "CLUSTER": "", "DOUBLINGCS": " -7 "}

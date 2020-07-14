@@ -5,27 +5,27 @@
 
 // See http://www.boost.org/libs/iostreams for documentation.
 
-// To configure Boost to work with libbz2, see the 
+// To configure Boost to work with libbz2, see the
 // installation instructions here:
 // http://boost.org/libs/iostreams/doc/index.html?path=7
 
-// Define BOOST_IOSTREAMS_SOURCE so that <boost/iostreams/detail/config.hpp> 
-// knows that we are building the library (possibly exporting code), rather 
+// Define BOOST_IOSTREAMS_SOURCE so that <boost/iostreams/detail/config.hpp>
+// knows that we are building the library (possibly exporting code), rather
 // than using it (possibly importing code).
 #ifndef BOOST_IOSTREAMS_SOURCE_BZ2
 #define BOOST_IOSTREAMS_SOURCE_BZ2
 #ifndef BOOST_IOSTREAMS_SOURCE
-#define BOOST_IOSTREAMS_SOURCE 
+#define BOOST_IOSTREAMS_SOURCE
 #endif
 
 #include <boost/throw_exception.hpp>
 #include <boost/iostreams/detail/config/dyn_link.hpp>
-#include <boost/iostreams/filter/bzip2.hpp> 
+#include <boost/iostreams/filter/bzip2.hpp>
 #include "bzlib.h"  // Julian Seward's "bzip.h" header.
-                    // To configure Boost to work with libbz2, see the 
+                    // To configure Boost to work with libbz2, see the
                     // installation instructions here:
                     // http://boost.org/libs/iostreams/doc/index.html?path=7
-                    
+
 namespace boost { namespace iostreams {
 
 namespace bzip2 {
@@ -52,24 +52,24 @@ const int config_error         = BZ_CONFIG_ERROR;
 const int finish               = BZ_FINISH;
 const int run                  = BZ_RUN;
 
-} // End namespace bzip2. 
+} // End namespace bzip2.
 
 //------------------Implementation of bzip2_error-----------------------------//
-                    
+
 bzip2_error::bzip2_error(int error)
-    : BOOST_IOSTREAMS_FAILURE("bzip2 error"), error_(error) 
+    : BOOST_IOSTREAMS_FAILURE("bzip2 error"), error_(error)
     { }
 
 void bzip2_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(int error)
 {
     switch (error) {
-    case BZ_OK: 
-    case BZ_RUN_OK: 
+    case BZ_OK:
+    case BZ_RUN_OK:
     case BZ_FLUSH_OK:
     case BZ_FINISH_OK:
     case BZ_STREAM_END:
         return;
-    case BZ_MEM_ERROR: 
+    case BZ_MEM_ERROR:
         boost::throw_exception(std::bad_alloc());
     default:
         boost::throw_exception(bzip2_error(error));
@@ -81,7 +81,7 @@ void bzip2_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(int error)
 namespace detail {
 
 bzip2_base::bzip2_base(const bzip2_params& params)
-    : params_(params), stream_(new bz_stream), ready_(false) 
+    : params_(params), stream_(new bz_stream), ready_(false)
     { }
 
 bzip2_base::~bzip2_base() { delete static_cast<bz_stream*>(stream_); }
@@ -141,28 +141,28 @@ int bzip2_base::decompress()
 }
 
 void bzip2_base::do_init
-    ( bool compress, 
-      bzip2::alloc_func /* alloc */, 
-      bzip2::free_func /* free */, 
+    ( bool compress,
+      bzip2::alloc_func /* alloc */,
+      bzip2::free_func /* free */,
       void* derived )
 {
     bz_stream* s = static_cast<bz_stream*>(stream_);
 
-    // Current interface for customizing memory management 
+    // Current interface for customizing memory management
     // is non-conforming and has been disabled:
     //    s->bzalloc = alloc;
     //    s->bzfree = free;
         s->bzalloc = 0;
         s->bzfree = 0;
     s->opaque = derived;
-    bzip2_error::check BOOST_PREVENT_MACRO_SUBSTITUTION( 
+    bzip2_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(
         compress ?
             BZ2_bzCompressInit( s,
-                                params_.block_size, 
-                                0, 
+                                params_.block_size,
+                                0,
                                 params_.work_factor ) :
-            BZ2_bzDecompressInit( s, 
-                                  0, 
+            BZ2_bzDecompressInit( s,
+                                  0,
                                   params_.small )
     );
     ready_ = true;

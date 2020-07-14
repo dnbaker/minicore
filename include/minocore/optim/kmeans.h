@@ -35,7 +35,7 @@ using blz::sqrL2Norm;
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr) {
+kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, bool multithread=true) {
 #ifndef NDEBUG
     std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
 #endif
@@ -83,17 +83,20 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         assignments[newc] = centers.size();
         centers.push_back(newc);
         distances[newc] = 0.;
-        OMP_PFOR
-        for(IT i = 0; i < np; ++i) {
+        auto lfunc = [&](IT i) ALWAYS_INLINE {
             auto &ldist = distances[i];
-            if(ldist == 0.) continue;
-            //std::fprintf(stderr, "Oracle about to call newc%zu / i%zu. centers size: %zu\n", newc, i, centers.size());
+            if(ldist == 0.) return;
             auto dist = oracle(newc, i);
             if(dist < ldist) { // Only write if it changed
                 assignments[i] = current_center_id;
                 ldist = dist;
             }
-        }
+        };
+        if(multithread) {
+            OMP_PFOR
+            for(IT i = 0; i < np; ++i)
+                lfunc(i);
+        } else for(IT i = 0; i < np; lfunc(i++));
         if(weights) ::std::partial_sum(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
             return x + y * weights[&y - ds];
         });
@@ -106,10 +109,10 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr) {
+kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, bool multithread=true) {
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights);
+    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, multithread);
 }
 
 template<typename Oracle, typename Sol, typename FT=float, typename IT=uint32_t>
@@ -144,7 +147,7 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
 template<typename Oracle,
          typename IT=std::uint32_t, typename RNG>
 std::vector<IT>
-kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
+kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000, bool multithread=true)
 {
     if(m == 0)  {
         std::fprintf(stderr, "m must be nonzero\n");
@@ -173,8 +176,7 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
         auto xdi = 1. / xdist;
         auto baseseed = IT(rng());
         const double max64inv = 1. / std::numeric_limits<uint64_t>::max();
-        OMP_PFOR
-        for(unsigned j = 1; j < m; ++j) {
+        auto lfunc = [&](unsigned j) {
             uint64_t local_seed = baseseed + j;
             wy::wyhash64_stateless(&local_seed);
             auto y = div.mod(local_seed);
@@ -189,6 +191,14 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
                         x = y, xdist = ydist, xdi = 1. / xdist;
                 }
             }
+        };
+        if(multithread) {
+            OMP_PFOR
+            for(unsigned j = 1; j < m; ++j) {
+                lfunc(j);
+            }
+        } else {
+            for(unsigned j = 1; j < m; lfunc(j++));
         }
         centers.insert(x);
     }
@@ -197,27 +207,27 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 std::vector<IT>
-kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm=Norm()) {
+kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm=Norm(), bool multithread=true) {
     if(m == 0) throw std::invalid_argument("m must be nonzero");
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
     size_t np = end - first;
-    return kmc2(dm, rng, np, k, m);
+    return kmc2(dm, rng, np, k, m, multithread);
 }
 
 
 template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
 auto
-kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr) {
+kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, bool multithread=true) {
     using FT = typename MT::ElementType;
     std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(~mat);
-        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights);
+        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, multithread);
     } else { // columnwise
         auto columnit = blz::columniterator(~mat);
-        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights);
+        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, multithread);
     }
     return ret;
 }
@@ -228,15 +238,16 @@ auto
 kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
      size_t m=2000,
      const Norm &norm=Norm(),
-     bool rowwise=true)
+     bool rowwise=true,
+     bool multithread=true)
 {
     std::vector<IT> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(~mat);
-        ret = kmc2(rowit.begin(), rowit.end(), rng, k, m, norm);
+        ret = kmc2(rowit.begin(), rowit.end(), rng, k, m, norm, multithread);
     } else { // columnwise
         auto columnit = blz::columniterator(~mat);
-        ret = kmc2(columnit.begin(), columnit.end(), rng, k, m, norm);
+        ret = kmc2(columnit.begin(), columnit.end(), rng, k, m, norm, multithread);
     }
     return ret;
 }

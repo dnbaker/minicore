@@ -29,7 +29,8 @@ void init_smw(py::module &m) {
             std::stringstream ss; ss << x;
             return ss.str();
         });
-    });
+    }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();}
+    ).def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();});
 
 
     // Utilities
@@ -69,6 +70,25 @@ void init_smw(py::module &m) {
     .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and an integer key for the coreest construction format.");
 
+    m.def("d2_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
+        std::vector<uint32_t> centers, asn;
+        std::vector<double> dc;
+        std::vector<float> fc;
+        if(smw.is_float()) {
+            std::tie(centers, asn, fc) = minocore::m2d2(smw.getfloat(), so);
+        } else {
+            std::tie(centers, asn, dc) = minocore::m2d2(smw.getdouble(), so);
+        }
+        py::array_t<uint32_t> ret(centers.size()), retasn(smw.rows());
+        py::array_t<double> costs(smw.rows());
+        auto rpi = ret.request(), api = retasn.request(), cpi = costs.request();
+        std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
+        if(fc.size()) std::copy(fc.begin(), fc.end(), (double *)cpi.ptr);
+        else          std::copy(dc.begin(), dc.end(), (double *)cpi.ptr);
+        std::copy(asn.begin(), asn.end(), (uint32_t *)api.ptr);
+        return py::make_tuple(ret, retasn, costs);
+    }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
+       py::arg("smw"), py::arg("sumopts"));
     m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers;
         std::vector<double> dret;
@@ -79,7 +99,7 @@ void init_smw(py::module &m) {
             std::tie(centers, dret) = minocore::m2greedysel(smw.getdouble(), so);
         }
         py::array_t<uint32_t> ret(centers.size());
-        py::array_t<double> costs(centers.size());
+        py::array_t<double> costs(smw.rows());
         auto rpi = ret.request(), cpi = costs.request();
         std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
         if(fret.size()) std::copy(fret.begin(), fret.end(), (double *)cpi.ptr);

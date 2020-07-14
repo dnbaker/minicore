@@ -5,24 +5,24 @@
 
 // See http://www.boost.org/libs/iostreams for documentation.
 
-// To configure Boost to work with zlib, see the 
+// To configure Boost to work with zlib, see the
 // installation instructions here:
 // http://boost.org/libs/iostreams/doc/index.html?path=7
 
-// Define BOOST_IOSTREAMS_SOURCE so that <boost/iostreams/detail/config.hpp> 
-// knows that we are building the library (possibly exporting code), rather 
+// Define BOOST_IOSTREAMS_SOURCE so that <boost/iostreams/detail/config.hpp>
+// knows that we are building the library (possibly exporting code), rather
 // than using it (possibly importing code).
 #ifndef BOOST_IOSTREAMS_SOURCE_ZLIB
 #define BOOST_IOSTREAMS_SOURCE_ZLIB
 #ifndef BOOST_IOSTREAMS_SOURCE
-#define BOOST_IOSTREAMS_SOURCE 
+#define BOOST_IOSTREAMS_SOURCE
 #endif
 
 #include <boost/throw_exception.hpp>
 #include <boost/iostreams/detail/config/dyn_link.hpp>
-#include <boost/iostreams/filter/zlib.hpp> 
+#include <boost/iostreams/filter/zlib.hpp>
 #include "zlib.h"   // Jean-loup Gailly's and Mark Adler's "zlib.h" header.
-                    // To configure Boost to work with zlib, see the 
+                    // To configure Boost to work with zlib, see the
                     // installation instructions here:
                     // http://boost.org/libs/iostreams/doc/index.html?path=7
 
@@ -67,22 +67,22 @@ const int sync_flush           = Z_SYNC_FLUSH;
 
 //const int os_code              = OS_CODE;
 
-} // End namespace zlib. 
+} // End namespace zlib.
 
 //------------------Implementation of zlib_error------------------------------//
-                    
-zlib_error::zlib_error(int error) 
-    : BOOST_IOSTREAMS_FAILURE("zlib error"), error_(error) 
+
+zlib_error::zlib_error(int error)
+    : BOOST_IOSTREAMS_FAILURE("zlib error"), error_(error)
     { }
 
 void zlib_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(int error)
 {
     switch (error) {
-    case Z_OK: 
-    case Z_STREAM_END: 
-    //case Z_BUF_ERROR: 
+    case Z_OK:
+    case Z_STREAM_END:
+    //case Z_BUF_ERROR:
         return;
-    case Z_MEM_ERROR: 
+    case Z_MEM_ERROR:
         boost::throw_exception(std::bad_alloc());
     default:
         boost::throw_exception(zlib_error(error));
@@ -134,12 +134,12 @@ void zlib_base::after(const char*& src_begin, char*& dest_begin, bool compress)
 }
 
 int zlib_base::xdeflate(int flush)
-{ 
+{
     return ::deflate(static_cast<z_stream*>(stream_), flush);
 }
 
 int zlib_base::xinflate(int flush)
-{ 
+{
     return ::inflate(static_cast<z_stream*>(stream_), flush);
 }
 
@@ -158,14 +158,14 @@ void zlib_base::reset(bool compress, bool realloc)
 }
 
 void zlib_base::do_init
-    ( const zlib_params& p, bool compress, 
-      zlib::xalloc_func /* alloc */, zlib::xfree_func /* free*/, 
+    ( const zlib_params& p, bool compress,
+      zlib::xalloc_func /* alloc */, zlib::xfree_func /* free*/,
       void* derived )
 {
     calculate_crc_ = p.calculate_crc;
     z_stream* s = static_cast<z_stream*>(stream_);
 
-    // Current interface for customizing memory management 
+    // Current interface for customizing memory management
     // is non-conforming and has been disabled:
     //    s->zalloc = alloc;
     //    s->zfree = free;
@@ -175,7 +175,7 @@ void zlib_base::do_init
     int window_bits = p.noheader? -p.window_bits : p.window_bits;
     zlib_error::check BOOST_PREVENT_MACRO_SUBSTITUTION(
         compress ?
-            deflateInit2( s, 
+            deflateInit2( s,
                           p.level,
                           p.method,
                           window_bits,

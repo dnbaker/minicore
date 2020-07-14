@@ -1503,9 +1503,9 @@ auto make_kmc2(const DissimilarityApplicator<MatrixType> &app, unsigned k, size_
 }
 
 template<typename MatrixType, typename WFT=blaze::ElementType_t<MatrixType>>
-auto make_kmeanspp(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr) {
+auto make_kmeanspp(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, bool multithread=true) {
     wy::WyRand<uint64_t> gen(seed);
-    return coresets::kmeanspp(app, gen, app.size(), k, weights);
+    return coresets::kmeanspp(app, gen, app.size(), k, weights, multithread);
 }
 
 template<typename MatrixType, typename WFT=blaze::ElementType_t<MatrixType>>
@@ -1515,8 +1515,8 @@ auto make_kcenter(const DissimilarityApplicator<MatrixType> &app, unsigned k, ui
 }
 
 template<typename MatrixType, typename WFT=typename MatrixType::ElementType, typename IT=uint32_t>
-auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, coresets::SensitivityMethod sens=cs::LBK) {
-    auto [centers, asn, costs] = make_kmeanspp(app, k, seed);
+auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, coresets::SensitivityMethod sens=cs::LBK, bool multithread=true) {
+    auto [centers, asn, costs] = make_kmeanspp(app, k, seed, multithread);
     coresets::CoresetSampler<typename MatrixType::ElementType, IT> cs;
     cs.make_sampler(app.size(), centers.size(), costs.data(), asn.data(), weights,
                     seed + 1, sens);

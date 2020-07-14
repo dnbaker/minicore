@@ -21,7 +21,7 @@ Py_ssize_t filtered_nonzeros(py::handle matrix, const std::vector<Py_ssize_t> &i
     for(Py_ssize_t i = 0; i < nnz; ++i) {
         auto cid = colp[i];
         if(indices.at(cid) >= 0 and datap[i] >= 0.) {
-            ++ret; 
+            ++ret;
         }
     }
     return ret;

@@ -1,7 +1,7 @@
 #ifndef MINOCORE_UTIL_IO_H__
 #define MINOCORE_UTIL_IO_H__
-#include <boost/iostreams/filtering_stream.hpp>                                                                                                                                                                                                                                              
-#include <boost/iostreams/device/file.hpp>                                                                                                                                                                                                                                                   
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/device/file.hpp>
 #include <iostream>
 #include <fstream>
 
@@ -20,8 +20,8 @@
 #endif
 
 #if defined(LZMA_H) || defined(HAVE_LZMA)
-  #include "lzma.h"                                                                                                                                                                                                                                                                            
-  #include <boost/iostreams/filter/lzma.hpp>                                                                                                                                                                                                                                                   
+  #include "lzma.h"
+  #include <boost/iostreams/filter/lzma.hpp>
   #ifdef VERBOSE_AF
     #pragma message("Enabling xz support")
   #endif
@@ -66,7 +66,7 @@ namespace util {
 
 namespace io {
 
-namespace boost_io = boost::iostreams;                                                                       
+namespace boost_io = boost::iostreams;
 
 static inline
 std::pair<std::unique_ptr<boost_io::filtering_istream>, std::unique_ptr<std::ifstream>>

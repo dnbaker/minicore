@@ -92,12 +92,18 @@ int m2d2core(std::string in, std::string out, SumOpts &opts)
     auto app = jsd::make_probdiv_applicator(sm, opts.dis, opts.prior, pcp);
     std::fprintf(stderr, "made applicator\n");
     ts.add_event("D^2 sampling");
-    auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed);
+    auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), true);
     auto csum = blz::sum(costs);
+    OMP_PFOR
     for(unsigned i = 0; i < opts.extra_sample_tries; ++i) {
-        auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed);
-        auto csum2 = blz::sum(costs2);
-        if(csum2 < csum) std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
+        auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), /*multithread=*/false);
+        if(auto csum2 = blz::sum(costs2); csum2 < csum) {
+            OMP_CRITICAL
+            {
+                if(csum2 < csum)
+                    std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
+            }
+        }
     }
     std::fprintf(stderr, "sampled points\n");
 

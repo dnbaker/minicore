@@ -16,7 +16,7 @@ def xopen(x):
         return gzip.open(x)
     else:
         return open(x)
-    
+
 
 
 def get_ids(x):
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     megamat.data.tofile(prefix + ".data")
     megamat.shape.tofile(prefix + ".shape")
     print(megamat.shape)
-    
+
 
 
 __all__ = ["FeatureMap", "get_ids", "get_id_map", "get_counts", "get_selected_ids", "xopen", "itertools", "mmread", "mmwrite", "select_features", "np"]

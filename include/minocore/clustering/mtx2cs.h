@@ -67,24 +67,6 @@ struct SumOpts {
 };
 
 
-template<typename FT, bool SO>
-auto m2greedysel(blaze::Matrix<FT, SO> &sm, const SumOpts &opts)
-{
-    blz::DV<blaze::ElementType_t<FT>, blz::rowVector> pc(1), *pcp = &pc;
-    if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
-    else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
-    else if(opts.prior == dist::NONE)
-        pcp = nullptr;
-    auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
-    wy::WyRand<uint64_t, 2> rng(opts.seed);
-    std::vector<uint32_t> centers;
-    if(opts.outlier_fraction) {
-        return coresets::kcenter_greedy_2approx_outliers_costs(
-            app, app.size(), rng, opts.k,
-            /*eps=*/1.5, opts.outlier_fraction
-        );
-    } else return coresets::kcenter_greedy_2approx_costs(app, app.size(), opts.k, rng);
-}
 
 
 /*
@@ -135,17 +117,24 @@ auto repeatedly_get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
         #pragma omp single
         nt = omp_get_num_threads();
     }
-    std::vector<res_t> bufs(std::min(nt, ntimes));
-    std::vector<FT> cost_values(bufs.size(), std::numeric_limits<FT>::max());
+    res_t best;
+    FT cost_value = std::numeric_limits<FT>::max();
     OMP_PFOR
     for(size_t i = 0; i < ntimes; ++i) {
         const int tid = omp_get_thread_num();
         RNG rngc(rng() ^ tid);
         auto res = get_initial_centers(matrix, rngc, k, kmc2rounds, norm);
         auto ncost = blz::sum(std::get<2>(res));
-        if(ncost < cost_values[tid]) res = bufs[tid], cost_values[tid] = ncost;
+        if(ncost < cost_value) {
+            OMP_CRITICAL {
+                if(ncost < cost_value) {
+                    best = std::move(res);
+                    cost_value = ncost;
+                }
+            }
+        }
     }
-    auto &[idx, asn, costs] = bufs[std::min_element(cost_values.begin(), cost_values.end()) - cost_values.begin()];
+    auto [idx, asn, costs] = std::move(best);
 #else
     auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2rounds, norm);
     auto tcost = blz::sum(costs);
@@ -162,5 +151,55 @@ auto repeatedly_get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
     std::copy(costs.begin(), costs.end(), modcosts.data());
     return std::make_tuple(idx, asn, modcosts); // Return a blaze vector
 }
+
+
+template<typename MT, bool SO>
+auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts)
+{
+    using FT = blaze::ElementType_t<MT>;
+    blz::DV<FT, blz::rowVector> pc(1), *pcp = &pc;
+    if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
+    else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
+    else if(opts.prior == dist::NONE)
+        pcp = nullptr;
+    auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
+    wy::WyRand<uint64_t, 2> rng(opts.seed);
+    auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), true);
+    auto csum = blz::sum(costs);
+    OMP_PFOR
+    for(unsigned i = 0; i < opts.extra_sample_tries; ++i) {
+        auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), /*multithread=*/false);
+        if(auto csum2 = blz::sum(costs2); csum2 < csum) {
+            OMP_CRITICAL
+            {
+                if(csum2 < csum)
+                    std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
+            }
+        }
+    }
+    CType<FT> modcosts(costs.size());
+    std::copy(costs.begin(), costs.end(), modcosts.begin());
+    return std::make_tuple(centers, asn, costs);
+}
+
+ template<typename FT, bool SO>
+ auto m2greedysel(blaze::Matrix<FT, SO> &sm, const SumOpts &opts)
+ {
+     blz::DV<blaze::ElementType_t<FT>, blz::rowVector> pc(1), *pcp = &pc;
+     if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
+     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
+     else if(opts.prior == dist::NONE)
+         pcp = nullptr;
+     auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
+     wy::WyRand<uint64_t, 2> rng(opts.seed);
+     std::vector<uint32_t> centers;
+     if(opts.outlier_fraction) {
+         return coresets::kcenter_greedy_2approx_outliers_costs(
+             app, app.size(), rng, opts.k,
+             /*eps=*/1.5, opts.outlier_fraction
+         );
+     } else return coresets::kcenter_greedy_2approx_costs(app, app.size(), opts.k, rng);
+ }
+
 
 } // namespace minocore

@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     for(const auto &pair: crhs) rhi.insert(pair.index());
     std::set<int> unionset;
     unionset.merge(lhi); unionset.merge(rhi);
-    auto sharedfunc = 
+    auto sharedfunc =
         [&](auto idx, auto x, auto y) {
 #if 0
             std::fprintf(stderr, "Index %zu has %g/%g (both nonzero) for x and y, respectively.\n", idx, double(x), double(y));
@@ -53,9 +53,9 @@ int main(int argc, char **argv) {
             assert(crhs[idx] == y);
 #endif
         };
-    auto lhfunc = 
+    auto lhfunc =
         [&](auto idx, auto x) {assert(clhs[idx] == x);};
-    auto rhfunc = 
+    auto rhfunc =
         [&](auto idx, auto y) {assert(crhs[idx] == y);};
     size_t sharednz = merge::for_each_by_case(ndim, clhs.begin(), clhs.end(), crhs.begin(), crhs.end(), sharedfunc, lhfunc, rhfunc);
     assert(sharednz == ndim - unionset.size());
