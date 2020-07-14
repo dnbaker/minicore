@@ -19,10 +19,11 @@ using util::fpq;
  * 2-approximate solution
  * T. F. Gonzalez. Clustering to minimize the maximum intercluster distance. Theoretical Computer Science, 38:293-306, 1985.
  */
+
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-std::vector<IT>
-kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), size_t maxdest=0)
+auto
+kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), size_t maxdest=0)
 {
     static_assert(sizeof(typename RNG::result_type) >= sizeof(IT), "IT must have the same size as the result type of the RNG");
     static_assert(std::is_arithmetic<FT>::value, "FT must be arithmetic");
@@ -72,13 +73,13 @@ kcenter_greedy_2approx(Iter first, Iter end, RNG &rng, size_t k, const Norm &nor
         centers[ci] = newc = bestind;
         distances[newc] = 0.;
     }
-    return centers;
-} // kcenter_greedy_2approx
+    return std::make_pair(centers, distances);
+} // kcenter_greedy_2approx_costs
 
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0, 0))>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-std::vector<IT>
-kcenter_greedy_2approx(Oracle &oracle, const size_t np, size_t k, RNG &rng)
+auto
+kcenter_greedy_2approx_costs(Oracle &oracle, const size_t np, size_t k, RNG &rng)
 {
     static_assert(sizeof(typename RNG::result_type) >= sizeof(IT), "IT must have the same size as the result type of the RNG");
     static_assert(std::is_arithmetic<FT>::value, "FT must be arithmetic");
@@ -87,7 +88,6 @@ kcenter_greedy_2approx(Oracle &oracle, const size_t np, size_t k, RNG &rng)
     VERBOSE_ONLY(std::fprintf(stderr, "[%s] Starting kcenter_greedy_2approx\n", __PRETTY_FUNCTION__);)
     auto newc = rng() % np;
     centers.push_back(newc);
-    if(k == 1) return centers;
     distances[newc] = 0.;
 #ifdef _OPENMP
     OMP_PFOR
@@ -99,10 +99,10 @@ kcenter_greedy_2approx(Oracle &oracle, const size_t np, size_t k, RNG &rng)
             distances[i] = oracle(i, newc);
         }
     }
+    if(k == 1) return std::make_pair(centers, distances);
     newc = std::max_element(distances.begin(), distances.end()) - distances.begin();
     distances[newc] = 0.;
     centers.push_back(newc);
-    if(k == 2) return centers;
 
     while(centers.size() < k) {
         OMP_PFOR
@@ -135,8 +135,15 @@ kcenter_greedy_2approx(Oracle &oracle, const size_t np, size_t k, RNG &rng)
         centers.push_back(newc);
         distances[newc] = 0.;
     }
-    return centers;
-} // kcenter_greedy_2approx
+    return std::make_pair(centers, distances);
+} // kcenter_greedy_2approx_costs
+
+template<typename...Args>
+auto
+kcenter_greedy_2approx(Args &&...args)
+{
+    return kcenter_greedy_2approx_costs(std::forward<Args>(args)...).first;
+}
 
 /*
 // Algorithm 2 from:
@@ -148,10 +155,10 @@ kcenter_greedy_2approx(Oracle &oracle, const size_t np, size_t k, RNG &rng)
 
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-std::vector<IT>
-kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double eps,
-                                double gamma=0.001,
-                                const Norm &norm=Norm())
+auto
+kcenter_greedy_2approx_outliers_costs(Iter first, Iter end, RNG &rng, size_t k, double eps,
+                                      double gamma=0.001,
+                                      const Norm &norm=Norm())
 {
     auto dm = make_index_dm(first, norm);
     const size_t np = end - first;
@@ -186,14 +193,15 @@ kcenter_greedy_2approx_outliers(Iter first, Iter end, RNG &rng, size_t k, double
         ret.push_back(newc);
         pqc.clear();
     } while(ret.size() < k);
-    return ret;
-}// kcenter_greedy_2approx_outliers
+    return std::make_pair(ret, distances);
+}// kcenter_greedy_2approx_outliers_costs
+
 
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
-std::vector<IT>
-kcenter_greedy_2approx_outliers(Oracle &oracle, size_t np, RNG &rng, size_t k, double eps,
-                                double gamma=0.001)
+auto
+kcenter_greedy_2approx_outliers_costs(Oracle &oracle, size_t np, RNG &rng, size_t k, double eps,
+                                      double gamma=0.001)
 {
     size_t farthestchunksize = std::ceil((1. + eps) * gamma * np);
     fpq<IT, FT> pq(farthestchunksize);
@@ -226,52 +234,45 @@ kcenter_greedy_2approx_outliers(Oracle &oracle, size_t np, RNG &rng, size_t k, d
         ret.push_back(newc);
         pq.getc().clear();
     } while(ret.size() < k);
-    return ret;
-}// kcenter_greedy_2approx_outliers
+    return std::make_pair(ret, distances);
+}// kcenter_greedy_2approx_outliers_costs
+
+template<typename...Args>
+auto
+kcenter_greedy_2approx_outliers(Args &&...args)
+{
+    return kcenter_greedy_2approx_outliers_costs(std::forward<Args>(args)...).first;
+}
 
 
 template<typename Iter, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm>
-std::vector<IT>
+auto
 solve_kcenter(Iter first, Iter end, const Norm &norm, RNG &rng, size_t k=50, double eps=1.,
               double gamma=0, int nrep=0)
 {
-    if(gamma == 0.) {
-        auto dm = make_index_dm(first, norm);
-        auto ret = kcenter_greedy_2approx(first, end, rng, k, norm);
-        auto getcost = [&](const auto &ctrs) {
-            using RT = decltype(norm(*first, *first));
-            RT maxcost = 0.;
-#ifdef _OPENMP
-        #pragma omp parallel for reduction(max:maxcost)
-#endif
-            for(unsigned i = 0; i < end - first; ++i) {
-                auto &r = *(first + i);
-                auto cit = ctrs.begin();
-                RT mmc;
-                for(mmc = norm(*cit++, r);cit != ctrs.end();mmc = std::min(norm(*cit++, r)));
-                maxcost = std::max(mmc, maxcost);
-            }
-        };
-        auto currentcost = getcost(ret);
-        while(nrep-- > 0) {
-            auto ret2 = kcenter_greedy_2approx(first, end, rng, k, norm);
-            if(auto newcost = getcost(ret2); newcost < ret2)
-                 std::tie(ret, currentcost) = std::move(std::tie(ret2, newcost));
-        }
+    auto get_sol = [&]() {
+        if(gamma == 0.) return kcenter_greedy_2approx_costs(first, end, rng, k, norm);
+        else            return kcenter_greedy_2approx_outliers_costs<Iter, FT>(first, end, rng, k, eps, gamma, norm);
+    };
+    auto [ret, costs] = get_sol();
+    auto current_cost = blz::sum(costs);
+    while(nrep-- > 0) {
+        auto [ret2, costs2] = get_sol();
+        if(auto newcost = blz::sum(ret2); newcost < current_cost)
+             std::tie(ret, costs, current_cost) = std::move(std::tie(ret2, costs2, newcost));
     }
-    return kcenter_greedy_2approx_outliers<Iter, FT>(first, end, rng, k, eps, gamma, norm);
+    return std::make_pair(ret, costs);
 }
 
 template<typename MT, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm, bool SO>
-std::vector<IT>
+auto
 solve_kcenter(blaze::Matrix<MT, SO> &matrix, const Norm &norm, RNG &rng, size_t k=50, double eps=1.,
               double gamma=0, int nrep=0)
 {
     auto &_mat = ~matrix;
     auto rit = blz::rowiterator(_mat);
-    return solve_kcenter(rit.begin(), rit.end(), norm, rng, k, eps, gamma, nrep);
     return solve_kcenter<decltype(rit.begin()), FT>(rit.begin(), rit.end(), norm, rng, k, eps, gamma, nrep);
 }
 

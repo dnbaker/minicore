@@ -719,9 +719,16 @@ auto wasserstein_p2(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, !SO> &y
 }
 
 template<typename VT, typename VT2, bool SO>
-auto discrete_total_variation_distance(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs) {
+static INLINE auto discrete_total_variation_distance(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs) {
     return ElementType_t<CommonType_t<VT, VT2>>(0.5) * blz::l1Norm(~lhs - ~rhs);
 }
+
+template<typename VT, typename VT2, bool SO>
+static INLINE auto canberra_distance(const blz::DenseVector<VT, SO> &lhs, const blz::DenseVector<VT2, SO> &rhs) {
+    const auto &lh(~lhs), &rh(~rhs);
+    return blaze::sum(blaze::abs(lh - rh) / (blaze::abs(lh) + blaze::abs(rh)));
+}
+
 
 } // distance
 

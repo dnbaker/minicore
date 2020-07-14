@@ -66,6 +66,27 @@ struct SumOpts {
         : SumOpts(dist::str2msr(msr), k, prior_value, coresets::str2sm(sm), outlier_fraction, max_rounds, soft) {}
 };
 
+
+template<typename FT, bool SO>
+auto m2greedysel(blaze::Matrix<FT, SO> &sm, const SumOpts &opts)
+{
+    blz::DV<blaze::ElementType_t<FT>, blz::rowVector> pc(1), *pcp = &pc;
+    if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
+    else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
+    else if(opts.prior == dist::NONE)
+        pcp = nullptr;
+    auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
+    wy::WyRand<uint64_t, 2> rng(opts.seed);
+    std::vector<uint32_t> centers;
+    if(opts.outlier_fraction) {
+        return coresets::kcenter_greedy_2approx_outliers_costs(
+            app, app.size(), rng, opts.k,
+            /*eps=*/1.5, opts.outlier_fraction
+        );
+    } else return coresets::kcenter_greedy_2approx_costs(app, app.size(), opts.k, rng);
+}
+
+
 /*
  * get_initial_centers:
  * Samples points in proportion to their cost, as evaluated by norm(x, y).
@@ -104,8 +125,28 @@ auto get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
 
 template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm>
 auto repeatedly_get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
-                         unsigned k, unsigned kmc2rounds, unsigned ntimes, const Norm &norm=Norm()) {
+                                    unsigned k, unsigned kmc2rounds, unsigned ntimes, const Norm &norm=Norm()) {
     using FT = blaze::ElementType_t<MT>;
+#ifdef _OPENMP
+    using res_t = decltype(get_initial_centers(matrix, rng, k, kmc2rounds, norm));
+    unsigned nt;
+    #pragma omp parallel
+    {
+        #pragma omp single
+        nt = omp_get_num_threads();
+    }
+    std::vector<res_t> bufs(std::min(nt, ntimes));
+    std::vector<FT> cost_values(bufs.size(), std::numeric_limits<FT>::max());
+    OMP_PFOR
+    for(size_t i = 0; i < ntimes; ++i) {
+        const int tid = omp_get_thread_num();
+        RNG rngc(rng() ^ tid);
+        auto res = get_initial_centers(matrix, rngc, k, kmc2rounds, norm);
+        auto ncost = blz::sum(std::get<2>(res));
+        if(ncost < cost_values[tid]) res = bufs[tid], cost_values[tid] = ncost;
+    }
+    auto &[idx, asn, costs] = bufs[std::min_element(cost_values.begin(), cost_values.end()) - cost_values.begin()];
+#else
     auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2rounds, norm);
     auto tcost = blz::sum(costs);
     for(;--ntimes;) {
@@ -116,8 +157,9 @@ auto repeatedly_get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
             std::tie(idx, asn, costs, tcost) = std::move(std::tie(_idx, _asn, _costs, ncost));
         }
     }
-    blz::DV<FT, blz::rowVector> modcosts(costs.size());
-    std::copy(costs.begin(), costs.end(), modcosts.begin());
+#endif
+    CType<FT> modcosts(costs.size());
+    std::copy(costs.begin(), costs.end(), modcosts.data());
     return std::make_tuple(idx, asn, modcosts); // Return a blaze vector
 }
 

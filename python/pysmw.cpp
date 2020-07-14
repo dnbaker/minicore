@@ -56,13 +56,35 @@ void init_smw(py::module &m) {
         }
         return ret;
     });
-    py::class_<SumOpts>(m, "sumopts")
+
+    // SumOpts
+    // Used for providing a pythonic interface for summary options
+    py::class_<SumOpts>(m, "SumOpts")
     .def(py::init<std::string, Py_ssize_t, double, std::string, double, Py_ssize_t, bool>(), py::arg("measure"), py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
-        py::arg("soft") = false)
+        py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and a string key for the coreest construction format.")
     .def(py::init<int, Py_ssize_t, double, std::string, double, Py_ssize_t, bool>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
-        py::arg("soft") = false)
+        py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and a string key for the coreest construction format.")
     .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
-        py::arg("soft") = false)
+        py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and an integer key for the coreest construction format.")
     .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
-        py::arg("soft") = false);
+        py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and an integer key for the coreest construction format.");
+
+    m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
+        std::vector<uint32_t> centers;
+        std::vector<double> dret;
+        std::vector<float> fret;
+        if(smw.is_float()) {
+            std::tie(centers, fret) = minocore::m2greedysel(smw.getfloat(), so);
+        } else {
+            std::tie(centers, dret) = minocore::m2greedysel(smw.getdouble(), so);
+        }
+        py::array_t<uint32_t> ret(centers.size());
+        py::array_t<double> costs(centers.size());
+        auto rpi = ret.request(), cpi = costs.request();
+        std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
+        if(fret.size()) std::copy(fret.begin(), fret.end(), (double *)cpi.ptr);
+        else            std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
+        return py::make_tuple(ret, costs);
+    }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
+       py::arg("smw"), py::arg("sumopts"));
 }

@@ -196,7 +196,7 @@ int m2kccs(std::string in, std::string out, SumOpts &opts)
     auto app = jsd::make_probdiv_applicator(sm, opts.dis, opts.prior, pcp);
     std::fprintf(stderr, "made applicator\n");
     ts.add_event("D^2 sampling");
-    std::mt19937_64 mt(opts.seed);
+    wy::WyRand<uint64_t> mt(opts.seed);
     std::vector<uint32_t> centers;
     auto kccs = kcenter_coreset_outliers(app, app.size(), mt, opts.k, opts.eps, 0.1, 1.5, opts.outlier_fraction);
     std::FILE *ofp;
@@ -230,9 +230,7 @@ int m2greedycore(std::string in, std::string out, SumOpts &opts)
     }
     std::fprintf(stderr, "Loaded\n");
 
-    blz::DV<FT, blz::rowVector> pc(1);
-    blz::DV<FT, blz::rowVector> *pcp = nullptr;
-    pcp = &pc;
+    blz::DV<FT, blz::rowVector> pc(1), *pcp = &pc;
     if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
     if(opts.prior != dist::NONE)
@@ -241,14 +239,8 @@ int m2greedycore(std::string in, std::string out, SumOpts &opts)
     auto app = jsd::make_probdiv_applicator(sm, opts.dis, opts.prior, pcp);
     std::fprintf(stderr, "made applicator\n");
     ts.add_event("D^2 sampling");
-    std::mt19937_64 mt(opts.seed);
-    std::vector<uint32_t> centers;
-    if(opts.outlier_fraction) {
-        centers = coresets::kcenter_greedy_2approx_outliers(
-            app, app.size(), mt, opts.k,
-            /*eps=*/1.5, opts.outlier_fraction
-        );
-    } else centers = coresets::kcenter_greedy_2approx(app, app.size(), opts.k, mt);
+    wy::WyRand<uint64_t> mt(opts.seed);
+    auto [centers, costs] = m2greedysel(sm, opts);
     std::FILE *ofp;
     if(!(ofp = std::fopen((out + ".centers").data(), "w"))) throw 1;
     for(size_t i = 0; i < opts.k; ++i) {

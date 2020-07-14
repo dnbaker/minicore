@@ -14,29 +14,39 @@
   #else
   #endif
 #else
-  #pragma message("Not enabling bzip2 support")
+  #ifdef VERBOSE_AF
+    #pragma message("Not enabling bzip2 support")
+  #endif
 #endif
 
 #if defined(LZMA_H) || defined(HAVE_LZMA)
   #include "lzma.h"                                                                                                                                                                                                                                                                            
   #include <boost/iostreams/filter/lzma.hpp>                                                                                                                                                                                                                                                   
-  #pragma message("Enabling xz support")
+  #ifdef VERBOSE_AF
+    #pragma message("Enabling xz support")
+  #endif
   #ifndef EXTERNAL_BOOST_IOSTREAMS
     #include "./boost/lzma.cpp"
   #endif
 #else
-  #pragma message("Not Enabling xz support")
+  #ifdef VERBOSE_AF
+    #pragma message("Not Enabling xz support")
+  #endif
 #endif
 
 
 #ifdef ZSTDLIB_API
   #include <boost/iostreams/filter/zstd.hpp>
-  #pragma message("Enabling zstd support")
+  #ifdef VERBOSE_AF
+    #pragma message("Enabling zstd support")
+  #endif
   #ifndef EXTERNAL_BOOST_IOSTREAMS
     #include "./boost/zstd.cpp"
   #endif
 #else
-  #pragma message("Not enabling zstd support")
+  #ifdef VERBOSE_AF
+    #pragma message("Not Enabling zstsd support")
+  #endif
 #endif
 
 #include <boost/algorithm/string/predicate.hpp>

@@ -216,19 +216,6 @@ public:
     FT pcosine_similarity(size_t j, const OT &o) const {
         if constexpr(IS_SPARSE) {
             if(prior_data_) {
-#if 0
-                if(prior_data_->size() != 1) throw TODOError("Disuniform prior");
-                const auto pv = (*prior_data_)[0];
-                const auto pvi = pv / (row_sums_[j] + prior_sum_);
-                if constexpr(blz::IsSparseVector_v<OT>) {
-                    throw TODOError("Sparse-within but not without");
-                } else {
-                    auto v = blaze::dot(o + pvi, row(j));
-                    auto extra = blz::sum(o * pvi);
-                    auto rhn = blz::sqrt(blz::sum(blz::pow(o + pvi, 2)));
-                    return (v + extra) * (*l2norm_cache_)[j] / rhn;
-                }
-#else
                 // dot(x + a, y + a)
                 // ==
                 // dot(x, y) + dot(x, a) + dot(y, a) + dot(a, a)
@@ -247,14 +234,13 @@ public:
                     auto num = dotxy + sum + suma2;
                     auto l2i = (*pl2norm_cache_)[j];
                     auto onorm = blz::sqrL2Norm(o);
-                    // dot(o + a, o + a) = 
+                    // dot(o + a, o + a) =
                     // dot(o, o) + 2 * dot(o, a) + dot(a, a)
                     auto onormsub = 2 * osum * pvi;
                     auto denom = std::sqrt(onorm + onormsub + suma2);
                     auto frac = num / (l2i * denom);
                     return frac;
                 } else TODOError("fast sparse pcosine with disuniform prior");
-#endif
             }
         }
         return blaze::dot(o, row(j)) / blaze::l2Norm(o) * pl2norm_cache_->operator[](j);
@@ -888,15 +874,56 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     FT jsd(size_t i, const OT &o, const OT2 &olog) const {
-        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         auto mnlog = evaluate(log(0.5 * (row(i) + o)));
         return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT jsd(size_t i, const OT &o) const {
-        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if constexpr(IS_SPARSE && blaze::IsSparseVector_v<OT>) {
+            if(prior_data_) {
+                FT ret = __getjsc(i);
+                const auto &pd(*prior_data_);
+                const auto lhn = prior_sum_ + row_sums_[i], rhn = prior_sum_ + blz::sum(o),
+                           lhi= 1. / lhn, rhi = 1. / rhn, bothsi = lhi = rhi;
+                auto update_x = [&](auto xy) {ret -= xy * std::log(.5 * xy);};
+                auto update_y = [&](auto yplus) {ret += yplus * std::log(yplus);};
+                if(pd.size() == 1) {
+                    const auto lhrsimul = lhi * pd[0];
+                    const auto rhrsimul = rhi * pd[0], rhrsimulog = std::log(rhrsimul) * rhrsimul;
+                    const auto bothsimul = lhrsimul + rhrsimul;
+                    auto sharedzeros = merge::for_each_by_case(row(i).begin(), row(i).end(), o.begin(), o.end(),
+                        [&](auto, auto x, auto y) {
+                            update_x(x + y + bothsimul); update_y(y + rhrsimul);
+                        },
+                        [&](auto ind, auto x) {
+                            update_x(x + bothsimul); ret += rhrsimulog;
+                        },
+                        [&](auto ind, auto y) {
+                            update_x(y + bothsimul); update_y(y + rhrsimul);
+                        });
+                    // ret -= bothsimul * std::log(.5 * bothsimul)
+                    // ret += sharedzeros * rhrsimulog
+                    ret -= sharedzeros * (bothsimul * std::log(bothsimul * .5) - rhrsimulog);
+                } else {
+                    merge::for_each_by_case(row(i).begin(), row(i).end(), o.begin(), o.end(),
+                        [&](auto ind, auto x, auto y) {
+                            update_x(x + y + pd[ind] * bothsi); update_y(y + pd[ind] * rhi);
+                        },
+                        [&](auto ind, auto x) {
+                            update_x(x + pd[ind] * bothsi); update_y(pd[ind] * rhi);
+                        },
+                        [&](auto ind, auto y) {
+                            update_x(pd[ind] * bothsi); update_y(pd[ind] * rhi + y);
+                        },
+                        [&](auto ind) {
+                            update_x(pd[ind] * bothsi); update_y(pd[ind] * rhi);
+                        });
+                }
+                return ret;
+            }
+        }
         auto olog = evaluate(blaze::neginf2zero(blaze::log(o)));
-        return jsd(i, o, olog);
+        return jsd(i, o, evaluate(blaze::neginf2zero(blaze::log(o))));
     }
     FT mkl(size_t i, size_t j) const {
         if constexpr(IS_SPARSE) {
@@ -1052,7 +1079,7 @@ public:
     }
     FT uwllr(size_t i, size_t j) const {
         if constexpr(IS_SPARSE) {
-            if(prior_data_) 
+            if(prior_data_)
                 return __uwllr_sparse_prior(i, j);
         }
         const auto lhn = row_sums_[i], rhn = row_sums_[j];
@@ -1162,15 +1189,7 @@ private:
         }
 
         if(dist::needs_logs(measure_)) {
-            if constexpr(IS_CSC_VIEW) {
-                logdata_ = CacheMatrixType(data_.rows(), data_.columns());
-                logdata_.reserve(data_.nnz());
-                for(size_t i = 0; i < data_.rows(); ++i) {
-                    for(const auto &pair: data_.column(i)) {
-                        logdata_.set(i, pair.index(), std::log(pair.value()));
-                    }
-                }
-            } else {
+            if(!IS_SPARSE) {
                 logdata_ = CacheMatrixType(neginf2zero(log(data_)));
             }
         }
@@ -1289,10 +1308,6 @@ private:
                     const auto ycontr = rhn * y + pv;
                     const auto nlogv = -std::log(lambda * (x + lhrsimul) + m1l * (y + rhrsimul));
                     ret += xcontr * nlogv + ycontr * (std::log(y + rhrsimul) + nlogv);
-#if 0
-                    ret -= (xcontr + ycontr) * logv;
-                    ret += ycontr * std::log(y + rhrsimul);
-#endif
                 },
                 [&](auto, auto x) {ret -= (lhn * x + pv2) * std::log(lambda * (x + lhrsimul) + m1l * rhrsimul);},
                 [&](auto, auto y) {
