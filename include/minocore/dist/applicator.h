@@ -1240,7 +1240,7 @@ private:
                 }
             }
         }
-        if(logdata_.rows()) {
+        if(dist::needs_logs(measure_)) {
             jsd_cache_.resize(data_.rows());
             auto &jc = jsd_cache_;
             if constexpr(IS_SPARSE) {
