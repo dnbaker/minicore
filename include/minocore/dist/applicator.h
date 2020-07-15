@@ -680,8 +680,8 @@ public:
             // FT sis(size_t i, size_t j) const
             static constexpr const FT offset = 0.1931471805599453;
             auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
-                const auto ix = 1. / x, iy = 1. / y;
-                ret += .25 * (x * iy + y * ix) - std::log((x + y) / std::sqrt(x * y)) + offset;
+                const auto ix = 1. / x, iy = 1. / y, isq = std::sqrt(ix * iy);
+                ret += .25 * (x * iy + y * ix) - std::log((x + y) * isq) + offset;
             };
             const size_t dim = data_.columns();
             auto lhn = row_sums_[i] + prior_sum_, rhn = blz::sum(o) + prior_sum_;
@@ -724,8 +724,8 @@ public:
             }
             static constexpr const FT offset = 0.1931471805599453;
             auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
-                const auto ix = 1. / x, iy = 1. / y;
-                ret += .25 * (x * iy + y * ix) - std::log((x + y) / std::sqrt(x * y)) + offset;
+                const auto ix = 1. / x, iy = 1. / y, isq = std::sqrt(ix * iy);
+                ret += .25 * (x * iy + y * ix) - std::log((x + y) * isq) + offset;
             };
             const size_t dim = data_.columns();
             auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
@@ -743,7 +743,7 @@ public:
                 auto &pd(*prior_data_);
                 merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
                     [&](auto ind, auto x, auto y) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), (y + rhi * pd[ind]));},
-                    [&](auto ind, auto x) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), rhn);},
+                    [&](auto ind, auto x) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), rhi * pd[ind]);},
                     [&](auto ind, auto y) ALWAYS_INLINE {do_inc(pd[ind] * lhi, (y + rhi * pd[ind]));},
                     [&](auto ind) ALWAYS_INLINE {do_inc(pd[ind] * lhi, rhi * pd[ind]);});
             }
@@ -830,7 +830,7 @@ public:
                 auto &pd(*prior_data_);
                 merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
                     [&](auto ind, auto x, auto y) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), (y + rhi * pd[ind]));},
-                    [&](auto ind, auto x) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), rhn);},
+                    [&](auto ind, auto x) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), rhi * pd[ind]);},
                     [&](auto ind, auto y) ALWAYS_INLINE {do_inc(pd[ind] * lhi, (y + rhi * pd[ind]));},
                     [&](auto ind) ALWAYS_INLINE {do_inc(pd[ind] * lhi, rhi * pd[ind]);});
             }
