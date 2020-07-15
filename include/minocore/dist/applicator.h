@@ -56,7 +56,6 @@ public:
                       const PriorContainer *c=nullptr):
         data_(ref), measure_(measure)
     {
-        std::fprintf(stderr, "initializing. prior container is null? %s\n", c ? "true": "false");
         prep(prior, c);
         MINOCORE_REQUIRE(dist::is_valid_measure(measure_), "measure_ must be valid");
     }
