@@ -1,14 +1,13 @@
 #pragma once
 #include "minocore/utility.h"
 #include "minocore/optim.h"
+#include "minocore/distance/dist.h"
 
 namespace minocore {
 
 
 template<typename FT>
 using CType = blz::DV<FT, blz::rowVector>;
-
-namespace dist = ::minocore::distance;
 
 struct SumOpts {
     size_t kmc2_rounds = 0;

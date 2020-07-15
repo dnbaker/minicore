@@ -25,15 +25,9 @@ struct latlon_t: public std::pair<double, double> {
 
 
 struct BoundingBoxData;
-static inline BoundingBoxData parse_bbdata(const char *s);
 struct BoundingBoxData {
     double latlo = 0., lathi = 0., lonlo = 0., lonhi = 0.;
     double p_box = 0.99, p_nobox = 0.01;
-    BoundingBoxData &operator=(const char *s) {
-        assert(s);
-        return *this = parse_bbdata(s);
-    }
-    bool set() const {return latlo || lathi || lonlo || lonhi;}
     bool valid() const {
         return lathi >= latlo && lonhi >= lonlo
             && p_box <= 1. && p_box >= 0.
@@ -76,6 +70,11 @@ struct BoundingBoxData {
         std::fputc('\n', stderr);
         return ret;
     }
+    BoundingBoxData &operator=(const char *s) {
+        assert(s);
+        return *this = parse_bbdata(s);
+    }
+    bool set() const {return latlo || lathi || lonlo || lonhi;}
 };
 
 } // namespace minocore
