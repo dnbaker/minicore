@@ -108,11 +108,10 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(std::string fn) {
 }
 static minocore::Graph<undirectedS> dimacs_official_parse(std::string input) {
     minocore::Graph<undirectedS> g;
-    auto [ifsp, fp] = util::io::xopen(input);
-    auto &ifs = *ifsp;
+    auto fdat = util::io::xopen(input);
     std::string graphtype;
     size_t nnodes = 0, nedges = 0;
-    for(std::string line; std::getline(ifs, line);) {
+    for(std::string line; std::getline(*fdat.first, line);) {
         if(line.empty()) continue;
         switch(line.front()) {
             case 'c': break; // nothing
