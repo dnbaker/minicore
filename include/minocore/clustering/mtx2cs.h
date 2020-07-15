@@ -1,7 +1,7 @@
 #pragma once
 #include "minocore/utility.h"
 #include "minocore/optim.h"
-#include "minocore/distance/dist.h"
+#include "minocore/dist/distance.h"
 
 namespace minocore {
 
