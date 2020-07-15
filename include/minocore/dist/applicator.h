@@ -813,7 +813,6 @@ public:
             auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
                 ret += std::log(x + y) - .5 * std::log(x * y) + offset;
             };
-            std::fprintf(stderr, "About to compute %zu/%zu\n", i, j);
             const size_t dim = data_.columns();
             auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
             auto lhi = 1. / lhn, rhi = 1. / rhn;
