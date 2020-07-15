@@ -167,6 +167,7 @@ public:
             case PROBABILITY_COSINE_SIMILARITY:
                                            set_distance_matrix<MatType, PROBABILITY_COSINE_SIMILARITY>(m, symmetrize); break;
             case SYMMETRIC_ITAKURA_SAITO:  set_distance_matrix<MatType, SYMMETRIC_ITAKURA_SAITO>(m, symmetrize); break;
+            case RSYMMETRIC_ITAKURA_SAITO:  set_distance_matrix<MatType, RSYMMETRIC_ITAKURA_SAITO>(m, symmetrize); break;
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); throw std::invalid_argument("Placeholders");
             default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + dist::prob2str(measure));
         }
@@ -366,6 +367,8 @@ public:
             ret = pcosine_similarity(i, o);
         } else if constexpr(constexpr_measure == SYMMETRIC_ITAKURA_SAITO) {
             ret = sis(i, o);
+        } else if constexpr(constexpr_measure == RSYMMETRIC_ITAKURA_SAITO) {
+            ret = rsis(i, o);
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
         }
@@ -448,6 +451,8 @@ public:
             ret = pcosine_similarity(i, o);
         } else if constexpr(constexpr_measure == SYMMETRIC_ITAKURA_SAITO) {
             ret = sis(i, o);
+        } else if constexpr(constexpr_measure == RSYMMETRIC_ITAKURA_SAITO) {
+            ret = rsis(i, o);
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
         }
@@ -512,6 +517,8 @@ public:
             ret = pcosine_similarity(i, j);
         } else if constexpr(constexpr_measure == SYMMETRIC_ITAKURA_SAITO) {
             ret = sis(i, j);
+        } else if constexpr(constexpr_measure == RSYMMETRIC_ITAKURA_SAITO) {
+            ret = rsis(i, j);
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
         }
@@ -551,6 +558,7 @@ public:
             case OLLR: ret = call<OLLR>(o, i, cache); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(o, i, cache); break;
             case SYMMETRIC_ITAKURA_SAITO: ret = call<SYMMETRIC_ITAKURA_SAITO>(o, i, cache); break;
+            case RSYMMETRIC_ITAKURA_SAITO: ret = call<RSYMMETRIC_ITAKURA_SAITO>(o, i, cache); break;
             case COSINE_DISTANCE: ret = call<COSINE_DISTANCE>(o, i); break;
             case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(o, i); break;
             case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(o, i); break;
@@ -598,6 +606,7 @@ public:
             case OLLR: ret = call<OLLR>(i, o, cache); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, o, cache); break;
             case SYMMETRIC_ITAKURA_SAITO: ret = call<SYMMETRIC_ITAKURA_SAITO>(i, o, cache); break;
+            case RSYMMETRIC_ITAKURA_SAITO: ret = call<RSYMMETRIC_ITAKURA_SAITO>(i, o, cache); break;
             case COSINE_DISTANCE: ret = call<COSINE_DISTANCE>(i, o); break;
             case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(i, o); break;
             case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(i, o); break;
@@ -636,6 +645,7 @@ public:
             case OLLR: ret = call<OLLR>(i, j); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, j); break;
             case SYMMETRIC_ITAKURA_SAITO: ret = call<SYMMETRIC_ITAKURA_SAITO>(i, j); break;
+            case RSYMMETRIC_ITAKURA_SAITO: ret = call<RSYMMETRIC_ITAKURA_SAITO>(i, j); break;
             case COSINE_DISTANCE: ret = call<COSINE_DISTANCE>(i, j); break;
             case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(i, j); break;
             case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(i, j); break;
@@ -658,6 +668,93 @@ public:
         return make_distance_matrix(measure_);
     }
 
+    template<typename OT, typename=std::enable_if_t<!std::is_arithmetic_v<OT>>>
+    FT rsis(size_t i, const OT &o) const {
+        FT ret = 0;
+        if constexpr(IS_SPARSE) {
+            if(!prior_data_) {
+                char buf[128];
+                std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%p\n", i, (void *)&o);
+                throw std::runtime_error(buf);
+            }
+            // FT sis(size_t i, size_t j) const
+            static constexpr const FT offset = 0.1931471805599453;
+            auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
+                const auto ix = 1. / x, iy = 1. / y;
+                ret += .25 * (x * iy + y * ix) - std::log((x + y) / std::sqrt(x * y)) + offset;
+            };
+            const size_t dim = data_.columns();
+            auto lhn = row_sums_[i] + prior_sum_, rhn = blz::sum(o) + prior_sum_;
+            auto lhi = 1. / lhn, rhi = 1. / rhn;
+            auto lhr(row(i));
+            if(prior_data_->size() == 1) {
+                const auto mul = prior_data_->operator[](0);
+                const auto lhrsi = mul / lhn, rhrsi = mul / rhn;
+                const auto shared_zero = merge::for_each_by_case(dim, lhr.begin(), lhr.end(), o.begin(), o.end(),
+                    [&](auto, auto x, auto y) ALWAYS_INLINE {do_inc(x + lhrsi, y * rhi + rhrsi);},
+                    [&](auto, auto x) ALWAYS_INLINE {do_inc(x + lhrsi, rhrsi);},
+                    [&](auto, auto y) ALWAYS_INLINE {do_inc(lhrsi, (y * rhi + rhrsi));});
+                ret -= shared_zero * std::log((lhrsi + rhrsi) / (4. * lhrsi * rhrsi));
+            } else {
+                auto &pd(*prior_data_);
+                merge::for_each_by_case(dim, lhr.begin(), lhr.end(), o.begin(), o.end(),
+                    [&](auto ind, auto x, auto y) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), rhi * (y + pd[ind]));},
+                    [&](auto ind, auto x) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), rhi * pd[ind]);},
+                    [&](auto ind, auto y) ALWAYS_INLINE {do_inc(pd[ind] * lhi, (y + pd[ind]) * rhi);},
+                    [&](auto ind) ALWAYS_INLINE {do_inc(pd[ind] * lhi, pd[ind] * rhi);});
+            }
+            ret += lhr.size() * 2; // Add in the 2s at the end in bulk
+            ret *= 0.5; // to account for the averaging.
+        } else {
+            auto normrow = o / blz::sum(o);
+            auto mn = evaluate(.5 / (row(i) + normrow));
+            auto lhs = evaluate(row(i) * mn);
+            auto rhs = evaluate(normrow * mn);
+            ret = .5 * (blaze::sum(lhs - blaze::log(lhs)) + blaze::sum(rhs - blaze::log(rhs)));
+        }
+        return ret;
+    }
+    FT rsis(size_t i, size_t j) const {
+        FT ret = 0;
+        if constexpr(IS_SPARSE) {
+            if(!prior_data_) {
+                char buf[128];
+                std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%zu\n", i, j);
+                throw std::runtime_error(buf);
+            }
+            static constexpr const FT offset = 0.1931471805599453;
+            auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
+                const auto ix = 1. / x, iy = 1. / y;
+                ret += .25 * (x * iy + y * ix) - std::log((x + y) / std::sqrt(x * y)) + offset;
+            };
+            const size_t dim = data_.columns();
+            auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
+            auto lhi = 1. / lhn, rhi = 1. / rhn;
+            auto lhr(row(i)), rhr(row(j));
+            if(prior_data_->size() == 1) {
+                const auto mul = prior_data_->operator[](0);
+                const auto lhrsi = mul / lhn, rhrsi = mul / rhn;
+                const auto shared_zero = merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
+                    [&](auto, auto x, auto y) ALWAYS_INLINE {do_inc((x + lhrsi), (y + rhrsi));},
+                    [&](auto, auto x) ALWAYS_INLINE {do_inc((x + lhrsi), rhrsi);},
+                    [&](auto, auto y) ALWAYS_INLINE {do_inc(lhrsi, (y + rhrsi));});
+                ret += shared_zero * (std::log(lhrsi + rhrsi) - .5 * std::log(lhrsi * rhrsi) + offset);
+            } else {
+                auto &pd(*prior_data_);
+                merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
+                    [&](auto ind, auto x, auto y) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), (y + rhi * pd[ind]));},
+                    [&](auto ind, auto x) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), rhn);},
+                    [&](auto ind, auto y) ALWAYS_INLINE {do_inc(pd[ind] * lhi, (y + rhi * pd[ind]));},
+                    [&](auto ind) ALWAYS_INLINE {do_inc(pd[ind] * lhi, rhi * pd[ind]);});
+            }
+        } else {
+            auto mn = evaluate(.5 / (row(i) + row(j)));
+            auto lhs = evaluate(row(i) * mn);
+            auto rhs = evaluate(row(j) * mn);
+            ret = .5 * (blaze::sum(lhs - blaze::log(lhs)) + blaze::sum(rhs - blaze::log(rhs)));
+        }
+        return ret;
+    }
     template<typename OT, typename=std::enable_if_t<!std::is_arithmetic_v<OT>>>
     FT sis(size_t i, const OT &o) const {
         FT ret = 0;
@@ -745,6 +842,7 @@ public:
         }
         return ret;
     }
+
     FT itakura_saito(size_t i, size_t j) const {
         FT ret;
         if constexpr(IS_SPARSE) {
