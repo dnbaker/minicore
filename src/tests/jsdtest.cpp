@@ -49,9 +49,9 @@ int main(int argc, char *argv[]) {
     jsd.set_distance_matrix(jsd_bnj, distance::UWLLR, true);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
     std::fprintf(stderr, "min/max UWLLR: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
-    jsd.set_distance_matrix(jsd_bnj, distance::JSD, true);
+    jsd.set_distance_matrix(jsd_bnj, distance::SIS, true);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
-    std::fprintf(stderr, "min/max jsd: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
+    std::fprintf(stderr, "min/max SIS: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs.flush();
     i = 25;
     while(nonemptyrows.size() < maxnrows && i < sparsemat.rows()) {
@@ -71,10 +71,14 @@ int main(int argc, char *argv[]) {
     jsd_bnj.resize(nonemptyrows.size(), nonemptyrows.size(), false);
     jsd_bnj = 0.;
     std::fprintf(stderr, "Assigned return matrix to 0.\n");
-    auto jsd2 = minocore::cmp::make_probdiv_applicator(first25);
+    auto jsd2 = minocore::cmp::make_probdiv_applicator(first25, distance::JSD, distance::Prior::DIRICHLET);
+    std::fprintf(stderr, "made probdiv\n");
     auto jsd3 = minocore::cmp::make_probdiv_applicator(first25, distance::L1);
+    std::fprintf(stderr, "made l1\n");
     minocore::util::Timer timer("1ksparsejsd");
+    std::fprintf(stderr, "calling set_distance_matrix\n");
     jsd2.set_distance_matrix(jsd_bnj, distance::JSD);
+    std::fprintf(stderr, "called set_distance_matrix\n");
     timer.report();
     std::fprintf(stderr, "bnj after larger minv: %g. maxv: %g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     timer.restart("1ksparseL2");
