@@ -345,7 +345,8 @@ static constexpr DissimilarityMeasure USABLE_MEASURES []  {
     COSINE_DISTANCE,
     COSINE_SIMILARITY,
     PL2,
-    PSL2
+    PSL2,
+    SYMMETRIC_ITAKURA_SAITO
     // Absent:
     // EMD/WEMB -- lacking proper evaluation
     // PROBABILITY_COSINE_DISTANCE/PROBABILITY_COSINE_SIMILARITY -- extensions to this space are not complete.
