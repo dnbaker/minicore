@@ -166,6 +166,7 @@ public:
             case COSINE_SIMILARITY:        set_distance_matrix<MatType, COSINE_SIMILARITY>(m, symmetrize); break;
             case PROBABILITY_COSINE_SIMILARITY:
                                            set_distance_matrix<MatType, PROBABILITY_COSINE_SIMILARITY>(m, symmetrize); break;
+            case SYMMETRIC_ITAKURA_SAITO:  set_distance_matrix<MatType, SYMMETRIC_ITAKURA_SAITO>(m, symmetrize); break;
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); throw std::invalid_argument("Placeholders");
             default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + dist::prob2str(measure));
         }
@@ -270,8 +271,18 @@ public:
     decltype(auto) weighted_row(size_t ind) const {
         return blaze::row(data_, ind BLAZE_CHECK_DEBUG) * row_sums_[ind];
     }
-    decltype(auto) row(size_t ind) const {return blaze::row(data_, ind BLAZE_CHECK_DEBUG);}
-    decltype(auto) logrow(size_t ind) const {return blaze::row(logdata_, ind BLAZE_CHECK_DEBUG);}
+    decltype(auto) row(size_t ind) const {
+#ifndef NDEBUG
+        if(ind > data_.rows()) {std::fprintf(stderr, "ind %zu too large (%zu rows)\n", ind, data_.rows()); std::exit(1);}
+#endif
+        return blaze::row(data_, ind BLAZE_CHECK_DEBUG);
+    }
+    decltype(auto) logrow(size_t ind) const {
+#ifndef NDEBUG
+        if(ind > logdata_.rows()) {std::fprintf(stderr, "ind %zu too large (%zu rows)\n", ind, logdata_.rows()); std::exit(1);}
+#endif
+        return blaze::row(logdata_, ind BLAZE_CHECK_DEBUG); 
+    }
     decltype(auto) sqrtrow(size_t ind) const {return blaze::row(sqrdata_, ind BLAZE_CHECK_DEBUG);}
 
     /*
@@ -353,6 +364,8 @@ public:
             ret = cosine_similarity(i, o);
         } else if constexpr(constexpr_measure == PROBABILITY_COSINE_SIMILARITY) {
             ret = pcosine_similarity(i, o);
+        } else if constexpr(constexpr_measure == SYMMETRIC_ITAKURA_SAITO) {
+            ret = sis(i, o);
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
         }
@@ -433,6 +446,8 @@ public:
             ret = cosine_similarity(i, o);
         } else if constexpr(constexpr_measure == PROBABILITY_COSINE_SIMILARITY) {
             ret = pcosine_similarity(i, o);
+        } else if constexpr(constexpr_measure == SYMMETRIC_ITAKURA_SAITO) {
+            ret = sis(i, o);
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
         }
@@ -488,13 +503,15 @@ public:
         } else if constexpr(constexpr_measure == REVERSE_ITAKURA_SAITO) {
             ret = itakura_saito(j, i);
         } else if constexpr(constexpr_measure == COSINE_DISTANCE) {
-            ret = cosine_distance(j, i);
+            ret = cosine_distance(i, j);
         } else if constexpr(constexpr_measure == PROBABILITY_COSINE_DISTANCE) {
-            ret = pcosine_distance(j, i);
+            ret = pcosine_distance(i, j);
         } else if constexpr(constexpr_measure == COSINE_SIMILARITY) {
-            ret = cosine_similarity(j, i);
+            ret = cosine_similarity(i, j);
         } else if constexpr(constexpr_measure == PROBABILITY_COSINE_SIMILARITY) {
-            ret = pcosine_similarity(j, i);
+            ret = pcosine_similarity(i, j);
+        } else if constexpr(constexpr_measure == SYMMETRIC_ITAKURA_SAITO) {
+            ret = sis(i, j);
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
         }
@@ -533,6 +550,7 @@ public:
             case UWLLR: ret = call<UWLLR>(o, i, cache); break;
             case OLLR: ret = call<OLLR>(o, i, cache); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(o, i, cache); break;
+            case SYMMETRIC_ITAKURA_SAITO: ret = call<SYMMETRIC_ITAKURA_SAITO>(o, i, cache); break;
             case COSINE_DISTANCE: ret = call<COSINE_DISTANCE>(o, i); break;
             case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(o, i); break;
             case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(o, i); break;
@@ -579,6 +597,7 @@ public:
             case UWLLR: ret = call<UWLLR>(i, o, cache); break;
             case OLLR: ret = call<OLLR>(i, o, cache); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, o, cache); break;
+            case SYMMETRIC_ITAKURA_SAITO: ret = call<SYMMETRIC_ITAKURA_SAITO>(i, o, cache); break;
             case COSINE_DISTANCE: ret = call<COSINE_DISTANCE>(i, o); break;
             case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(i, o); break;
             case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(i, o); break;
@@ -616,6 +635,7 @@ public:
             case UWLLR: ret = call<UWLLR>(i, j); break;
             case OLLR: ret = call<OLLR>(i, j); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, j); break;
+            case SYMMETRIC_ITAKURA_SAITO: ret = call<SYMMETRIC_ITAKURA_SAITO>(i, j); break;
             case COSINE_DISTANCE: ret = call<COSINE_DISTANCE>(i, j); break;
             case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(i, j); break;
             case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(i, j); break;
@@ -638,6 +658,93 @@ public:
         return make_distance_matrix(measure_);
     }
 
+    template<typename OT, typename=std::enable_if_t<!std::is_arithmetic_v<OT>>>
+    FT sis(size_t i, const OT &o) const {
+        FT ret = 0;
+        if constexpr(IS_SPARSE) {
+            if(!prior_data_) {
+                char buf[128];
+                std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%p\n", i, (void *)&o);
+                throw std::runtime_error(buf);
+            }
+            // For derivation, see below in 
+            // FT sis(size_t i, size_t j) const
+            static constexpr FT offset = -.6931471805599453;
+            auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
+                ret += std::log(x + y) - .5 * std::log(x * y) + offset;
+            };
+            const size_t dim = data_.columns();
+            auto lhn = row_sums_[i] + prior_sum_, rhn = blz::sum(o) + prior_sum_;
+            auto lhi = 1. / lhn, rhi = 1. / rhn;
+            auto lhr(row(i));
+            if(prior_data_->size() == 1) {
+                const auto mul = prior_data_->operator[](0);
+                const auto lhrsi = mul / lhn, rhrsi = mul / rhn;
+                const auto shared_zero = merge::for_each_by_case(dim, lhr.begin(), lhr.end(), o.begin(), o.end(),
+                    [&](auto, auto x, auto y) ALWAYS_INLINE {do_inc(x + lhrsi, y * rhi + rhrsi);},
+                    [&](auto, auto x) ALWAYS_INLINE {do_inc(x + lhrsi, rhrsi);},
+                    [&](auto, auto y) ALWAYS_INLINE {do_inc(lhrsi, (y * rhi + rhrsi));});
+                ret -= shared_zero * std::log((lhrsi + rhrsi) / (4. * lhrsi * rhrsi));
+            } else {
+                auto &pd(*prior_data_);
+                merge::for_each_by_case(dim, lhr.begin(), lhr.end(), o.begin(), o.end(),
+                    [&](auto ind, auto x, auto y) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), rhi * (y + pd[ind]));},
+                    [&](auto ind, auto x) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), rhi * pd[ind]);},
+                    [&](auto ind, auto y) ALWAYS_INLINE {do_inc(pd[ind] * lhi, (y + pd[ind]) * rhi);},
+                    [&](auto ind) ALWAYS_INLINE {do_inc(pd[ind] * lhi, pd[ind] * rhi);});
+            }
+            ret += lhr.size() * 2; // Add in the 2s at the end in bulk
+            ret *= 0.5; // to account for the averaging.
+        } else {
+            auto normrow = o / blz::sum(o);
+            auto mn = evaluate(.5 / (row(i) + normrow));
+            auto lhs = evaluate(row(i) * mn);
+            auto rhs = evaluate(normrow * mn);
+            ret = .5 * (blaze::sum(lhs - blaze::log(lhs)) + blaze::sum(rhs - blaze::log(rhs)));
+        }
+        return ret;
+    }
+    FT sis(size_t i, size_t j) const {
+        FT ret = 0;
+        if constexpr(IS_SPARSE) {
+            if(!prior_data_) {
+                char buf[128];
+                std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%zu\n", i, j);
+                throw std::runtime_error(buf);
+            }
+            static constexpr FT offset = -.6931471805599453;
+            auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
+                ret += std::log(x + y) - .5 * std::log(x * y) + offset;
+            };
+            std::fprintf(stderr, "About to compute %zu/%zu\n", i, j);
+            const size_t dim = data_.columns();
+            auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
+            auto lhi = 1. / lhn, rhi = 1. / rhn;
+            auto lhr(row(i)), rhr(row(j));
+            if(prior_data_->size() == 1) {
+                const auto mul = prior_data_->operator[](0);
+                const auto lhrsi = mul / lhn, rhrsi = mul / rhn;
+                const auto shared_zero = merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
+                    [&](auto, auto x, auto y) ALWAYS_INLINE {do_inc((x + lhrsi), (y + rhrsi));},
+                    [&](auto, auto x) ALWAYS_INLINE {do_inc((x + lhrsi), rhrsi);},
+                    [&](auto, auto y) ALWAYS_INLINE {do_inc(lhrsi, (y + rhrsi));});
+                ret += shared_zero * (std::log(lhrsi + rhrsi) - .5 * std::log(lhrsi * rhrsi) + offset);
+            } else {
+                auto &pd(*prior_data_);
+                merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
+                    [&](auto ind, auto x, auto y) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), (y + rhi * pd[ind]));},
+                    [&](auto ind, auto x) ALWAYS_INLINE {do_inc((x + pd[ind] * lhi), rhn);},
+                    [&](auto ind, auto y) ALWAYS_INLINE {do_inc(pd[ind] * lhi, (y + rhi * pd[ind]));},
+                    [&](auto ind) ALWAYS_INLINE {do_inc(pd[ind] * lhi, rhi * pd[ind]);});
+            }
+        } else {
+            auto mn = evaluate(.5 / (row(i) + row(j)));
+            auto lhs = evaluate(row(i) * mn);
+            auto rhs = evaluate(row(j) * mn);
+            ret = .5 * (blaze::sum(lhs - blaze::log(lhs)) + blaze::sum(rhs - blaze::log(rhs)));
+        }
+        return ret;
+    }
     FT itakura_saito(size_t i, size_t j) const {
         FT ret;
         if constexpr(IS_SPARSE) {
@@ -1107,7 +1214,7 @@ public:
         const auto lhn = row_sums_[i], rhn = blz::sum(o);
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
         const auto rowprod = evaluate(lambda * row(i) + m1l * o);
-        auto mycontrib = blz::dot(neginf22zero(blaze::log(o)), o);
+        auto mycontrib = blz::dot(neginf2zero(blaze::log(o)), o);
         return std::max(lambda * __getjsc(i) + m1l * mycontrib - blaze::dot(rowprod, neginf2zero(blaze::log(rowprod))), 0.);
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
@@ -1166,6 +1273,7 @@ private:
             if(prior_data_->size() == 1) prior_sum_ = data_.columns() * prior_data_->operator[](0);
             else                         prior_sum_ = std::accumulate(prior_data_->begin(), prior_data_->end(), 0.);
         }
+        std::fprintf(stderr, "Set up prior data\n");
         row_sums_.resize(data_.rows());
         {
             for(size_t i = 0; i < data_.rows(); ++i) {
@@ -1188,11 +1296,13 @@ private:
             }
         }
 
+        //std::fprintf(stderr, "Set up row sums\n");
         if(dist::needs_logs(measure_)) {
             if(!IS_SPARSE) {
                 logdata_ = CacheMatrixType(neginf2zero(log(data_)));
             }
         }
+        //std::fprintf(stderr, "Cached logs\n");
         if(dist::needs_sqrt(measure_)) {
             if constexpr(IS_CSC_VIEW) {
                 sqrdata_ = CacheMatrixType(data_.rows(), data_.columns());
@@ -1206,6 +1316,7 @@ private:
                 sqrdata_ = CacheMatrixType(blaze::sqrt(data_));
             }
         }
+        //std::fprintf(stderr, "Cached sqrts\n");
         if(dist::needs_l2_cache(measure_)) {
             l2norm_cache_.reset(new VecT(data_.rows()));
             OMP_PFOR
@@ -1279,7 +1390,7 @@ private:
             }
             if(!(IS_SPARSE && prior_data_))
                 for(size_t i = 0; i < jc.size(); ++i)
-                    jc[i] = dot(row(i), logrow(i));
+                    jc[i] = dot(row(i), neginf2zero(log(row(i))));
         }
     }
     INLINE FT __getjsc(size_t index) const {
