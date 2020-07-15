@@ -1627,7 +1627,7 @@ auto make_kcenter(const DissimilarityApplicator<MatrixType> &app, unsigned k, ui
 
 template<typename MatrixType, typename WFT=typename MatrixType::ElementType, typename IT=uint32_t>
 auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, coresets::SensitivityMethod sens=cs::LBK, bool multithread=true) {
-    auto [centers, asn, costs] = make_kmeanspp(app, k, seed, multithread);
+    auto [centers, asn, costs] = make_kmeanspp(app, k, seed, weights, multithread);
     coresets::CoresetSampler<typename MatrixType::ElementType, IT> cs;
     cs.make_sampler(app.size(), centers.size(), costs.data(), asn.data(), weights,
                     seed + 1, sens);
