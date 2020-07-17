@@ -41,9 +41,9 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Dist
         const auto argmin = std::min_element(ctrcosts.begin(), ctrcosts.end()) - ctrcosts.begin();
         const auto delta = ctrcosts[argmin] - gain;
         if(delta < 0.) {
-            std::fprintf(stderr, "Swapping out %zd for %zd for a gain of %g\n", ctrs[argmin], sel, delta);
-            ctrs[argmin] == sel;
-            row(ctrcostmat, argmin, blaze::unchecked) = newcosts;
+            std::fprintf(stderr, "Swapping out %d for %zd for a gain of %g\n", ctrs[argmin], sel, delta);
+            ctrs[argmin] = sel;
+            row(ctrcostmat, argmin, blaze::unchecked) = trans(newcosts);
             blaze::CustomVector<value_type, blaze::unaligned, blaze::unpadded>(&distances[0], np) =
                 blaze::min<blaze::rowwise>(blaze::trans(ctrcostmat));
             total_gain += delta;
