@@ -8,6 +8,7 @@
 #include "minocore/util/oracle.h"
 #include "minocore/util/timer.h"
 #include "minocore/util/div.h"
+#include "minocore/optim/lsearchpp.h"
 #include "minocore/util/blaze_adaptor.h"
 
 namespace minocore {
@@ -32,10 +33,18 @@ using blz::sqrL2Norm;
  * The Banerjee paper has a table of relevant information.
  */
 
+/*
+ *
+ * oracle: computes distance D(x, y) for i in [0, np)
+ * weights: null if equal, used if provided
+ * multithread: optionally multithreaded
+ * lspprounds: how many localsearch++ rounds to perform. By default, perform none.
+ */
+
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, bool multithread=true) {
+kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0) {
 #ifndef NDEBUG
     std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
 #endif
@@ -102,6 +111,11 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         });
         else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
     }
+    
+     if(lspprounds > 0)
+        localsearchpp_rounds(oracle, rng, distances, cdf, centers, assignments, np, lspprounds, weights);
+#if 0
+#endif
     std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
 }
@@ -109,10 +123,10 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, bool multithread=true) {
+kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0) {
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, multithread);
+    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, multithread, lspprounds);
 }
 
 template<typename Oracle, typename Sol, typename FT=float, typename IT=uint32_t>
@@ -219,15 +233,15 @@ kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm
 template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
 auto
-kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, bool multithread=true) {
+kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0) {
     using FT = typename MT::ElementType;
     std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(~mat);
-        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, multithread);
+        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, multithread, lspprounds);
     } else { // columnwise
         auto columnit = blz::columniterator(~mat);
-        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, multithread);
+        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, multithread, lspprounds);
     }
     return ret;
 }
