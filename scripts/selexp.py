@@ -125,6 +125,7 @@ if __name__ == "__main__":
     ap.add_argument("--outlier-fraction", "-O", type=float, default=0.)
     ap.add_argument("--timefunc", '-T', type=str, default=None)
     ap.add_argument("--parse-blaze", '-B', action='store_true')
+    ap.add_argument("--skipearly", action='store_true')
     args = ap.parse_args()
     k = args.k
     path = args.path
@@ -145,7 +146,11 @@ if __name__ == "__main__":
             lf = f"logfile{reduce(lambda x, y: x ^ hash(y), sys.argv, 0)}"
             print("No logfile provided, using '%s'" % lf, file=sys.stderr)
     pb = args.parse_blaze
-    for m in MEASURES:
+    if args.skipearly:
+        msr = [i for i in MEASURES if i not in {"L1", "L2", "SQRL2", "MKL"}]
+    else:
+        msr = MEASURES[:]
+    for m in msr:
         print(f"processing {m}", file=sys.stderr)
         cmds = CMDDICT[m]
         mydest = dest + "_" + m
