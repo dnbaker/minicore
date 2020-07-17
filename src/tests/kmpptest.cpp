@@ -100,7 +100,11 @@ int main(int argc, char *argv[]) {
     stop = t();
     std::fprintf(stderr, "Time for kcenter_greedy_2approx: %0.12gs\n", double((stop - start).count()) / 1e9);
     start = t();
-    auto centers2 = kmeanspp(mat, gen, npoints, blz::L1Norm());
+#if 0
+    auto centers2 = kmeanspp(mat, gen, npoints, blz::L1Norm(), true, (FLOAT_TYPE *)nullptr, true, std::ceil(npoints * std::log(npoints)));
+#else
+    auto centers2 = kmeanspp(mat, gen, npoints, blz::L1Norm(), true, (FLOAT_TYPE *)nullptr, true);
+#endif
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ on L1 norm on matrix: %0.12gs\n", double((stop - start).count()) / 1e9);
     test_kccs(mat, gen, npoints, eps);
