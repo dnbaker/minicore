@@ -9,6 +9,20 @@
 #define FT double
 #endif
 
+#ifndef FLOAT_TYPE
+#define FLOAT_TYPE FT
+#endif
+
+#ifndef INDICESTYPE
+#define INDICESTYPE uint64_t
+#endif
+#ifndef INDPTRTYPE
+#define INDPTRTYPE uint64_t
+#endif
+#ifndef DATATYPE
+#define DATATYPE uint32_t
+#endif
+
 void usage(char *s) {
     std::fprintf(stderr, "Usage: %s <flags> <input=\"\"> <output>\n-r\tMax nrows [50000]\n-c\tmin count [50]\n-k\tk [50]\n-m\tkmc2 chain length [100]\n",
                  s);
@@ -40,20 +54,23 @@ int main(int argc, char *argv[]) {
     std::ofstream ofs(output);
     blz::DM<FT> sparsemat;
     if(fmt == 0) {
-        sparsemat = minocore::csc2sparse<FT>(input, true);
+        sparsemat = minocore::csc2sparse<FLOAT_TYPE, INDPTRTYPE, INDICESTYPE, DATATYPE>(input, true);
     } else if(fmt == 1) {
         blaze::Archive<std::ifstream> arch(input);
         arch >> sparsemat;
     } else if(fmt == 2) {
         sparsemat = minocore::mtx2sparse<FT>(input);
     }
+    std::fprintf(stderr, "gathering rows: %zu\n", maxnrows);
     std::vector<unsigned> nonemptyrows;
     size_t i = 0;
     while(nonemptyrows.size() < maxnrows && i < sparsemat.rows()) {
+        std::fprintf(stderr, "i: %u. maxnrows: %u. curretn size: %zu\n", i, maxnrows, nonemptyrows.size());
         const auto nzc = blz::nonZeros(row(sparsemat, i));
-        if(nzc > mincount) {
+        if(nzc >= mincount)
             nonemptyrows.push_back(i);
-        }
+        else
+            std::fprintf(stderr, "nzc of %u < min %u\n", unsigned(nzc), mincount);
         ++i;
     }
     std::fprintf(stderr, "Gathered %zu rows, with %zu columns\n", nonemptyrows.size(), sparsemat.columns());

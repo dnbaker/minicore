@@ -49,6 +49,7 @@ public:
     MatrixType &data() const {return data_;}
     const VecT &row_sums() const {return row_sums_;}
     size_t size() const {return data_.rows();}
+    auto rs(size_t i) const {return row_sums_[i];}
     template<typename PriorContainer=blaze::DynamicVector<FT, blaze::rowVector>>
     DissimilarityApplicator(MatrixType &ref,
                       DissimilarityMeasure measure=JSM,

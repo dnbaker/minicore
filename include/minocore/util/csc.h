@@ -177,7 +177,12 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
         }
         ret.finalize(used_rows++);
     }
-    if(used_rows != i) std::fprintf(stderr, "Only used %zu/%zu rows, skipping empty rows\n", used_rows, i);
+    if(used_rows != i) {
+        const auto nr = used_rows;
+        std::fprintf(stderr, "Only used %zu/%zu rows, skipping empty rows\n", used_rows, i);
+        while(used_rows < mat.n_) ret.finalize(used_rows++);
+        ret.resize(nr, ret.columns(), /*preserve_values=*/true);
+    }
     std::fprintf(stderr, "Parsed matrix of %zu/%zu\n", ret.rows(), ret.columns());
     return ret;
 }
