@@ -5,7 +5,7 @@
 #include "./blaze_adaptor.h"
 #include "./io.h"
 #include "./exception.h"
-#include "mio/single_include/mio/mio.hpp"
+#include "thirdparty/mio.hpp"
 #include <fstream>
 
 
