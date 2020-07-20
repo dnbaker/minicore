@@ -49,9 +49,9 @@ int main(int argc, char *argv[]) {
     jsd.set_distance_matrix(jsd_bnj, distance::UWLLR, true);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
     std::fprintf(stderr, "min/max UWLLR: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
-    jsd.set_distance_matrix(jsd_bnj, distance::SIS, true);
+    jsd.set_distance_matrix(jsd_bnj, distance::RSIS, true);
     ofs << jsd_bnj << '\n' << blz::min(jsd_bnj) << '\n' << blaze::max(jsd_bnj) << '\n';
-    std::fprintf(stderr, "min/max SIS: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
+    std::fprintf(stderr, "min/max RSIS: %g/%g\n", blz::min(jsd_bnj), blz::max(jsd_bnj));
     ofs.flush();
     i = 25;
     while(nonemptyrows.size() < maxnrows && i < sparsemat.rows()) {

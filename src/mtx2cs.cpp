@@ -42,6 +42,9 @@ void usage() {
                          "-i: Use Itakura-Saito distance\n"
                          "-I: Use reverse Itakura-Saito distance\n"
                          "-H: Use Hellinger distance\n"
+                         "-W: Unweighted log-likelihood ratio test (UWLLR)\n"
+                         "-y: Symmetrized Itakura-Saito\n"
+                         "-v: Reverse Symmetrized Itakura-Saito\n"
                          "-u: Use Probability Cosine distance\n"
                          "-U: Use Cosine distance\n"
                         "\n\n\n"
@@ -382,7 +385,7 @@ int main(int argc, char **argv) {
     std::string inpath, outpath;
     [[maybe_unused]] bool use_double = true;
     ResultType rt = ResultType::CORESET;
-    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:O:uURlGHiIYQbFVP7BdjJxSMT12NCDfh?")) >= 0;) {
+    for(int c;(c = getopt(argc, argv, "s:c:k:g:p:K:L:O:uURlGHiIYQbFVP7BdjJxSMT12NCDfh?yWv")) >= 0;) {
         switch(c) {
             case 'p': OMP_ONLY(omp_set_num_threads(std::atoi(optarg));) break;
             case 'h': case '?': usage();          break;
@@ -404,6 +407,9 @@ int main(int argc, char **argv) {
             case 'u': opts.dis = dist::PROBABILITY_COSINE_DISTANCE; break;
             case 'U': opts.dis = dist::COSINE_DISTANCE; break;
             case 'R': opts.dis = dist::REVERSE_MKL; break;
+            case 'W': opts.dis = dist::UWLLR; break;
+            case 'y': opts.dis = dist::SIS; break;
+            case 'v': opts.dis = dist::REVERSE_SYMMETRIC_ITAKURA_SAITO; break;
 
             case 'F': opts.sm = coresets::FL; break;
             case 'V': opts.sm = coresets::VARADARAJAN_XIAO; break;

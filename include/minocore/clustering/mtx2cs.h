@@ -1,14 +1,13 @@
 #pragma once
 #include "minocore/utility.h"
 #include "minocore/optim.h"
+#include "minocore/dist/distance.h"
 
 namespace minocore {
 
 
 template<typename FT>
 using CType = blz::DV<FT, blz::rowVector>;
-
-namespace dist = ::minocore::distance;
 
 struct SumOpts {
     size_t kmc2_rounds = 0;
@@ -111,12 +110,6 @@ auto repeatedly_get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
     using FT = blaze::ElementType_t<MT>;
 #ifdef _OPENMP
     using res_t = decltype(get_initial_centers(matrix, rng, k, kmc2rounds, norm));
-    unsigned nt;
-    #pragma omp parallel
-    {
-        #pragma omp single
-        nt = omp_get_num_threads();
-    }
     res_t best;
     FT cost_value = std::numeric_limits<FT>::max();
     OMP_PFOR

@@ -12,5 +12,6 @@
 #include <optim/jv_solver.h>
 #include <optim/jv.h>
 #include <optim/lsearch.h>
+#include <optim/lsearchpp.h>
 
 #endif

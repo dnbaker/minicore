@@ -26,8 +26,8 @@ template<typename DirectedS, typename VtxProps=boost::no_property, typename Grap
 Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(std::string fn) {
     using GraphType = Graph<DirectedS, float, VtxProps, GraphProps>;
     std::string line;
-    auto [ifsp, fp] = util::io::xopen(fn);
-    auto &ifs = *ifsp;
+    auto fdat = util::io::xopen(fn);
+    auto &ifs = *fdat.first;
     if(!std::getline(ifs, line)) throw std::runtime_error(std::string("Failed to read from file ") + fn);
     unsigned nnodes = std::atoi(line.data());
     if(!nnodes) throw 2;
@@ -63,8 +63,8 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(std::string fn) {
     using GraphType = Graph<DirectedS, float, VtxProps, GraphProps>;
     GraphType ret;
     std::string line;
-    auto [ifsp, fp] = util::io::xopen(fn);
-    auto &ifs = *ifsp;
+    auto fdat = util::io::xopen(fn);
+    auto &ifs = *fdat.first;
     std::vector<VtxIdType> ids;
     std::unordered_map<VtxIdType, uint32_t> loc2id;
     static constexpr unsigned SHIFT = sizeof(VtxIdType) * CHAR_BIT / 2;
@@ -108,11 +108,10 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_nber(std::string fn) {
 }
 static minocore::Graph<undirectedS> dimacs_official_parse(std::string input) {
     minocore::Graph<undirectedS> g;
-    auto [ifsp, fp] = util::io::xopen(input);
-    auto &ifs = *ifsp;
+    auto fdat = util::io::xopen(input);
     std::string graphtype;
     size_t nnodes = 0, nedges = 0;
-    for(std::string line; std::getline(ifs, line);) {
+    for(std::string line; std::getline(*fdat.first, line);) {
         if(line.empty()) continue;
         switch(line.front()) {
             case 'c': break; // nothing
