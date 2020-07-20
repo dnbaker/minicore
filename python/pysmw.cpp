@@ -68,8 +68,33 @@ void init_smw(py::module &m) {
     .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and an integer key for the coreest construction format.")
     .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
-        py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and an integer key for the coreest construction format.");
-
+        py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and an integer key for the coreest construction format.")
+    .def("__str__", &SumOpts::to_string)
+    .def("__repr__", [](const SumOpts &x) {
+        std::string ret = x.to_string();
+        char buf[32];
+        std::sprintf(buf, "%p", (void *)&x);
+        ret += std::string(". Address: ") + buf;
+        return ret;
+    })
+    .def_readwrite("gamma", &SumOpts::gamma).def_readwrite("k", &SumOpts::k)
+    .def_readwrite("search_max_rounds", &SumOpts::lloyd_max_rounds).def_readwrite("extra_sample_rounds", &SumOpts::extra_sample_tries)
+    .def_readwrite("soft", &SumOpts::soft)
+    .def_readwrite("outlier_fraction", &SumOpts::outlier_fraction)
+    .def_readwrite("discrete_metric_search", &SumOpts::discrete_metric_search);
+#if 0
+    .def_property("cs",
+            [](auto &obj) {return py::cast<py::str>(coresets::sm2str(obj))},
+            [](auto &obj, py::object item) {
+            Py_ssize_t val;
+            if(py::isinstance<py::str>(item)) {
+                val = minocore::coresets::str2sm(py::cast<std::string>(item));
+            } else if(py::isinstance<py::int_>(item)) {
+                val = item;
+            }
+            obj.sm = (minocore::coresets::SensitivityMethod)val;
+    });
+#endif
     m.def("d2_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
