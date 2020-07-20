@@ -89,6 +89,35 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("smw"), py::arg("sumopts"));
+    m.def("d2_select",  [](py::array arr, const SumOpts &so) {
+        auto bi = arr.request();
+        if(bi.ndim != 2) throw std::invalid_argument("arr must have 2 dimensions");
+        if(bi.format.size() != 1)
+            throw std::invalid_argument("bi format must be basic");
+        std::vector<uint32_t> centers, asn;
+        std::vector<double> dc;
+        std::vector<float> fc;
+        switch(bi.format.front()) {
+            case 'f': {
+                blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> cm((float *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
+                std::tie(centers, asn, fc) = minocore::m2d2(cm, so);
+            } break;
+            case 'd': {
+                blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded> cm((double *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
+                std::tie(centers, asn, dc) = minocore::m2d2(cm, so);
+            } break;
+            default: throw std::invalid_argument("Not supported: non-double/float type");
+        }
+        py::array_t<uint32_t> ret(centers.size()), retasn(bi.shape[0]);
+        py::array_t<double> costs(bi.shape[0]);
+        auto rpi = ret.request(), api = retasn.request(), cpi = costs.request();
+        std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
+        if(fc.size()) std::copy(fc.begin(), fc.end(), (double *)cpi.ptr);
+        else          std::copy(dc.begin(), dc.end(), (double *)cpi.ptr);
+        std::copy(asn.begin(), asn.end(), (uint32_t *)api.ptr);
+        return py::make_tuple(ret, retasn, costs);
+    }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
+       py::arg("data"), py::arg("sumopts"));
     m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers;
         std::vector<double> dret;
@@ -107,4 +136,50 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("smw"), py::arg("sumopts"));
+    m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
+        std::vector<uint32_t> centers;
+        std::vector<double> dret;
+        std::vector<float> fret;
+        if(smw.is_float()) {
+            std::tie(centers, fret) = minocore::m2greedysel(smw.getfloat(), so);
+        } else {
+            std::tie(centers, dret) = minocore::m2greedysel(smw.getdouble(), so);
+        }
+        py::array_t<uint32_t> ret(centers.size());
+        py::array_t<double> costs(smw.rows());
+        auto rpi = ret.request(), cpi = costs.request();
+        std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
+        if(fret.size()) std::copy(fret.begin(), fret.end(), (double *)cpi.ptr);
+        else            std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
+        return py::make_tuple(ret, costs);
+    }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
+       py::arg("smw"), py::arg("sumopts"));
+    m.def("greedy_select",  [](py::array arr, const SumOpts &so) {
+        std::vector<uint32_t> centers;
+        std::vector<double> dret;
+        std::vector<float> fret;
+        auto bi = arr.request();
+        if(bi.ndim != 2) throw std::invalid_argument("arr must have 2 dimensions");
+        if(bi.format.size() != 1)
+            throw std::invalid_argument("bi format must be basic");
+        switch(bi.format.front()) {
+            case 'f': {
+                blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> cm((float *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
+                std::tie(centers, fret) = minocore::m2greedysel(cm, so);
+            } break;
+            case 'd': {
+                blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded> cm((double *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
+                std::tie(centers, dret) = minocore::m2greedysel(cm, so);
+            } break;
+            default: throw std::invalid_argument("Not supported: non-double/float type");
+        }
+        py::array_t<uint32_t> ret(centers.size());
+        py::array_t<double> costs(bi.shape[0]);
+        auto rpi = ret.request(), cpi = costs.request();
+        std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
+        if(fret.size()) std::copy(fret.begin(), fret.end(), (double *)cpi.ptr);
+        else            std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
+        return py::make_tuple(ret, costs);
+    }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
+       py::arg("data"), py::arg("sumopts"));
 }
