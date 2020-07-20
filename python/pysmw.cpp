@@ -1,6 +1,7 @@
 #include "smw.h"
 #include "pyfgc.h"
 #include <sstream>
+#include <map>
 
 
 void init_smw(py::module &m) {
@@ -82,7 +83,6 @@ void init_smw(py::module &m) {
     .def_readwrite("soft", &SumOpts::soft)
     .def_readwrite("outlier_fraction", &SumOpts::outlier_fraction)
     .def_readwrite("discrete_metric_search", &SumOpts::discrete_metric_search)
-#if 1
     .def_property("cs",
             [](SumOpts &obj) -> py::str {
                 return std::string(coresets::sm2str(obj.sm));
@@ -97,8 +97,40 @@ void init_smw(py::module &m) {
                 obj.sm = (minocore::coresets::SensitivityMethod)val;
             }
         )
-#endif
-    ;
+    .def_property("prior", [](SumOpts &obj) -> py::str {
+        switch(obj.prior) {
+            case dist::NONE: return "NONE";
+            case dist::DIRICHLET: return "DIRICHLET";
+            case dist::FEATURE_SPECIFIC_PRIOR: return "FSP";
+            case dist::GAMMA_BETA: return "GAMMA";
+            default: throw std::invalid_argument(std::string("Invalid prior: ") + std::to_string((int)obj.prior));
+        }
+    }, [](SumOpts &obj, py::object asn) -> void {
+        if(asn.is_none()) {
+            obj.prior = dist::NONE;
+            return;
+        }
+        if(py::isinstance<py::str>(asn)) {
+            const std::map<std::string, dist::Prior> map {
+                {"NONE", dist::NONE},
+                {"DIRICHLET", dist::DIRICHLET},
+                {"GAMMA", dist::GAMMA_BETA},
+                {"GAMMA_BETA", dist::GAMMA_BETA},
+                {"FSP", dist::FEATURE_SPECIFIC_PRIOR},
+                {"FEATURE_SPECIFIC_PRIOR", dist::FEATURE_SPECIFIC_PRIOR},
+            };
+            auto key = std::string(py::cast<py::str>(asn));
+            for(auto &i: key) i = std::toupper(i);
+            auto it = map.find(std::string(py::cast<py::str>(asn)));
+            if(it == map.end())
+                throw std::out_of_range("Prior must be NONE, FSP, FEATURE_SPECIFIC_PRIOR, GAMMA, or DIRICHLET");
+            obj.prior = it->second;
+        } else if(py::isinstance<py::int_>(asn)) {
+            auto x = py::cast<Py_ssize_t>(asn);
+            if(x > 3) throw std::out_of_range("x must be <= 3 if an integer, to represent various priors");
+            obj.prior = (dist::Prior)x;
+        }
+    });
     m.def("d2_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
