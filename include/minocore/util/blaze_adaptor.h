@@ -47,8 +47,7 @@ struct row_iterator_t {
     bool operator>=(row_iterator_t o) const {return rownum >= o.rownum;}
     std::ptrdiff_t operator-(row_iterator_t o) const {return rownum - o.rownum;}
     auto operator[](size_t index) const {
-        //std::fprintf(stderr, "index: %zu. rownum: %zu. nrows: %zu\n", index, rownum, ref_.rows());
-        assert(index + rownum < ref_.rows());
+        assert(index + rownum < ref_.rows() || !std::fprintf(stderr, "Attempting to access %zu + %zu = %zu / %zu\n", index, rownum, index + rownum, ref_.rows()));
         return row(ref_, index + rownum, blaze::unchecked);
     }
     auto operator*() const {
