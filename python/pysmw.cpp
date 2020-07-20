@@ -81,20 +81,24 @@ void init_smw(py::module &m) {
     .def_readwrite("search_max_rounds", &SumOpts::lloyd_max_rounds).def_readwrite("extra_sample_rounds", &SumOpts::extra_sample_tries)
     .def_readwrite("soft", &SumOpts::soft)
     .def_readwrite("outlier_fraction", &SumOpts::outlier_fraction)
-    .def_readwrite("discrete_metric_search", &SumOpts::discrete_metric_search);
-#if 0
+    .def_readwrite("discrete_metric_search", &SumOpts::discrete_metric_search)
+#if 1
     .def_property("cs",
-            [](auto &obj) {return py::cast<py::str>(coresets::sm2str(obj))},
-            [](auto &obj, py::object item) {
-            Py_ssize_t val;
-            if(py::isinstance<py::str>(item)) {
-                val = minocore::coresets::str2sm(py::cast<std::string>(item));
-            } else if(py::isinstance<py::int_>(item)) {
-                val = item;
+            [](SumOpts &obj) -> py::str {
+                return std::string(coresets::sm2str(obj.sm));
+            },
+            [](SumOpts &obj, py::object item) {
+                Py_ssize_t val;
+                if(py::isinstance<py::str>(item)) {
+                    val = minocore::coresets::str2sm(py::cast<std::string>(item));
+                } else if(py::isinstance<py::int_>(item)) {
+                    val = py::cast<Py_ssize_t>(item);
+                } else throw std::invalid_argument("value must be str or int");
+                obj.sm = (minocore::coresets::SensitivityMethod)val;
             }
-            obj.sm = (minocore::coresets::SensitivityMethod)val;
-    });
+        )
 #endif
+    ;
     m.def("d2_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
