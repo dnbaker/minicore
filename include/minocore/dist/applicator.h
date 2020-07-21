@@ -1655,6 +1655,9 @@ private:
         }
         return std::max(ret, FT(0.));
     }
+    ~DissimilarityApplicator() {
+        data_ *= blaze::expand(trans(row_sums_ + prior_sum_), data_.columns());
+    }
 }; // DissimilarityApplicator
 
 template<typename T>
