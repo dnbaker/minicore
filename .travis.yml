@@ -38,4 +38,4 @@ script:
 notifications:
     slack: jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
     rooms:
-      - jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
+     - jhu-genomics:BbHYSks7DhOolq80IYf6m9oe#libsketch
