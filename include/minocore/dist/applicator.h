@@ -1659,7 +1659,7 @@ private:
     }
 public:
     ~DissimilarityApplicator() {
-        data_ *= blaze::expand(trans(row_sums_ + prior_sum_), data_.columns());
+        data_ *= blaze::expand(trans(row_sums_ + prior_sum_), data_.rows());
     }
 }; // DissimilarityApplicator
 
