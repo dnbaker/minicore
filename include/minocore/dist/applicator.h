@@ -50,6 +50,8 @@ public:
     const VecT &row_sums() const {return row_sums_;}
     size_t size() const {return data_.rows();}
     auto rs(size_t i) const {return row_sums_[i];}
+    DissimilarityApplicator(const DissimilarityApplicator &o) = delete;
+    DissimilarityApplicator(DissimilarityApplicator &&o) = default;
     template<typename PriorContainer=blaze::DynamicVector<FT, blaze::rowVector>>
     DissimilarityApplicator(MatrixType &ref,
                       DissimilarityMeasure measure=JSM,
@@ -1655,6 +1657,7 @@ private:
         }
         return std::max(ret, FT(0.));
     }
+public:
     ~DissimilarityApplicator() {
         data_ *= blaze::expand(trans(row_sums_ + prior_sum_), data_.columns());
     }
