@@ -1659,7 +1659,7 @@ private:
     }
 public:
     ~DissimilarityApplicator() {
-        data_ *= blaze::expand(trans(row_sums_ + prior_sum_), data_.rows());
+        data_ %= blaze::expand(trans(row_sums_ + prior_sum_), data_.columns()); // Undo the re-weighting
     }
 }; // DissimilarityApplicator
 
@@ -1669,18 +1669,6 @@ template<typename MT>
 struct is_dissimilarity_applicator<DissimilarityApplicator<MT>>: std::true_type {};
 template<typename T>
 static constexpr bool is_dissimilarity_applicator_v = is_dissimilarity_applicator<T>::value;
-
-template<typename MT1, typename MT2>
-struct PairDissimilarityApplicator {
-    DissimilarityApplicator<MT1> &pda_;
-    DissimilarityApplicator<MT2> &pdb_;
-    PairDissimilarityApplicator(DissimilarityApplicator<MT1> &lhs, DissimilarityApplicator<MT2> &rhs): pda_(lhs), pdb_(rhs) {
-        if(lhs.measure_ != rhs.measure_) throw std::runtime_error("measures must be the same (for preprocessing reasons).");
-    }
-    decltype(auto) operator()(size_t i, size_t j) const {
-        return pda_(i, pdb_.row(j));
-    }
-};
 
 template<typename MatrixType>
 class MultinomialJSDApplicator: public DissimilarityApplicator<MatrixType> {
