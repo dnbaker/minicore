@@ -68,7 +68,7 @@ LINKS += -ltbb
 endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
-      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg
+      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg solvetestdbg
 
 tests: $(TESTS)
 print_tests:
@@ -106,16 +106,16 @@ printlibs:
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
 
 mtx%: src/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -DNDEBUG # -fsanitize=undefined -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG # -fsanitize=undefined -fsanitize=address
 
 mtx%: src/utils/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -DNDEBUG # -fsanitize=undefined -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG # -fsanitize=undefined -fsanitize=address
 
 mtx%dbg: src/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0  # -fsanitize=undefined -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  # -fsanitize=undefined -fsanitize=address
 
 mtx%dbg: src/utils/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0  # -fsanitize=undefined -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  # -fsanitize=undefined -fsanitize=address
 
 alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
@@ -124,10 +124,10 @@ dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB
 
 jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS)
 
 jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp

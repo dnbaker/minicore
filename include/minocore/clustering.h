@@ -1,9 +1,6 @@
 #ifndef MINOCORE_CLUSTERING_HEADERS_H__
 #define MINOCORE_CLUSTERING_HEADERS_H__
 
-#include "minocore/clustering/dispatch.h"
-#include "minocore/clustering/traits.h"
-#include "minocore/clustering/sampling.h"
 #include "minocore/clustering/streaming.h"
 
 

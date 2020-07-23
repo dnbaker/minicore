@@ -140,9 +140,8 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &_data, const Rows &rs, blz:
 }
 
 
-template<typename MT, bool SO, typename VT2, bool TF2, typename FT=CommonType_t<ElementType_t<MT>, ElementType_t<VT2>>, typename IT=uint32_t>
-static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT2, TF2> &ret, const FT *weights) {
-    assert(weights);
+template<typename MT, bool SO, typename VT2, bool TF2, typename IT=uint32_t, typename WT>
+static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT2, TF2> &ret, const WT &weights) {
     const size_t nc = (~data).columns();
     if((~ret).size() != nc) {
         (~ret).resize(nc);
@@ -151,6 +150,7 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVe
         throw std::runtime_error("Use a different index type, there are more features than fit in IT");
     const size_t nr = (~data).rows();
     auto pairs = std::make_unique<std::pair<ElementType_t<MT>, IT>[]>(nr);
+    using FT = blaze::CommonType_t<blz::ElementType_t<MT>, blz::ElementType_t<VT2>, std::decay_t<decltype(weights[0])>>;
     std::unique_ptr<FT[]> cw(new FT[nr]); //
     for(size_t i = 0; i < nc; ++i) {
         auto col = column(~data, i);
@@ -180,7 +180,7 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::DenseVe
 }
 
 
-template<typename MT, bool SO, typename VT, bool TF, typename VT3=blz::CommonType_t<ElementType_t<MT>, ElementType_t<VT>>>
+template<typename MT, bool SO, typename VT, bool TF, typename VT3=blz::CommonType_t<ElementType_t<MT>, ElementType_t<VT>>, typename=std::enable_if_t<std::is_arithmetic_v<VT3>>>
 void l1_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, const VT3 *weights=static_cast<VT3 *>(nullptr)) {
     if(weights)
         weighted_median(data, ret, weights);
@@ -188,16 +188,21 @@ void l1_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, c
         l1_unweighted_median(data, ret);
 }
 
-template<typename MT, bool SO, typename VT, bool TF, typename Rows, typename VT3=blz::CommonType_t<ElementType_t<MT>, ElementType_t<VT>>>
+template<typename MT, bool SO, typename VT, bool TF, typename VT3, typename=std::enable_if_t<!std::is_arithmetic_v<VT3> && !std::is_pointer_v<VT3>>>
+void l1_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, const VT3 &weights) {
+    weighted_median(data, ret, weights);
+}
+
+template<typename MT, bool SO, typename VT, bool TF, typename Rows, typename VT3=blz::CommonType_t<ElementType_t<MT>, ElementType_t<VT>>, typename=std::enable_if_t<blaze::IsRows_v<Rows>>>
 void l1_median(const blz::Matrix<MT, SO> &data, blz::DenseVector<VT, TF> &ret, const Rows &rows, const VT3 *weights=static_cast<VT3 *>(nullptr)) {
     if(weights) {
         auto dr(blaze::rows(data, rows.data(), rows.size()));
         const blz::CustomVector<VT3, blaze::unaligned, blaze::unpadded> cv((VT3 *)weights, (~data).rows());
         blz::DynamicVector<VT3> selected_weights(blaze::elements(cv, rows.data(), rows.size()));
         weighted_median(dr, ret, selected_weights.data());
-    } else
-        l1_unweighted_median(data, rows, ret);
+    } else l1_unweighted_median(data, rows, ret);
 }
+
 
 } // namespace coresets
 } // namespace minocore
