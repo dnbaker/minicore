@@ -180,31 +180,48 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
 {
     if(prior.size() > 1 && std::set<double>(prior.begin(), prior.end()).size() != 1)
         throw NotImplementedError("Disuniform prior. This can be done, but at some runtime expense.");
-    auto perform_core = [&](auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, const auto &nsharedfunc) {
-        const size_t sharednz = merge::for_each_by_case(
-                                mr.begin(), mr.end(), ctr.begin(), ctr.end(),
-                                [&](auto, auto x, auto y) {init += sharedfunc(x, y);},
-                                [&](auto, auto x) {init += lhofunc(x);},
-                                [&](auto, auto y) {init += rhofunc(y);});
-        init += nsharedfunc(sharednz);
-        return init;
-    };
-    // Perform core now takes:
-    // 1. Initialization
-    // 2-4. Functions for sharednz, lhnz, rhnz
-    // 5. Function for number of shared zeros
-    // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
-    FT ret;
-    switch(msr) {
-#if 0
-        case JSD: {
-            return perform_core(...)
+    if constexpr(!blaze::IsSparseVector_v<CtrT> || !blaze::IsSparseVector_v<MatrixRowT>) {
+        auto logr = blz::neginf2zero(blz::log(mr));
+        auto logc = blz::neginf2zero(blz::log(ctr));
+        switch(msr) {
+            default: throw TODOError("Not yet done");
+            case JSM: case JSD: {
+                FT ret;
+                auto mn = .5 * (mr + ctr);
+                auto lmn = blaze::neginf2zero(log(mn));
+                ret = .5 * (blz::dot(mr, logr - lmn) + blz::dot(ctr, logc - lmn));
+                if(msr == JSM) ret = std::sqrt(ret);
+                return ret;
+            }
+            case MKL: return blz::dot(mr, logr - logc);
         }
-#endif
-        throw TODOError("Replace this");
-        default:;
+    } else {
+        auto perform_core = [&](auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, const auto &nsharedfunc) {
+            const size_t sharednz = merge::for_each_by_case(
+                                    mr.begin(), mr.end(), ctr.begin(), ctr.end(),
+                                    [&](auto, auto x, auto y) {init += sharedfunc(x, y);},
+                                    [&](auto, auto x) {init += lhofunc(x);},
+                                    [&](auto, auto y) {init += rhofunc(y);});
+            init += nsharedfunc(sharednz);
+            return init;
+        };
+        // Perform core now takes:
+        // 1. Initialization
+        // 2-4. Functions for sharednz, lhnz, rhnz
+        // 5. Function for number of shared zeros
+        // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
+        FT ret;
+        switch(msr) {
+            case JSD:
+            case ITAKURA_SAITO:
+            case REVERSE_ITAKURA_SAITO:
+            case SIS:
+            case RSIS:
+            case MKL: 
+            default: throw std::invalid_argument("unexpected msr");
+        }
+        return ret;
     }
-    return ret;
 }
 
 template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
