@@ -138,21 +138,11 @@ void set_centroids_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
     }
 }
 
-template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
-void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
-                        const dist::DissimilarityMeasure measure,
-                        const PriorT &prior,
-                        std::vector<CtrT> &centers,
-                        AsnT &asn,
-                        CostsT &costs,
-                        const WeightT *weights)
-{
-
-    // Setup helpers
-    // -- Parameters
-    using asn_t = std::decay_t<decltype(asn[0])>;
-    const size_t np = costs.size();
-    const unsigned k = centers.size();
+#if 0
+    cached value helpers
+    // TODO: partition out cached quantities
+    // into an abstraction which is shared by all iterates
+    // and not re-computed each time
     // -- Cached values
     //    row sums -- multiply by inverse using SIMD rather than use division
     //    square root: only for Hellinger/Bhattacharyya
@@ -183,6 +173,61 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
         }
     }
 
+#endif
+
+template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT>
+FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, double prior_sum)
+{
+    if(prior.size() > 1 && std::set<double>(prior.begin(), prior.end()).size() != 1)
+        throw NotImplementedError("Disuniform prior. This can be done, but at some runtime expense.");
+    auto perform_core = [&](auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, const auto &nsharedfunc) {
+        const size_t sharednz = merge::for_each_by_case(
+                                mr.begin(), mr.end(), ctr.begin(), ctr.end(),
+                                [&](auto, auto x, auto y) {init += sharedfunc(x, y);},
+                                [&](auto, auto x) {init += lhofunc(x);},
+                                [&](auto, auto y) {init += rhofunc(y);});
+        init += nsharedfunc(sharednz);
+        return init;
+    };
+    // Perform core now takes:
+    // 1. Initialization
+    // 2-4. Functions for sharednz, lhnz, rhnz
+    // 5. Function for number of shared zeros
+    // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
+    FT ret;
+    switch(msr) {
+#if 0
+        case JSD: {
+            return perform_core(...)
+        }
+#endif
+        throw TODOError("Replace this");
+        default:;
+    }
+    return ret;
+}
+
+template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
+void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
+                        const dist::DissimilarityMeasure measure,
+                        const PriorT &prior,
+                        std::vector<CtrT> &centers,
+                        AsnT &asn,
+                        CostsT &costs,
+                        const WeightT *weights)
+{
+
+    // Setup helpers
+    // -- Parameters
+    using asn_t = std::decay_t<decltype(asn[0])>;
+    const size_t np = costs.size();
+    const unsigned k = centers.size();
+    const FT prior_sum =
+        prior.size() == 0 ? 0.
+                          : prior.size() == 1
+                          ? double(prior[0] * (~mat).columns())
+                          : double(blz::sum(prior));
+
     // Compute distance function
     // Handles similarity measure, caching, and the use of a prior for exponential family models
     //
@@ -197,28 +242,55 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
     auto compute_cost = [&](auto id, auto cid) {
         auto mr = row(~mat, id, blaze::unchecked);
         const auto &ctr = centers[cid];
+#if 1
+        auto mrmult = mr / blz::sum(mr);
+        auto wctr = ctr / blz::sum(ctr);
+#else
         auto mrmult = mr * irowsums[id];
         auto wctr = ctr * icsums[cid];
+#endif
         FT ret;
         switch(measure) {
+
+            // Geometric
             case L1: ret = blz::l1Norm(ctr - mr); break;
             case L2: ret = blz::l2Norm(ctr - mr); break;
             case SQRL2: ret = blz::sqrNorm(ctr - mr); break;
             case PSL2: ret = blz::sqrNorm(wctr - mrmult); break;
             case PL2: ret = blz::l2Norm(wctr - mrmult); break;
 
+            // Discrete Probability Distribution Measures
             case TVD: ret = .5 * blz::sum(blz::abs(wctr - mrmult)); break;
-            case HELLINGER: ret = blz::l2Norm(srcenters[cid] - blz::sqrt(mrmult)); break;
+            case HELLINGER: ret = blz::l2Norm(blz::sqrt(wctr) - blz::sqrt(mrmult)); break;
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: {
-                const auto sim = blz::dot(srcenters[cid], blz::sqrt(mrmult));
-
+                const auto sim = blz::dot(blz::sqrt(wctr), blz::sqrt(mrmult));
                 ret = measure == BHATTACHARYYA_METRIC ? std::sqrt(1. - sim)
                                                       : -std::log(sim);
             } break;
+            
+            case POISSON: case JSD:
+            case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
+            case SIS: case RSIS: case MKL: 
+                ret = msr_with_prior(measure, ctr, mr, prior, prior_sum); break;
             case PROBABILITY_COSINE_DISTANCE:
-                ret = blz::dot(mrmult, wctr) * l2points[id] * l2centers[cid]; break;
+#if 1
+                ret = blz::dot(mrmult, wctr) * (1. / (blz::l2Norm(mrmult) * blz::l2Norm(wctr)));
+#else
+                ret = blz::dot(mrmult, wctr) * l2points[id] * l2centers[cid];
+#endif
+            break;
             case COSINE_DISTANCE:
-                ret = blz::dot(mr, ctr) * l2points[id] * l2centers[cid]; break;
+#if 1
+                ret = blz::dot(mr, ctr) * (1. / (blz::l2Norm(mr) * blz::l2Norm(ctr)));
+#else
+                ret = blz::dot(mr, ctr) * l2points[id] * l2centers[cid];
+#endif
+                break;
+            case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: case COSINE_SIMILARITY: case PROBABILITY_COSINE_SIMILARITY:
+            case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+            case WEMD: case EMD: case OLLR:
+            case JSM: std::fprintf(stderr, "No EM algorithm available for measure %d/%s\n", (int)measure, msr2str(measure));
+            [[fallthrough]];
             default: throw std::invalid_argument(std::string("Unupported measure ") + msr2str(measure));
         }
         return ret;
