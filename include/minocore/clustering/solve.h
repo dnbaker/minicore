@@ -104,8 +104,7 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
     for(;;) {
         set_centroids_hard<FT>(mat, measure, prior, centers, asn, costs, weights);
         assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights);
-        auto oldcost = cost;
-        cost = compute_cost();
+        auto oldcost = cost; cost = compute_cost();
         if(oldcost - cost < eps * initcost || ++iternum == maxiter)
             break;
     }
@@ -131,10 +130,11 @@ void set_centroids_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
     const CentroidPol pol = msr2pol(measure);
     switch(pol) {
         case NOT_APPLICABLE: throw std::runtime_error("Cannot optimize without a valid centroid policy.");
-        case L1_MEDIAN: set_centroids_l1<FT>(~mat, asn, costs, centers, weights);
-        case GEO_MEDIAN: set_centroids_l2<FT>(~mat, asn, costs, centers, weights);
         case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(~mat, measure, prior, asn, costs, centers, weights);
-        case TVD_MEDIAN: set_centroids_tvd<FT>(~mat, asn, costs, centers, weights);
+
+        case L1_MEDIAN:          set_centroids_l1<FT>( ~mat, asn, costs, centers, weights);
+        case GEO_MEDIAN:         set_centroids_l2<FT>( ~mat, asn, costs, centers, weights);
+        case TVD_MEDIAN:         set_centroids_tvd<FT>(~mat, asn, costs, centers, weights);
     }
 }
 
@@ -147,10 +147,117 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
                         CostsT &costs,
                         const WeightT *weights)
 {
-    for(size_t i = 0; i < np; ++i) {
-        
+
+    // Setup helpers
+    // -- Parameters
+    using asn_t = std::decay_t<decltype(asn[0])>;
+    const size_t np = costs.size();
+    const unsigned k = centers.size();
+    // -- Cached values
+    //    row sums -- multiply by inverse using SIMD rather than use division
+    //    square root: only for Hellinger/Bhattacharyya
+    std::unique_ptr<CtrT[]> srcenters;
+    // Inverse sums for normalization
+    std::unique_ptr<double[]> icsums(new double[k]);
+    blz::DV<double, blz::rowVector> irowsums = 1. / trans(blz::sum<blz::rowwise>(~mat));
+    blz::DV<double, blz::rowVector> l2centers, l2points;
+    for(unsigned i = 0; i < k; ++i) icsums[i] = 1. / blz::sum(centers[i]);
+    if(dist::needs_sqrt(measure)) {
+        srcenters.reset(new CtrT[k]);
+        for(unsigned i = 0; i < k; srcenters[i] = blz::sqrt(centers[i] / blz::sum(centers[i])), ++i);
     }
-    throw NotImplementedError("Not yet");
+    if(dist::needs_l2_cache(measure) || dist::needs_probability_l2_cache(measure)) {
+        l2centers.resize(k);
+        l2points.resize(np);
+        for(unsigned i = 0; i < k; ++i) {
+            if(dist::needs_l2_cache(measure))
+                l2centers[i] = 1. /  blz::l2Norm(centers[i]);
+            else
+                l2centers[i] = 1. /  blz::l2Norm(centers[i] * icsums[i]);
+        }
+        for(unsigned i = 0; i < np; ++i) {
+            if(dist::needs_l2_cache(measure))
+                l2points[i] = 1. /  blz::l2Norm(row(~mat, i));
+            else
+                l2points[i] = 1. /  blz::l2Norm(row(~mat, i) * irowsums[i]);
+        }
+    }
+
+    // Compute distance function
+    // Handles similarity measure, caching, and the use of a prior for exponential family models
+    //
+    //
+    // TODO: use https://www.aaai.org/Papers/ICML/2003/ICML03-022.pdf
+    //        triangle inequality to accelerate k-means algorithm
+    //       this depends on whether or not a measure is a metric
+    //       , or, for the rho-metric generalization
+    //       a suitable relaxation allowing similar acceleration.
+    //       Also, if there are enough centers, a nearest neighbor structure
+    //       could make centroid assignment faster
+    auto compute_cost = [&](auto id, auto cid) {
+        auto mr = row(~mat, id, blaze::unchecked);
+        const auto &ctr = centers[cid];
+        auto mrmult = mr * irowsums[id];
+        auto wctr = ctr * icsums[cid];
+        FT ret;
+        switch(measure) {
+            case L1: ret = blz::l1Norm(ctr - mr); break;
+            case L2: ret = blz::l2Norm(ctr - mr); break;
+            case SQRL2: ret = blz::sqrNorm(ctr - mr); break;
+            case PSL2: ret = blz::sqrNorm(wctr - mrmult); break;
+            case PL2: ret = blz::l2Norm(wctr - mrmult); break;
+
+            case TVD: ret = .5 * blz::sum(blz::abs(wctr - mrmult)); break;
+            case HELLINGER: ret = blz::l2Norm(srcenters[cid] - blz::sqrt(mrmult)); break;
+            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: {
+                const auto sim = blz::dot(srcenters[cid], blz::sqrt(mrmult));
+
+                ret = measure == BHATTACHARYYA_METRIC ? std::sqrt(1. - sim)
+                                                      : -std::log(sim);
+            } break;
+            case PROBABILITY_COSINE_DISTANCE:
+                ret = blz::dot(mrmult, wctr) * l2points[id] * l2centers[cid]; break;
+            case COSINE_DISTANCE:
+                ret = blz::dot(mr, ctr) * l2points[id] * l2centers[cid]; break;
+            default: throw std::invalid_argument(std::string("Unupported measure ") + msr2str(measure));
+        }
+        return ret;
+    };
+    for(size_t i = 0; i < np; ++i) {
+        auto cost = compute_cost(i, 0);
+        asn_t bestid = 0;
+        for(unsigned j = 1; j < k; ++j)
+            if(auto newcost = compute_cost(i, 1); newcost < cost)
+                bestid = j, cost = newcost;
+        costs[i] = cost;
+        asn[i] = bestid;
+    }
+}
+template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
+void assign_points_soft(const blaze::Matrix<MT, blz::rowMajor> &mat,
+                        const dist::DissimilarityMeasure measure,
+                        const PriorT &prior,
+                        std::vector<CtrT> &centers,
+                        AsnT &asn,
+                        CostsT &costs,
+                        const WeightT *weights)
+{
+#if 0
+    using asn_t = std::decay_t<decltype(asn[0])>;
+    const size_t np = costs.size();
+    const unsigned k = centers.size();
+    for(size_t i = 0; i < np; ++i) {
+        auto cost = compute_cost(i, 0);
+        asn_t bestid = 0;
+        for(unsigned j = 1; j < k; ++j)
+            if(auto newcost = compute_cost(i, 1); newcost < cost)
+                bestid = j, cost = newcost;
+        costs[i] = cost;
+        asn[i] = bestid;
+    }
+#else
+    throw TODOError("Not completed");
+#endif
 }
 
 #if 0

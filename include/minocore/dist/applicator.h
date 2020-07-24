@@ -1028,8 +1028,8 @@ public:
     }
 
     FT hellinger(size_t i, size_t j) const {
-        return sqrdata_.rows() ? blaze::sqrNorm(sqrtrow(i) - sqrtrow(j))
-                               : blaze::sqrNorm(blaze::sqrt(row(i)) - blaze::sqrt(row(j)));
+        return sqrdata_.rows() ? blaze::l2Norm(sqrtrow(i) - sqrtrow(j))
+                               : blaze::l2Norm(blaze::sqrt(row(i)) - blaze::sqrt(row(j)));
     }
     FT jsd(size_t i, size_t j) const {
         FT ret;

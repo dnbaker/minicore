@@ -60,11 +60,10 @@ int main(int argc, char *argv[]) {
     } else if(fmt == 2) {
         sparsemat = minocore::mtx2sparse<FT>(input);
     }
-    std::fprintf(stderr, "gathering rows: %zu\n", maxnrows);
+    std::fprintf(stderr, "gathering rows: %u\n", maxnrows);
     std::vector<unsigned> nonemptyrows;
     size_t i = 0;
     while(nonemptyrows.size() < maxnrows && i < sparsemat.rows()) {
-        std::fprintf(stderr, "i: %u. maxnrows: %u. curretn size: %zu\n", i, maxnrows, nonemptyrows.size());
         const auto nzc = blz::nonZeros(row(sparsemat, i));
         if(nzc >= mincount)
             nonemptyrows.push_back(i);
