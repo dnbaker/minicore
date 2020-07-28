@@ -1081,8 +1081,8 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     FT jsd(size_t i, const OT &o, const OT2 &olog) const {
-        auto mnlog = evaluate(log(0.5 * (row(i) + o)));
-        return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
+        const auto mnlog = evaluate(log(0.5 * (row(i) + o)));
+        return .5 * (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT jsd(size_t i, const OT &o) const {
@@ -1126,10 +1126,9 @@ public:
                             update_x(pd[ind] * bothsi); update_y(pd[ind] * rhi);
                         });
                 }
-                return ret;
+                return ret * 0.5;
             }
         }
-        auto olog = evaluate(blaze::neginf2zero(blaze::log(o)));
         return jsd(i, o, evaluate(blaze::neginf2zero(blaze::log(o))));
     }
     FT mkl(size_t i, size_t j) const {
@@ -1151,7 +1150,7 @@ public:
                     const FT rhincl = std::log(rhinc);
                     const FT empty_contrib = -lhinc * rhincl;
                     auto nz = merge::for_each_by_case(dim, lhit, lhe, rhit, rhe,
-                        [&](auto, auto xval, auto yval) ALWAYS_INLINE {ret -= (xval + lhinc) + std::log(yval + rhinc);},
+                        [&](auto, auto xval, auto yval) ALWAYS_INLINE {ret -= (xval + lhinc) * std::log(yval + rhinc);},
                         [&](auto, auto xval) ALWAYS_INLINE  {ret -= (xval + lhinc) * rhincl;},
                         [&](auto, auto yval) ALWAYS_INLINE  {ret -= lhinc * std::log(yval + rhinc);});
                     ret += empty_contrib * nz;
