@@ -572,7 +572,7 @@ using functional::indices_if;
 
 // Solve geometric median for a set of points.
 template<typename MT, bool SO, typename VT, typename WeightType>
-auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType *weights, double eps=0)
+auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weights, double eps=0)
 {
     if((~mat).rows() == 1) return ~dv = row((~mat), 0);
     const auto &_mat = ~mat;
@@ -617,7 +617,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType 
 }
 // Solve geometric median for a set of points.
 template<typename MT, bool SO, typename VT, typename WeightType, typename=std::enable_if_t<!std::is_arithmetic_v<WeightType>>>
-auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, const WeightType &weights, double eps=0.)
+auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType &weights, double eps=0.)
 {
     if((~mat).rows() == 1) return ~dv = row((~mat), 0);
     const auto &_mat = ~mat;
@@ -648,7 +648,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, const Weigh
     return ~dv;
 }
 template<typename MT, bool SO, typename VT>
-auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=0) {
+auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, double eps=0) {
     return geomedian<MT, SO, VT, blz::ElementType_t<MT>>(mat, dv, static_cast<blaze::ElementType_t<MT> *>(nullptr), eps);
 }
 

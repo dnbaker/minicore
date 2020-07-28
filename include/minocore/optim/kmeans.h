@@ -111,7 +111,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         });
         else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
     }
-    
+
     std::fprintf(stderr, "Completed kmeans++. Optional ls++\n");
     if(lspprounds > 0)
         localsearchpp_rounds(oracle, rng, distances, cdf, centers, assignments, np, lspprounds, weights);

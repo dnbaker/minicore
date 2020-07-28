@@ -73,6 +73,7 @@ template<typename MT, // MatrixType
          typename FT=blz::ElementType_t<MT>, // Type of result.
                                              // Defaults to that of MT, but can be parametrized. (e.g., when MT is integral)
          typename CtrT=blz::DynamicVector<FT, rowVector>, // Vector Type
+         typename CostsT,
          typename PriorT=blz::DynamicVector<FT, rowVector>,
          typename AsnT=blz::DynamicVector<uint32_t>,
          typename WeightT=CtrT, // Vector Type
@@ -83,7 +84,7 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
                              const PriorT &prior,
                              std::vector<CtrT> &centers,
                              AsnT &asn,
-                             CtrT &costs,
+                             CostsT &costs,
                              const WeightT *weights=static_cast<WeightT *>(nullptr),
                              double eps=1e-10,
                              size_t maxiter=size_t(-1))
@@ -195,13 +196,23 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case MKL: return blz::dot(mr, logr - logc);
         }
     } else {
-        auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, const auto &nsharedfunc) {
-            const size_t sharednz = merge::for_each_by_case(
-                                    src.begin(), src.end(), ctr.begin(), ctr.end(),
-                                    [&](auto, auto x, auto y) {init += sharedfunc(x, y);},
-                                    [&](auto, auto x) {init += lhofunc(x);},
-                                    [&](auto, auto y) {init += rhofunc(y);});
-            init += nsharedfunc(sharednz);
+        const size_t nd = mr.size();
+        auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, const auto &nsharedfunc)
+            -> FT
+                ALWAYS_INLINE
+        {
+            if constexpr(blaze::IsSparseVector_v<std::decay_t<decltype(src)>> && blaze::IsSparseVector_v<std::decay_t<decltype(ctr)>>) {
+                const size_t sharednz = merge::for_each_by_case(nd,
+                                        src.begin(), src.end(), ctr.begin(), ctr.end(),
+                                        [&](auto, auto x, auto y) {init += sharedfunc(x, y);},
+                                        [&](auto, auto x) {init += lhofunc(x);},
+                                        [&](auto, auto y) {init += rhofunc(y);});
+                init += nsharedfunc(sharednz);
+            } else if constexpr(blaze::IsDenseVector_v<std::decay_t<decltype(src)>> && blaze::IsDenseVector_v<std::decay_t<decltype(ctr)>>) {
+                throw TODOError("");
+            } else {
+                throw TODOError("mixed densities;");
+            }
             return init;
         };
         // Perform core now takes:
@@ -210,48 +221,71 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         // 5. Function for number of shared zeros
         // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
         FT ret;
-        const size_t nd = mr.size();
         const FT lhsum = blz::sum(mr) + prior_sum;
         const FT rhsum = blz::sum(ctr) + prior_sum;
         const FT lhrsi = 1. / lhsum, rhrsi = 1. / rhsum; // TODO: cache sums?
         const FT lhinc = prior[0] * lhrsi, rhinc = prior[0] * rhrsi;
-        const FT rhl = std::log(rhinc);
+        const FT rhl = std::log(rhinc), rhincl = rhl * rhinc;
+        const FT lhl = std::log(lhinc), lhincl = lhl * lhinc;
+        const FT shl = std::log((lhinc + rhinc) * .5), shincl = (lhinc + rhinc) * .5 * shl;;
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
         // TODO: consider batching logs from sparse vectors with some extra dispatching code
-        auto __is_compute = [&](auto x) ALWAYS_INLINE {
+        auto __isc = [&](auto x) ALWAYS_INLINE {
             return x - std::log(x);
         };
         switch(msr) {
-            case JSD:
+            case JSD: {
+                ret = perform_core(wr, wc, FT(0),
+                   [&](auto, auto xval, auto yval) ALWAYS_INLINE {
+                        auto xv = xval + lhinc, yv = yval + rhinc;
+                        auto addv = xv + yv, halfv = addv * .5;
+                        return .5 * (xv * std::log(xv) + yv * std::log(yv) - std::log(halfv) * addv);
+                    },
+                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {
+                        auto xv = xval + lhinc;
+                        auto addv = xv + rhinc, halfv = addv * .5;
+                        return .5 * (xv * std::log(xv) + rhincl - std::log(halfv) * addv);
+                    },
+                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {
+                        auto yv = yval + rhinc;
+                        auto addv = yv + lhinc, halfv = addv * .5;
+                        return .5 * (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
+                    },
+                    /*sharedz*/    [&](auto x) {
+                        return x * .5 * (lhincl + rhincl - shincl);
+                    });
+            }
             case ITAKURA_SAITO: {
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto, auto xval, auto yval) ALWAYS_INLINE {
-                        ret += __is_compute((xval + lhinc) / (yval + rhinc));
+                        return __isc((xval + lhinc) / (yval + rhinc));
                     },
-                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {ret += __is_compute((xval + lhinc) * rhrsi);},
-                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {ret += __is_compute(lhinc / (yval + rhinc));},
-                    /*sharedz*/    [szl](auto x) {return x * __is_compute(rhsum * lhrsi);});
+                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {return __isc((xval + lhinc) * rhrsi);},
+                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {return __isc(lhinc / (yval + rhinc));},
+                    /*sharedz*/    [&,rhsum,lhrsi](auto x) {return x * __isc(rhsum * lhrsi);});
             }
             case REVERSE_ITAKURA_SAITO:
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto, auto xval, auto yval) ALWAYS_INLINE {
-                        ret += __is_compute((yval + rhinc) / (xval + lhinc));
+                        return __isc((yval + rhinc) / (xval + lhinc));
                     },
-                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {ret += __is_compute(rhinc / (xval + lhinc);},
-                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {ret += __is_compute(lhrsi * (yval + rhinc));},
-                    /*sharedz*/    [szl](auto x) {return x * __is_compute(lhsum * rhrsi);});
-            case SIS:
-            case RSIS:
-            default: throw std::invalid_argument("unexpected msr");
+                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {return __isc(rhinc / (xval + lhinc));},
+                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {return __isc(lhrsi * (yval + rhinc));},
+                    /*sharedz*/    [&,lhsum,rhrsi](auto x) {return x * __isc(lhsum * rhrsi);});
             case MKL: {
                 ret = perform_core(wr, wc, 0.,
-                    /* shared */   [&](auto, auto xval, auto yval) ALWAYS_INLINE {ret += (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
-                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {ret += (xval + lhinc) * (std::log(xval + lhinc) + rhl);},
-                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {ret += lhinc * std::log(yval + rhinc);},
+                    /* shared */   [&](auto, auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
+                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) + rhl);},
+                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {return lhinc * std::log(yval + rhinc);},
                     /*sharedz*/    [lr=-lhinc * rhl](auto x) {return lr * x;});
             }
             break;
+            case JSM:
+            case SIS:
+            case RSIS:
+            case UWLLR: case LLR:
+            default: throw TODOError("unexpected msr; not yet supported");
         }
         return ret;
     }
@@ -317,10 +351,10 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
                 ret = measure == BHATTACHARYYA_METRIC ? std::sqrt(1. - sim)
                                                       : -std::log(sim);
             } break;
-            
+
             case POISSON: case JSD:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
-            case SIS: case RSIS: case MKL: 
+            case SIS: case RSIS: case MKL:
                 ret = msr_with_prior(measure, ctr, mr, prior, prior_sum); break;
             case PROBABILITY_COSINE_DISTANCE:
 #if 1

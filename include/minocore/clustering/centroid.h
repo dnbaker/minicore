@@ -492,7 +492,13 @@ void set_centroids_full_mean(const Mat &mat,
             } else ctr = blaze::mean<blaze::columnwise>(rowsel);
         }
         // Adjust for prior
-        switch(prior.size()) {case 1: ctr += prior[0]; break;default: ctr += prior; case 0:;}
+        if constexpr(blaze::IsDenseVector_v<CtrsT>) {
+            switch(prior.size()) {
+                case 1:  ctr += prior[0]; break;
+                default: ctr += prior;    break;
+                case 0:;
+            }
+        }
     }
 }
 
