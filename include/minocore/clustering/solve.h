@@ -231,57 +231,57 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
         // TODO: consider batching logs from sparse vectors with some extra dispatching code
-        auto __isc = [&](auto x) ALWAYS_INLINE {
-            return x - std::log(x);
-        };
+        auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
+        // Consider -ffast-math/-fassociative-math
         switch(msr) {
+            case JSM:
             case JSD: {
                 ret = perform_core(wr, wc, FT(0),
-                   [&](auto, auto xval, auto yval) ALWAYS_INLINE {
+                   [&](auto xval, auto yval) ALWAYS_INLINE {
                         auto xv = xval + lhinc, yv = yval + rhinc;
                         auto addv = xv + yv, halfv = addv * .5;
                         return .5 * (xv * std::log(xv) + yv * std::log(yv) - std::log(halfv) * addv);
                     },
-                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {
                         auto xv = xval + lhinc;
                         auto addv = xv + rhinc, halfv = addv * .5;
                         return .5 * (xv * std::log(xv) + rhincl - std::log(halfv) * addv);
                     },
-                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {
                         auto yv = yval + rhinc;
                         auto addv = yv + lhinc, halfv = addv * .5;
                         return .5 * (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
                     },
-                    /*sharedz*/    [&](auto x) {
-                        return x * .5 * (lhincl + rhincl - shincl);
+                    /*sharedz*/    [mult=(lhincl + rhincl - shincl) * .5](auto x) {
+                        return x * mult;
                     });
+                if(msr == JSM) ret = std::sqrt(ret);
             }
             case ITAKURA_SAITO: {
                 ret = perform_core(wr, wc, -FT(nd),
-                    /* shared */   [&](auto, auto xval, auto yval) ALWAYS_INLINE {
+                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
                         return __isc((xval + lhinc) / (yval + rhinc));
                     },
-                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {return __isc((xval + lhinc) * rhrsi);},
-                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {return __isc(lhinc / (yval + rhinc));},
-                    /*sharedz*/    [&,rhsum,lhrsi](auto x) {return x * __isc(rhsum * lhrsi);});
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return __isc((xval + lhinc) * rhrsi);},
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhinc / (yval + rhinc));},
+                    /*sharedz*/    [&,mult=__isc(rhsum * lhrsi)](auto x) {return x * mult;});
             }
             case REVERSE_ITAKURA_SAITO:
                 ret = perform_core(wr, wc, -FT(nd),
-                    /* shared */   [&](auto, auto xval, auto yval) ALWAYS_INLINE {
+                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
                         return __isc((yval + rhinc) / (xval + lhinc));
                     },
-                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {return __isc(rhinc / (xval + lhinc));},
-                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {return __isc(lhrsi * (yval + rhinc));},
-                    /*sharedz*/    [&,lhsum,rhrsi](auto x) {return x * __isc(lhsum * rhrsi);});
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return __isc(rhinc / (xval + lhinc));},
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhrsi * (yval + rhinc));},
+                    /*sharedz*/    [&,mult=__isc(lhsum * rhrsi)](auto x) {return x * mult;});
             case MKL: {
                 ret = perform_core(wr, wc, 0.,
-                    /* shared */   [&](auto, auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
-                    /* xonly */    [&](auto, auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) + rhl);},
-                    /* yonly */    [&](auto, auto yval) ALWAYS_INLINE  {return lhinc * std::log(yval + rhinc);},
+                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) + rhl);},
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * std::log(yval + rhinc);},
                     /*sharedz*/    [lr=-lhinc * rhl](auto x) {return lr * x;});
             }
             break;
-            case JSM:
             case SIS:
             case RSIS:
             case UWLLR: case LLR:
