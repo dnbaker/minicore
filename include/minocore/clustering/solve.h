@@ -99,12 +99,18 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
     };
     const int k = centers.size();
     const size_t np = costs.size();
+    std::fprintf(stderr, "Beginning perform_hard_clustering %s weights.\n", weights ? " with": " without");
     auto cost = compute_cost();
+    std::fprintf(stderr, "cost: %g\n", cost);
     const auto initcost = cost;
     size_t iternum = 0;
     for(;;) {
+        std::fprintf(stderr, "Beginning iter %zu\n", iternum);
         set_centroids_hard<FT>(mat, measure, prior, centers, asn, costs, weights);
+        std::fprintf(stderr, "Set centroids %zu\n", iternum);
+        
         assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights);
+        std::fprintf(stderr, "Assigning points %zu\n", iternum);
         auto newcost = compute_cost();
         if(cost - newcost < eps * initcost || ++iternum == maxiter)
             break;
@@ -130,14 +136,14 @@ void set_centroids_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
 {
     MINOCORE_VALIDATE(dist::is_valid_measure(measure));
     const CentroidPol pol = msr2pol(measure);
-    switch(pol) {
-        case NOT_APPLICABLE: throw std::runtime_error("Cannot optimize without a valid centroid policy.");
-        case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(~mat, measure, prior, asn, costs, centers, weights);
-
-        case L1_MEDIAN:          set_centroids_l1<FT>( ~mat, asn, costs, centers, weights);
-        case GEO_MEDIAN:         set_centroids_l2<FT>( ~mat, asn, costs, centers, weights);
-        case TVD_MEDIAN:         set_centroids_tvd<FT>(~mat, asn, costs, centers, weights);
+    if(dist::is_bregman(measure)) {
+        assert(FULL_WEIGHTED_MEAN == pol);
     }
+    if(pol == FULL_WEIGHTED_MEAN) set_centroids_full_mean<FT>(~mat, measure, prior, asn, costs, centers, weights);
+    else if(pol == L1_MEDIAN)            set_centroids_l1<FT>(~mat, asn, costs, centers, weights);
+    else if(pol == GEO_MEDIAN)           set_centroids_l2<FT>(~mat, asn, costs, centers, weights);
+    else if(pol == TVD_MEDIAN)          set_centroids_tvd<FT>(~mat, asn, costs, centers, weights);
+    else throw std::runtime_error("Cannot optimize without a valid centroid policy.");
 }
 
 #if 0

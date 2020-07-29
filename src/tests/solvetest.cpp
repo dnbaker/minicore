@@ -34,7 +34,7 @@ int main() {
     const size_t k = centers.size();
     const double psum = prior[0] * nc, pv = prior[0];
     blz::DV<uint32_t> asn(nr);
-    blz::DV<double> hardcosts = blaze::generate(nr, [&,k](auto id) {
+    blz::DV<double> hardcosts = blaze::generate(nr, [&](auto id) {
         auto r = row(x, id);
         uint32_t bestid = 0;
         double ret = compute_cost(centers[0], r, psum, pv);
@@ -42,9 +42,18 @@ int main() {
             auto x = compute_cost(centers[j], r, psum, pv);
             if(x < ret) ret = x, bestid = j;
         }
+        assert(id < asn.size());
         asn[id] = bestid;
         return ret;
     });
+    std::fprintf(stderr, "Total cost: %g. max cost: %g\n", blz::sum(hardcosts), blz::max(hardcosts));
+    std::vector<uint32_t> counts(k);
+    for(const auto v: asn) ++counts[v];
+    for(unsigned i = 0; i < k; ++i) {
+        std::fprintf(stderr, "Center %d with sum %g has %u supporting\n", i, blz::sum(centers[i]), counts[i]);
+    }
+    assert(min(asn) == 0);
+    assert(max(asn) == centers.size() - 1);
     clust::perform_hard_clustering(x, dist::JSD, prior, centers, asn, hardcosts);
     //minocore::perform_soft_clustering(x, minocore::distance::JSD, prior, centers, costs);
 }

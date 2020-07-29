@@ -14,6 +14,17 @@ enum CentroidPol {
     NOT_APPLICABLE
 };
 
+static constexpr const char *cp2str(CentroidPol pol) {
+    switch(pol) {
+     case FULL_WEIGHTED_MEAN: return "full weighted mean";
+     case L1_MEDIAN:          return "l1 median";
+     case TVD_MEDIAN:         return "tvd median";
+     case GEO_MEDIAN:         return "geo median";
+     default:
+     case NOT_APPLICABLE:     return "not applicable";
+    }
+}
+
 using namespace ::minocore::distance;
 
 static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) {
