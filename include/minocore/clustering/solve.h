@@ -89,19 +89,15 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
                              double eps=1e-10,
                              size_t maxiter=size_t(-1))
 {
-    auto compute_cost = [&]() {
-        FT ret;
-        if(weights)
-            ret = blz::dot(costs, *weights);
-        else
-            ret = blz::sum(costs);
-        return ret;
+    auto compute_cost = [&costs,w=weights]() {
+        if(w) return blz::dot(costs, *w);
+        else  return blz::sum(costs);
     };
     const int k = centers.size();
     const size_t np = costs.size();
-    std::fprintf(stderr, "Beginning perform_hard_clustering %s weights.\n", weights ? " with": " without");
+    std::fprintf(stderr, "Beginning perform_hard_clustering with%s weights.\n", weights ? "": "out");
     auto cost = compute_cost();
-    std::fprintf(stderr, "cost: %g\n", cost);
+    std::fprintf(stderr, "cost: %0.16g\n", cost);
     const auto initcost = cost;
     size_t iternum = 0;
     for(;;) {
@@ -112,10 +108,22 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
         assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights);
         std::fprintf(stderr, "Assigning points %zu\n", iternum);
         auto newcost = compute_cost();
-        if(cost - newcost < eps * initcost || ++iternum == maxiter)
+        if(cost - newcost < eps * initcost) {
+#ifndef NDEBUG
+            std::fprintf(stderr, "Relative cost difference %0.16g compared to threshold %0.16g determined by %0.16g eps and %0.16g init cost\n",
+                         cost - newcost, eps * initcost, eps, initcost);
+#endif
             break;
+        }
+        if(++iternum == maxiter) {
+#ifndef NDEBUG
+            std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
+#endif
+            break;
+        }
         cost = newcost;
     }
+    std::fprintf(stderr, "Completing clustering after %zu rounds. Initial cost %0.16g. Final cost %0.16g.\n", iternum, initcost, cost);
     return std::make_pair(initcost, cost);
 }
 
@@ -186,14 +194,22 @@ void set_centroids_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
 template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT>
 FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, double prior_sum)
 {
-    if(!blaze::IsSparseVector_v<CtrT> || !blaze::IsSparseVector_v<MatrixRowT> || prior_sum == 0.) {
-        auto logr = blz::neginf2zero(blz::log(mr));
-        auto logc = blz::neginf2zero(blz::log(ctr));
+    std::fprintf(stderr, "Calling msr_with_prior with data of dimension %zu, with a prior $\\Beta$ of %0.16g. Sums of center %0.16g and datapoint %0.16g\n", ctr.size(), prior[0],
+                 blz::sum(ctr), blz::sum(mr));
+    if constexpr(!blaze::IsSparseVector_v<CtrT> || !blaze::IsSparseVector_v<MatrixRowT>) {
+        point:
+        std::fprintf(stderr, "Using non-specialized form\n");
+        const auto div = 1. / (blz::sum(mr) + prior_sum);
+        auto pv = prior[0];
+        auto subr = (mr + pv) / (blz::sum(mr) + prior_sum);
+        auto subc = (ctr + pv) / (blz::sum(ctr) + prior_sum);
+        auto logr = blz::neginf2zero(blz::log(subr));
+        auto logc = blz::neginf2zero(blz::log(subc));
         switch(msr) {
             default: throw TODOError("Not yet done");
             case JSM: case JSD: {
                 FT ret;
-                auto mn = .5 * (mr + ctr);
+                auto mn = .5 * (subr + subc);
                 auto lmn = blaze::neginf2zero(log(mn));
                 ret = .5 * (blz::dot(mr, logr - lmn) + blz::dot(ctr, logc - lmn));
                 if(msr == JSM) ret = std::sqrt(ret);
@@ -208,9 +224,13 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 ALWAYS_INLINE
         {
             if constexpr(blaze::IsSparseVector_v<std::decay_t<decltype(src)>> && blaze::IsSparseVector_v<std::decay_t<decltype(ctr)>>) {
+                std::fprintf(stderr, "Calling merge::for_each_by_case!\n");
                 const size_t sharednz = merge::for_each_by_case(nd,
                                         src.begin(), src.end(), ctr.begin(), ctr.end(),
-                                        [&](auto, auto x, auto y) {init += sharedfunc(x, y);},
+                                        [&](auto, auto x, auto y) {
+                                            std::fprintf(stderr, "contribution of %0.16g and %0.16g is %0.16g\n", x, y, sharedfunc(x, y));
+                                            init += sharedfunc(x, y);
+                                        },
                                         [&](auto, auto x) {init += lhofunc(x);},
                                         [&](auto, auto y) {init += rhofunc(y);});
                 init += nsharedfunc(sharednz);
@@ -233,28 +253,48 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         const FT lhinc = prior[0] * lhrsi, rhinc = prior[0] * rhrsi;
         const FT rhl = std::log(rhinc), rhincl = rhl * rhinc;
         const FT lhl = std::log(lhinc), lhincl = lhl * lhinc;
-        const FT shl = std::log((lhinc + rhinc) * .5), shincl = (lhinc + rhinc) * .5 * shl;;
+        const FT shl = std::log((lhinc + rhinc) * .5), shincl = (lhinc + rhinc) * shl;
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
+        std::fprintf(stderr, "Sum of row weights: %0.16g\n", blz::sum(wr));
+        std::fprintf(stderr, "Sum of center weights: %0.16g\n", blz::sum(wc));
+        assert(std::abs(blz::sum(wr)) < 1.);
+        assert(blz::sum(wc) < 1.);
         // TODO: consider batching logs from sparse vectors with some extra dispatching code
         auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
         // Consider -ffast-math/-fassociative-math
         switch(msr) {
             case JSM:
             case JSD: {
+#ifndef NDEBUG
+                std::fprintf(stderr, "from lh value %0.16g and rh value %0.16g, mult = (%0.16g + %0.16g - %0.16g) * .5 = %0.16g\n", lhinc, rhinc, lhincl, rhincl, shincl, (lhincl + rhincl - shincl) * .5);
+#endif
                 ret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
                         auto xv = xval + lhinc, yv = yval + rhinc;
+#if VERBOSE_AF
+                        std::fprintf(stderr, "Calling both nonzero. %0.16g (%0.16g + %0.16g) vs %0.16g (%0.16g + %0.16g)\n",
+                                     xv, xval, lhinc, yv, yval, rhinc);
+#endif
                         auto addv = xv + yv, halfv = addv * .5;
                         return .5 * (xv * std::log(xv) + yv * std::log(yv) - std::log(halfv) * addv);
                     },
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {
+#if VERBOSE_AF
+                        std::fprintf(stderr, "Calling x nonzero. x prob: %0.16g (%0.16g + %0.16g). y prob: %0.16g (from prior)\n",
+                                     xval + lhinc, xval, lhinc, rhinc);
+#endif
                         auto xv = xval + lhinc;
+                        assert(xv <= 1.);
                         auto addv = xv + rhinc, halfv = addv * .5;
                         return .5 * (xv * std::log(xv) + rhincl - std::log(halfv) * addv);
                     },
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {
                         auto yv = yval + rhinc;
+#if VERBOSE_AF
+                        std::fprintf(stderr, "Calling y nonzero. x prob: %0.16g (from prior). y prob: %0.16g (%0.16g + %0.16g)\n",
+                                     lhinc, yv, yval, rhinc);
+#endif
                         auto addv = yv + lhinc, halfv = addv * .5;
                         return .5 * (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
                     },
@@ -262,7 +302,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         return x * mult;
                     });
                 if(msr == JSM) ret = std::sqrt(ret);
+                std::fprintf(stderr, "msr value is %0.16g\n", ret);
             }
+            break;
             case ITAKURA_SAITO: {
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
@@ -272,6 +314,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhinc / (yval + rhinc));},
                     /*sharedz*/    [&,mult=__isc(rhsum * lhrsi)](auto x) {return x * mult;});
             }
+            break;
             case REVERSE_ITAKURA_SAITO:
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
@@ -280,6 +323,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return __isc(rhinc / (xval + lhinc));},
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhrsi * (yval + rhinc));},
                     /*sharedz*/    [&,mult=__isc(lhsum * rhrsi)](auto x) {return x * mult;});
+            break;
             case MKL: {
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
@@ -332,16 +376,19 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
     auto compute_cost = [&](auto id, auto cid) {
         auto mr = row(~mat, id, blaze::unchecked);
         const auto &ctr = centers[cid];
-#if 1
-        auto mrmult = mr / blz::sum(mr);
-        auto wctr = ctr / blz::sum(ctr);
-#else
-        auto mrmult = mr * irowsums[id];
-        auto wctr = ctr * icsums[cid];
+        //auto mrmult = mr * (1. / (blz::sum(mr)));
+        //auto wctr = ctr * (1. / (blz::sum(ctr)));
+        //assert(measure == dist::JSD); // Temporary: this is only for sanity checking while debugging JSD calculation
+#if VERBOSE_AF
+        std::fprintf(stderr, "Calling compute_cost between item %u and center id %u with measure %d/%s\n",
+                     (int)id, (int)cid, (int)measure, dist::msr2str(measure));
 #endif
         FT ret;
         switch(measure) {
 
+#if 0
+            // UNCOMMENT THIS --
+            // this is just to do faster debugging
             // Geometric
             case L1: ret = blz::l1Norm(ctr - mr); break;
             case L2: ret = blz::l2Norm(ctr - mr); break;
@@ -357,31 +404,31 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
                 ret = measure == BHATTACHARYYA_METRIC ? std::sqrt(1. - sim)
                                                       : -std::log(sim);
             } break;
+#endif
 
             case POISSON: case JSD:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
             case SIS: case RSIS: case MKL:
                 ret = msr_with_prior(measure, ctr, mr, prior, prior_sum); break;
+#if 0
+            // case LLR, UWLLR
             case PROBABILITY_COSINE_DISTANCE:
-#if 1
                 ret = blz::dot(mrmult, wctr) * (1. / (blz::l2Norm(mrmult) * blz::l2Norm(wctr)));
-#else
-                ret = blz::dot(mrmult, wctr) * l2points[id] * l2centers[cid];
-#endif
             break;
             case COSINE_DISTANCE:
-#if 1
                 ret = blz::dot(mr, ctr) * (1. / (blz::l2Norm(mr) * blz::l2Norm(ctr)));
-#else
-                ret = blz::dot(mr, ctr) * l2points[id] * l2centers[cid];
-#endif
                 break;
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: case COSINE_SIMILARITY: case PROBABILITY_COSINE_SIMILARITY:
             case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
             case WEMD: case EMD: case OLLR:
             case JSM: std::fprintf(stderr, "No EM algorithm available for measure %d/%s\n", (int)measure, msr2str(measure));
             [[fallthrough]];
+#endif
             default: throw std::invalid_argument(std::string("Unupported measure ") + msr2str(measure));
+        }
+        if(unlikely(ret < 0)) {
+            std::fprintf(stderr, "Warning: got a negative distance back %0.16g under %d/%s. Check details!\n", ret, (int)measure, msr2str(measure));
+            throw std::runtime_error("negative measure of dissimilarity");
         }
         return ret;
     };
@@ -389,10 +436,13 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
         auto cost = compute_cost(i, 0);
         asn_t bestid = 0;
         for(unsigned j = 1; j < k; ++j)
-            if(auto newcost = compute_cost(i, 1); newcost < cost)
+            if(auto newcost = compute_cost(i, j); newcost < cost)
                 bestid = j, cost = newcost;
         costs[i] = cost;
         asn[i] = bestid;
+#ifndef NDEBUG
+        std::fprintf(stderr, "point %zu is assigned to center %u with cost %0.16g\n", i, bestid, cost);
+#endif
     }
 }
 template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>

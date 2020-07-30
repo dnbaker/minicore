@@ -2,6 +2,7 @@
 #include "src/tests/solvetestdata.cpp"
 
 namespace clust = minocore::clustering;
+using namespace minocore;
 
 template<typename LH, typename RH>
 INLINE double compute_cost(const LH &lh, const RH &rh, double psum, double pv) {
@@ -10,7 +11,7 @@ INLINE double compute_cost(const LH &lh, const RH &rh, double psum, double pv) {
     auto lhb = lh.begin(), lhe = lh.end();
     auto rhb = rh.begin(), rhe = rh.end();
     double ret = 0.;
-    auto func = [&](auto xv, auto yv) {
+    auto func = [&](auto xv, auto yv) ALWAYS_INLINE {
         xv *= lhi; yv *= rhi;
         auto mni = 2. / (xv + yv);
         return (xv * std::log(xv * mni) + yv * std::log(yv * mni));
@@ -22,12 +23,20 @@ INLINE double compute_cost(const LH &lh, const RH &rh, double psum, double pv) {
         [&,pv](auto,auto y) {ret += func(pv, y + pv);});
     ret += func(pv, pv) * sharednz;
     ret *= .5; // account for .5
+    ret = std::max(ret, 0.);
     return ret;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+    dist::print_measures();
     const size_t nr = x.rows(), nc = x.columns();
     blz::DV<double> prior{.1};
+    dist::DissimilarityMeasure msr = dist::JSD;
+    if(argc > 1) {
+        msr = (dist::DissimilarityMeasure)std::atoi(argv[1]);
+        std::fprintf(stderr, "This may not work if you change the measure but not the original costs\n");
+    }
+    std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
     std::vector<blaze::CompressedVector<double, blaze::rowVector>> centers;
     for(const auto id: {1018, 2624, 5481, 6006, 8972})
         centers.emplace_back(row(x, id));
@@ -46,14 +55,16 @@ int main() {
         asn[id] = bestid;
         return ret;
     });
-    std::fprintf(stderr, "Total cost: %g. max cost: %g\n", blz::sum(hardcosts), blz::max(hardcosts));
+    auto mnc = blz::min(hardcosts);
+    std::fprintf(stderr, "Total cost: %g. max cost: %g. min cost: %g\n", blz::sum(hardcosts), blz::max(hardcosts), mnc);
     std::vector<uint32_t> counts(k);
     for(const auto v: asn) ++counts[v];
     for(unsigned i = 0; i < k; ++i) {
-        std::fprintf(stderr, "Center %d with sum %g has %u supporting\n", i, blz::sum(centers[i]), counts[i]);
+        std::fprintf(stderr, "Center %d with sum %g has %u supporting, with total cost of assigned points %g\n", i, blz::sum(centers[i]), counts[i],
+                     blz::sum(blz::generate(nr, [&](auto id) { return asn[id] == i ? hardcosts[id]: 0.;})));
     }
     assert(min(asn) == 0);
     assert(max(asn) == centers.size() - 1);
-    clust::perform_hard_clustering(x, dist::JSD, prior, centers, asn, hardcosts);
+    clust::perform_hard_clustering(x, msr, prior, centers, asn, hardcosts);
     //minocore::perform_soft_clustering(x, minocore::distance::JSD, prior, centers, costs);
 }
