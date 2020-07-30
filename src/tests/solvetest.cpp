@@ -30,7 +30,7 @@ INLINE double compute_cost(const LH &lh, const RH &rh, double psum, double pv) {
 int main(int argc, char *argv[]) {
     dist::print_measures();
     const size_t nr = x.rows(), nc = x.columns();
-    blz::DV<double> prior{.1};
+    blz::DV<double> prior{1. / nc};
     dist::DissimilarityMeasure msr = dist::JSD;
     if(argc > 1) {
         msr = (dist::DissimilarityMeasure)std::atoi(argv[1]);
@@ -38,8 +38,13 @@ int main(int argc, char *argv[]) {
     }
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
     std::vector<blaze::CompressedVector<double, blaze::rowVector>> centers;
-    for(const auto id: {1018, 2624, 5481, 6006, 8972})
-        centers.emplace_back(row(x, id));
+    std::vector<int> ids{1018, 2624, 5481, 6006, 8972};
+    while(ids.size() < 10) {
+        auto rid = std::rand() % x.rows();
+        if(std::find(ids.begin(), ids.end(), rid) == ids.end())
+            ids.emplace_back(rid);
+    }
+    for(const auto id: ids) centers.emplace_back(row(x, id));
     const size_t k = centers.size();
     const double psum = prior[0] * nc, pv = prior[0];
     blz::DV<uint32_t> asn(nr);
