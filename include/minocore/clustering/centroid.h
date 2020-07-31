@@ -365,9 +365,9 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             }
             default: {
                 auto asp = asnv.data();
-                auto rowsel = rows(mat, asnv.data(), nasn);
+                auto rowsel = rows(mat, asp, nasn);
                 if(weights)
-                    coresets::l1_median(rowsel, ctrs[i], elements(*weights, asnv.data(), nasn));
+                    coresets::l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
                 else
                     coresets::l1_median(rowsel, ctrs[i]);
             } break;
@@ -376,7 +376,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
 }
 
 template<typename FT=double, typename Mat, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
-void set_centroids_tvd(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, WeightsT *weights) {
+void set_centroids_tvd(const Mat &, AsnT &, CostsT &, CtrsT &, WeightsT *) {
     throw std::invalid_argument("TVD clustering not supported explicitly; instead, normalize your count vectors and perform the clustering with L1");
 }
 
@@ -409,7 +409,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             std::partial_sum(costs.begin(), costs.end(), pd);
         }
         std::vector<uint32_t> idxleft;
-        for(int i = 0; i < k; ++i)
+        for(unsigned int i = 0; i < k; ++i)
             if(std::find(sa.begin(), sa.end(), i) == sa.end())
                 blz::push_back(idxleft, i);
         // Re-calculate for centers that have been removed

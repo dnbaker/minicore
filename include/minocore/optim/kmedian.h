@@ -161,7 +161,6 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<
     if((~ret).size() != nc) {
         (~ret).resize(nc);
     }
-    auto &rr = ~ret;
     if(unlikely((~data).columns() > ((uint64_t(1) << (sizeof(IT) * CHAR_BIT)) - 1)))
         throw std::runtime_error("Use a different index type, there are more features than fit in IT");
     const size_t nr = (~data).rows();

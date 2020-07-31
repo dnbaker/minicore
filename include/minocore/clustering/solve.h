@@ -93,8 +93,6 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
         if(w) return blz::dot(costs, *w);
         else  return blz::sum(costs);
     };
-    const int k = centers.size();
-    const size_t np = costs.size();
     std::fprintf(stderr, "Beginning perform_hard_clustering with%s weights.\n", weights ? "": "out");
     assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights); // Assign points myself
     const auto initcost = compute_cost();
@@ -438,7 +436,7 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
         if(ret < 0) {
             if(unlikely(ret < -1e-10)) {
                 std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s for ids %u/%u. Check details!\n", ret, (int)measure, msr2str(measure),
-                             id, cid);
+                             (unsigned)id, (unsigned)cid);
                 std::cerr << ctr << '\n';
                 std::cerr << mr << '\n';
                 std::abort();
