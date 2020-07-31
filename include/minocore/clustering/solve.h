@@ -89,16 +89,17 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
                              double eps=1e-10,
                              size_t maxiter=size_t(-1))
 {
-    auto compute_cost = [&costs,w=weights]() {
+    auto compute_cost = [&costs,w=weights]() -> FT {
         if(w) return blz::dot(costs, *w);
         else  return blz::sum(costs);
     };
     const int k = centers.size();
     const size_t np = costs.size();
     std::fprintf(stderr, "Beginning perform_hard_clustering with%s weights.\n", weights ? "": "out");
-    auto cost = compute_cost();
+    assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights); // Assign points myself
+    const auto initcost = compute_cost();
+    FT cost = initcost;
     std::fprintf(stderr, "cost: %0.12g\n", cost);
-    const auto initcost = cost;
     size_t iternum = 0;
     for(;;) {
         std::fprintf(stderr, "Beginning iter %zu\n", iternum);
@@ -108,6 +109,12 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
         assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights);
         std::fprintf(stderr, "Assigning points %zu\n", iternum);
         auto newcost = compute_cost();
+        if(newcost > cost) {
+            break;
+            auto msg = std::string("New cost ") + std::to_string(newcost) + "> original cost " + std::to_string(cost);
+            std::cerr << msg;
+            std::abort();
+        }
         if(cost - newcost < eps * initcost) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g init cost\n",
@@ -210,9 +217,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             default: throw TODOError("Not yet done");
             case JSM: case JSD: {
                 FT ret;
-                auto mn = .5 * (subr + subc);
+                auto mn = FT(.5) * (subr + subc);
                 auto lmn = blaze::neginf2zero(log(mn));
-                ret = .5 * (blz::dot(mr, logr - lmn) + blz::dot(ctr, logc - lmn));
+                ret = FT(.5) * (blz::dot(mr, logr - lmn) + blz::dot(ctr, logc - lmn));
                 if(msr == JSM) ret = std::sqrt(ret);
                 return ret;
             }
@@ -251,11 +258,11 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         FT ret;
         const FT lhsum = blz::sum(mr) + prior_sum;
         const FT rhsum = blz::sum(ctr) + prior_sum;
-        const FT lhrsi = 1. / lhsum, rhrsi = 1. / rhsum; // TODO: cache sums?
+        const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum; // TODO: cache sums?
         const FT lhinc = prior[0] * lhrsi, rhinc = prior[0] * rhrsi;
         const FT rhl = std::log(rhinc), rhincl = rhl * rhinc;
         const FT lhl = std::log(lhinc), lhincl = lhl * lhinc;
-        const FT shl = std::log((lhinc + rhinc) * .5), shincl = (lhinc + rhinc) * shl;
+        const FT shl = std::log((lhinc + rhinc) * FT(.5)), shincl = (lhinc + rhinc) * shl;
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
 #if 0
@@ -306,9 +313,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         return x * mult;
                     });
                 if(msr == JSM) ret = std::sqrt(ret);
-#if 0
-                std::fprintf(stderr, "msr value is %0.12g\n", ret);
-#endif
             }
             break;
             case ITAKURA_SAITO: {
@@ -333,8 +337,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case MKL: {
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
-                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) + rhl);},
-                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * std::log(yval + rhinc);},
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
                     /*sharedz*/    [lr=-lhinc * rhl](auto x) {return lr * x;});
             }
             break;
@@ -432,9 +436,15 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
 #endif
             default: throw std::invalid_argument(std::string("Unupported measure ") + msr2str(measure));
         }
-        if(unlikely(ret < 0)) {
-            std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s. Check details!\n", ret, (int)measure, msr2str(measure));
-            throw std::runtime_error("negative measure of dissimilarity");
+        if(ret < 0) {
+            if(unlikely(ret < -1e-10)) {
+                std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s for ids %u/%u. Check details!\n", ret, (int)measure, msr2str(measure),
+                             id, cid);
+                std::cerr << ctr << '\n';
+                std::cerr << mr << '\n';
+                std::abort();
+            }
+            ret = 0.;
         }
         return ret;
     };

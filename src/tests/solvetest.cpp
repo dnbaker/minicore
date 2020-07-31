@@ -13,6 +13,8 @@ INLINE double compute_cost(const LH &lh, const RH &rh, double psum, double pv) {
     double ret = 0.;
     auto func = [&](auto xv, auto yv) ALWAYS_INLINE {
         xv *= lhi; yv *= rhi;
+        assert(xv < 1.);
+        assert(yv < 1.);
         auto mni = 2. / (xv + yv);
         return (xv * std::log(xv * mni) + yv * std::log(yv * mni));
     };
@@ -21,7 +23,8 @@ INLINE double compute_cost(const LH &lh, const RH &rh, double psum, double pv) {
         [&,pv](auto,auto x, auto y) {ret += func(x + pv, y + pv);},
         [&,pv](auto,auto x) {ret += func(x + pv, pv);},
         [&,pv](auto,auto y) {ret += func(pv, y + pv);});
-    ret += func(pv, pv) * sharednz;
+    if(lhsum != rhsum)
+        ret += func(pv, pv) * sharednz;
     ret *= .5; // account for .5
     ret = std::max(ret, 0.);
     return ret;
@@ -31,7 +34,7 @@ int main(int argc, char *argv[]) {
     dist::print_measures();
     const size_t nr = x.rows(), nc = x.columns();
     blz::DV<double> prior{1. / nc};
-    dist::DissimilarityMeasure msr = dist::JSD;
+    dist::DissimilarityMeasure msr = dist::MKL;
     if(argc > 1) {
         msr = (dist::DissimilarityMeasure)std::atoi(argv[1]);
         std::fprintf(stderr, "This may not work if you change the measure but not the original costs\n");
@@ -61,7 +64,7 @@ int main(int argc, char *argv[]) {
         return ret;
     });
     auto mnc = blz::min(hardcosts);
-    std::fprintf(stderr, "Total cost: %g. max cost: %g. min cost: %g\n", blz::sum(hardcosts), blz::max(hardcosts), mnc);
+    std::fprintf(stderr, "Total cost: %g. max cost: %g. min cost: %g. mean cost:%g\n", blz::sum(hardcosts), blz::max(hardcosts), mnc, blz::mean(hardcosts));
     std::vector<uint32_t> counts(k);
     for(const auto v: asn) ++counts[v];
     for(unsigned i = 0; i < k; ++i) {
