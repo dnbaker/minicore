@@ -151,6 +151,7 @@ void set_centroids_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
 {
     MINOCORE_VALIDATE(dist::is_valid_measure(measure));
     const CentroidPol pol = msr2pol(measure);
+    std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));
     if(dist::is_bregman(measure)) {
         assert(FULL_WEIGHTED_MEAN == pol);
     }
@@ -277,9 +278,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         switch(msr) {
             case JSM:
             case JSD: {
-#if 0
-                std::fprintf(stderr, "from lh value %0.12g and rh value %0.12g, mult = (%0.12g + %0.12g - %0.12g) * .5 = %0.12g\n", lhinc, rhinc, lhincl, rhincl, shincl, (lhincl + rhincl - shincl) * .5);
-#endif
                 ret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
                         auto xv = xval + lhinc, yv = yval + rhinc;
@@ -288,7 +286,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                      xv, xval, lhinc, yv, yval, rhinc);
 #endif
                         auto addv = xv + yv, halfv = addv * .5;
-                        return .5 * (xv * std::log(xv) + yv * std::log(yv) - std::log(halfv) * addv);
+                        return (xv * std::log(xv) + yv * std::log(yv) - std::log(halfv) * addv);
                     },
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {
 #if VERBOSE_AF
@@ -298,7 +296,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         auto xv = xval + lhinc;
                         assert(xv <= 1.);
                         auto addv = xv + rhinc, halfv = addv * .5;
-                        return .5 * (xv * std::log(xv) + rhincl - std::log(halfv) * addv);
+                        return (xv * std::log(xv) + rhincl - std::log(halfv) * addv);
                     },
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {
                         auto yv = yval + rhinc;
@@ -307,11 +305,12 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                      lhinc, yv, yval, rhinc);
 #endif
                         auto addv = yv + lhinc, halfv = addv * .5;
-                        return .5 * (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
+                        return (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
                     },
-                    /*sharedz*/    [mult=(lhincl + rhincl - shincl) * .5](auto x) {
+                    /*sharedz*/    [mult=(lhincl + rhincl - shincl)](auto x) {
                         return x * mult;
                     });
+                ret = 0.5 * ret;
                 if(msr == JSM) ret = std::sqrt(ret);
             }
             break;

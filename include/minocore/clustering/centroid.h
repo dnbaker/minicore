@@ -470,30 +470,74 @@ void set_centroids_full_mean(const Mat &mat,
     const PriorT &prior, AsnT &asn, CostsT &costs, CtrsT &ctrs,
     WeightsT *weights)
 {
+    std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p\n", (void *)weights);
     //
 
+    assert(asn.size() == costs.size() || !std::fprintf(stderr, "asn size %zu, cost size %zu\n", asn.size(), costs.size()));
     using asn_t = std::decay_t<decltype(asn[0])>;
+    blaze::SmallArray<asn_t, 16> sa;
+    wy::WyRand<asn_t, 4> rng(costs.size()); // Used for restarting orphaned centers
     const size_t np = costs.size(), k = ctrs.size();
     std::vector<std::vector<asn_t>> assigned(k);
     std::unique_ptr<blz::DV<FT>> probup;
-    for(size_t i = 0; i < np; ++i)
-        blz::push_back(assigned[asn[i]], i);
-    wy::WyRand<asn_t, 4> rng(costs.size()); // Used for restarting orphaned centers
-    blaze::SmallArray<asn_t, 16> sa;
-    for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
-    while(!sa.empty()) {
-        char buf[1024];
-        std::sprintf(buf, "Restarting centers with no support for set_centroids_full_mean: %s as measure with prior of size %zu (%s)\n",
-                     msr2str(measure), prior.size(), prior.size() ? double(prior[0]): 0.);
-        throw TODOError(buf);
+    for(size_t i = 0; i < np; ++i) {
+        auto ai = asn[i];
+        if(ai > k) {
+            std::fprintf(stderr, "assigned value %d > %d\n", ai, k);
+            std::abort();
+        }
+        blz::push_back(assigned[ai], i);
     }
+#ifndef NDEBUG
+    for(unsigned i = 0; i < assigned.size(); ++i) std::fprintf(stderr, "Center %zd has %zu assigned points\n", i, assigned[i].size());
+#endif
+    for(unsigned i = 0; i < k; ++i)
+        if(assigned[i].empty())
+            blz::push_back(sa, i);
+    std::fprintf(stderr, "make sa. sa size: %zu\n", sa.size());
+    while(sa.size()) {
+        char buf[1024];
+        const auto pv = prior.size() ? FT(prior[0]): FT(0);
+        std::sprintf(buf, "Restarting centers with no support for set_centroids_full_mean: %s as measure with prior of size %zu (%g)\n",
+                     msr2str(measure), prior.size(), pv);
+        std::string msg = buf;
+        std::cerr << msg;
+        throw std::runtime_error(msg);
+        const constexpr RestartMethodPol restartpol = RESTART_GREEDY;
+        for(const auto id: sa) {
+            // Instead, use a temporary buffer to store partial sums and randomly select newly-started centers
+            // for D2, and just ran
+            std::ptrdiff_t r;
+    
+            if(restartpol == RESTART_GREEDY)
+                r = std::max_element(costs.begin(), costs.end()) - costs.begin();
+            else if(restartpol == RESTART_RANDOM)
+                r = rng() % costs.size();
+            else throw TODOError("D2 sampling-based restarting not yet completed; this simply uses a partial sum and selects by fraction of cost rather than greedily selecting the greatest.");
+            ctrs[id] = row(mat, r);
+            for(size_t i = 0; i < np; ++i) {
+                unsigned bestid = asn[i], obi = bestid;
+                for(unsigned j = 0; j < k; ++j) {
+                    if(j == bestid) continue;
+                    auto c = 0.;
+                    throw TODOError("Note: here it should instead consist of calls to msr_with_prior\n");
+                    if(c < costs[i]) costs[i] = c, bestid = j;
+                }
+                if(bestid != obi)
+                    asn[i] = bestid;
+            }
+        }
+    }
+    std::fprintf(stderr, "Computing centroids\n");
     for(unsigned i = 0; i < k; ++i) {
+        std::fprintf(stderr, "Computing centroid %u\n", i);
         // Compute mean for centroid
         const auto nasn = assigned[i].size();
         const auto asp = assigned[i].data();
         auto &ctr = ctrs[i];
         if(nasn == 1) ctr = row(mat, *asp);
         else {
+            std::fprintf(stderr, "Selecting rows\n");
             auto rowsel = rows(mat, asp, nasn);
             if(weights) {
                 auto elsel = elements(*weights, asp, nasn);
@@ -501,6 +545,7 @@ void set_centroids_full_mean(const Mat &mat,
                 // weighted sum over total weight -> weighted mean
                 ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
             } else ctr = blaze::mean<blaze::columnwise>(rowsel);
+            std::fprintf(stderr, "Set center %u\n", i);
         }
         // Adjust for prior
         if constexpr(blaze::IsDenseVector_v<CtrsT>) {
@@ -511,6 +556,7 @@ void set_centroids_full_mean(const Mat &mat,
             }
         }
     }
+    DBG_ONLY(std::fprintf(stderr, "Centroids set\n");)
 }
 
 } } // namespace minocore::clustering
