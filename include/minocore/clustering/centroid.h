@@ -1,10 +1,51 @@
 #ifndef MINOCORE_CLUSTERING_CENTROID_H__
 #define MINOCORE_CLUSTERING_CENTROID_H__
-#include "minocore/dist.h"
 #include "minocore/util/blaze_adaptor.h"
+#include "minocore/dist.h"
 #include "minocore/optim/kmedian.h"
 
 namespace minocore { namespace clustering {
+
+enum CentroidPol {
+    FULL_WEIGHTED_MEAN, // SQRL2, Bregman Divergences (+ convex combinations), cosine distance
+    L1_MEDIAN,          // L1
+    TVD_MEDIAN,         // Total variation distance, which is L1 in probability space
+    GEO_MEDIAN,         // L2 norm
+    NOT_APPLICABLE
+};
+
+static constexpr const char *cp2str(CentroidPol pol) {
+    switch(pol) {
+     case FULL_WEIGHTED_MEAN: return "full weighted mean";
+     case L1_MEDIAN:          return "l1 median";
+     case TVD_MEDIAN:         return "tvd median";
+     case GEO_MEDIAN:         return "geo median";
+     default:
+     case NOT_APPLICABLE:     return "not applicable";
+    }
+}
+
+using namespace ::minocore::distance;
+
+static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) {
+    switch(msr) {
+        case EMD: case WEMD: case JSM:
+        case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
+        default:
+            return NOT_APPLICABLE;
+
+        case UWLLR: case LLR: case MKL: case JSD: case SQRL2: case POISSON:
+        case REVERSE_POISSON: case REVERSE_MKL: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
+        case SYMMETRIC_ITAKURA_SAITO: case RSYMMETRIC_ITAKURA_SAITO:
+
+            return FULL_WEIGHTED_MEAN;
+
+        case L2:  return GEO_MEDIAN;
+        case L1:  return  L1_MEDIAN;
+        case TVD: return TVD_MEDIAN;
+
+    }
+}
 
 struct CentroidPolicy {
     template<typename VT, bool TF, typename Range, typename VT2=VT, typename RowSums>
@@ -236,6 +277,287 @@ struct CentroidPolicy {
         }
     }
 }; // CentroidPolicy
+
+template<typename FT=double, typename Mat, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
+void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, WeightsT *weights) {
+    const unsigned k = ctrs.size();
+    using asn_t = std::decay_t<decltype(asn[0])>;
+    std::vector<std::vector<asn_t>> assigned(ctrs.size());
+    std::unique_ptr<blz::DV<FT>> probup;
+    for(size_t i = 0; i < costs.size(); ++i) {
+        blz::push_back(assigned[asn[i]], i);
+    }
+    blaze::SmallArray<asn_t, 16> sa;
+    wy::WyRand<asn_t, 4> rng(costs.size());
+    for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
+    while(!sa.empty()) {
+        // Compute partial sum
+#ifndef NDEBUG
+        std::fprintf(stderr, "reseeding %zu centers\n", sa.size());
+#endif
+        if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
+        auto &probs = *probup;
+        FT *pd = probs.data(), *pe = pd + probs.size();
+        auto cb = costs.begin(), ce = costs.end();
+        if(weights) {
+            std::partial_sum(cb, ce, pd, [ds=&costs[0],&weights](auto x, const auto &y) {
+                return x + y * ((*weights)[&y - ds]);
+            });
+        } else std::partial_sum(cb, ce, pd);
+        std::vector<uint32_t> idxleft;
+        for(unsigned i = 0; i < k; ++i)
+            if(std::find(sa.begin(), sa.end(), i) == sa.end())
+                blz::push_back(idxleft, i);
+        // Re-calculate for centers that have been removed
+        for(auto idx: sa) {
+            for(auto assigned_id: assigned[idx]) {
+                auto ilit = idxleft.begin();
+                auto myr = row(mat, assigned_id);
+                auto fcost = blz::l1Norm(ctrs[*ilit++] - myr);
+                asn_t bestid = 0;
+                for(;ilit != idxleft.end();++ilit) {
+                    auto ncost = blz::l1Norm(ctrs[*ilit] - myr);
+                    if(ncost < fcost) bestid = *ilit, fcost = ncost;
+                }
+                costs[assigned_id] = fcost;
+                asn[assigned_id] = bestid;
+            }
+        }
+        // Use D2 sampling to re-seed
+        for(const auto idx: sa) {
+            std::uniform_real_distribution<double> dist;
+            std::ptrdiff_t found = std::lower_bound(pd, pe, dist(rng) * pe[-1]) - pd;
+            assert(found < (std::ptrdiff_t)(pe - pd));
+            ctrs[idx] = row(mat, found);
+            for(size_t i = 0; i < mat.rows(); ++i) {
+                const auto c = blz::l1Norm(ctrs[idx] - row(mat, i, blz::unchecked));
+                if(c < costs[i]) {
+                    asn[i] = idx;
+                    costs[i] = c;
+                }
+            }
+        }
+        for(auto &subasn: assigned) subasn.clear();
+        // Check for orphans again
+        sa.clear();
+        for(size_t i = 0; i < costs.size(); ++i) {
+            blz::push_back(assigned[asn[i]], i);
+        }
+        for(const auto &subasn: assigned) if(subasn.empty()) sa.pushBack(&subasn - assigned.data());
+    }
+    for(unsigned i = 0; i < k; ++i) {
+        const auto &asnv = assigned[i];
+        const auto nasn = asnv.size();
+        MINOCORE_VALIDATE(nasn != 0);
+        switch(nasn) {
+            case 1: ctrs[i] = row(mat, asnv[0]); break;
+            case 2: {
+                if(weights) {
+                    auto &w = *weights;
+                    const auto a0 = asnv[0], a1 = asnv[1];
+                    auto w0 = w[a0], w1 = w[a1];
+                    auto tw = w0 + w1;
+                    ctrs[i] = (1. / tw) * (row(mat, asnv[0]) * w[w0] + row(mat, asnv[1]) * w[w1]);
+                } else {
+                    ctrs[i] = .5 * (row(mat, asnv[0], blz::unchecked) + row(mat, asnv[1], blz::unchecked));
+                }
+                break;
+            }
+            default: {
+                auto asp = asnv.data();
+                auto rowsel = rows(mat, asp, nasn);
+                if(weights)
+                    coresets::l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
+                else
+                    coresets::l1_median(rowsel, ctrs[i]);
+            } break;
+        }
+    }
+}
+
+template<typename FT=double, typename Mat, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
+void set_centroids_tvd(const Mat &, AsnT &, CostsT &, CtrsT &, WeightsT *) {
+    throw std::invalid_argument("TVD clustering not supported explicitly; instead, normalize your count vectors and perform the clustering with L1");
+}
+
+template<typename FT=double, typename Mat, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
+void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, WeightsT *weights, double eps=0.) {
+    using asn_t = std::decay_t<decltype(asn[0])>;
+    std::vector<std::vector<asn_t>> assigned(ctrs.size());
+    const size_t np = costs.size();
+    const unsigned k = ctrs.size();
+    std::unique_ptr<blz::DV<FT>> probup;
+    for(size_t i = 0; i < np; ++i) {
+        blz::push_back(assigned[asn[i]], i);
+    }
+    wy::WyRand<asn_t, 4> rng(costs.size());
+    blaze::SmallArray<asn_t, 16> sa;
+    for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
+    while(!sa.empty()) {
+        // Compute partial sum
+#ifndef NDEBUG
+        std::fprintf(stderr, "reseeding %zu centers\n", sa.size());
+#endif
+        if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
+        auto &probs = *probup;
+        FT *pd = probs.data(), *pe = pd + probs.size();
+        if(weights) {
+            ::std::partial_sum(costs.begin(), costs.end(), pd, [&weights,ds=&costs[0]](auto x, const auto &y) {
+                return x + y * ((*weights)[&y - ds]);
+            });
+        } else {
+            std::partial_sum(costs.begin(), costs.end(), pd);
+        }
+        std::vector<uint32_t> idxleft;
+        for(unsigned int i = 0; i < k; ++i)
+            if(std::find(sa.begin(), sa.end(), i) == sa.end())
+                blz::push_back(idxleft, i);
+        // Re-calculate for centers that have been removed
+        for(auto idx: sa) {
+            for(auto assigned_id: assigned[idx]) {
+                auto ilit = idxleft.begin();
+                auto myr = row(mat, assigned_id);
+                auto fcost = blz::l2Norm(ctrs[*ilit++] - myr);
+                asn_t bestid = 0;
+                for(;ilit != idxleft.end();++ilit) {
+                    auto ncost = blz::l2Norm(ctrs[*ilit] - myr);
+                    if(ncost < fcost) bestid = *ilit, fcost = ncost;
+                }
+                costs[assigned_id] = fcost;
+                asn[assigned_id] = bestid;
+            }
+        }
+        // Use D2 sampling to re-seed
+        for(const auto idx: sa) {
+            std::uniform_real_distribution<double> dist;
+            std::ptrdiff_t found = std::lower_bound(pd, pe, dist(rng) * pe[-1]) - pd;
+            assert(found < (std::ptrdiff_t)(pe - pd));
+            ctrs[idx] = row(mat, found);
+            for(size_t i = 0; i < mat.rows(); ++i) {
+                const auto c = blz::l2Norm(ctrs[idx] - row(mat, i, blz::unchecked));
+                if(c < costs[i]) {
+                    asn[i] = idx;
+                    costs[i] = c;
+                }
+            }
+        }
+        for(auto &subasn: assigned) subasn.clear();
+        // Check for orphans again
+        sa.clear();
+        for(size_t i = 0; i < np; ++i) {
+            blz::push_back(assigned[asn[i]], i);
+        }
+        for(const auto &subasn: assigned) if(subasn.empty()) sa.pushBack(&subasn - assigned.data());
+    }
+    for(unsigned i = 0; i < k; ++i) {
+        const auto nasn = assigned[i].size();
+        const auto asp = assigned[i].data();
+        MINOCORE_VALIDATE(nasn != 0);
+        if(nasn == 1)
+            ctrs[i] = row(mat, *asp);
+        else {
+            auto rowsel = rows(mat, asp, nasn);
+            if(weights)
+                blz::geomedian(rowsel, ctrs[i], elements(costs, asp, nasn), eps);
+            else
+                blz::geomedian(rowsel, ctrs[i], eps);
+        }
+    }
+}
+template<typename FT=double, typename Mat, typename PriorT, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
+void set_centroids_full_mean(const Mat &mat,
+    const dist::DissimilarityMeasure measure,
+    const PriorT &prior, AsnT &asn, CostsT &costs, CtrsT &ctrs,
+    WeightsT *weights)
+{
+    std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p\n", (void *)weights);
+    //
+
+    assert(asn.size() == costs.size() || !std::fprintf(stderr, "asn size %zu, cost size %zu\n", asn.size(), costs.size()));
+    using asn_t = std::decay_t<decltype(asn[0])>;
+    blaze::SmallArray<asn_t, 16> sa;
+    wy::WyRand<asn_t, 4> rng(costs.size()); // Used for restarting orphaned centers
+    const size_t np = costs.size(), k = ctrs.size();
+    std::vector<std::vector<asn_t>> assigned(k);
+    std::unique_ptr<blz::DV<FT>> probup;
+    for(size_t i = 0; i < np; ++i) {
+        auto ai = asn[i];
+        if(ai > k) {
+            std::fprintf(stderr, "assigned value %d > %d\n", ai, k);
+            std::abort();
+        }
+        blz::push_back(assigned[ai], i);
+    }
+#ifndef NDEBUG
+    for(unsigned i = 0; i < assigned.size(); ++i) std::fprintf(stderr, "Center %zd has %zu assigned points\n", i, assigned[i].size());
+#endif
+    for(unsigned i = 0; i < k; ++i)
+        if(assigned[i].empty())
+            blz::push_back(sa, i);
+    std::fprintf(stderr, "make sa. sa size: %zu\n", sa.size());
+    while(sa.size()) {
+        char buf[1024];
+        const auto pv = prior.size() ? FT(prior[0]): FT(0);
+        std::sprintf(buf, "Restarting centers with no support for set_centroids_full_mean: %s as measure with prior of size %zu (%g)\n",
+                     msr2str(measure), prior.size(), pv);
+        std::string msg = buf;
+        std::cerr << msg;
+        throw std::runtime_error(msg);
+        const constexpr RestartMethodPol restartpol = RESTART_GREEDY;
+        for(const auto id: sa) {
+            // Instead, use a temporary buffer to store partial sums and randomly select newly-started centers
+            // for D2, and just ran
+            std::ptrdiff_t r;
+    
+            if(restartpol == RESTART_GREEDY)
+                r = std::max_element(costs.begin(), costs.end()) - costs.begin();
+            else if(restartpol == RESTART_RANDOM)
+                r = rng() % costs.size();
+            else throw TODOError("D2 sampling-based restarting not yet completed; this simply uses a partial sum and selects by fraction of cost rather than greedily selecting the greatest.");
+            ctrs[id] = row(mat, r);
+            for(size_t i = 0; i < np; ++i) {
+                unsigned bestid = asn[i], obi = bestid;
+                for(unsigned j = 0; j < k; ++j) {
+                    if(j == bestid) continue;
+                    auto c = 0.;
+                    throw TODOError("Note: here it should instead consist of calls to msr_with_prior\n");
+                    if(c < costs[i]) costs[i] = c, bestid = j;
+                }
+                if(bestid != obi)
+                    asn[i] = bestid;
+            }
+        }
+    }
+    std::fprintf(stderr, "Computing centroids\n");
+    for(unsigned i = 0; i < k; ++i) {
+        std::fprintf(stderr, "Computing centroid %u\n", i);
+        // Compute mean for centroid
+        const auto nasn = assigned[i].size();
+        const auto asp = assigned[i].data();
+        auto &ctr = ctrs[i];
+        if(nasn == 1) ctr = row(mat, *asp);
+        else {
+            std::fprintf(stderr, "Selecting rows\n");
+            auto rowsel = rows(mat, asp, nasn);
+            if(weights) {
+                auto elsel = elements(*weights, asp, nasn);
+                auto weighted_rows = rowsel % blaze::expand(elsel, mat.columns());
+                // weighted sum over total weight -> weighted mean
+                ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
+            } else ctr = blaze::mean<blaze::columnwise>(rowsel);
+            std::fprintf(stderr, "Set center %u\n", i);
+        }
+        // Adjust for prior
+        if constexpr(blaze::IsDenseVector_v<CtrsT>) {
+            switch(prior.size()) {
+                case 1:  ctr += prior[0]; break;
+                default: ctr += prior;    break;
+                case 0:;
+            }
+        }
+    }
+    DBG_ONLY(std::fprintf(stderr, "Centroids set\n");)
+}
 
 } } // namespace minocore::clustering
 

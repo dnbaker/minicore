@@ -1,5 +1,5 @@
 #include "H5Cpp.h"
-#include "mio/single_include/mio/mio.hpp"
+#include "thirdparty/mio.hpp"
 #include <cassert>
 #include <memory>
 //#include <h5cpp/hdf5.hpp>

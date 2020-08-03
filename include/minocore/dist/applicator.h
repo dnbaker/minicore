@@ -49,6 +49,9 @@ public:
     MatrixType &data() const {return data_;}
     const VecT &row_sums() const {return row_sums_;}
     size_t size() const {return data_.rows();}
+    auto rs(size_t i) const {return row_sums_[i];}
+    DissimilarityApplicator(const DissimilarityApplicator &o) = delete;
+    DissimilarityApplicator(DissimilarityApplicator &&o) = default;
     template<typename PriorContainer=blaze::DynamicVector<FT, blaze::rowVector>>
     DissimilarityApplicator(MatrixType &ref,
                       DissimilarityMeasure measure=JSM,
@@ -282,7 +285,7 @@ public:
 #ifndef NDEBUG
         if(ind > logdata_.rows()) {std::fprintf(stderr, "ind %zu too large (%zu rows)\n", ind, logdata_.rows()); std::exit(1);}
 #endif
-        return blaze::row(logdata_, ind BLAZE_CHECK_DEBUG); 
+        return blaze::row(logdata_, ind BLAZE_CHECK_DEBUG);
     }
     decltype(auto) sqrtrow(size_t ind) const {return blaze::row(sqrdata_, ind BLAZE_CHECK_DEBUG);}
 
@@ -764,7 +767,7 @@ public:
                 std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%p\n", i, (void *)&o);
                 throw std::runtime_error(buf);
             }
-            // For derivation, see below in 
+            // For derivation, see below in
             // FT sis(size_t i, size_t j) const
             static constexpr FT offset = -.6931471805599453;
             auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
@@ -1025,8 +1028,8 @@ public:
     }
 
     FT hellinger(size_t i, size_t j) const {
-        return sqrdata_.rows() ? blaze::sqrNorm(sqrtrow(i) - sqrtrow(j))
-                               : blaze::sqrNorm(blaze::sqrt(row(i)) - blaze::sqrt(row(j)));
+        return sqrdata_.rows() ? blaze::l2Norm(sqrtrow(i) - sqrtrow(j))
+                               : blaze::l2Norm(blaze::sqrt(row(i)) - blaze::sqrt(row(j)));
     }
     FT jsd(size_t i, size_t j) const {
         FT ret;
@@ -1078,8 +1081,8 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     FT jsd(size_t i, const OT &o, const OT2 &olog) const {
-        auto mnlog = evaluate(log(0.5 * (row(i) + o)));
-        return (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
+        const auto mnlog = evaluate(log(0.5 * (row(i) + o)));
+        return .5 * (blaze::dot(row(i), logrow(i) - mnlog) + blaze::dot(o, olog - mnlog));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT jsd(size_t i, const OT &o) const {
@@ -1123,10 +1126,9 @@ public:
                             update_x(pd[ind] * bothsi); update_y(pd[ind] * rhi);
                         });
                 }
-                return ret;
+                return ret * 0.5;
             }
         }
-        auto olog = evaluate(blaze::neginf2zero(blaze::log(o)));
         return jsd(i, o, evaluate(blaze::neginf2zero(blaze::log(o))));
     }
     FT mkl(size_t i, size_t j) const {
@@ -1148,7 +1150,7 @@ public:
                     const FT rhincl = std::log(rhinc);
                     const FT empty_contrib = -lhinc * rhincl;
                     auto nz = merge::for_each_by_case(dim, lhit, lhe, rhit, rhe,
-                        [&](auto, auto xval, auto yval) ALWAYS_INLINE {ret -= (xval + lhinc) + std::log(yval + rhinc);},
+                        [&](auto, auto xval, auto yval) ALWAYS_INLINE {ret -= (xval + lhinc) * std::log(yval + rhinc);},
                         [&](auto, auto xval) ALWAYS_INLINE  {ret -= (xval + lhinc) * rhincl;},
                         [&](auto, auto yval) ALWAYS_INLINE  {ret -= lhinc * std::log(yval + rhinc);});
                     ret += empty_contrib * nz;
@@ -1654,6 +1656,10 @@ private:
         }
         return std::max(ret, FT(0.));
     }
+public:
+    ~DissimilarityApplicator() {
+        data_ %= blaze::expand(trans(row_sums_ + prior_sum_), data_.columns()); // Undo the re-weighting
+    }
 }; // DissimilarityApplicator
 
 template<typename T>
@@ -1662,18 +1668,6 @@ template<typename MT>
 struct is_dissimilarity_applicator<DissimilarityApplicator<MT>>: std::true_type {};
 template<typename T>
 static constexpr bool is_dissimilarity_applicator_v = is_dissimilarity_applicator<T>::value;
-
-template<typename MT1, typename MT2>
-struct PairDissimilarityApplicator {
-    DissimilarityApplicator<MT1> &pda_;
-    DissimilarityApplicator<MT2> &pdb_;
-    PairDissimilarityApplicator(DissimilarityApplicator<MT1> &lhs, DissimilarityApplicator<MT2> &rhs): pda_(lhs), pdb_(rhs) {
-        if(lhs.measure_ != rhs.measure_) throw std::runtime_error("measures must be the same (for preprocessing reasons).");
-    }
-    decltype(auto) operator()(size_t i, size_t j) const {
-        return pda_(i, pdb_.row(j));
-    }
-};
 
 template<typename MatrixType>
 class MultinomialJSDApplicator: public DissimilarityApplicator<MatrixType> {
@@ -1730,6 +1724,158 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
                     seed + 1, sens);
     return cs;
 }
+
+
+template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT>
+FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, double prior_sum)
+{
+#if VERBOSE_AF
+    std::fprintf(stderr, "Calling msr_with_prior with data of dimension %zu, with a prior $\\Beta$ of %0.12g. Sums of center %0.12g and datapoint %0.12g\n", ctr.size(), prior[0],
+                 blz::sum(ctr), blz::sum(mr));
+#endif
+    if constexpr(!blaze::IsSparseVector_v<CtrT> && !blaze::IsSparseVector_v<MatrixRowT>) {
+        std::fprintf(stderr, "Using non-specialized form\n");
+        const auto div = 1. / (blz::sum(mr) + prior_sum);
+        auto pv = prior[0];
+        auto subr = (mr + pv) / (blz::sum(mr) + prior_sum);
+        auto subc = (ctr + pv) / (blz::sum(ctr) + prior_sum);
+        auto logr = blz::neginf2zero(blz::log(subr));
+        auto logc = blz::neginf2zero(blz::log(subc));
+        switch(msr) {
+            default: throw TODOError("Not yet done");
+            case JSM: case JSD: {
+                FT ret;
+                auto mn = FT(.5) * (subr + subc);
+                auto lmn = blaze::neginf2zero(log(mn));
+                ret = FT(.5) * (blz::dot(mr, logr - lmn) + blz::dot(ctr, logc - lmn));
+                if(msr == JSM) ret = std::sqrt(ret);
+                return ret;
+            }
+            case MKL: return blz::dot(mr, logr - logc);
+        }
+    } else if constexpr(blaze::IsSparseVector_v<CtrT> && blaze::IsSparseVector_v<MatrixRowT>) {
+        const size_t nd = mr.size();
+        auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, const auto &nsharedfunc)
+            -> FT
+        {
+            if constexpr(blaze::IsSparseVector_v<std::decay_t<decltype(src)>> && blaze::IsSparseVector_v<std::decay_t<decltype(ctr)>>) {
+                const size_t sharednz = merge::for_each_by_case(nd,
+                                        src.begin(), src.end(), ctr.begin(), ctr.end(),
+                                        [&](auto, auto x, auto y) {
+#if VERBOSE_AF
+                                            std::fprintf(stderr, "contribution of %0.12g and %0.12g is %0.12g\n", x, y, sharedfunc(x, y));
+#endif
+                                            init += sharedfunc(x, y);
+                                        },
+                                        [&](auto, auto x) {init += lhofunc(x);},
+                                        [&](auto, auto y) {init += rhofunc(y);});
+                init += nsharedfunc(sharednz);
+            } else if constexpr(blaze::IsDenseVector_v<std::decay_t<decltype(src)>> && blaze::IsDenseVector_v<std::decay_t<decltype(ctr)>>) {
+                throw TODOError("");
+            } else {
+                throw TODOError("mixed densities;");
+            }
+            return init;
+        };
+        // Perform core now takes:
+        // 1. Initialization
+        // 2-4. Functions for sharednz, lhnz, rhnz
+        // 5. Function for number of shared zeros
+        // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
+        FT ret;
+        const FT lhsum = blz::sum(mr) + prior_sum;
+        const FT rhsum = blz::sum(ctr) + prior_sum;
+        const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum; // TODO: cache sums?
+        const FT lhinc = prior[0] * lhrsi, rhinc = prior[0] * rhrsi;
+        const FT rhl = std::log(rhinc), rhincl = rhl * rhinc;
+        const FT lhl = std::log(lhinc), lhincl = lhl * lhinc;
+        const FT shl = std::log((lhinc + rhinc) * FT(.5)), shincl = (lhinc + rhinc) * shl;
+        auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
+        auto wc = ctr * rhrsi; //
+#if 0
+        std::fprintf(stderr, "Sum of row weights: %0.12g\n", blz::sum(wr));
+        std::fprintf(stderr, "Sum of center weights: %0.12g\n", blz::sum(wc));
+#endif
+        assert(std::abs(blz::sum(wr)) < 1.);
+        assert(blz::sum(wc) < 1.);
+        // TODO: consider batching logs from sparse vectors with some extra dispatching code
+        auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
+        // Consider -ffast-math/-fassociative-math
+        switch(msr) {
+            case JSM:
+            case JSD: {
+                ret = perform_core(wr, wc, FT(0),
+                   [&](auto xval, auto yval) ALWAYS_INLINE {
+                        auto xv = xval + lhinc, yv = yval + rhinc;
+#if VERBOSE_AF
+                        std::fprintf(stderr, "Calling both nonzero. %0.12g (%0.12g + %0.12g) vs %0.12g (%0.12g + %0.12g)\n",
+                                     xv, xval, lhinc, yv, yval, rhinc);
+#endif
+                        auto addv = xv + yv, halfv = addv * .5;
+                        return (xv * std::log(xv) + yv * std::log(yv) - std::log(halfv) * addv);
+                    },
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {
+#if VERBOSE_AF
+                        std::fprintf(stderr, "Calling x nonzero. x prob: %0.12g (%0.12g + %0.12g). y prob: %0.12g (from prior)\n",
+                                     xval + lhinc, xval, lhinc, rhinc);
+#endif
+                        auto xv = xval + lhinc;
+                        assert(xv <= 1.);
+                        auto addv = xv + rhinc, halfv = addv * .5;
+                        return (xv * std::log(xv) + rhincl - std::log(halfv) * addv);
+                    },
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {
+                        auto yv = yval + rhinc;
+#if VERBOSE_AF
+                        std::fprintf(stderr, "Calling y nonzero. x prob: %0.12g (from prior). y prob: %0.12g (%0.12g + %0.12g)\n",
+                                     lhinc, yv, yval, rhinc);
+#endif
+                        auto addv = yv + lhinc, halfv = addv * .5;
+                        return (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
+                    },
+                    /*sharedz*/    [mult=(lhincl + rhincl - shincl)](auto x) {
+                        return x * mult;
+                    });
+                ret = 0.5 * ret;
+                if(msr == JSM) ret = std::sqrt(ret);
+            }
+            break;
+            case ITAKURA_SAITO: {
+                ret = perform_core(wr, wc, -FT(nd),
+                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
+                        return __isc((xval + lhinc) / (yval + rhinc));
+                    },
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return __isc((xval + lhinc) * rhrsi);},
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhinc / (yval + rhinc));},
+                    /*sharedz*/    [&,mult=__isc(rhsum * lhrsi)](auto x) {return x * mult;});
+            }
+            break;
+            case REVERSE_ITAKURA_SAITO:
+                ret = perform_core(wr, wc, -FT(nd),
+                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
+                        return __isc((yval + rhinc) / (xval + lhinc));
+                    },
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return __isc(rhinc / (xval + lhinc));},
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhrsi * (yval + rhinc));},
+                    /*sharedz*/    [&,mult=__isc(lhsum * rhrsi)](auto x) {return x * mult;});
+            break;
+            case MKL: {
+                ret = perform_core(wr, wc, 0.,
+                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
+                    /*sharedz*/    [lr=-lhinc * rhl](auto x) {return lr * x;});
+            }
+            break;
+            case SIS:
+            case RSIS:
+            case UWLLR: case LLR:
+            default: throw TODOError("unexpected msr; not yet supported");
+        }
+        return ret;
+    }
+}
+
 
 } // namespace cmp
 

@@ -572,7 +572,7 @@ using functional::indices_if;
 
 // Solve geometric median for a set of points.
 template<typename MT, bool SO, typename VT, typename WeightType>
-auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType *weights, double eps=0)
+auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weights, double eps=0)
 {
     if((~mat).rows() == 1) return ~dv = row((~mat), 0);
     const auto &_mat = ~mat;
@@ -615,8 +615,40 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType 
     }
     return ~dv;
 }
+// Solve geometric median for a set of points.
+template<typename MT, bool SO, typename VT, typename WeightType, typename=std::enable_if_t<!std::is_arithmetic_v<WeightType>>>
+auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType &weights, double eps=0.)
+{
+    if((~mat).rows() == 1) return ~dv = row((~mat), 0);
+    const auto &_mat = ~mat;
+    using FT = typename std::decay_t<decltype(~mat)>::ElementType;
+    FT prevcost = std::numeric_limits<FT>::max();
+    size_t iternum = 0;
+    assert((~dv).size() == (~mat).columns());
+    DV<FT, SO> costs(_mat.rows());
+    std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
+    for(;;) {
+        OMP_PFOR
+        for(size_t i = 0; i < _mat.rows(); ++i)
+            costs[i] = weights[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
+        FT current_cost = sum(costs);
+        FT dist;
+        std::fprintf(stderr, "Current cost: %g.\n", current_cost);
+        if((dist = std::abs(prevcost - current_cost)) <= eps) break;
+        if(unlikely(std::isnan(dist))) {
+            std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+            break;
+        }
+        ++iternum;
+        costs = 1. / costs;
+        costs *= 1. / blaze::sum(costs);
+        ~dv = trans(costs) * ~mat;
+        prevcost = current_cost;
+    }
+    return ~dv;
+}
 template<typename MT, bool SO, typename VT>
-auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=0) {
+auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, double eps=0) {
     return geomedian<MT, SO, VT, blz::ElementType_t<MT>>(mat, dv, static_cast<blaze::ElementType_t<MT> *>(nullptr), eps);
 }
 

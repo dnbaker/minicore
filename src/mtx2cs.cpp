@@ -6,8 +6,6 @@
 
 using namespace minocore;
 
-namespace dist = minocore::distance;
-
 using minocore::util::timediff2ms;
 
 SumOpts opts;

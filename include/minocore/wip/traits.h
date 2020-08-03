@@ -4,6 +4,8 @@
 namespace minocore {
 namespace clustering {
 
+#pragma message("Note: clusteringtraits has been deprecated in favor of SumOpts")
+
 using ClusteringEnumType = std::size_t;
 using ce_t = ClusteringEnumType;
 

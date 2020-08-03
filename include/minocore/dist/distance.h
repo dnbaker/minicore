@@ -299,6 +299,9 @@ static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {
         default: return "INVALID TYPE";
     }
 }
+static constexpr INLINE const char *msr2str(DissimilarityMeasure d) {
+    return prob2str(d);
+}
 static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";
@@ -391,6 +394,15 @@ static constexpr bool is_valid_measure(DissimilarityMeasure measure) {
     }
     return false;
 }
+
+
+enum RestartMethodPol {
+    RESTART_D2,
+    RESTART_GREEDY,
+    RESTART_RANDOM
+};
+
+
 } // detail
 
 
