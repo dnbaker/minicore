@@ -18,7 +18,7 @@
 | UWLLR | dissimilarity measure | `UWLLR` | 14 | non-metric, but can be processed as a data-dependent rho-metric. As the prior rises, the $\rho$-violation of the triangle inequality shrinks. JSD and S2JSD LS hash functions will likely work for this and LLR|
 
 
-### Metrics, pseuometrics, and measures
+### Metrics, pseudometrics, and measures
 Of the above, there are strict metrics: L1, L2, JSM, Hellinger, Bhattacharyya, and TVD
 
 Some are constant-factor $\rho$-metrics (SQRL2)
