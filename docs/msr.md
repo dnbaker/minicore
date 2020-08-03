@@ -42,3 +42,5 @@ L2 uses Gaussian sampling + p-stable distributions.
 
 Hellinger, JSD, LLR, and UWLLR nearest neighbors can be found using Hellinger/JSD LSH function, which is itself a reduction to the L2 nearest neighbors for the square roots of the probability vectors.
 Because of the relations between TVD, JSD, and Hellinger, techniques that work for one often work for another.
+
+http://eduardovalle.com/wordpress/wp-content/uploads/2014/10/silva14sisapLargeScaleMetricLSH.pdf provides techniques for non-metrics; additionally, their use of kmeans++ for nearest neighbor lookup comparisons suggests that there may be a way to use importance sampling via D2 sampling as a hack around a proper LSH table.
