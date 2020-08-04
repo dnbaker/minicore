@@ -91,18 +91,23 @@ class JSDLSHasher {
 public:
     using ElementType = FT;
     static constexpr bool StorageOrder = SO;
+    static constexpr const FT rngnorm = 1.0/(1ull<<52);
     JSDLSHasher(LSHasherSettings settings, const double r, uint64_t seed=0): settings_(settings) {
         unsigned nd = settings.dim_, nh = settings.nhashes();
         if(seed == 0) seed = nd * nh + r;
-        std::mt19937_64 mt(seed);
+        seed |= 1; // Ensures that the seed is odd, necessary
         std::normal_distribution<FT> gen;
-        randproj_ = blaze::generate(nh, nd, [&](size_t x, size_t y){
-            std::mt19937_64 mt(seed + x + seed * y);
-            return gen(mt);
+        randproj_ = blaze::generate(nh, nd, [seed](uint64_t x, size_t y) ALWAYS_INLINE {
+            x = 0x5851f42d4c957f2duLL ^ (((x << 32) | y) * 0x219223e8e0b5407buLL) + seed;
+            uint32_t xorshift = ((x >> 18) ^ x) >> 27u, rot = x >> 59;
+            x = ((xorshift >> rot) | (xorshift << ((-rot) & 31)) >> 52);
+            return (x >> 12) * rngnorm;
         });
         randproj_ /= r;
-        boffsets_ = blaze::generate(nh, [&](size_t){return FT(mt()) / mt.max();});
-        assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow, I suppose
+        boffsets_.resize(nh);
+        std::mt19937_64 mt(seed);
+        for(auto &i: boffsets_) i = FT(mt()) / mt.max();
+        assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow
     }
     template<typename VT>
     decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {

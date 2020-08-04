@@ -197,6 +197,7 @@ void set_centroids_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
 
 #endif
 
+#if 0
 template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT>
 FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, double prior_sum)
 {
@@ -213,7 +214,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         auto logr = blz::neginf2zero(blz::log(subr));
         auto logc = blz::neginf2zero(blz::log(subc));
         switch(msr) {
-            default: throw TODOError("Not yet done");
+            default:
+            std::cerr << "Not yet implemented " << msr2str(msr) << '\n';
+            std::abort();
             case JSM: case JSD: {
                 FT ret;
                 auto mn = FT(.5) * (subr + subc);
@@ -243,9 +246,11 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                         [&](auto, auto y) {init += rhofunc(y);});
                 init += nsharedfunc(sharednz);
             } else if constexpr(blaze::IsDenseVector_v<std::decay_t<decltype(src)>> && blaze::IsDenseVector_v<std::decay_t<decltype(ctr)>>) {
-                throw TODOError("");
+                std::cerr << "Not supported: dense vectors\n";
+                std::abort();
             } else {
-                throw TODOError("mixed densities;");
+                std::cerr << "Not supported: mixed density vectors\n";
+                std::abort();
             }
             return init;
         };
@@ -347,6 +352,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         return ret;
     }
 }
+#endif
 
 template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
 void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
@@ -368,6 +374,8 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
                           : prior.size() == 1
                           ? double(prior[0] * (~mat).columns())
                           : double(blz::sum(prior));
+    blaze::DynamicVector<FT, blaze::rowVector> center_sums = trans(blaze::generate(k, [&centers](auto x) {return blz::sum(centers[x]);}));
+    std::fprintf(stderr, "[%s]: %d-clustering with %s and %zu dimensions\n", __func__, k, dist::msr2str(measure), centers[0].size());
 
     // Compute distance function
     // Handles similarity measure, caching, and the use of a prior for exponential family models
@@ -383,8 +391,9 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
     auto compute_cost = [&](auto id, auto cid) {
         auto mr = row(~mat, id, blaze::unchecked);
         const auto &ctr = centers[cid];
-        //auto mrmult = mr * (1. / (blz::sum(mr)));
-        //auto wctr = ctr * (1. / (blz::sum(ctr)));
+        assert(ctr.size() == mr.size());
+        auto mrmult = mr / (blz::sum(mr));
+        auto wctr = ctr * (1. / (center_sums[cid]));
         //assert(measure == dist::JSD); // Temporary: this is only for sanity checking while debugging JSD calculation
 #if VERBOSE_AF
         std::fprintf(stderr, "Calling compute_cost between item %u and center id %u with measure %d/%s\n",
@@ -393,11 +402,10 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
         FT ret;
         switch(measure) {
 
-#if 0
             // UNCOMMENT THIS --
             // this is just to do faster debugging
             // Geometric
-            case L1: ret = blz::l1Norm(ctr - mr); break;
+            case L1: ret = blz::sum(blz::abs(ctr - mr)); break; // Replacing l1Norm with blz::sum(blz::abs due to error in norm backend
             case L2: ret = blz::l2Norm(ctr - mr); break;
             case SQRL2: ret = blz::sqrNorm(ctr - mr); break;
             case PSL2: ret = blz::sqrNorm(wctr - mrmult); break;
@@ -411,12 +419,11 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
                 ret = measure == BHATTACHARYYA_METRIC ? std::sqrt(1. - sim)
                                                       : -std::log(sim);
             } break;
-#endif
 
             case POISSON: case JSD:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
             case SIS: case RSIS: case MKL:
-                ret = msr_with_prior(measure, ctr, mr, prior, prior_sum); break;
+                ret = cmp::msr_with_prior(measure, ctr, mr, prior, prior_sum); break;
 #if 0
             // case LLR, UWLLR
             case PROBABILITY_COSINE_DISTANCE:
@@ -431,7 +438,7 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
             case JSM: std::fprintf(stderr, "No EM algorithm available for measure %d/%s\n", (int)measure, msr2str(measure));
             [[fallthrough]];
 #endif
-            default: throw std::invalid_argument(std::string("Unupported measure ") + msr2str(measure));
+            default: throw std::invalid_argument(std::string("Unsupported measure ") + msr2str(measure));
         }
         if(ret < 0) {
             if(unlikely(ret < -1e-10)) {

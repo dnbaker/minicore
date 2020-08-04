@@ -32,6 +32,8 @@ INLINE double compute_cost(const LH &lh, const RH &rh, double psum, double pv) {
 
 int main(int argc, char *argv[]) {
     dist::print_measures();
+    if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv)
+        std::exit(1);
     const size_t nr = x.rows(), nc = x.columns();
     blz::DV<double> prior{1. / nc};
     dist::DissimilarityMeasure msr = dist::MKL;

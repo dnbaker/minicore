@@ -296,8 +296,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         std::fprintf(stderr, "reseeding %zu centers\n", sa.size());
 #endif
         if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
-        auto &probs = *probup;
-        FT *pd = probs.data(), *pe = pd + probs.size();
+        FT *pd = probup->data(), *pe = pd + probup->size();
         auto cb = costs.begin(), ce = costs.end();
         if(weights) {
             std::partial_sum(cb, ce, pd, [ds=&costs[0],&weights](auto x, const auto &y) {
@@ -400,7 +399,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
 #endif
         if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
         auto &probs = *probup;
-        FT *pd = probs.data(), *pe = pd + probs.size();
+        FT *pd = probup->data(), *pe = pd + probup->size();
         if(weights) {
             ::std::partial_sum(costs.begin(), costs.end(), pd, [&weights,ds=&costs[0]](auto x, const auto &y) {
                 return x + y * ((*weights)[&y - ds]);
@@ -457,6 +456,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             ctrs[i] = row(mat, *asp);
         else {
             auto rowsel = rows(mat, asp, nasn);
+            std::cerr << "Calculating geometric median and storing in " << ctrs[i] << '\n';
             if(weights)
                 blz::geomedian(rowsel, ctrs[i], elements(costs, asp, nasn), eps);
             else
@@ -500,27 +500,26 @@ void set_centroids_full_mean(const Mat &mat,
         const auto pv = prior.size() ? FT(prior[0]): FT(0);
         std::sprintf(buf, "Restarting centers with no support for set_centroids_full_mean: %s as measure with prior of size %zu (%g)\n",
                      msr2str(measure), prior.size(), pv);
-        std::string msg = buf;
-        std::cerr << msg;
-        throw std::runtime_error(msg);
+        std::cerr << buf;
         const constexpr RestartMethodPol restartpol = RESTART_GREEDY;
+        const FT psum = prior.size() == 1 ? FT(prior[0]) * prior.size(): blz::sum(prior);
         for(const auto id: sa) {
             // Instead, use a temporary buffer to store partial sums and randomly select newly-started centers
             // for D2, and just ran
             std::ptrdiff_t r;
-    
             if(restartpol == RESTART_GREEDY)
                 r = std::max_element(costs.begin(), costs.end()) - costs.begin();
             else if(restartpol == RESTART_RANDOM)
                 r = rng() % costs.size();
-            else throw TODOError("D2 sampling-based restarting not yet completed; this simply uses a partial sum and selects by fraction of cost rather than greedily selecting the greatest.");
+            else
+                throw TODOError("D2 sampling-based restarting not yet completed; this simply uses a partial sum and selects by fraction of cost rather than greedily selecting the greatest.");
             ctrs[id] = row(mat, r);
             for(size_t i = 0; i < np; ++i) {
                 unsigned bestid = asn[i], obi = bestid;
+                auto r = row(mat, i, blaze::unchecked);
                 for(unsigned j = 0; j < k; ++j) {
-                    if(j == bestid) continue;
-                    auto c = 0.;
-                    throw TODOError("Note: here it should instead consist of calls to msr_with_prior\n");
+                    if(j == obi) continue;
+                    const auto c = cmp::msr_with_prior(measure, ctrs[j], r, prior, psum);
                     if(c < costs[i]) costs[i] = c, bestid = j;
                 }
                 if(bestid != obi)

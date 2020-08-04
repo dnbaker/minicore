@@ -585,6 +585,10 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weig
     if(weights)
         cv.reset(new CustomVector<WeightType, unaligned, unpadded, SO>(const_cast<WeightType *>(weights), _mat.rows()));
     for(;;) {
+#ifndef NDEBUG
+        std::fprintf(stderr, "Iteration %zu for matrix %zu/%zu and vector %zu with weights at %p\n",
+                     iternum + 1, (~mat).rows(), (~mat).columns(), (~dv).size(), (void *)weights);
+#endif
         if(cv) {
             auto &cvr = *cv;
             OMP_PFOR
@@ -592,11 +596,17 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weig
                 costs[i] = cvr[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
         } else {
 #if 1
-            OMP_PFOR
-            for(size_t i = 0; i < _mat.rows(); ++i)
-                costs[i] = blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
+            for(size_t i = 0; i < _mat.rows(); ++i) {
+                std::cerr << "cost before is: " << costs[i] << '\n';
+                const auto r = row(_mat, i, blaze::unchecked) - ~dv;
+                std::cerr << "Row: " << row(_mat, i) << '\n';
+                std::cerr << "center: " << ~dv << '\n';
+                costs[i] = blz::sqrt(blz::max(blz::sum(r * r), ElementType_t<MT>(0)));
+                if(std::isnan(costs[i]))
+                    std::cerr << "cost after is NAN: " << costs[i] << '\n';
+            }
 #else
-            costs = sqrt(sum<rowwise>(blz::pow(_mat - exp, 2))); // pow2 seems broken
+            costs = sqrt(sum<rowwise>(blz::pow(_mat - blaze::expand(~dv, (~mat).rows()), 2))); // pow2 seems broken
 #endif
         }
         FT current_cost = sum(costs);
@@ -605,7 +615,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weig
         if((dist = std::abs(prevcost - current_cost)) <= eps) break;
         if(unlikely(std::isnan(dist))) {
             std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
-            break;
+            throw std::runtime_error("Optimization failed: nan");
         }
         ++iternum;
         costs = 1. / costs;
