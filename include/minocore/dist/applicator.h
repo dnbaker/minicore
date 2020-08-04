@@ -1755,7 +1755,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         }
     } else if constexpr(blaze::IsSparseVector_v<CtrT> && blaze::IsSparseVector_v<MatrixRowT>) {
         const size_t nd = mr.size();
-        auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, const auto &nsharedfunc)
+        auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, auto nsharedmult)
             -> FT
         {
             if constexpr(blaze::IsSparseVector_v<std::decay_t<decltype(src)>> && blaze::IsSparseVector_v<std::decay_t<decltype(ctr)>>) {
@@ -1769,7 +1769,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                         },
                                         [&](auto, auto x) ALWAYS_INLINE {init += lhofunc(x);},
                                         [&](auto, auto y) ALWAYS_INLINE {init += rhofunc(y);});
-                init += nsharedfunc(sharednz);
+                init += sharednz * nsharedmult;
             } else if constexpr(blaze::IsDenseVector_v<std::decay_t<decltype(src)>> && blaze::IsDenseVector_v<std::decay_t<decltype(ctr)>>) {
                 throw TODOError("");
             } else {
@@ -1818,13 +1818,34 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         auto addv = yv + lhinc, halfv = addv * .5;
                         return (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
                     },
-                    /*sharedz*/    [mult=(lhincl + rhincl - shincl)](auto x) {
-                        return x * mult;
-                    });
+                    lhincl + rhincl - shincl);
                 ret = 0.5 * ret;
                 if(msr == JSM) ret = std::sqrt(ret);
             }
             break;
+            case UWLLR: {
+                throw TODOError();
+                auto bothsum = lhsum + rhsum;
+                auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
+                ret = perform_core(wr, wc, FT(0),
+                   [&](auto xval, auto yval) ALWAYS_INLINE {
+                        auto xv = xval + lhinc, yv = yval + rhinc;
+                        auto addv = xv + yv, halfv = addv * .5;
+                        return (xv * std::log(xv) + yv * std::log(yv) - std::log(halfv) * addv);
+                    },
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {
+                        auto xv = xval + lhinc;
+                        assert(xv <= 1.);
+                        auto addv = xv + rhinc, halfv = addv * .5;
+                        return (xv * std::log(xv) + rhincl - std::log(halfv) * addv);
+                    },
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {
+                        auto yv = yval + rhinc;
+                        auto addv = yv + lhinc, halfv = addv * .5;
+                        return (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
+                    },
+                    lhincl + rhincl - shincl);
+            }
             case ITAKURA_SAITO: {
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
@@ -1832,7 +1853,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     },
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return __isc((xval + lhinc) * rhrsi);},
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhinc / (yval + rhinc));},
-                    /*sharedz*/    [&,mult=__isc(rhsum * lhrsi)](auto x) {return x * mult;});
+                    __isc(rhsum * lhrsi));
             }
             break;
             case REVERSE_ITAKURA_SAITO:
@@ -1842,19 +1863,19 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     },
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return __isc(rhinc / (xval + lhinc));},
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhrsi * (yval + rhinc));},
-                    /*sharedz*/    [&,mult=__isc(lhsum * rhrsi)](auto x) {return x * mult;});
+                    __isc(lhsum * rhrsi));
             break;
             case MKL: {
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
-                    /*sharedz*/    [lr=-lhinc * rhl](auto x) {return lr * x;});
+                    -lhinc * rhl);
             }
             break;
             case SIS:
             case RSIS:
-            case UWLLR: case LLR:
+            case LLR:
             default: throw TODOError("unexpected msr; not yet supported");
         }
         return ret;

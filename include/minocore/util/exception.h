@@ -10,6 +10,7 @@ inline namespace exception {
 struct TODOError: public std::runtime_error {
     template<typename...A>
     TODOError(A &&...a): std::runtime_error(std::forward<A>(a)...) {}
+    TODOError(): std::runtime_error("TODO: this") {}
 };
 
 class NotImplementedError: public std::runtime_error {

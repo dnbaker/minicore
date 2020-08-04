@@ -597,11 +597,13 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weig
         } else {
 #if 1
             for(size_t i = 0; i < _mat.rows(); ++i) {
-                std::cerr << "cost before is: " << costs[i] << '\n';
                 const auto r = row(_mat, i, blaze::unchecked) - ~dv;
+#if 0
+                std::cerr << "cost before is: " << costs[i] << '\n';
                 std::cerr << "Row: " << row(_mat, i) << '\n';
                 std::cerr << "center: " << ~dv << '\n';
-                costs[i] = blz::sqrt(blz::max(blz::sum(r * r), ElementType_t<MT>(0)));
+#endif
+                costs[i] = blz::sqrt(blz::sum(r * r));
                 if(std::isnan(costs[i]))
                     std::cerr << "cost after is NAN: " << costs[i] << '\n';
             }

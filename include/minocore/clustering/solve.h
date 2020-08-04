@@ -422,7 +422,7 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
 
             case POISSON: case JSD:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
-            case SIS: case RSIS: case MKL:
+            case SIS: case RSIS: case MKL: case UWLLR: case LLR:
                 ret = cmp::msr_with_prior(measure, ctr, mr, prior, prior_sum); break;
 #if 0
             // case LLR, UWLLR
