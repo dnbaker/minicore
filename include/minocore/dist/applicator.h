@@ -1824,28 +1824,32 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             }
             break;
             case UWLLR: {
-                throw TODOError();
-                auto bothsum = lhsum + rhsum;
-                auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
+                const auto bothsum = lhsum + rhsum;
+                const auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
+                const auto emptymean = lambda * lhinc + m1l * rhinc;
+                const auto emptycontrib = lambda * lhinc * std::log(lhinc / emptymean) + m1l * rhinc * std::log(rhinc / emptymean);
                 ret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
                         auto xv = xval + lhinc, yv = yval + rhinc;
-                        auto addv = xv + yv, halfv = addv * .5;
-                        return (xv * std::log(xv) + yv * std::log(yv) - std::log(halfv) * addv);
+                        auto meanv = lambda * xv + m1l * yv, mi = FT(1.) / meanv;
+                        auto xvl = std::log(xv * mi), yvl = std::log(yv * mi);
+                        return lambda * xv * xvl + m1l * yv * yvl;
                     },
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {
                         auto xv = xval + lhinc;
-                        assert(xv <= 1.);
-                        auto addv = xv + rhinc, halfv = addv * .5;
-                        return (xv * std::log(xv) + rhincl - std::log(halfv) * addv);
+                        auto meanv = lambda * xv + m1l * rhinc, mi = FT(1) / meanv;
+                        auto xvl = std::log(xv * mi), yvl = std::log(rhinc * mi);
+                        return lambda * xv * xvl + m1l * rhinc * yvl;
                     },
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {
                         auto yv = yval + rhinc;
-                        auto addv = yv + lhinc, halfv = addv * .5;
-                        return (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
+                        auto meanv = lambda * lhinc + m1l * (yval + rhinc), mi = FT(1) / meanv;
+                        auto xvl = std::log(lhinc * mi), yvl = std::log(yv * mi);
+                        return lambda * lhinc * xvl + m1l * yv * yvl;
                     },
-                    lhincl + rhincl - shincl);
+                    emptycontrib);
             }
+            break;
             case ITAKURA_SAITO: {
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
