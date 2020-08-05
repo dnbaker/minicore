@@ -5,6 +5,7 @@ namespace clust = minocore::clustering;
 using namespace minocore;
 
 int main(int argc, char *argv[]) {
+    std::ios_base::sync_with_stdio(false);
     dist::print_measures();
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv)
         std::exit(1);

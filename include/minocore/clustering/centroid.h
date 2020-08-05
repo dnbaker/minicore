@@ -34,6 +34,8 @@ static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) 
         default:
             return NOT_APPLICABLE;
 
+        case COSINE_DISTANCE: // I think this is right, but the rest I am sure are right.
+
         case UWLLR: case LLR: case MKL: case JSD: case SQRL2: case POISSON:
         case REVERSE_POISSON: case REVERSE_MKL: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case RSYMMETRIC_ITAKURA_SAITO:

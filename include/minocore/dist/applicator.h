@@ -1742,18 +1742,28 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         auto logr = blz::neginf2zero(blz::log(subr));
         auto logc = blz::neginf2zero(blz::log(subc));
         switch(msr) {
-            default: throw TODOError("Not yet done");
+            default: throw TODOError(std::string("Not yet done: ") + dist::msr2str(msr) + "/" + std::to_string((int)msr));
             case JSM: case JSD: {
-                FT ret;
                 auto mn = FT(.5) * (subr + subc);
                 auto lmn = blaze::neginf2zero(log(mn));
-                ret = FT(.5) * (blz::dot(mr, logr - lmn) + blz::dot(ctr, logc - lmn));
+                auto ret = FT(.5) * (blz::dot(mr, logr - lmn) + blz::dot(ctr, logc - lmn));
                 if(msr == JSM) ret = std::sqrt(ret);
                 return ret;
             }
             case MKL: return blz::dot(mr, logr - logc);
+            case L1: return blz::l1Dist(ctr, mr);
+            case L2: return blz::l2Dist(ctr, mr);
+            case SQRL2: return blz::sqrDist(ctr, mr);
+            case COSINE_DISTANCE: return cmp::cosine_distance(ctr, mr); // TODO: cache norms for each line
         }
     } else if constexpr(blaze::IsSparseVector_v<CtrT> && blaze::IsSparseVector_v<MatrixRowT>) {
+        // If geometric, 
+        switch(msr) {
+            case L1: return blz::l1Dist(ctr, mr);
+            case L2: return blz::l2Dist(ctr, mr);
+            case SQRL2: return blz::sqrDist(ctr, mr);
+            default: ; // do nothing
+        }
         const size_t nd = mr.size();
         auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, auto nsharedmult)
             -> FT
