@@ -1823,6 +1823,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 if(msr == JSM) ret = std::sqrt(ret);
             }
             break;
+            case LLR:
             case UWLLR: {
                 const auto bothsum = lhsum + rhsum;
                 const auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
@@ -1848,6 +1849,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         return lambda * lhinc * xvl + m1l * yv * yvl;
                     },
                     emptycontrib);
+                if(msr == LLR) ret *= bothsum;
             }
             break;
             case ITAKURA_SAITO: {
@@ -1879,7 +1881,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             break;
             case SIS:
             case RSIS:
-            case LLR:
             default: throw TODOError("unexpected msr; not yet supported");
         }
         return ret;

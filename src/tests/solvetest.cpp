@@ -4,32 +4,6 @@
 namespace clust = minocore::clustering;
 using namespace minocore;
 
-template<typename LH, typename RH>
-INLINE double compute_cost(const LH &lh, const RH &rh, double psum, double pv) {
-    auto lhsum = blz::sum(lh) + psum, rhsum = blz::sum(rh) + psum;
-    auto lhi = 1. / lhsum, rhi = 1. / rhsum;
-    auto lhb = lh.begin(), lhe = lh.end();
-    auto rhb = rh.begin(), rhe = rh.end();
-    double ret = 0.;
-    auto func = [&](auto xv, auto yv) ALWAYS_INLINE {
-        xv *= lhi; yv *= rhi;
-        assert(xv < 1.);
-        assert(yv < 1.);
-        auto mni = 2. / (xv + yv);
-        return (xv * std::log(xv * mni) + yv * std::log(yv * mni));
-    };
-    auto sharednz = minocore::merge::for_each_by_case(
-        lh.size(), lhb, lhe, rhb, rhe,
-        [&,pv](auto,auto x, auto y) {ret += func(x + pv, y + pv);},
-        [&,pv](auto,auto x) {ret += func(x + pv, pv);},
-        [&,pv](auto,auto y) {ret += func(pv, y + pv);});
-    if(lhsum != rhsum)
-        ret += func(pv, pv) * sharednz;
-    ret *= .5; // account for .5
-    ret = std::max(ret, 0.);
-    return ret;
-}
-
 int main(int argc, char *argv[]) {
     dist::print_measures();
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv)
@@ -51,14 +25,14 @@ int main(int argc, char *argv[]) {
     }
     for(const auto id: ids) centers.emplace_back(row(x, id));
     const size_t k = centers.size();
-    const double psum = prior[0] * nc, pv = prior[0];
+    const double psum = prior[0] * nc;
     blz::DV<uint32_t> asn(nr);
     blz::DV<double> hardcosts = blaze::generate(nr, [&](auto id) {
         auto r = row(x, id);
         uint32_t bestid = 0;
-        double ret = compute_cost(centers[0], r, psum, pv);
+        double ret = cmp::msr_with_prior(msr, r, centers.front(), prior, psum);
         for(unsigned j = 1; j < k; ++j) {
-            auto x = compute_cost(centers[j], r, psum, pv);
+            double x = cmp::msr_with_prior(msr, r, centers[j], prior, psum);
             if(x < ret) ret = x, bestid = j;
         }
         assert(id < asn.size());
