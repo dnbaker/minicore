@@ -96,10 +96,9 @@ public:
         unsigned nd = settings.dim_, nh = settings.nhashes();
         if(seed == 0) seed = nd * nh + r;
         seed |= 1; // Ensures that the seed is odd, necessary
-        std::normal_distribution<FT> gen;
         randproj_ = blaze::generate(nh, nd, [seed](uint64_t x, size_t y) ALWAYS_INLINE {
-            x = 0x5851f42d4c957f2duLL ^ (((x << 32) | y) * 0x219223e8e0b5407buLL) + seed;
-            uint32_t xorshift = ((x >> 18) ^ x) >> 27u, rot = x >> 59;
+            x = 0x5851f42d4c957f2duLL ^ ((((x << 32) | y) * 0x219223e8e0b5407buLL) + seed);
+            uint64_t xorshift = ((x >> 18) ^ x) >> 27u, rot = x >> 59;
             x = ((xorshift >> rot) | (xorshift << ((-rot) & 31)) >> 52);
             return (x >> 12) * rngnorm;
         });
@@ -112,22 +111,26 @@ public:
     template<typename VT>
     decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {
         //std::fprintf(stderr, "Regular input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
-        return blaze::ceil(randproj_ * blaze::sqrt(~input) + boffsets_);
+        return randproj_ * blaze::sqrt(~input) + boffsets_;
     }
     template<typename VT>
     decltype(auto) hash(const blaze::Vector<VT, !SO> &input) const {
         //std::fprintf(stderr, "Reversed input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
-        return blaze::ceil(randproj_ * trans(blaze::sqrt(~input)) + boffsets_);
+        return randproj_ * trans(blaze::sqrt(~input)) + boffsets_;
     }
     template<typename VT>
     decltype(auto) hash(const blaze::Matrix<VT, SO> &input) const {
         //std::fprintf(stderr, "Regular input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (~input).rows(), (~input).columns(), randproj_.rows(), randproj_.columns());
-        return trans(blaze::ceil(randproj_ * trans(blaze::sqrt(~input)) + blaze::expand(boffsets_, (~input).rows())));
+        return trans(randproj_ * trans(blaze::sqrt(~input)) + blaze::expand(boffsets_, (~input).rows()));
     }
     template<typename VT>
     decltype(auto) hash(const blaze::Matrix<VT, !SO> &input) const {
         //std::fprintf(stderr, "Reversed SO input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (~input).rows(), (~input).columns(), randproj_.rows(), randproj_.columns());
-        return trans(blaze::ceil(randproj_ * blaze::sqrt(~input) + blaze::expand(boffsets_, (~input).columns())));
+        return trans(randproj_ * blaze::sqrt(~input) + blaze::expand(boffsets_, (~input).columns()));
+    }
+    template<typename...Args>
+    decltype(auto) hash(Args &&...args) const {
+        return ceil(project(std::forward<Args>(args)...));
     }
     const auto &matrix() const {return randproj_;}
     auto dim() const {return randproj_.columns();}
@@ -169,28 +172,32 @@ public:
         assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow, I suppose
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {
-        if constexpr(use_offsets) return blaze::floor(randproj_ * (~input) + 1. + boffsets_);
-        else                      return blaze::floor(randproj_ * (~input));
+    decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
+        if constexpr(use_offsets) return randproj_ * (~input) + 1. + boffsets_;
+        else                      return randproj_ * (~input);
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, !SO> &input) const {
-        if constexpr(use_offsets) return blaze::floor(randproj_ * trans(~input) + 1. + boffsets_);
-        else                      return blaze::floor(randproj_ * trans(~input));
+    decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
+        if constexpr(use_offsets) return randproj_ * trans(~input) + 1. + boffsets_;
+        else                      return randproj_ * trans(~input);
     }
     template<typename MT>
-    decltype(auto) hash(const blaze::Matrix<MT, SO> &input) const {
+    decltype(auto) project(const blaze::Matrix<MT, SO> &input) const {
         if constexpr(use_offsets)
-            return trans(blaze::floor(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).rows())));
+            return trans(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).rows()));
         else
-            return trans(blaze::floor(randproj_ * trans(~input)));
+            return trans(randproj_ * trans(~input));
     }
     template<typename MT>
-    decltype(auto) hash(const blaze::Matrix<MT, !SO> &input) const {
+    decltype(auto) project(const blaze::Matrix<MT, !SO> &input) const {
         if constexpr(use_offsets)
-            return trans(blaze::floor(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).columns())));
+            return trans(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).columns()));
         else
-            return trans(blaze::floor(randproj_ * trans(~input)));
+            return trans(randproj_ * trans(~input));
+    }
+    template<typename...HArgs>
+    decltype(auto) hash(Args &&...args) const {
+        return floor(project(std::forward<HArgs>(args)...));
     }
     const auto &matrix() const {return randproj_;}
     auto dim() const {return settings_.dim_;}
@@ -265,25 +272,36 @@ public:
         if(seed == 0) seed = nd * nh  + w + 1. / w;
         std::mt19937_64 mt(seed);
         std::normal_distribution<FT> gen;
-        randproj_ = blaze::abs(blaze::generate(nh, nd, [&](size_t, size_t){return gen(mt);}) * (4. / (w * w)));
-        boffsets_ = blaze::generate(nh, [&](size_t){return FT(mt() / 2) / mt.max();}) - 0.5;
+        auto wyseed = mt();
+        randproj_ = blaze::abs(blaze::generate(nh, nd, [&](size_t i, size_t j){
+            wy::WyHash<uint64_t> wyh(((i << 32) | j) ^ wyseed);
+            return gen(wyh);
+        }) * (4. / (w * w)));
+        wyseed = mt();
+        boffsets_ = blaze::generate<SO>(nh, [&](size_t i) {
+            return (wy::WyHash<uint64_t>(i ^ wyseed)() >> 12) * (1. / (1ull << 52));
+        }) - 0.5;
         assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow, I suppose
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {
-        return blaze::floor(blaze::sqrt(randproj_ * (~input) + 1.) + boffsets_);
+    decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
+        return blaze::sqrt(randproj_ * (~input) + 1.) + boffsets_;
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, !SO> &input) const {
-        return blaze::floor(blaze::sqrt(randproj_ * trans(~input) + 1.) + boffsets_);
+    decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
+        return blaze::sqrt(randproj_ * trans(~input) + 1.) + boffsets_;
     }
     template<typename MT>
-    decltype(auto) hash(const blaze::Matrix<MT, SO> &input) const {
-        return trans(blaze::floor(blaze::sqrt(randproj_ * trans(~input) + 1.) + blaze::expand(boffsets_, (~input).rows())));
+    decltype(auto) project(const blaze::Matrix<MT, SO> &input) const {
+        return trans(blaze::sqrt(randproj_ * trans(~input) + 1.) + blaze::expand(boffsets_, (~input).rows()));
     }
     template<typename MT>
-    decltype(auto) hash(const blaze::Matrix<MT, !SO> &input) const {
-        return trans(blaze::floor(blaze::sqrt(randproj_ * (trans(~input)) + 1.) + blaze::expand(boffsets_, (~input).columns())));
+    decltype(auto) project(const blaze::Matrix<MT, !SO> &input) const {
+        return trans(blaze::sqrt(randproj_ * (trans(~input)) + 1.) + blaze::expand(boffsets_, (~input).columns()));
+    }
+    template<typename...Args>
+    decltype(auto) hash(Args &&...args) const {
+        return floor(project(std::forward<Args>(args)...));
     }
     const auto &matrix() const {return randproj_;}
     auto dim() const {return settings_.dim_;}

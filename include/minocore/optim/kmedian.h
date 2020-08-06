@@ -15,9 +15,9 @@ static INLINE void __assign(blaze::DenseVector<VT, TF> &vec, IT ind, FT val) {
 template<typename VT, bool TF, typename FT, typename IT>
 static INLINE void __assign(blaze::SparseVector<VT, TF> &vec, IT ind, FT val) {
     auto &rr = ~vec;
-    if(val > FT(0.)) {
-        if(rr.nonZeros() == rr.capacity())
-            rr.reserve(std::max(rr.capacity() << 1, size_t(4)));
+    if(val != FT(0.)) {
+        if(rr.capacity() <= rr.nonZeros() + 1)
+            rr.reserve(std::max((rr.nonZeros() + 1) << 1, size_t(4)));
         rr.append(ind, val);
     }
 }
@@ -91,7 +91,6 @@ void sparse_l1_unweighted_median(const blz::SparseMatrix<MT, SO> &data, blz::Vec
                 pq.push(pair);
             } else if(pq.empty()) break;
         }
-        auto &cref = ctr[cid++];
         const size_t vsz = vals.size();
         FT val;
         if(vsz < hlf) {
@@ -101,7 +100,8 @@ void sparse_l1_unweighted_median(const blz::SparseMatrix<MT, SO> &data, blz::Vec
             const size_t idx = vals.size() - nr / 2 - 1;
             val = odd ? vals[idx]: (vals[idx] + vals[idx + 1]) * FT(.5);
         }
-        __assign(ctr, cid++, val);
+        __assign(ctr, cid, val);
+        ++cid;
         vals.clear();
     }
     if constexpr(blaze::IsDenseVector_v<VT>) {
@@ -117,16 +117,20 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT, TF> &
         return;
     }
 #endif
-    std::fprintf(stderr, "Dense unweighted l1 median\n");
+    std::fprintf(stderr, "%s unweighted l1 median. data shape: %zu/%zu. Return shape: %zu\n", blaze::IsDenseMatrix_v<MT> ? "Dense": "Sparse", (~data).rows(), (~data).columns(), (~ret).size());
     assert((~ret).size() == (~data).columns());
     auto &rr(~ret);
     const auto &dr(~data);
     const bool odd = dr.rows() % 2;
     const size_t hlf = dr.rows() / 2;
+    blaze::DynamicVector<ElementType_t<MT>, blaze::columnVector> dv;
     for(size_t i = 0; i < dr.columns(); ++i) {
-        blaze::DynamicVector<ElementType_t<MT>, blaze::columnVector> tmpind = column(data, i); // Should do fast copying.
-        shared::sort(tmpind.begin(), tmpind.end());
-        __assign(rr, i,  odd ? tmpind[hlf]: ElementType_t<MT>(.5) * (tmpind[hlf - 1] + tmpind[hlf]));
+        dv = column(dr, i);
+        // Should do fast copying.
+        shared::sort(dv.begin(), dv.end());
+        auto val = odd ? dv[hlf]: ElementType_t<MT>(.5) * (dv[hlf - 1] + dv[hlf]);
+        std::fprintf(stderr, "Setting value %g for index %zu\n", val, i);
+        __assign(rr, i,  val);
     }
 }
 
