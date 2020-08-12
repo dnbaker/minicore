@@ -595,7 +595,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weig
             for(size_t i = 0; i < _mat.rows(); ++i)
                 costs[i] = cvr[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
         } else {
-#if 1
+#if 0
             for(size_t i = 0; i < _mat.rows(); ++i) {
                 const auto r = row(_mat, i, blaze::unchecked) - ~dv;
                 std::cerr << "row #" << i << " is " << r << '\n';

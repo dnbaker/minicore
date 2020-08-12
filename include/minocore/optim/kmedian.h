@@ -17,16 +17,11 @@ template<typename VT, bool TF, typename FT, typename IT>
 static INLINE void __assign(blaze::SparseVector<VT, TF> &vec, IT ind, FT val) {
     static_assert(std::is_integral_v<IT>, "Sanity1");
     static_assert(std::is_arithmetic_v<FT>, "Sanity2");
-    std::fprintf(stderr, "Setting value %g for index %zu\n", val, ind);
     auto &rr = ~vec;
-    std::cerr << "value before: " << rr[ind] << '\n';
-    std::cerr << "rr before: " << rr << '\n';
     if(val != FT(0.)) {
         if(rr.capacity() <= rr.nonZeros() + 1)
             rr.reserve(std::max((rr.nonZeros() + 1) << 1, size_t(4)));
         rr.append(ind, val);
-        std::cerr << "value after: " << rr[ind] << '\n';
-        std::cerr << "rr after: " << rr << '\n';
     }
 }
 #else
@@ -150,7 +145,9 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT, TF> &
         // Should do fast copying.
         shared::sort(dv.begin(), dv.end());
         auto val = odd ? dv[hlf]: ElementType_t<MT>(.5) * (dv[hlf - 1] + dv[hlf]);
+#if 0
         std::fprintf(stderr, "val %g at %zu\n", val, i);
+#endif
         __assign(rr, i,  val);
         assert(rr[i] == val || !std::fprintf(stderr, "rr[i] %g vs %g\n", rr[i], val));
     }
