@@ -286,7 +286,9 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     using asn_t = std::decay_t<decltype(asn[0])>;
     std::vector<std::vector<asn_t>> assigned(ctrs.size());
     std::unique_ptr<blz::DV<FT>> probup;
+    assert(costs.size() == asn.size());
     for(size_t i = 0; i < costs.size(); ++i) {
+        assert(asn[i] < assigned.size());
         blz::push_back(assigned[asn[i]], i);
     }
     blaze::SmallArray<asn_t, 16> sa;
@@ -350,6 +352,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         const auto &asnv = assigned[i];
         const auto nasn = asnv.size();
         MINOCORE_VALIDATE(nasn != 0);
+        std::fprintf(stderr, "Processing L1 centroid %u for %zu points\n", i, nasn);
         switch(nasn) {
             case 1: ctrs[i] = row(mat, asnv[0]); break;
             case 2: {
@@ -366,6 +369,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             }
             default: {
                 auto asp = asnv.data();
+                std::fprintf(stderr, "Selecting %zu rows\n", nasn);
                 auto rowsel = rows(mat, asp, nasn);
                 if(weights)
                     coresets::l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
@@ -458,11 +462,12 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             ctrs[i] = row(mat, *asp);
         else {
             auto rowsel = rows(mat, asp, nasn);
-            std::cerr << "Calculating geometric median and storing in " << ctrs[i] << '\n';
+            std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << ctrs[i] << '\n';
             if(weights)
                 blz::geomedian(rowsel, ctrs[i], elements(costs, asp, nasn), eps);
             else
                 blz::geomedian(rowsel, ctrs[i], eps);
+            std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';
         }
     }
 }
@@ -482,13 +487,9 @@ void set_centroids_full_mean(const Mat &mat,
     const size_t np = costs.size(), k = ctrs.size();
     std::vector<std::vector<asn_t>> assigned(k);
     std::unique_ptr<blz::DV<FT>> probup;
+    set_asn:
     for(size_t i = 0; i < np; ++i) {
-        auto ai = asn[i];
-        if(ai > k) {
-            std::fprintf(stderr, "assigned value %d > %d\n", ai, k);
-            std::abort();
-        }
-        blz::push_back(assigned[ai], i);
+        blz::push_back(assigned[asn[i]], i);
     }
 #ifndef NDEBUG
     for(unsigned i = 0; i < assigned.size(); ++i) std::fprintf(stderr, "Center %zd has %zu assigned points\n", i, assigned[i].size());
@@ -496,9 +497,9 @@ void set_centroids_full_mean(const Mat &mat,
     for(unsigned i = 0; i < k; ++i)
         if(assigned[i].empty())
             blz::push_back(sa, i);
-    std::fprintf(stderr, "make sa. sa size: %zu\n", sa.size());
-    while(sa.size()) {
-        char buf[1024];
+    if(sa.size()) {
+        std::fprintf(stderr, "make sa. sa size: %zu\n", sa.size());
+        char buf[256];
         const auto pv = prior.size() ? FT(prior[0]): FT(0);
         std::sprintf(buf, "Restarting centers with no support for set_centroids_full_mean: %s as measure with prior of size %zu (%g)\n",
                      msr2str(measure), prior.size(), pv);
@@ -528,6 +529,9 @@ void set_centroids_full_mean(const Mat &mat,
                     asn[i] = bestid;
             }
         }
+        sa.clear();
+        for(auto &x: assigned) x.clear();
+        goto set_asn;
     }
     std::fprintf(stderr, "Computing centroids\n");
     for(unsigned i = 0; i < k; ++i) {
@@ -553,7 +557,7 @@ void set_centroids_full_mean(const Mat &mat,
             switch(prior.size()) {
                 case 1:  ctr += prior[0]; break;
                 default: ctr += prior;    break;
-                case 0:;
+                case 0:; // do nothing, IE, there is no prior
             }
         }
     }

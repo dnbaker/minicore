@@ -4,13 +4,15 @@
 namespace clust = minocore::clustering;
 using namespace minocore;
 
+// #define double float
+
 int main(int argc, char *argv[]) {
     std::ios_base::sync_with_stdio(false);
     dist::print_measures();
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv)
         std::exit(1);
     const size_t nr = x.rows(), nc = x.columns();
-    blz::DV<double> prior{1. / nc};
+    blz::DV<double> prior{double(1. / nc)};
     dist::DissimilarityMeasure msr = dist::MKL;
     if(argc > 1) {
         msr = (dist::DissimilarityMeasure)std::atoi(argv[1]);

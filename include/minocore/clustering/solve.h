@@ -21,16 +21,16 @@ using blz::columnMajor;
  * See perform_hard_clustering/perform_soft_clustering below for the interface
  */
 
-template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
-void set_centroids_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
+template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
+void set_centroids_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
                         std::vector<CtrT> &centers,
                         AsnT &asn,
                         CostsT &costs,
                         const WeightT *weights=static_cast<WeightT *>(nullptr));
-template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
-void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
+template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
+void assign_points_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
                         std::vector<CtrT> &centers,
@@ -79,7 +79,7 @@ template<typename MT, // MatrixType
          typename WeightT=CtrT, // Vector Type
          typename=std::enable_if_t<std::is_floating_point_v<FT>>
         >
-auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
+auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TODO: consider replacing blaze::Matrix with template Mat for CSR matrices
                              const dist::DissimilarityMeasure measure,
                              const PriorT &prior,
                              std::vector<CtrT> &centers,
@@ -94,24 +94,25 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
         else  return blz::sum(costs);
     };
     std::fprintf(stderr, "Beginning perform_hard_clustering with%s weights.\n", weights ? "": "out");
-    assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights); // Assign points myself
+    assign_points_hard<FT>(~mat, measure, prior, centers, asn, costs, weights); // Assign points myself
     const auto initcost = compute_cost();
     FT cost = initcost;
     std::fprintf(stderr, "cost: %0.12g\n", cost);
     size_t iternum = 0;
     for(;;) {
         std::fprintf(stderr, "Beginning iter %zu\n", iternum);
-        set_centroids_hard<FT>(mat, measure, prior, centers, asn, costs, weights);
+        set_centroids_hard<FT>(~mat, measure, prior, centers, asn, costs, weights);
         std::fprintf(stderr, "Set centroids %zu\n", iternum);
         
-        assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights);
+        assign_points_hard<FT>(~mat, measure, prior, centers, asn, costs, weights);
         std::fprintf(stderr, "Assigning points %zu\n", iternum);
         auto newcost = compute_cost();
+        std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);
         if(newcost > cost) {
-            break;
-            auto msg = std::string("New cost ") + std::to_string(newcost) + "> original cost " + std::to_string(cost);
+            auto msg = std::string("New cost ") + std::to_string(newcost) + " > original cost " + std::to_string(cost) + '\n';
             std::cerr << msg;
-            std::abort();
+            //DBG_ONLY(std::abort();)
+            break;
         }
         if(cost - newcost < eps * initcost) {
 #ifndef NDEBUG
@@ -138,8 +139,8 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat,
  * set_centroids_hard assumes that costs of points have been assigned,
  *
  */
-template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
-void set_centroids_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
+template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
+void set_centroids_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
                         std::vector<CtrT> &centers,
@@ -153,15 +154,15 @@ void set_centroids_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
     if(dist::is_bregman(measure)) {
         assert(FULL_WEIGHTED_MEAN == pol);
     }
-    if(pol == FULL_WEIGHTED_MEAN) set_centroids_full_mean<FT>(~mat, measure, prior, asn, costs, centers, weights);
-    else if(pol == L1_MEDIAN)            set_centroids_l1<FT>(~mat, asn, costs, centers, weights);
-    else if(pol == GEO_MEDIAN)           set_centroids_l2<FT>(~mat, asn, costs, centers, weights);
-    else if(pol == TVD_MEDIAN)          set_centroids_tvd<FT>(~mat, asn, costs, centers, weights);
+    if(pol == FULL_WEIGHTED_MEAN) set_centroids_full_mean<FT>(mat, measure, prior, asn, costs, centers, weights);
+    else if(pol == L1_MEDIAN)            set_centroids_l1<FT>(mat, asn, costs, centers, weights);
+    else if(pol == GEO_MEDIAN)           set_centroids_l2<FT>(mat, asn, costs, centers, weights);
+    else if(pol == TVD_MEDIAN)          set_centroids_tvd<FT>(mat, asn, costs, centers, weights);
     else throw std::runtime_error("Cannot optimize without a valid centroid policy.");
 }
 
-template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
-void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
+template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
+void assign_points_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
                         std::vector<CtrT> &centers,
@@ -178,7 +179,7 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
     const FT prior_sum =
         prior.size() == 0 ? 0.
                           : prior.size() == 1
-                          ? double(prior[0] * (~mat).columns())
+                          ? double(prior[0] * mat.columns())
                           : double(blz::sum(prior));
     blaze::DynamicVector<FT, blaze::rowVector> center_sums = trans(blaze::generate(k, [&centers](auto x) {return blz::sum(centers[x]);}));
     std::fprintf(stderr, "[%s]: %d-clustering with %s and %zu dimensions\n", __func__, k, dist::msr2str(measure), centers[0].size());
@@ -195,30 +196,32 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
     //       Also, if there are enough centers, a nearest neighbor structure
     //       could make centroid assignment faster
     auto compute_cost = [&](auto id, auto cid) {
-        auto mr = row(~mat, id, blaze::unchecked);
+        auto mr = row(mat, id);
+        assert(cid < centers.size() || !std::fprintf(stderr, "cid %u, size %zu\n", unsigned(cid), centers.size()));
         const auto &ctr = centers[cid];
         assert(ctr.size() == mr.size());
-        auto mrmult = mr / (blz::sum(mr));
+        auto mrmult = mr / sum(mr);
         auto wctr = ctr * (1. / (center_sums[cid]));
         //assert(measure == dist::JSD); // Temporary: this is only for sanity checking while debugging JSD calculation
-#if VERBOSE_AF
+#if 0
         std::fprintf(stderr, "Calling compute_cost between item %u and center id %u with measure %d/%s\n",
                      (int)id, (int)cid, (int)measure, dist::msr2str(measure));
 #endif
         FT ret;
         switch(measure) {
 
-            // UNCOMMENT THIS --
-            // this is just to do faster debugging
             // Geometric
-            case L1: ret = blz::sum(blz::abs(ctr - mr)); break; // Replacing l1Norm with blz::sum(blz::abs due to error in norm backend
-            case L2: ret = blz::l2Norm(ctr - mr); break;
-            case SQRL2: ret = blz::sqrNorm(ctr - mr); break;
-            case PSL2: ret = blz::sqrNorm(wctr - mrmult); break;
-            case PL2: ret = blz::l2Norm(wctr - mrmult); break;
+            case L1:    
+                ret = l1Dist(ctr, mr);
+                //ret = blz::sum(blz::abs(ctr - mr)); 
+            break; // Replacing l1Norm with blz::sum(blz::abs due to error in norm backend
+            case L2:    ret = blz::l2Dist(ctr, mr); break;
+            case SQRL2: ret = blz::sqrDist(ctr, mr); break;
+            case PSL2:  ret = blz::sqrNorm(wctr - mrmult); break;
+            case PL2:   ret = blz::l2Norm(wctr - mrmult); break;
 
             // Discrete Probability Distribution Measures
-            case TVD: ret = .5 * blz::sum(blz::abs(wctr - mrmult)); break;
+            case TVD:       ret = .5 * blz::sum(blz::abs(wctr - mrmult)); break;
             case HELLINGER: ret = blz::l2Norm(blz::sqrt(wctr) - blz::sqrt(mrmult)); break;
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: {
                 const auto sim = blz::dot(blz::sqrt(wctr), blz::sqrt(mrmult));
@@ -226,12 +229,12 @@ void assign_points_hard(const blaze::Matrix<MT, blz::rowMajor> &mat,
                                                       : -std::log(sim);
             } break;
 
+            // Bregman divergences + convex combinations thereof
             case POISSON: case JSD:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
             case SIS: case RSIS: case MKL: case UWLLR: case LLR:
                 ret = cmp::msr_with_prior(measure, ctr, mr, prior, prior_sum); break;
 #if 0
-            // case LLR, UWLLR
             case PROBABILITY_COSINE_DISTANCE:
                 ret = blz::dot(mrmult, wctr) * (1. / (blz::l2Norm(mrmult) * blz::l2Norm(wctr)));
             break;

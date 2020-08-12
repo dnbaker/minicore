@@ -12,15 +12,29 @@ template<typename VT, bool TF, typename FT, typename IT>
 static INLINE void __assign(blaze::DenseVector<VT, TF> &vec, IT ind, FT val) {
     (~vec)[ind] = val;
 }
+#if 1
 template<typename VT, bool TF, typename FT, typename IT>
 static INLINE void __assign(blaze::SparseVector<VT, TF> &vec, IT ind, FT val) {
+    static_assert(std::is_integral_v<IT>, "Sanity1");
+    static_assert(std::is_arithmetic_v<FT>, "Sanity2");
+    std::fprintf(stderr, "Setting value %g for index %zu\n", val, ind);
     auto &rr = ~vec;
+    std::cerr << "value before: " << rr[ind] << '\n';
+    std::cerr << "rr before: " << rr << '\n';
     if(val != FT(0.)) {
         if(rr.capacity() <= rr.nonZeros() + 1)
             rr.reserve(std::max((rr.nonZeros() + 1) << 1, size_t(4)));
         rr.append(ind, val);
+        std::cerr << "value after: " << rr[ind] << '\n';
+        std::cerr << "rr after: " << rr << '\n';
     }
 }
+#else
+template<typename VT, bool TF, typename FT, typename IT>
+static INLINE void __assign(blaze::SparseVector<VT, TF> &vec, IT ind, FT val) {
+    (~vec).set(ind, val);
+}
+#endif
 
 
 namespace detail {
@@ -59,6 +73,9 @@ void sparse_l1_unweighted_median(const blz::SparseMatrix<MT, SO> &data, blz::Vec
     }
     using FT = blaze::ElementType_t<MT>;
     auto &ctr = ~ret;
+    if constexpr(blaze::IsSparseVector_v<VT>) {
+        ctr.reset();
+    }
     using CI = typename MT::ConstIterator;
     const size_t nd = (~data).columns(), nr = (~data).rows(), hlf = nr / 2, odd = nr & 1;
     detail::IndexPQ<CI, uint32_t> pq(nr);
@@ -75,14 +92,15 @@ void sparse_l1_unweighted_median(const blz::SparseMatrix<MT, SO> &data, blz::Vec
     // Setting all to 0 lets us simply skip elements with the wrong number of nonzeros.
     while(pq.size()) {
         //std::fprintf(stderr, "Top index: %zu\n", pq.top().first->index());
-        while(cid < pq.top().first->index())
-            __assign(ctr, cid++, 0);
-        if(unlikely(cid > pq.top().first->index())) {
-            auto pqs = pq.getsorted();
-            for(const auto v: pqs) std::fprintf(stderr, "%zu:%g\n", v.first->index(), v.first->value());
-            std::exit(1);
-            //throw std::runtime_error("pq is incorrectly sorted.");
-        }
+        if constexpr(!blaze::IsSparseVector_v<VT>) {
+            while(cid < pq.top().first->index())
+                __assign(ctr, cid++, 0);
+            if(unlikely(cid > pq.top().first->index())) {
+                auto pqs = pq.getsorted();
+                for(const auto v: pqs) std::fprintf(stderr, "%zu:%g\n", v.first->index(), v.first->value());
+                std::exit(1);
+            }
+        } else cid = pq.top().first->index();
         while(pq.top().first->index() == cid) {
             auto pair = pq.top();
             pq.pop();
@@ -124,13 +142,17 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT, TF> &
     const bool odd = dr.rows() % 2;
     const size_t hlf = dr.rows() / 2;
     blaze::DynamicVector<ElementType_t<MT>, blaze::columnVector> dv;
+    if constexpr(blaze::IsSparseVector_v<VT>) {
+        (~ret).reset();
+    }
     for(size_t i = 0; i < dr.columns(); ++i) {
         dv = column(dr, i);
         // Should do fast copying.
         shared::sort(dv.begin(), dv.end());
         auto val = odd ? dv[hlf]: ElementType_t<MT>(.5) * (dv[hlf - 1] + dv[hlf]);
-        std::fprintf(stderr, "Setting value %g for index %zu\n", val, i);
+        std::fprintf(stderr, "val %g at %zu\n", val, i);
         __assign(rr, i,  val);
+        assert(rr[i] == val || !std::fprintf(stderr, "rr[i] %g vs %g\n", rr[i], val));
     }
 }
 
@@ -144,6 +166,9 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &_data, const Rows &rs, blz:
     const size_t hlf = rs.size() / 2;
     const size_t nc = dr.columns();
     blaze::DynamicMatrix<ElementType_t<MT>, SO> tmpind;
+    if constexpr(blaze::IsSparseVector_v<VT>) {
+        (~ret).reset();
+    }
     size_t i;
     for(i = 0; i < nc;) {
         const unsigned nr = std::min(size_t(8), nc - i);
@@ -164,6 +189,9 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<
     const size_t nc = (~data).columns();
     if((~ret).size() != nc) {
         (~ret).resize(nc);
+    }
+    if constexpr(blaze::IsSparseVector_v<VT>) {
+        (~ret).reset();
     }
     if(unlikely((~data).columns() > ((uint64_t(1) << (sizeof(IT) * CHAR_BIT)) - 1)))
         throw std::runtime_error("Use a different index type, there are more features than fit in IT");

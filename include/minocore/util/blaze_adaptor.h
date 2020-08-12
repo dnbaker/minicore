@@ -598,14 +598,17 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weig
 #if 1
             for(size_t i = 0; i < _mat.rows(); ++i) {
                 const auto r = row(_mat, i, blaze::unchecked) - ~dv;
-#if 0
+                std::cerr << "row #" << i << " is " << r << '\n';
                 std::cerr << "cost before is: " << costs[i] << '\n';
                 std::cerr << "Row: " << row(_mat, i) << '\n';
                 std::cerr << "center: " << ~dv << '\n';
-#endif
                 costs[i] = blz::sqrt(blz::sum(r * r));
-                if(std::isnan(costs[i]))
+                std::cerr << "cost after is " << costs[i] << '\n';
+                if(std::isnan(costs[i])) {
                     std::cerr << "cost after is NAN: " << costs[i] << '\n';
+                    std::cerr << r << '\n';
+                    std::cerr << "r squared should be " << (r * r) << '\n';
+                }
             }
 #else
             costs = sqrt(sum<rowwise>(blz::pow(_mat - blaze::expand(~dv, (~mat).rows()), 2))); // pow2 seems broken
@@ -649,6 +652,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType
         if((dist = std::abs(prevcost - current_cost)) <= eps) break;
         if(unlikely(std::isnan(dist))) {
             std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+            throw std::runtime_error("Optimization failed: nan");
             break;
         }
         ++iternum;
