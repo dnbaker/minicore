@@ -190,7 +190,7 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<
     if((~ret).size() != nc) {
         (~ret).resize(nc);
     }
-    if constexpr(blaze::IsSparseVector_v<VT>) {
+    if constexpr(blaze::IsSparseVector_v<VT2>) {
         (~ret).reset();
     }
     if(unlikely((~data).columns() > ((uint64_t(1) << (sizeof(IT) * CHAR_BIT)) - 1)))
