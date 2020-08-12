@@ -595,8 +595,10 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weig
             for(size_t i = 0; i < _mat.rows(); ++i)
                 costs[i] = cvr[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
         } else {
-#if 0
+#if 1
+            OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i) {
+#if 0
                 const auto r = row(_mat, i, blaze::unchecked) - ~dv;
                 std::cerr << "row #" << i << " is " << r << '\n';
                 std::cerr << "cost before is: " << costs[i] << '\n';
@@ -609,6 +611,9 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weig
                     std::cerr << r << '\n';
                     std::cerr << "r squared should be " << (r * r) << '\n';
                 }
+#else
+                costs[i] = blz::l2Norm(row(_mat, i) - ~dv);
+#endif
             }
 #else
             costs = sqrt(sum<rowwise>(blz::pow(_mat - blaze::expand(~dv, (~mat).rows()), 2))); // pow2 seems broken

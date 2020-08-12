@@ -46,7 +46,7 @@ int main(int c, char **a) {
     blz::geomedian(m, v4, weights.data());
     auto diff = blz::l2Norm(v4 - v);
     std::fprintf(stderr, "diff between weighted and unweighted: %.12g. norms: %.12g, %.12g\n", diff, blz::l2Norm(v4), blz::l2Norm(v));
-    assert(diff < 1e-4 * std::max(blz::l2Norm(v4), blz::l2Norm(v)));
+    assert(diff < 1e-6 * std::max(blz::l2Norm(v4), blz::l2Norm(v)));
     auto l1_start = t();
     minocore::coresets::l1_median(m, v2);
     auto l1_stop = t();
