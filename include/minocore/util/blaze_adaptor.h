@@ -572,7 +572,7 @@ using functional::indices_if;
 
 // Solve geometric median for a set of points.
 template<typename MT, bool SO, typename VT, typename WeightType>
-auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weights, double eps=0)
+auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *const weights, double eps=0)
 {
     if((~mat).rows() == 1) return ~dv = row((~mat), 0);
     const auto &_mat = ~mat;
@@ -589,7 +589,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weig
         std::fprintf(stderr, "Iteration %zu for matrix %zu/%zu and vector %zu with weights at %p\n",
                      iternum + 1, (~mat).rows(), (~mat).columns(), (~dv).size(), (void *)weights);
 #endif
-        if(cv) {
+        if(weights) {
             auto &cvr = *cv;
             OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i)
@@ -628,6 +628,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *weig
             throw std::runtime_error("Optimization failed: nan");
         }
         ++iternum;
+        std::cerr << "costs: " << costs << '\n';
         costs = 1. / costs;
         costs *= 1. / blaze::sum(costs);
         ~dv = trans(costs) * ~mat;

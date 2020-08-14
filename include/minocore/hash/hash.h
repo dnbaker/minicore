@@ -96,11 +96,10 @@ public:
         unsigned nd = settings.dim_, nh = settings.nhashes();
         if(seed == 0) seed = nd * nh + r;
         seed |= 1; // Ensures that the seed is odd, necessary
-        randproj_ = blaze::generate(nh, nd, [seed](uint64_t x, size_t y) ALWAYS_INLINE {
-            x = 0x5851f42d4c957f2duLL ^ ((((x << 32) | y) * 0x219223e8e0b5407buLL) + seed);
-            uint64_t xorshift = ((x >> 18) ^ x) >> 27u, rot = x >> 59;
-            x = ((xorshift >> rot) | (xorshift << ((-rot) & 31)) >> 52);
-            return (x >> 12) * rngnorm;
+        std::normal_distribution<FT> gen;
+        randproj_ = blaze::generate(nh, nd, [seed,&gen](uint64_t x, size_t y) ALWAYS_INLINE {
+            wy::WyRand<uint64_t> rng(((x << 32) | y) ^ seed);
+            return gen(rng);
         });
         randproj_ /= r;
         boffsets_.resize(nh);
