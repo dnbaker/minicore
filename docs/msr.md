@@ -1,5 +1,5 @@
 ## Measure by Measure
-| Measure | Category(ies) | Codename | Integer | Notes | 
+| Measure | Category(ies) | Codename | Integer | Notes |
 |--------|-----------------|---------|----------|----|
 | L1 distance | geometric metric | L1 | 0 | |
 | L2 distance | geometric metric | L2 | 1 | |
@@ -36,6 +36,34 @@ Jensen-Shannon is the symmetrized KL divergence; the corresponding symmetrizatio
 Squared L2 distance itself is also a Bregman divergence; it corresponds to the spherical Gaussian.
 
 
+## Expectation Maximization
+
+Another question is whether or not a measure can be optimized over via EM.
+
+|Measure | Distance | Centroid method |
+|--------|----------|-----------------|
+|L1      |L1 distance| component-wise median|
+|L2      |L2 distance| geometric median via Weiszfeld's algorithm|
+|SQRL2   |squared L2 distance; a Bregman divergence| Weighted mean of points|
+|Itakura-Saito |IS distance, a Bregman divergence| Weighted mean of points|
+|Reverse Itakura-Saito |RIS distance, a Bregman divergence| Weighted mean of points|
+|Symmetrized Itakura-Saito |SIS distance, a convex combination of Bregman divergences| Weighted mean of points|
+|Reverse Symmetrized Itakura-Saito |RSIS distance, a convex combination of Bregman divergences| Weighted mean of points|
+|KL Divergence |KL divergence, a Bregman divergence| Weighted mean of points|
+|Reverse KL |RMKL distance, a Bregman divergence| Weighted mean of points|
+|JSD |JSD, a convex combination of KL divergences| Weighted mean of points|
+|UWLLR |UWLLR, a symmetric, linear combination of KL divergences| Weighted mean of points|
+|LLR |LLR, linear combination of KL divergences| Weighted mean of points|
+|Total variation distance|1/2 L1 distance in probability space| component-wise median|
+
+Measures for which we would like such an algorithm but don't have include:
+
+JSM, the square root of the JSD
+Bhattacharyya distance
+Bhattacharyya metric
+Hellinger distance
+
+
 ### LSH functions
 L1 nearest-neighbors can be found with Cauchy sampling and p-stable distributions.
 L2 uses Gaussian sampling + p-stable distributions.
@@ -44,3 +72,8 @@ Hellinger, JSD, LLR, and UWLLR nearest neighbors can be found using Hellinger/JS
 Because of the relations between TVD, JSD, and Hellinger, techniques that work for one often work for another.
 
 http://eduardovalle.com/wordpress/wp-content/uploads/2014/10/silva14sisapLargeScaleMetricLSH.pdf provides techniques for non-metrics; additionally, their use of kmeans++ for nearest neighbor lookup comparisons suggests that there may be a way to use importance sampling via D2 sampling as a hack around a proper LSH table.
+
+Measures not supporting EM (JSM, Bhattacharyya metric, or Hellinger) can still be clustered
+using density-based or linkage-based methods.
+
+Maintaining an efficient, accurate nearest-neighbor structure enables cheap large-scale clustering for most of these.

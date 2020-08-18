@@ -23,6 +23,13 @@ struct LSHasherSettings {
     LSHasherSettings(const LSHasherSettings &) = default;
     LSHasherSettings(LSHasherSettings &&) = default;
 
+    bool operator==(const LSHasherSettings &o) const {
+        return dim_ == o.dim_ && k_ == o.k_ && l_ == o.l_;
+    }
+    bool operator!=(const LSHasherSettings &o) const {
+        return dim_ != o.dim_ || k_ != o.k_ || l_ != o.l_;
+    }
+
     LSHasherSettings(unsigned d, unsigned k, unsigned l): dim_(d), k_(k), l_(l) {}
     LSHasherSettings(std::initializer_list<unsigned> il) {
         if(il.size() != 3) throw std::invalid_argument("LSHasherSettings requires 3 values");
@@ -120,22 +127,22 @@ public:
     JSDLSHasher(unsigned dim, unsigned k, unsigned l, const double r, uint64_t seed=0): JSDLSHasher(LSHasherSettings{dim, k, l}, r, seed)
     {}
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {
+    decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
         //std::fprintf(stderr, "Regular input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
         return randproj_ * blaze::sqrt(~input) + boffsets_;
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, !SO> &input) const {
+    decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
         //std::fprintf(stderr, "Reversed input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
         return randproj_ * trans(blaze::sqrt(~input)) + boffsets_;
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Matrix<VT, SO> &input) const {
+    decltype(auto) project(const blaze::Matrix<VT, SO> &input) const {
         //std::fprintf(stderr, "Regular input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (~input).rows(), (~input).columns(), randproj_.rows(), randproj_.columns());
         return trans(randproj_ * trans(blaze::sqrt(~input)) + blaze::expand(boffsets_, (~input).rows()));
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Matrix<VT, !SO> &input) const {
+    decltype(auto) project(const blaze::Matrix<VT, !SO> &input) const {
         //std::fprintf(stderr, "Reversed SO input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (~input).rows(), (~input).columns(), randproj_.rows(), randproj_.columns());
         return trans(randproj_ * blaze::sqrt(~input) + blaze::expand(boffsets_, (~input).columns()));
     }
