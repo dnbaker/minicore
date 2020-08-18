@@ -18,7 +18,17 @@ struct LSHasherSettings {
     unsigned dim_;
     unsigned k_;
     unsigned l_;
+
     unsigned nhashes() const {return k_ * l_;}
+    LSHasherSettings(const LSHasherSettings &) = default;
+    LSHasherSettings(LSHasherSettings &&) = default;
+
+    LSHasherSettings(unsigned d, unsigned k, unsigned l): dim_(d), k_(k), l_(l) {}
+    LSHasherSettings(std::initializer_list<unsigned> il) {
+        if(il.size() != 3) throw std::invalid_argument("LSHasherSettings requires 3 values");
+        auto beg = il.begin();
+        dim_ = *beg++, k_ = *beg++, l_ = *beg;
+    }
 };
 
 template<typename FT>
@@ -107,6 +117,8 @@ public:
         for(auto &i: boffsets_) i = FT(mt()) / mt.max();
         assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow
     }
+    JSDLSHasher(unsigned dim, unsigned k, unsigned l, const double r, uint64_t seed=0): JSDLSHasher(LSHasherSettings{dim, k, l}, r, seed)
+    {}
     template<typename VT>
     decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {
         //std::fprintf(stderr, "Regular input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
@@ -156,6 +168,9 @@ class PStableLSHasher {
 public:
     using ElementType = FT;
     static constexpr bool StorageOrder = SO;
+    template<typename...CArgs>
+    PStableLSHasher(unsigned dim, unsigned k, unsigned l, double w, uint64_t seed, CArgs &&...args):
+        PStableLSHasher(LSHasherSettings{dim, k, l}, w, seed, std::forward<CArgs>(args)...) {}
     template<typename...CArgs>
     PStableLSHasher(LSHasherSettings settings, double w, uint64_t seed, CArgs &&...args):
         settings_(settings), w_(w)
@@ -265,6 +280,8 @@ class S2JSDLSHasher {
 public:
     using ElementType = FT;
     static constexpr bool StorageOrder = SO;
+    S2JSDLSHasher(unsigned dim, unsigned k, unsigned l, const double w, uint64_t seed=0): S2JSDLSHasher(LSHasherSettings{dim, k, l}, w, seed)
+    {}
     S2JSDLSHasher(LSHasherSettings settings, double w, uint64_t seed=0): settings_(settings), w_(w) {
         auto nh = settings.nhashes();
         auto nd = settings.dim_;
