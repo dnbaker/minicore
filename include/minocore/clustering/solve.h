@@ -103,7 +103,7 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
         std::fprintf(stderr, "Beginning iter %zu\n", iternum);
         set_centroids_hard<FT>(~mat, measure, prior, centers, asn, costs, weights);
         std::fprintf(stderr, "Set centroids %zu\n", iternum);
-        
+
         assign_points_hard<FT>(~mat, measure, prior, centers, asn, costs, weights);
         std::fprintf(stderr, "Assigning points %zu\n", iternum);
         auto newcost = compute_cost();
@@ -211,9 +211,9 @@ void assign_points_hard(const Mat &mat,
         switch(measure) {
 
             // Geometric
-            case L1:    
+            case L1:
                 ret = l1Dist(ctr, mr);
-                //ret = blz::sum(blz::abs(ctr - mr)); 
+                //ret = blz::sum(blz::abs(ctr - mr));
             break; // Replacing l1Norm with blz::sum(blz::abs due to error in norm backend
             case L2:    ret = blz::l2Dist(ctr, mr); break;
             case SQRL2: ret = blz::sqrDist(ctr, mr); break;
