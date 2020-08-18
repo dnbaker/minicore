@@ -23,6 +23,14 @@ struct LSHasherSettings {
     LSHasherSettings(const LSHasherSettings &) = default;
     LSHasherSettings(LSHasherSettings &&) = default;
 
+    bool operator==(const LSHasherSettings &o) const {
+        return dim_ == o.dim_ && k_ == o.k_ && l_ == o.l_;
+    }
+
+    bool operator!=(const LSHasherSettings &o) const {
+        return dim_ != o.dim_ || k_ != o.k_ || l_ != o.l_;
+    }
+
     LSHasherSettings(unsigned d, unsigned k, unsigned l): dim_(d), k_(k), l_(l) {}
     LSHasherSettings(std::initializer_list<unsigned> il) {
         if(il.size() != 3) throw std::invalid_argument("LSHasherSettings requires 3 values");
@@ -97,8 +105,8 @@ class JSDLSHasher {
     // by the Hellinger distance, and uses an LSH for the Hellinger as-is.
     blaze::DynamicMatrix<FT, SO> randproj_;
     blaze::DynamicVector<FT, SO> boffsets_;
-    LSHasherSettings settings_;
 public:
+    const LSHasherSettings settings_;
     using ElementType = FT;
     static constexpr bool StorageOrder = SO;
     static constexpr const FT rngnorm = 1.0/(1ull<<52);
@@ -120,22 +128,22 @@ public:
     JSDLSHasher(unsigned dim, unsigned k, unsigned l, const double r, uint64_t seed=0): JSDLSHasher(LSHasherSettings{dim, k, l}, r, seed)
     {}
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {
+    decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
         //std::fprintf(stderr, "Regular input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
         return randproj_ * blaze::sqrt(~input) + boffsets_;
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, !SO> &input) const {
+    decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
         //std::fprintf(stderr, "Reversed input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
         return randproj_ * trans(blaze::sqrt(~input)) + boffsets_;
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Matrix<VT, SO> &input) const {
+    decltype(auto) project(const blaze::Matrix<VT, SO> &input) const {
         //std::fprintf(stderr, "Regular input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (~input).rows(), (~input).columns(), randproj_.rows(), randproj_.columns());
         return trans(randproj_ * trans(blaze::sqrt(~input)) + blaze::expand(boffsets_, (~input).rows()));
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Matrix<VT, !SO> &input) const {
+    decltype(auto) project(const blaze::Matrix<VT, !SO> &input) const {
         //std::fprintf(stderr, "Reversed SO input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (~input).rows(), (~input).columns(), randproj_.rows(), randproj_.columns());
         return trans(randproj_ * blaze::sqrt(~input) + blaze::expand(boffsets_, (~input).columns()));
     }
@@ -163,7 +171,9 @@ template<template<typename...> class Distribution, typename FT, bool SO, bool us
 class PStableLSHasher {
     blaze::DynamicMatrix<FT, SO> randproj_;
     blaze::DynamicVector<FT, SO> boffsets_;
+public:
     LSHasherSettings settings_;
+private:
     double w_;
 public:
     using ElementType = FT;
@@ -229,6 +239,9 @@ public:
     L2LSHasher(LSHasherSettings settings, double w, uint64_t seed=0, Args &&...args): super(settings, w, seed, std::forward<Args>(args)...)
     {
     }
+    template<typename...Args>
+    L2LSHasher(unsigned d, unsigned k, unsigned l, double w, uint64_t seed=0, Args &&...args): 
+        L2LSHasher(LSHasherSettings(d, k, l), w, seed, std::forward<Args>(args)...) {}
 };
 
 template<typename FT=double, bool SO=blaze::rowMajor, bool use_offsets=true>
@@ -239,6 +252,9 @@ public:
     L1LSHasher(LSHasherSettings settings, double w, uint64_t seed=0, Args &&...args): super(settings, w, seed, std::forward<Args>(args)...)
     {
     }
+    template<typename...Args>
+    L1LSHasher(unsigned d, unsigned k, unsigned l, double w, uint64_t seed=0, Args &&...args): 
+        L1LSHasher(LSHasherSettings(d, k, l), w, seed, std::forward<Args>(args)...) {}
 };
 template<typename FT=double, bool SO=blaze::rowMajor, bool use_offsets=true>
 class LpLSHasher: public PStableLSHasher<cms_distribution, FT, SO, use_offsets> {
@@ -248,6 +264,9 @@ public:
     LpLSHasher(LSHasherSettings settings, double p, double w, uint64_t seed=0): super(settings, w, seed, p)
     {
     }
+    template<typename...Args>
+    LpLSHasher(unsigned d, unsigned k, unsigned l, double p, double w, uint64_t seed=0, Args &&...args): 
+        LpLSHasher(LSHasherSettings(d, k, l), p, w, seed, std::forward<Args>(args)...) {}
 };
 
 template<typename FT=double, bool SO=blaze::rowMajor, bool use_offsets=true>
@@ -275,7 +294,9 @@ class S2JSDLSHasher {
     // Note that this is an LSH for the JS Metric, not the JSD.
     blaze::DynamicMatrix<FT, SO> randproj_;
     blaze::DynamicVector<FT, SO> boffsets_;
+public:
     LSHasherSettings settings_;
+private:
     double w_;
 public:
     using ElementType = FT;
@@ -536,6 +557,7 @@ using hash::S2JSDLSHasher;     // D_{JSM}(P || Q) = \sqrt{D_{JS}(P || Q)}
 using hash::TVDLSHasher;       // D_{TV}(P || Q)  = \frac{D_{\ell_1}(P || Q)}{2}
 
 using hash::LSHTable;
+using hash::LpLSHasher;
 
 }
 
