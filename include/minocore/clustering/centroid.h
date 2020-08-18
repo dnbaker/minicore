@@ -34,6 +34,8 @@ static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) 
         default:
             return NOT_APPLICABLE;
 
+        case COSINE_DISTANCE: // I think this is right, but the rest I am sure are right.
+
         case UWLLR: case LLR: case MKL: case JSD: case SQRL2: case POISSON:
         case REVERSE_POISSON: case REVERSE_MKL: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case RSYMMETRIC_ITAKURA_SAITO:
@@ -284,7 +286,9 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     using asn_t = std::decay_t<decltype(asn[0])>;
     std::vector<std::vector<asn_t>> assigned(ctrs.size());
     std::unique_ptr<blz::DV<FT>> probup;
+    assert(costs.size() == asn.size());
     for(size_t i = 0; i < costs.size(); ++i) {
+        assert(asn[i] < assigned.size());
         blz::push_back(assigned[asn[i]], i);
     }
     blaze::SmallArray<asn_t, 16> sa;
@@ -296,8 +300,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         std::fprintf(stderr, "reseeding %zu centers\n", sa.size());
 #endif
         if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
-        auto &probs = *probup;
-        FT *pd = probs.data(), *pe = pd + probs.size();
+        FT *pd = probup->data(), *pe = pd + probup->size();
         auto cb = costs.begin(), ce = costs.end();
         if(weights) {
             std::partial_sum(cb, ce, pd, [ds=&costs[0],&weights](auto x, const auto &y) {
@@ -349,6 +352,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         const auto &asnv = assigned[i];
         const auto nasn = asnv.size();
         MINOCORE_VALIDATE(nasn != 0);
+        std::fprintf(stderr, "Processing L1 centroid %u for %zu points\n", i, nasn);
         switch(nasn) {
             case 1: ctrs[i] = row(mat, asnv[0]); break;
             case 2: {
@@ -365,6 +369,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             }
             default: {
                 auto asp = asnv.data();
+                std::fprintf(stderr, "Selecting %zu rows\n", nasn);
                 auto rowsel = rows(mat, asp, nasn);
                 if(weights)
                     coresets::l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
@@ -400,7 +405,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
 #endif
         if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
         auto &probs = *probup;
-        FT *pd = probs.data(), *pe = pd + probs.size();
+        FT *pd = probup->data(), *pe = pd + probup->size();
         if(weights) {
             ::std::partial_sum(costs.begin(), costs.end(), pd, [&weights,ds=&costs[0]](auto x, const auto &y) {
                 return x + y * ((*weights)[&y - ds]);
@@ -457,10 +462,12 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             ctrs[i] = row(mat, *asp);
         else {
             auto rowsel = rows(mat, asp, nasn);
+            std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << ctrs[i] << '\n';
             if(weights)
                 blz::geomedian(rowsel, ctrs[i], elements(costs, asp, nasn), eps);
             else
                 blz::geomedian(rowsel, ctrs[i], eps);
+            std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';
         }
     }
 }
@@ -480,13 +487,9 @@ void set_centroids_full_mean(const Mat &mat,
     const size_t np = costs.size(), k = ctrs.size();
     std::vector<std::vector<asn_t>> assigned(k);
     std::unique_ptr<blz::DV<FT>> probup;
+    set_asn:
     for(size_t i = 0; i < np; ++i) {
-        auto ai = asn[i];
-        if(ai > k) {
-            std::fprintf(stderr, "assigned value %d > %d\n", ai, k);
-            std::abort();
-        }
-        blz::push_back(assigned[ai], i);
+        blz::push_back(assigned[asn[i]], i);
     }
 #ifndef NDEBUG
     for(unsigned i = 0; i < assigned.size(); ++i) std::fprintf(stderr, "Center %zd has %zu assigned points\n", i, assigned[i].size());
@@ -494,39 +497,41 @@ void set_centroids_full_mean(const Mat &mat,
     for(unsigned i = 0; i < k; ++i)
         if(assigned[i].empty())
             blz::push_back(sa, i);
-    std::fprintf(stderr, "make sa. sa size: %zu\n", sa.size());
-    while(sa.size()) {
-        char buf[1024];
+    if(sa.size()) {
+        std::fprintf(stderr, "make sa. sa size: %zu\n", sa.size());
+        char buf[256];
         const auto pv = prior.size() ? FT(prior[0]): FT(0);
         std::sprintf(buf, "Restarting centers with no support for set_centroids_full_mean: %s as measure with prior of size %zu (%g)\n",
                      msr2str(measure), prior.size(), pv);
-        std::string msg = buf;
-        std::cerr << msg;
-        throw std::runtime_error(msg);
+        std::cerr << buf;
         const constexpr RestartMethodPol restartpol = RESTART_GREEDY;
+        const FT psum = prior.size() == 1 ? FT(prior[0]) * prior.size(): blz::sum(prior);
         for(const auto id: sa) {
             // Instead, use a temporary buffer to store partial sums and randomly select newly-started centers
             // for D2, and just ran
             std::ptrdiff_t r;
-    
             if(restartpol == RESTART_GREEDY)
                 r = std::max_element(costs.begin(), costs.end()) - costs.begin();
             else if(restartpol == RESTART_RANDOM)
                 r = rng() % costs.size();
-            else throw TODOError("D2 sampling-based restarting not yet completed; this simply uses a partial sum and selects by fraction of cost rather than greedily selecting the greatest.");
+            else
+                throw TODOError("D2 sampling-based restarting not yet completed; this simply uses a partial sum and selects by fraction of cost rather than greedily selecting the greatest.");
             ctrs[id] = row(mat, r);
             for(size_t i = 0; i < np; ++i) {
                 unsigned bestid = asn[i], obi = bestid;
+                auto r = row(mat, i, blaze::unchecked);
                 for(unsigned j = 0; j < k; ++j) {
-                    if(j == bestid) continue;
-                    auto c = 0.;
-                    throw TODOError("Note: here it should instead consist of calls to msr_with_prior\n");
+                    if(j == obi) continue;
+                    const auto c = cmp::msr_with_prior(measure, ctrs[j], r, prior, psum);
                     if(c < costs[i]) costs[i] = c, bestid = j;
                 }
                 if(bestid != obi)
                     asn[i] = bestid;
             }
         }
+        sa.clear();
+        for(auto &x: assigned) x.clear();
+        goto set_asn;
     }
     std::fprintf(stderr, "Computing centroids\n");
     for(unsigned i = 0; i < k; ++i) {
@@ -552,7 +557,7 @@ void set_centroids_full_mean(const Mat &mat,
             switch(prior.size()) {
                 case 1:  ctr += prior[0]; break;
                 default: ctr += prior;    break;
-                case 0:;
+                case 0:; // do nothing, IE, there is no prior
             }
         }
     }

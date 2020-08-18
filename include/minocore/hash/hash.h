@@ -18,7 +18,25 @@ struct LSHasherSettings {
     unsigned dim_;
     unsigned k_;
     unsigned l_;
+
     unsigned nhashes() const {return k_ * l_;}
+    LSHasherSettings(const LSHasherSettings &) = default;
+    LSHasherSettings(LSHasherSettings &&) = default;
+
+    bool operator==(const LSHasherSettings &o) const {
+        return dim_ == o.dim_ && k_ == o.k_ && l_ == o.l_;
+    }
+
+    bool operator!=(const LSHasherSettings &o) const {
+        return dim_ != o.dim_ || k_ != o.k_ || l_ != o.l_;
+    }
+
+    LSHasherSettings(unsigned d, unsigned k, unsigned l): dim_(d), k_(k), l_(l) {}
+    LSHasherSettings(std::initializer_list<unsigned> il) {
+        if(il.size() != 3) throw std::invalid_argument("LSHasherSettings requires 3 values");
+        auto beg = il.begin();
+        dim_ = *beg++, k_ = *beg++, l_ = *beg;
+    }
 };
 
 template<typename FT>
@@ -87,42 +105,51 @@ class JSDLSHasher {
     // by the Hellinger distance, and uses an LSH for the Hellinger as-is.
     blaze::DynamicMatrix<FT, SO> randproj_;
     blaze::DynamicVector<FT, SO> boffsets_;
-    LSHasherSettings settings_;
 public:
+    const LSHasherSettings settings_;
     using ElementType = FT;
     static constexpr bool StorageOrder = SO;
+    static constexpr const FT rngnorm = 1.0/(1ull<<52);
     JSDLSHasher(LSHasherSettings settings, const double r, uint64_t seed=0): settings_(settings) {
         unsigned nd = settings.dim_, nh = settings.nhashes();
         if(seed == 0) seed = nd * nh + r;
-        std::mt19937_64 mt(seed);
+        seed |= 1; // Ensures that the seed is odd, necessary
         std::normal_distribution<FT> gen;
-        randproj_ = blaze::generate(nh, nd, [&](size_t x, size_t y){
-            std::mt19937_64 mt(seed + x + seed * y);
-            return gen(mt);
+        randproj_ = blaze::generate(nh, nd, [seed,&gen](uint64_t x, size_t y) ALWAYS_INLINE {
+            wy::WyRand<uint64_t> rng(((x << 32) | y) ^ seed);
+            return gen(rng);
         });
         randproj_ /= r;
-        boffsets_ = blaze::generate(nh, [&](size_t){return FT(mt()) / mt.max();});
-        assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow, I suppose
+        boffsets_.resize(nh);
+        std::mt19937_64 mt(seed);
+        for(auto &i: boffsets_) i = FT(mt()) / mt.max();
+        assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow
     }
+    JSDLSHasher(unsigned dim, unsigned k, unsigned l, const double r, uint64_t seed=0): JSDLSHasher(LSHasherSettings{dim, k, l}, r, seed)
+    {}
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {
+    decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
         //std::fprintf(stderr, "Regular input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
-        return blaze::ceil(randproj_ * blaze::sqrt(~input) + boffsets_);
+        return randproj_ * blaze::sqrt(~input) + boffsets_;
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, !SO> &input) const {
+    decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
         //std::fprintf(stderr, "Reversed input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
-        return blaze::ceil(randproj_ * trans(blaze::sqrt(~input)) + boffsets_);
+        return randproj_ * trans(blaze::sqrt(~input)) + boffsets_;
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Matrix<VT, SO> &input) const {
+    decltype(auto) project(const blaze::Matrix<VT, SO> &input) const {
         //std::fprintf(stderr, "Regular input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (~input).rows(), (~input).columns(), randproj_.rows(), randproj_.columns());
-        return trans(blaze::ceil(randproj_ * trans(blaze::sqrt(~input)) + blaze::expand(boffsets_, (~input).rows())));
+        return trans(randproj_ * trans(blaze::sqrt(~input)) + blaze::expand(boffsets_, (~input).rows()));
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Matrix<VT, !SO> &input) const {
+    decltype(auto) project(const blaze::Matrix<VT, !SO> &input) const {
         //std::fprintf(stderr, "Reversed SO input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (~input).rows(), (~input).columns(), randproj_.rows(), randproj_.columns());
-        return trans(blaze::ceil(randproj_ * blaze::sqrt(~input) + blaze::expand(boffsets_, (~input).columns())));
+        return trans(randproj_ * blaze::sqrt(~input) + blaze::expand(boffsets_, (~input).columns()));
+    }
+    template<typename...Args>
+    decltype(auto) hash(Args &&...args) const {
+        return ceil(project(std::forward<Args>(args)...));
     }
     const auto &matrix() const {return randproj_;}
     auto dim() const {return randproj_.columns();}
@@ -144,11 +171,16 @@ template<template<typename...> class Distribution, typename FT, bool SO, bool us
 class PStableLSHasher {
     blaze::DynamicMatrix<FT, SO> randproj_;
     blaze::DynamicVector<FT, SO> boffsets_;
+public:
     LSHasherSettings settings_;
+private:
     double w_;
 public:
     using ElementType = FT;
     static constexpr bool StorageOrder = SO;
+    template<typename...CArgs>
+    PStableLSHasher(unsigned dim, unsigned k, unsigned l, double w, uint64_t seed, CArgs &&...args):
+        PStableLSHasher(LSHasherSettings{dim, k, l}, w, seed, std::forward<CArgs>(args)...) {}
     template<typename...CArgs>
     PStableLSHasher(LSHasherSettings settings, double w, uint64_t seed, CArgs &&...args):
         settings_(settings), w_(w)
@@ -164,28 +196,32 @@ public:
         assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow, I suppose
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {
-        if constexpr(use_offsets) return blaze::floor(randproj_ * (~input) + 1. + boffsets_);
-        else                      return blaze::floor(randproj_ * (~input));
+    decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
+        if constexpr(use_offsets) return randproj_ * (~input) + 1. + boffsets_;
+        else                      return randproj_ * (~input);
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, !SO> &input) const {
-        if constexpr(use_offsets) return blaze::floor(randproj_ * trans(~input) + 1. + boffsets_);
-        else                      return blaze::floor(randproj_ * trans(~input));
+    decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
+        if constexpr(use_offsets) return randproj_ * trans(~input) + 1. + boffsets_;
+        else                      return randproj_ * trans(~input);
     }
     template<typename MT>
-    decltype(auto) hash(const blaze::Matrix<MT, SO> &input) const {
+    decltype(auto) project(const blaze::Matrix<MT, SO> &input) const {
         if constexpr(use_offsets)
-            return trans(blaze::floor(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).rows())));
+            return trans(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).rows()));
         else
-            return trans(blaze::floor(randproj_ * trans(~input)));
+            return trans(randproj_ * trans(~input));
     }
     template<typename MT>
-    decltype(auto) hash(const blaze::Matrix<MT, !SO> &input) const {
+    decltype(auto) project(const blaze::Matrix<MT, !SO> &input) const {
         if constexpr(use_offsets)
-            return trans(blaze::floor(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).columns())));
+            return trans(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).columns()));
         else
-            return trans(blaze::floor(randproj_ * trans(~input)));
+            return trans(randproj_ * trans(~input));
+    }
+    template<typename...HArgs>
+    decltype(auto) hash(Args &&...args) const {
+        return floor(project(std::forward<HArgs>(args)...));
     }
     const auto &matrix() const {return randproj_;}
     auto dim() const {return settings_.dim_;}
@@ -203,6 +239,9 @@ public:
     L2LSHasher(LSHasherSettings settings, double w, uint64_t seed=0, Args &&...args): super(settings, w, seed, std::forward<Args>(args)...)
     {
     }
+    template<typename...Args>
+    L2LSHasher(unsigned d, unsigned k, unsigned l, double w, uint64_t seed=0, Args &&...args): 
+        L2LSHasher(LSHasherSettings(d, k, l), w, seed, std::forward<Args>(args)...) {}
 };
 
 template<typename FT=double, bool SO=blaze::rowMajor, bool use_offsets=true>
@@ -213,6 +252,9 @@ public:
     L1LSHasher(LSHasherSettings settings, double w, uint64_t seed=0, Args &&...args): super(settings, w, seed, std::forward<Args>(args)...)
     {
     }
+    template<typename...Args>
+    L1LSHasher(unsigned d, unsigned k, unsigned l, double w, uint64_t seed=0, Args &&...args): 
+        L1LSHasher(LSHasherSettings(d, k, l), w, seed, std::forward<Args>(args)...) {}
 };
 template<typename FT=double, bool SO=blaze::rowMajor, bool use_offsets=true>
 class LpLSHasher: public PStableLSHasher<cms_distribution, FT, SO, use_offsets> {
@@ -222,6 +264,9 @@ public:
     LpLSHasher(LSHasherSettings settings, double p, double w, uint64_t seed=0): super(settings, w, seed, p)
     {
     }
+    template<typename...Args>
+    LpLSHasher(unsigned d, unsigned k, unsigned l, double p, double w, uint64_t seed=0, Args &&...args): 
+        LpLSHasher(LSHasherSettings(d, k, l), p, w, seed, std::forward<Args>(args)...) {}
 };
 
 template<typename FT=double, bool SO=blaze::rowMajor, bool use_offsets=true>
@@ -249,36 +294,51 @@ class S2JSDLSHasher {
     // Note that this is an LSH for the JS Metric, not the JSD.
     blaze::DynamicMatrix<FT, SO> randproj_;
     blaze::DynamicVector<FT, SO> boffsets_;
+public:
     LSHasherSettings settings_;
+private:
     double w_;
 public:
     using ElementType = FT;
     static constexpr bool StorageOrder = SO;
+    S2JSDLSHasher(unsigned dim, unsigned k, unsigned l, const double w, uint64_t seed=0): S2JSDLSHasher(LSHasherSettings{dim, k, l}, w, seed)
+    {}
     S2JSDLSHasher(LSHasherSettings settings, double w, uint64_t seed=0): settings_(settings), w_(w) {
         auto nh = settings.nhashes();
         auto nd = settings.dim_;
         if(seed == 0) seed = nd * nh  + w + 1. / w;
         std::mt19937_64 mt(seed);
         std::normal_distribution<FT> gen;
-        randproj_ = blaze::abs(blaze::generate(nh, nd, [&](size_t, size_t){return gen(mt);}) * (4. / (w * w)));
-        boffsets_ = blaze::generate(nh, [&](size_t){return FT(mt() / 2) / mt.max();}) - 0.5;
+        auto wyseed = mt();
+        randproj_ = blaze::abs(blaze::generate(nh, nd, [&](size_t i, size_t j){
+            wy::WyHash<uint64_t> wyh(((i << 32) | j) ^ wyseed);
+            return gen(wyh);
+        }) * (4. / (w * w)));
+        wyseed = mt();
+        boffsets_ = blaze::generate<SO>(nh, [&](size_t i) {
+            return (wy::WyHash<uint64_t>(i ^ wyseed)() >> 12) * (1. / (1ull << 52));
+        }) - 0.5;
         assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow, I suppose
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, SO> &input) const {
-        return blaze::floor(blaze::sqrt(randproj_ * (~input) + 1.) + boffsets_);
+    decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
+        return blaze::sqrt(randproj_ * (~input) + 1.) + boffsets_;
     }
     template<typename VT>
-    decltype(auto) hash(const blaze::Vector<VT, !SO> &input) const {
-        return blaze::floor(blaze::sqrt(randproj_ * trans(~input) + 1.) + boffsets_);
+    decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
+        return blaze::sqrt(randproj_ * trans(~input) + 1.) + boffsets_;
     }
     template<typename MT>
-    decltype(auto) hash(const blaze::Matrix<MT, SO> &input) const {
-        return trans(blaze::floor(blaze::sqrt(randproj_ * trans(~input) + 1.) + blaze::expand(boffsets_, (~input).rows())));
+    decltype(auto) project(const blaze::Matrix<MT, SO> &input) const {
+        return trans(blaze::sqrt(randproj_ * trans(~input) + 1.) + blaze::expand(boffsets_, (~input).rows()));
     }
     template<typename MT>
-    decltype(auto) hash(const blaze::Matrix<MT, !SO> &input) const {
-        return trans(blaze::floor(blaze::sqrt(randproj_ * (trans(~input)) + 1.) + blaze::expand(boffsets_, (~input).columns())));
+    decltype(auto) project(const blaze::Matrix<MT, !SO> &input) const {
+        return trans(blaze::sqrt(randproj_ * (trans(~input)) + 1.) + blaze::expand(boffsets_, (~input).columns()));
+    }
+    template<typename...Args>
+    decltype(auto) hash(Args &&...args) const {
+        return floor(project(std::forward<Args>(args)...));
     }
     const auto &matrix() const {return randproj_;}
     auto dim() const {return settings_.dim_;}
@@ -497,6 +557,7 @@ using hash::S2JSDLSHasher;     // D_{JSM}(P || Q) = \sqrt{D_{JS}(P || Q)}
 using hash::TVDLSHasher;       // D_{TV}(P || Q)  = \frac{D_{\ell_1}(P || Q)}{2}
 
 using hash::LSHTable;
+using hash::LpLSHasher;
 
 }
 

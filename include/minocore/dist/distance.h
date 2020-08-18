@@ -607,6 +607,24 @@ static constexpr const char *prior2desc(Prior p) {
 }
 
 
+template<typename VT1, typename VT2, bool SO, bool OSO, typename CT=CommonType_t<ElementType_t<VT1>, ElementType_t<VT2>>, typename OFT>
+CT cosine_similarity(const blz::Vector<VT1, SO> &x, const blz::Vector<VT2, OSO> &y, OFT xnorm, OFT ynorm) {
+    return blz::dot(~x, ~y) / (xnorm * ynorm);
+}
+template<typename VT1, typename VT2, bool SO, bool OSO, typename CT=CommonType_t<ElementType_t<VT1>, ElementType_t<VT2>>>
+CT cosine_similarity(const blz::Vector<VT1, SO> &x, const blz::Vector<VT2, OSO> &y) {
+    return blz::dot(~x, ~y) / (blz::l2Norm(~x) * blz::l2Norm(~y));
+}
+template<typename VT1, typename VT2, bool SO, bool OSO, typename CT=CommonType_t<ElementType_t<VT1>, ElementType_t<VT2>>, typename OFT>
+CT cosine_distance(const blz::Vector<VT1, SO> &x, const blz::Vector<VT2, OSO> &y, OFT xnorm, OFT ynorm) {
+    static constexpr CT PI_INV = 1. / 3.14159265358979323846264338327950288;
+    return std::acos(cosine_similarity(x, y, xnorm, ynorm)) * PI_INV;
+}
+template<typename VT1, typename VT2, bool SO, bool OSO, typename CT=CommonType_t<ElementType_t<VT1>, ElementType_t<VT2>>>
+CT cosine_distance(const blz::Vector<VT1, SO> &x, const blz::Vector<VT2, OSO> &y) {
+    static constexpr CT PI_INV = 1. / 3.14159265358979323846264338327950288;
+    return std::acos(cosine_similarity(x, y, blz::l2Norm(~x), blz::l2Norm(~y))) * PI_INV;
+}
 
 template<typename LHVec, typename RHVec>
 auto bhattacharyya_measure(const LHVec &lhs, const RHVec &rhs) {
@@ -688,6 +706,7 @@ CT scipy_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVect
     }
     return ret;
 }
+
 
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
 CT scipy_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1.) {

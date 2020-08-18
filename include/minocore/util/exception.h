@@ -2,35 +2,45 @@
 #define FGC_EXCEPTION_H__
 #include <stdexcept>
 #include <string>
+#include <iostream> // for std::cerr;
 
 namespace minocore {
 
 inline namespace exception {
 
-struct TODOError: public std::runtime_error {
+struct verbose_runtime_error: public std::runtime_error {
+    // Sometimes exception messages aren't emitted by the stdlib, so we're ensuring they are
     template<typename...A>
-    TODOError(A &&...a): std::runtime_error(std::forward<A>(a)...) {}
+    verbose_runtime_error(A &&...a): std::runtime_error(std::forward<A>(a)...) {
+        std::cerr << "What: " << this->what() << '\n';
+    }
 };
 
-class NotImplementedError: public std::runtime_error {
+struct TODOError: public verbose_runtime_error {
+    template<typename...A>
+    TODOError(A &&...a): verbose_runtime_error(std::forward<A>(a)...) {}
+    TODOError(): verbose_runtime_error("TODO: this") {}
+};
+
+class NotImplementedError: public verbose_runtime_error {
 public:
     template<typename... Args>
-    NotImplementedError(Args &&...args): std::runtime_error(std::forward<Args>(args)...) {}
+    NotImplementedError(Args &&...args): verbose_runtime_error(std::forward<Args>(args)...) {}
 
-    NotImplementedError(): std::runtime_error("NotImplemented.") {}
+    NotImplementedError(): verbose_runtime_error("NotImplemented.") {}
 };
 
-class UnsatisfiedPreconditionError: public std::runtime_error {
+class UnsatisfiedPreconditionError: public verbose_runtime_error {
 public:
-    UnsatisfiedPreconditionError(std::string msg): std::runtime_error(std::string("Unsatisfied precondition: ") + msg) {}
+    UnsatisfiedPreconditionError(std::string msg): verbose_runtime_error(std::string("Unsatisfied precondition: ") + msg) {}
 
-    UnsatisfiedPreconditionError(): std::runtime_error("Unsatisfied precondition.") {}
+    UnsatisfiedPreconditionError(): verbose_runtime_error("Unsatisfied precondition.") {}
 };
 
 static int require(bool condition, std::string s, int ec=0) {
     if(!condition) {
-        if(ec) throw std::runtime_error(s + " Error code: " + std::to_string(ec));
-        else   throw std::runtime_error(s);
+        if(ec) throw verbose_runtime_error(s + " Error code: " + std::to_string(ec));
+        else   throw verbose_runtime_error(s);
     }
     return ec;
 }
@@ -52,11 +62,11 @@ static int precondition_require(bool condition, std::string s, int ec=0) {
     return ec;
 }
 
-class UnsatisfiedPostconditionError: public std::runtime_error {
+class UnsatisfiedPostconditionError: public verbose_runtime_error {
 public:
-    UnsatisfiedPostconditionError(std::string msg): std::runtime_error(std::string("Unsatisfied precondition: ") + msg) {}
+    UnsatisfiedPostconditionError(std::string msg): verbose_runtime_error(std::string("Unsatisfied precondition: ") + msg) {}
 
-    UnsatisfiedPostconditionError(): std::runtime_error("Unsatisfied precondition.") {}
+    UnsatisfiedPostconditionError(): verbose_runtime_error("Unsatisfied precondition.") {}
 };
 
 static int postcondition_require(bool condition, std::string s, int ec=0) {
