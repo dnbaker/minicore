@@ -380,8 +380,8 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     }
 }
 
-template<typename FT=double, typename Mat, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
-void set_centroids_tvd(const Mat &, AsnT &, CostsT &, CtrsT &, WeightsT *) {
+template<typename...Args>
+void set_centroids_tvd(Args &&...args) {
     throw std::invalid_argument("TVD clustering not supported explicitly; instead, normalize your count vectors and perform the clustering with L1");
 }
 
@@ -561,7 +561,53 @@ void set_centroids_full_mean(const Mat &mat,
             }
         }
     }
-    DBG_ONLY(std::fprintf(stderr, "Centroids set\n");)
+    DBG_ONLY(std::fprintf(stderr, "Centroids set, hard\n");)
+}
+
+template<typename FT=double, typename Mat, typename PriorT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
+void set_centroids_full_mean(const Mat &mat,
+    const dist::DissimilarityMeasure measure,
+    const PriorT &prior, CostsT &costs, CtrsT &ctrs,
+    WeightsT *weights, FT temp=1.)
+{
+    std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
+
+    std::fprintf(stderr, "Computing centroids\n");
+    blz::DV<FT, blz::rowVector> asn(ctrs.size(), 0.);
+    blz::DV<FT> wsums(ctrs.size(), 0.);
+    const unsigned k = ctrs.size();
+    OMP_ONLY(std::unique_ptr<std::mutex[]> locks(ctrs.size());)
+    OMP_PFOR
+    for(uint64_t i = 0; i < costs.rows(); ++i) {
+        auto r = row(costs, i, blaze::unchecked);
+        if(temp != 1.)
+            asn = softmax(r * temp);
+        else
+            asn = softmax(r);
+        FT w;
+        if(weights) w = weights->operator[](i);
+        else w = 1.;
+        for(unsigned j = 0; j < k; ++j) {
+            if(!asn[j]) continue;
+            if(weights) {
+                {
+                    OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
+                    ctrs[j] += r * (asn[j] * w);
+                }
+                OMP_ATOMIC
+                wsums[j] += w;
+            } else {
+                {
+                    OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
+                    ctrs[j] += r * asn[j];
+                }
+                OMP_ATOMIC
+                ++wsums[j];
+            }
+        }
+    }
+    for(unsigned j = 0; j < k; ++j) ctrs[j] /= wsums[j];
+    DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
 }
 
 } } // namespace minocore::clustering
