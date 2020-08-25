@@ -273,43 +273,6 @@ void assign_points_hard(const Mat &mat,
         VERBOSE_ONLY(std::fprintf(stderr, "point %zu is assigned to center %u with cost %0.12g\n", i, bestid, cost);)
     }
 }
-#if 0
-void assign_points_hard(const Mat &mat,
-                        const dist::DissimilarityMeasure measure,
-                        const PriorT &prior,
-                        std::vector<CtrT> &centers,
-                        AsnT &asn,
-                        CostsT &costs,
-                        const WeightT *weights=static_cast<WeightT *>(nullptr));
-
-
-#endif
-template<typename FT, typename MT, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT>
-void assign_points_soft(const blaze::Matrix<MT, blz::rowMajor> &mat,
-                        const dist::DissimilarityMeasure measure,
-                        const PriorT &prior,
-                        std::vector<CtrT> &centers,
-                        AsnT &asn,
-                        CostsT &costs,
-                        const WeightT *weights)
-{
-#if 0
-    using asn_t = std::decay_t<decltype(asn[0])>;
-    const size_t np = costs.size();
-    const unsigned k = centers.size();
-    for(size_t i = 0; i < np; ++i) {
-        auto cost = compute_cost(i, 0);
-        asn_t bestid = 0;
-        for(unsigned j = 1; j < k; ++j)
-            if(auto newcost = compute_cost(i, 1); newcost < cost)
-                bestid = j, cost = newcost;
-        costs[i] = cost;
-        asn[i] = bestid;
-    }
-#else
-    throw TODOError("Not completed");
-#endif
-}
 
 template<typename MT, // MatrixType
          typename FT=blaze::ElementType_t<MT>, // Type of result.
@@ -395,7 +358,6 @@ void set_centroids_soft(const Mat &mat,
                           ? double(prior[0] * mat.columns())
                           : double(blz::sum(prior));
     blaze::DynamicVector<FT, blaze::rowVector> center_sums = trans(blaze::generate(k, [&centers](auto x) {return blz::sum(centers[x]);}));
-    throw NotImplementedError("Not yet completed: set_centroids_soft. This now computes centers and recalculates costs.");
     auto compute_cost = [&](auto id, auto cid) -> FT {
         auto mr = row(mat, id BLAZE_CHECK_DEBUG);
         const auto &ctr = centers[cid];

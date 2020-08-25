@@ -108,13 +108,14 @@ static constexpr INLINE bool is_bregman(DissimilarityMeasure d)  {
         case JSD: case MKL: case POISSON: case ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO:
+        case SQRL2:
         return true;
         default: ;
     }
     return false;
 }
 static constexpr INLINE bool satisfies_d2(DissimilarityMeasure d) {
-    return d == LLR || d == UWLLR || d == OLLR || is_bregman(d) || d == SQRL2 || d == PSL2;
+    return d == LLR || d == UWLLR || d == OLLR || is_bregman(d) || d == PSL2;
 }
 static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
     switch(d) {

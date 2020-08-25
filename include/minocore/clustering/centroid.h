@@ -572,41 +572,34 @@ void set_centroids_full_mean(const Mat &mat,
 {
     std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
 
-    std::fprintf(stderr, "Computing centroids\n");
-    blz::DV<FT, blz::rowVector> asn(ctrs.size(), 0.);
-    blz::DV<FT> wsums(ctrs.size(), 0.);
+    std::fprintf(stderr, "[%s] Computing centroids\n", __func__);
     const unsigned k = ctrs.size();
-    OMP_ONLY(std::unique_ptr<std::mutex[]> locks(ctrs.size());)
+    blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
+    OMP_ONLY(std::unique_ptr<std::mutex[]> locks(new std::mutex[ctrs.size()]);)
+    // Currently, this locks each center uniquely
+    // This is not ideal, but it's hard to handle this atomically
+    // TODO: provide a better parallelization method, either
+    // 1. reduction
+    // 2. more fine-grained locking strategies (though would fail for low-dimension data)
     OMP_PFOR
     for(uint64_t i = 0; i < costs.rows(); ++i) {
-        auto r = row(costs, i, blaze::unchecked);
-        if(temp != 1.)
-            asn = softmax(r * temp);
-        else
-            asn = softmax(r);
-        FT w;
+        std::fprintf(stderr, "item %zu/%zu contributions being added\n", i + 1, costs.rows());
+        const auto r = row(costs, i, blaze::unchecked);
+        const auto mr = row(mat, i, blz::unchecked);
+        assert(asn.size() == r.size());
+        asn = softmax(r * temp);
+        FT w = 1.;
         if(weights) w = weights->operator[](i);
-        else w = 1.;
         for(unsigned j = 0; j < k; ++j) {
-            if(!asn[j]) continue;
-            if(weights) {
-                {
-                    OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
-                    ctrs[j] += r * (asn[j] * w);
-                }
-                OMP_ATOMIC
-                wsums[j] += w;
-            } else {
-                {
-                    OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
-                    ctrs[j] += r * asn[j];
-                }
-                OMP_ATOMIC
-                ++wsums[j];
-            }
+            const auto aiv = asn[j];
+            if(aiv == 0.) continue;
+            OMP_ATOMIC
+            wsums[j] += w;
+            OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
+            ctrs[j] += mr * (aiv * w);
         }
     }
-    for(unsigned j = 0; j < k; ++j) ctrs[j] /= wsums[j];
+    for(unsigned j = 0; j < k; ++j) ctrs[j] *= (FT(1.) / wsums[j]);
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
 }
 
