@@ -54,14 +54,10 @@ int main(int argc, char *argv[]) {
     }
     assert(min(asn) == 0);
     assert(max(asn) == centers.size() - 1);
-    clust::perform_hard_clustering(x, msr, prior, centers, asn, hardcosts);
     // generate a coreset
-    coresets::CoresetSampler<double, uint32_t> cs;
-    coresets::SensitivityMethod sm = coresets::BFL;
-    //if(msr == dist::MKL || msr == dist::SQRL2 || msr == dist::IS || msr == dist::REVERSE_MKL || msr == dist::REVERSE_ITAKURA_SAITO) {
-    if(dist::is_bregman(msr)) {
-        sm = coresets::LBK;
-    } else if(msr == dist::L1 || msr == dist::L2) sm = coresets::VX;
-    cs.make_sampler(x.rows(), k, hardcosts.data(), asn.data(), nullptr, /*seed=*/13, sm);
     // recalculate now
+    complete_hardcosts = blaze::generate(nr, k, [&](auto r, auto col) {
+        return cmp::msr_with_prior(msr, row(x, r), centers[col], prior, psum);
+    });
+    clust::perform_soft_clustering(x, msr, prior, centers, complete_hardcosts, temp);
 }
