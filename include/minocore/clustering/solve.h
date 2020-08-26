@@ -294,12 +294,14 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
                              size_t maxiter=size_t(-1))
 {
     auto compute_cost = [&]() {
-        FT ret;
-        if(weights) {
-            auto cwexp = costs % blz::expand(*weights, costs.columns());
-            ret = blaze::sum(blaze::softmax<blaze::rowwise>(costs * temperature) % cwexp);
-        } else {
-            ret = blaze::sum(blaze::softmax<blaze::rowwise>(costs * temperature) % costs);
+        FT ret = 0.;
+        OMP_PRAGMA("omp parallel for reduction(+:ret)")
+        for(size_t i = 0; i < costs.rows(); ++i) {
+            auto cr = row(costs, i, blaze::unchecked);
+            if(weights)
+                ret += sum(softmax(cr * temperature) * cr) * (*weights)[i];
+            else
+                ret += sum(softmax(cr * temperature) * cr);
         }
         return ret;
     };

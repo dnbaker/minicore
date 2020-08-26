@@ -172,6 +172,9 @@ libsleef.a:
 	+cd sleef && mkdir -p __build && cd __build && cmake .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd .. && rm -r __build
 
 
+soft: solvetestdbg solvetest solvesoft solvesoftdbg
+
+
 
 clean:
 	rm -f $(EX) graphrun dmlrun $(FEX) $(PGEX) $(PGFEX) $(EX)
