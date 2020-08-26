@@ -1804,7 +1804,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
         assert(std::abs(blz::sum(wr)) < 1.);
-        assert(blz::sum(wc) < 1.);
+        //assert(blz::sum(wc) < 1. || !std::fprintf(stderr, "sum of wc: %g. rhrsi: %g. rhrsum: %g\n", blz::sum(wc), rhrsi, rhsum));
         // TODO: consider batching logs from sparse vectors with some extra dispatching code
         auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
         // Consider -ffast-math/-fassociative-math

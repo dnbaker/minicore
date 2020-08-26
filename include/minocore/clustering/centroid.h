@@ -533,16 +533,14 @@ void set_centroids_full_mean(const Mat &mat,
         for(auto &x: assigned) x.clear();
         goto set_asn;
     }
-    std::fprintf(stderr, "Computing centroids\n");
     for(unsigned i = 0; i < k; ++i) {
-        std::fprintf(stderr, "Computing centroid %u\n", i);
         // Compute mean for centroid
         const auto nasn = assigned[i].size();
         const auto asp = assigned[i].data();
         auto &ctr = ctrs[i];
         if(nasn == 1) ctr = row(mat, *asp);
         else {
-            std::fprintf(stderr, "Selecting rows\n");
+            DBG_ONLY(std::fprintf(stderr, "Selecting rows\n");)
             auto rowsel = rows(mat, asp, nasn);
             if(weights) {
                 auto elsel = elements(*weights, asp, nasn);
@@ -550,7 +548,7 @@ void set_centroids_full_mean(const Mat &mat,
                 // weighted sum over total weight -> weighted mean
                 ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
             } else ctr = blaze::mean<blaze::columnwise>(rowsel);
-            std::fprintf(stderr, "Set center %u\n", i);
+            DBG_ONLY(std::fprintf(stderr, "Set center %u\n", i);)
         }
         // Adjust for prior
         if constexpr(blaze::IsDenseVector_v<CtrsT>) {
@@ -572,9 +570,11 @@ void set_centroids_full_mean(const Mat &mat,
 {
     std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
 
-    std::fprintf(stderr, "[%s] Computing centroids\n", __func__);
+    VERBOSE_ONLY(std::fprintf(stderr, "[%s] Computing centroids\n", __func__);)
     const unsigned k = ctrs.size();
     blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
+    OMP_PFOR
+    for(unsigned i = 0; i < ctrs.size(); ++i) ctrs[i].reset(); // set to 0
     OMP_ONLY(std::unique_ptr<std::mutex[]> locks(new std::mutex[ctrs.size()]);)
     // Currently, this locks each center uniquely
     // This is not ideal, but it's hard to handle this atomically
@@ -583,11 +583,14 @@ void set_centroids_full_mean(const Mat &mat,
     // 2. more fine-grained locking strategies (though would fail for low-dimension data)
     OMP_PFOR
     for(uint64_t i = 0; i < costs.rows(); ++i) {
-        std::fprintf(stderr, "item %zu/%zu contributions being added\n", i + 1, costs.rows());
         const auto r = row(costs, i, blaze::unchecked);
         const auto mr = row(mat, i, blz::unchecked);
         assert(asn.size() == r.size());
         asn = softmax(r * temp);
+        if(isnan(asn)) {
+            std::cerr << "asn: " << asn << " from softmax " << (r * temp) << " for temp = " << temp << '\n';
+            throw std::runtime_error("isnan");
+        }
         FT w = 1.;
         if(weights) w = weights->operator[](i);
         for(unsigned j = 0; j < k; ++j) {
@@ -597,9 +600,12 @@ void set_centroids_full_mean(const Mat &mat,
             wsums[j] += w;
             OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
             ctrs[j] += mr * (aiv * w);
+            //std::cerr << "ctr after at iter " << i << " and j " << j << " is " << ctrs[j] << '\n';
         }
     }
-    for(unsigned j = 0; j < k; ++j) ctrs[j] *= (FT(1.) / wsums[j]);
+    for(unsigned j = 0; j < k; ++j) {
+        ctrs[j] *= (FT(1.) / wsums[j]);
+    }
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
 }
 

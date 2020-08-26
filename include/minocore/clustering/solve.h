@@ -297,15 +297,9 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
         FT ret;
         if(weights) {
             auto cwexp = costs % blz::expand(*weights, costs.columns());
-            if(temperature != 1.)
-                ret = blaze::sum(blaze::softmax<blaze::rowwise>(costs * temperature) % cwexp);
-            else
-                ret = blaze::sum(blaze::softmax<blaze::rowwise>(costs) % cwexp);
+            ret = blaze::sum(blaze::softmax<blaze::rowwise>(costs * temperature) % cwexp);
         } else {
-            if(temperature != 1.)
-                ret = blaze::sum(blaze::softmax<blaze::rowwise>(costs * temperature) % costs);
-            else
-                ret = blaze::sum(blaze::softmax<blaze::rowwise>(costs) % costs);
+            ret = blaze::sum(blaze::softmax<blaze::rowwise>(costs * temperature) % costs);
         }
         return ret;
     };
@@ -317,6 +311,7 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
         auto oldcost = cost;
         set_centroids_soft<FT>(~mat, measure, prior, centers, costs, weights, temperature);
         cost = compute_cost();
+        std::fprintf(stderr, "oldcost: %g. newcost: %g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
         if(oldcost - cost < eps * initcost || ++iternum == maxiter)
             break;
     }
@@ -360,8 +355,9 @@ void set_centroids_soft(const Mat &mat,
     blaze::DynamicVector<FT, blaze::rowVector> center_sums = trans(blaze::generate(k, [&centers](auto x) {return blz::sum(centers[x]);}));
     auto compute_cost = [&](auto id, auto cid) -> FT {
         auto mr = row(mat, id BLAZE_CHECK_DEBUG);
+        assert(cid < centers.size());
         const auto &ctr = centers[cid];
-        assert(ctr.size() == mr.size());
+        assert(ctr.size() == mr.size() || !std::fprintf(stderr, "ctr size: %zu. row size: %zu\n", ctr.size(), mr.size()));
         auto mrmult = mr / sum(mr);
         auto wctr = ctr * (1. / (center_sums[cid]));
         FT ret;
@@ -396,7 +392,15 @@ void set_centroids_soft(const Mat &mat,
         }
         return ret;
     };
-    costs = blaze::generate(mat.rows(), mat.columns(), compute_cost);
+    costs = blaze::generate(mat.rows(), centers.size(), compute_cost);
+#if 0
+    for(size_t i = std::min(size_t(10), centers.size()); i--;) {
+        std::cerr << "center " << i << " is: " << centers[i];
+    }
+    for(size_t i = std::min(size_t(10), mat.rows()); i--;) {
+        std::cerr << "row " << i << " has costs " << row(costs, i);
+    }
+#endif
 }
 
 

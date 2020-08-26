@@ -15,9 +15,13 @@ int main(int argc, char *argv[]) {
     const size_t nr = x.rows(), nc = x.columns();
     blz::DV<double> prior{double(1. / nc)};
     dist::DissimilarityMeasure msr = dist::MKL;
+    double temp = 1.;
     if(argc > 1) {
         msr = (dist::DissimilarityMeasure)std::atoi(argv[1]);
-        std::fprintf(stderr, "This may not work if you change the measure but not the original costs\n");
+    }
+    if(argc > 2) {
+        temp = std::atof(argv[2]);
+        std::fprintf(stderr, "temp for soft clustering is %g\n", temp);
     }
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
     std::vector<blaze::CompressedVector<double, blaze::rowVector>> centers;
@@ -64,5 +68,5 @@ int main(int argc, char *argv[]) {
     complete_hardcosts = blaze::generate(nr, k, [&](auto r, auto col) {
         return cmp::msr_with_prior(msr, row(x, r), centers_cpy[col], prior, psum);
     });
-    clust::perform_soft_clustering(x, msr, prior, centers_cpy, complete_hardcosts);
+    clust::perform_soft_clustering(x, msr, prior, centers_cpy, complete_hardcosts, temp);
 }
