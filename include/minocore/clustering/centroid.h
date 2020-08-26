@@ -575,13 +575,12 @@ void set_centroids_full_mean(const Mat &mat,
     blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
     OMP_PFOR
     for(unsigned i = 0; i < ctrs.size(); ++i) ctrs[i].reset(); // set to 0
-    OMP_ONLY(std::unique_ptr<std::mutex[]> locks(new std::mutex[ctrs.size()]);)
+    //OMP_ONLY(std::unique_ptr<std::mutex[]> locks(new std::mutex[ctrs.size()]);)
     // Currently, this locks each center uniquely
     // This is not ideal, but it's hard to handle this atomically
     // TODO: provide a better parallelization method, either
     // 1. reduction
     // 2. more fine-grained locking strategies (though would fail for low-dimension data)
-    OMP_PFOR
     for(uint64_t i = 0; i < costs.rows(); ++i) {
         const auto r = row(costs, i, blaze::unchecked);
         const auto mr = row(mat, i, blz::unchecked);
@@ -598,13 +597,13 @@ void set_centroids_full_mean(const Mat &mat,
             if(aiv == 0.) continue;
             OMP_ATOMIC
             wsums[j] += w;
-            OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
+            //OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
             ctrs[j] += mr * (aiv * w);
             //std::cerr << "ctr after at iter " << i << " and j " << j << " is " << ctrs[j] << '\n';
         }
     }
     for(unsigned j = 0; j < k; ++j) {
-        ctrs[j] *= (FT(1.) / wsums[j]);
+        ctrs[j] /= wsums[j];
     }
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
 }
