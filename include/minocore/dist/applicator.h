@@ -1906,8 +1906,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
             {
                 FT tmp = dist::bhattacharyya_measure(mr / (lhsum - prior_sum),  ctr / (rhsum - prior_sum));
-                if(msr == BHATTACHARYYA_METRIC) tmp = std::sqrt(1. - tmp);
-                else                            tmp = -std::log(tmp);
+                if(msr == BHATTACHARYYA_METRIC) tmp = std::sqrt(std::max(FT(1.) - tmp, FT(0)));
+                else                            tmp = -std::log(tmp + 1e-50);
                 ret = tmp;
                 break;
             }
