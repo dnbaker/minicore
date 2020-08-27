@@ -632,7 +632,7 @@ auto bhattacharyya_measure(const LHVec &lhs, const RHVec &rhs) {
     // Requires same storage.
     // TODO: generalize for different storage classes/transpose flags using DenseVector and SparseVector
     // base classes
-    return sqrt(lhs * rhs);
+    return sum(sqrt(lhs * rhs));
 }
 
 template<typename LHVec, typename RHVec>
@@ -781,6 +781,11 @@ template<typename VT, typename VT2, bool SO>
 static INLINE auto canberra_distance(const blz::DenseVector<VT, SO> &lhs, const blz::DenseVector<VT2, SO> &rhs) {
     const auto &lh(~lhs), &rh(~rhs);
     return blaze::sum(blaze::abs(lh - rh) / (blaze::abs(lh) + blaze::abs(rh)));
+}
+
+template<typename VT, typename VT2, bool SO>
+static INLINE auto hellinger(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs) {
+    return l2Norm(sqrt(~lhs) - sqrt(~rhs));
 }
 
 

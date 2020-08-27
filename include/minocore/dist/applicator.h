@@ -1780,8 +1780,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                         [&](auto, auto x) ALWAYS_INLINE {init += lhofunc(x);},
                                         [&](auto, auto y) ALWAYS_INLINE {init += rhofunc(y);});
                 init += sharednz * nsharedmult;
-            } else if constexpr(blaze::IsDenseVector_v<std::decay_t<decltype(src)>> && blaze::IsDenseVector_v<std::decay_t<decltype(ctr)>>) {
-                throw TODOError("");
             } else {
                 throw TODOError("mixed densities;");
             }
@@ -1809,6 +1807,10 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
         // Consider -ffast-math/-fassociative-math
         switch(msr) {
+            case L1: ret = l1Dist(mr, ctr); break;
+            case L2: ret = l2Dist(mr, ctr); break;
+            case SQRL2: ret = sqrDist(mr, ctr); break;
+            case TVD: ret = l1Dist(mr / (lhsum - prior_sum), ctr / (rhsum - prior_sum)); break;
             case JSM:
             case JSD: {
                 ret = perform_core(wr, wc, FT(0),
@@ -1829,7 +1831,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         return (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
                     },
                     lhincl + rhincl - shincl);
-                ret = 0.5 * ret;
+                ret = std::max(FT(0.5) * ret, FT(0));
                 if(msr == JSM) ret = std::sqrt(ret);
             }
             break;
@@ -1860,6 +1862,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     },
                     emptycontrib);
                 if(msr == LLR) ret *= bothsum;
+                ret = std::max(ret, FT(0)); // ensure non-negativity
             }
             break;
             case ITAKURA_SAITO: {
@@ -1889,6 +1892,29 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     -lhinc * rhl);
             }
             break;
+            case REVERSE_MKL: {
+                ret = perform_core(wr, wc, 0.,
+                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (yval + rhinc) * (std::log((yval + rhinc) / (xval + lhinc)));},
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return rhinc * (rhl - std::log(xval + lhinc));},
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {
+                                    const auto yv = yval + rhinc;
+                                    return yv * (std::log(yv) - lhl);
+                    },
+                    -rhinc * lhl);
+            }
+            break;
+            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
+            {
+                FT tmp = dist::bhattacharyya_measure(mr / (lhsum - prior_sum),  ctr / (rhsum - prior_sum));
+                if(msr == BHATTACHARYYA_METRIC) tmp = std::sqrt(1. - tmp);
+                else                            tmp = -std::log(tmp);
+                ret = tmp;
+                break;
+            }
+            case HELLINGER: {
+                ret = hellinger(mr / (lhsum - prior_sum),  ctr / (rhsum - prior_sum));
+                break;
+            }
             case SIS:
             case RSIS:
             default: throw TODOError("unexpected msr; not yet supported");

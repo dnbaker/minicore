@@ -163,7 +163,9 @@ void set_centroids_hard(const Mat &mat,
             break;
 #endif
         default:
-            throw std::runtime_error("Cannot optimize without a valid centroid policy.");
+            constexpr const char *msg = "Cannot optimize without a valid centroid policy.";
+            std::cerr << msg;
+            throw std::runtime_error(msg);
     }
 }
 
@@ -210,6 +212,7 @@ void assign_points_hard(const Mat &mat,
         auto wctr = ctr * (1. / (center_sums[cid]));
         //assert(measure == dist::JSD); // Temporary: this is only for sanity checking while debugging JSD calculation
         FT ret;
+        static_assert(2 == SQRL2, "sanity check");
         switch(measure) {
 
             // Geometric
@@ -248,7 +251,11 @@ void assign_points_hard(const Mat &mat,
             case JSM: std::fprintf(stderr, "No EM algorithm available for measure %d/%s\n", (int)measure, msr2str(measure));
             [[fallthrough]];
 #endif
-            default: throw std::invalid_argument(std::string("Unsupported measure ") + msr2str(measure));
+            default: {
+                const auto msg = std::string("Unsupported measure ") + msr2str(measure) + ", " + std::to_string((int)measure);
+                std::cerr << msg;
+                throw std::invalid_argument(msg);
+            }
         }
         if(ret < 0) {
             if(unlikely(ret < -1e-10)) {
@@ -259,7 +266,7 @@ void assign_points_hard(const Mat &mat,
                 std::abort();
             }
             ret = 0.;
-        }
+        } else if(std::isnan(ret)) ret = 0.;
         return ret;
     };
     for(size_t i = 0; i < np; ++i) {
@@ -298,10 +305,14 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
         OMP_PRAGMA("omp parallel for reduction(+:ret)")
         for(size_t i = 0; i < costs.rows(); ++i) {
             auto cr = row(costs, i, blaze::unchecked);
-            if(weights)
-                ret += sum(softmax(cr * temperature) * cr) * (*weights)[i];
-            else
-                ret += sum(softmax(cr * temperature) * cr);
+            FT pointcost;
+            try {
+                pointcost = serial(sum(softmax(cr * temperature) * cr));
+            } catch(const std::exception &ex) {
+                std::cerr << ex.what() << " for point " << i << '\n'; throw;
+            }
+            if(weights) pointcost *= (*weights)[i];
+            ret += pointcost;
         }
         return ret;
     };
@@ -313,7 +324,7 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
         auto oldcost = cost;
         set_centroids_soft<FT>(~mat, measure, prior, centers, costs, weights, temperature);
         cost = compute_cost();
-        std::fprintf(stderr, "oldcost: %g. newcost: %g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
+        std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
         if(oldcost - cost < eps * initcost || ++iternum == maxiter)
             break;
     }
@@ -365,7 +376,6 @@ void set_centroids_soft(const Mat &mat,
         FT ret;
         switch(measure) {
 
-#if 0
             // Geometric
             case L1:
                 ret = l1Dist(ctr, mr);
@@ -380,10 +390,12 @@ void set_centroids_soft(const Mat &mat,
             case HELLINGER: ret = blz::l2Norm(blz::sqrt(wctr) - blz::sqrt(mrmult)); break;
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: {
                 const auto sim = blz::dot(blz::sqrt(wctr), blz::sqrt(mrmult));
-                ret = measure == BHATTACHARYYA_METRIC ? std::sqrt(1. - sim)
-                                                      : -std::log(sim);
+                if(measure == BHATTACHARYYA_METRIC) {
+                    ret = std::sqrt(std::max(FT(1.) - sim, FT(0)));
+                } else {
+                    ret = -std::log(sim + 1e-50); // To ensure that the number is not a NAN;
+                }
             } break;
-#endif
 
             // Bregman divergences + convex combinations thereof
             case POISSON: case JSD:

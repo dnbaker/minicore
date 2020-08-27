@@ -56,8 +56,10 @@ int main(int argc, char *argv[]) {
     assert(max(asn) == centers.size() - 1);
     // generate a coreset
     // recalculate now
+    std::cerr << "Calculate costs\n";
     complete_hardcosts = blaze::generate(nr, k, [&](auto r, auto col) {
         return cmp::msr_with_prior(msr, row(x, r), centers[col], prior, psum);
     });
+    std::cerr << "Perform clustering\n";
     clust::perform_soft_clustering(x, msr, prior, centers, complete_hardcosts, temp);
 }

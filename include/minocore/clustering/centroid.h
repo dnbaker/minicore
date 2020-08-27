@@ -29,16 +29,19 @@ using namespace ::minocore::distance;
 
 static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) {
     switch(msr) {
-        case EMD: case WEMD: case JSM:
+        case EMD: case WEMD:
         case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
         default:
             return NOT_APPLICABLE;
 
-        case COSINE_DISTANCE: // I think this is right, but the rest I am sure are right.
 
         case UWLLR: case LLR: case MKL: case JSD: case SQRL2: case POISSON:
         case REVERSE_POISSON: case REVERSE_MKL: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case RSYMMETRIC_ITAKURA_SAITO:
+
+        // These might work, but there's no guarantee it will work well.
+        case COSINE_DISTANCE: case JSM:
+        case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: case HELLINGER:
 
             return FULL_WEIGHTED_MEAN;
 
@@ -575,7 +578,6 @@ void set_centroids_full_mean(const Mat &mat,
     blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
     OMP_PFOR
     for(unsigned i = 0; i < ctrs.size(); ++i) ctrs[i].reset(); // set to 0
-    //OMP_ONLY(std::unique_ptr<std::mutex[]> locks(new std::mutex[ctrs.size()]);)
     // Currently, this locks each center uniquely
     // This is not ideal, but it's hard to handle this atomically
     // TODO: provide a better parallelization method, either
@@ -586,12 +588,11 @@ void set_centroids_full_mean(const Mat &mat,
         const auto mr = row(mat, i, blz::unchecked);
         assert(asn.size() == r.size());
         asn = softmax(r * temp);
-        if(isnan(asn)) {
+        if(unlikely(isnan(asn))) {
             std::cerr << "asn: " << asn << " from softmax " << (r * temp) << " for temp = " << temp << '\n';
             throw std::runtime_error("isnan");
         }
-        FT w = 1.;
-        if(weights) w = weights->operator[](i);
+        const FT w = weights ? weights->operator[](i): FT(1);
         for(unsigned j = 0; j < k; ++j) {
             const auto aiv = asn[j];
             if(aiv == 0.) continue;
