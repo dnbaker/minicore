@@ -17,6 +17,22 @@ namespace cmp {
 using namespace blz;
 using namespace minocore::distance;
 
+#define DISPATCH_MSR_MACRO(MACRO)\
+            MACRO(SRULRT) MACRO(SRLRT)\
+            MACRO(SYMMETRIC_ITAKURA_SAITO) MACRO(RSYMMETRIC_ITAKURA_SAITO)\
+            MACRO(COSINE_DISTANCE) MACRO(COSINE_SIMILARITY)\
+            MACRO(PROBABILITY_COSINE_DISTANCE) MACRO(PROBABILITY_COSINE_SIMILARITY)\
+            MACRO(LLR) MACRO(OLLR) MACRO(UWLLR)\
+            MACRO(BHATTACHARYYA_METRIC) MACRO(BHATTACHARYYA_DISTANCE)\
+            MACRO(HELLINGER)\
+            MACRO(POISSON)\
+            MACRO(REVERSE_POISSON)\
+            MACRO(JSD)\
+            MACRO(JSM) MACRO(MKL) MACRO(REVERSE_MKL)\
+            MACRO(EMD) MACRO(WEMD)\
+            MACRO(ITAKURA_SAITO) MACRO(REVERSE_ITAKURA_SAITO)\
+            MACRO(PL2) MACRO(PSL2) MACRO(L1) MACRO(L2) MACRO(SQRL2)\
+            MACRO(TOTAL_VARIATION_DISTANCE)
 
 template<typename MatrixType, typename ElementType=blaze::ElementType_t<MatrixType>>
 class DissimilarityApplicator {
@@ -142,31 +158,8 @@ public:
     template<typename MatType>
     void set_distance_matrix(MatType &m, DissimilarityMeasure measure, bool symmetrize=false) const {
         switch(measure) {
-            case TOTAL_VARIATION_DISTANCE: set_distance_matrix<MatType, TOTAL_VARIATION_DISTANCE>(m, symmetrize); break;
-            case L1:                       set_distance_matrix<MatType, L1>(m, symmetrize); break;
-            case L2:                       set_distance_matrix<MatType, L2>(m, symmetrize); break;
-            case SQRL2:                    set_distance_matrix<MatType, SQRL2>(m, symmetrize); break;
-            case PL2:                      set_distance_matrix<MatType, PL2>(m, symmetrize); break;
-            case PSL2:                     set_distance_matrix<MatType, PSL2>(m, symmetrize); break;
-            case JSD:                      set_distance_matrix<MatType, JSD>(m, symmetrize); break;
-            case JSM:                      set_distance_matrix<MatType, JSM>(m, symmetrize); break;
-            case REVERSE_MKL:              set_distance_matrix<MatType, REVERSE_MKL>(m, symmetrize); break;
-            case MKL:                      set_distance_matrix<MatType, MKL>(m, symmetrize); break;
-            case EMD:                      set_distance_matrix<MatType, EMD>(m, symmetrize); break;
-            case WEMD:                     set_distance_matrix<MatType, WEMD>(m, symmetrize); break;
-            case REVERSE_POISSON:          set_distance_matrix<MatType, REVERSE_POISSON>(m, symmetrize); break;
-            case POISSON:                  set_distance_matrix<MatType, POISSON>(m, symmetrize); break;
-            case ITAKURA_SAITO:            set_distance_matrix<MatType, ITAKURA_SAITO>(m, symmetrize); break;
-            case REVERSE_ITAKURA_SAITO:    set_distance_matrix<MatType, REVERSE_ITAKURA_SAITO>(m, symmetrize); break;
-#define SET_CASE(x) case x: set_distance_matrix<MatType, x>(m, symmetrize); break
-            SET_CASE(SRULRT); SET_CASE(SRLRT);
-            SET_CASE(SYMMETRIC_ITAKURA_SAITO); SET_CASE(RSYMMETRIC_ITAKURA_SAITO)
-            SET_CASE(COSINE_DISTANCE) SET_CASE(COSINE_SIMILARITY)
-            SET_CASE(PROBABILITY_COSINE_DISTANCE) SET_CASE(PROBABILITY_COSINE_SIMILARITY)
-            SET_CASE(LLR) SET_CASE(OLLR) SET_CASE(UWLLR)
-            SET_CASE(BHATTACHARYYA_METRIC) SET_CASE(BHATTACHARYYA_DISTANCE)
-            SET_CASE(HELLINGER)
-#undef SET_CASE
+#define SET_CASE(x) case x: set_distance_matrix<MatType, x>(m, symmetrize); break;
+        DISPATCH_MSR_MACRO(SET_CASE)
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); throw std::invalid_argument("Placeholders");
             default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + dist::prob2str(measure));
         }
@@ -518,9 +511,9 @@ public:
             ret = sis(i, j);
         } else if constexpr(constexpr_measure == RSYMMETRIC_ITAKURA_SAITO) {
             ret = rsis(i, j);
-        } else if(constexpr(constexpr_measure == SRULRT) {
+        } else if constexpr(constexpr_measure == SRULRT) {
             ret = std::sqrt(uwllr(i, j));
-        } else if(constexpr(constexpr_measure == SRLRT) {
+        } else if constexpr(constexpr_measure == SRLRT) {
             ret = std::sqrt(llr(i, j));
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
@@ -630,35 +623,9 @@ public:
         }
         FT ret;
         switch(measure) {
-            case TOTAL_VARIATION_DISTANCE: ret = call<TOTAL_VARIATION_DISTANCE>(i, j); break;
-            case L1: ret = call<L1>(i, j); break;
-            case L2: ret = call<L2>(i, j); break;
-            case PL2: ret = call<PL2>(i, j); break;
-            case PSL2: ret = call<PSL2>(i, j); break;
-            case SQRL2: ret = call<SQRL2>(i, j); break;
-            case JSD: ret = call<JSD>(i, j); break;
-            case JSM: ret = call<JSM>(i, j); break;
-            case REVERSE_MKL: ret = call<REVERSE_MKL>(i, j); break;
-            case MKL: ret = call<MKL>(i, j); break;
-            case EMD: ret = call<EMD>(i, j); break;
-            case WEMD: ret = call<WEMD>(i, j); break;
-            case REVERSE_POISSON: ret = call<REVERSE_POISSON>(i, j); break;
-            case POISSON: ret = call<POISSON>(i, j); break;
-            case HELLINGER: ret = call<HELLINGER>(i, j); break;
-            case BHATTACHARYYA_METRIC: ret = call<BHATTACHARYYA_METRIC>(i, j); break;
-            case BHATTACHARYYA_DISTANCE: ret = call<BHATTACHARYYA_DISTANCE>(i, j); break;
-            case LLR: ret = call<LLR>(i, j); break;
-            case SRLRT: ret = std::sqrt(call<LLR>(i, j)); break;
-            case SRULRT: ret = std::sqrt(call<UWLLR>(i, j)); break;
-            case UWLLR: ret = call<UWLLR>(i, j); break;
-            case OLLR: ret = call<OLLR>(i, j); break;
-            case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, j); break;
-            case SYMMETRIC_ITAKURA_SAITO: ret = call<SYMMETRIC_ITAKURA_SAITO>(i, j); break;
-            case RSYMMETRIC_ITAKURA_SAITO: ret = call<RSYMMETRIC_ITAKURA_SAITO>(i, j); break;
-            case COSINE_DISTANCE: ret = call<COSINE_DISTANCE>(i, j); break;
-            case PROBABILITY_COSINE_DISTANCE: ret = call<PROBABILITY_COSINE_DISTANCE>(i, j); break;
-            case COSINE_SIMILARITY: ret = call<COSINE_SIMILARITY>(i, j); break;
-            case PROBABILITY_COSINE_SIMILARITY: ret = call<PROBABILITY_COSINE_SIMILARITY>(i, j); break;
+#define SET_CASE(x) case x: set = call<x>(i, j); break;
+        DISPATCH_MSR_MACRO(SET_CASE)
+#undef SET_CASE
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); return 0.;
             default: __builtin_unreachable();
         }
@@ -1945,6 +1912,8 @@ using jsd::make_kmc2;
 using jsd::make_kmeanspp;
 using jsd::make_jsm_applicator;
 using jsd::make_probdiv_applicator;
+
+using cmp::msr_with_prior;
 
 
 
