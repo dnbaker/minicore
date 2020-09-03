@@ -83,6 +83,7 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
                              double eps=1e-10,
                              size_t maxiter=size_t(-1))
 {
+    auto centers_cpy = centers;
     auto compute_cost = [&costs,w=weights]() -> FT {
         if(w) return blz::dot(costs, *w);
         else  return blz::sum(costs);
@@ -95,10 +96,10 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
     size_t iternum = 0;
     for(;;) {
         std::fprintf(stderr, "Beginning iter %zu\n", iternum);
-        set_centroids_hard<FT>(~mat, measure, prior, centers, asn, costs, weights);
+        set_centroids_hard<FT>(~mat, measure, prior, centers_cpy, asn, costs, weights);
         std::fprintf(stderr, "Set centroids %zu\n", iternum);
 
-        assign_points_hard<FT>(~mat, measure, prior, centers, asn, costs, weights);
+        assign_points_hard<FT>(~mat, measure, prior, centers_cpy, asn, costs, weights);
         std::fprintf(stderr, "Assigning points %zu\n", iternum);
         auto newcost = compute_cost();
         std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);
@@ -108,6 +109,7 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
             //DBG_ONLY(std::abort();)
             break;
         }
+        std::swap_ranges(centers.begin(), centers.end(), centers_cpy.begin());
         if(cost - newcost < eps * initcost) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g init cost\n",
@@ -149,6 +151,7 @@ void set_centroids_hard(const Mat &mat,
         assert(FULL_WEIGHTED_MEAN == pol);
     }
     switch(pol) {
+        case JSM_MEDIAN:
         case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(mat, measure, prior, asn, costs, centers, weights);
             break;
         case L1_MEDIAN:
@@ -234,9 +237,9 @@ void assign_points_hard(const Mat &mat,
             } break;
 
             // Bregman divergences + convex combinations thereof
-            case POISSON: case JSD:
+            case POISSON: case JSD: case JSM:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
-            case SIS: case RSIS: case MKL: case UWLLR: case LLR:
+            case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:
                 ret = cmp::msr_with_prior(measure, ctr, mr, prior, prior_sum); break;
 #if 0
             case PROBABILITY_COSINE_DISTANCE:
@@ -297,9 +300,10 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
                              CostsT &costs,
                              FT temperature=1.,
                              const WeightT *weights=static_cast<WeightT *>(nullptr),
-                             double eps=1e-10,
+                             double eps=1e-40,
                              size_t maxiter=size_t(-1))
 {
+    auto centers_cpy(centers);
     auto compute_cost = [&]() {
         FT ret = 0.;
         OMP_PRAGMA("omp parallel for reduction(+:ret)")
@@ -322,11 +326,14 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
     size_t iternum = 0;
     for(;;) {
         auto oldcost = cost;
-        set_centroids_soft<FT>(~mat, measure, prior, centers, costs, weights, temperature);
+        set_centroids_soft<FT>(~mat, measure, prior, centers_cpy, costs, weights, temperature);
         cost = compute_cost();
         std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
-        if(oldcost - cost < eps * initcost || ++iternum == maxiter)
+        if(oldcost > cost) // Update centers only if an improvement
+            std::swap_ranges(centers_cpy.begin(), centers_cpy.end(), centers.begin());
+        if(oldcost - cost < eps * initcost || ++iternum == maxiter) {
             break;
+        }
     }
     return std::make_tuple(initcost, cost, iternum);
 }
@@ -353,6 +360,7 @@ void set_centroids_soft(const Mat &mat,
     std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));
 #endif
     switch(pol) {
+        case JSM_MEDIAN:
         case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(mat, measure, prior, costs, centers, weights, temp);
             break;
         default:
@@ -398,9 +406,9 @@ void set_centroids_soft(const Mat &mat,
             } break;
 
             // Bregman divergences + convex combinations thereof
-            case POISSON: case JSD:
+            case POISSON: case JSD: case JSM:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
-            case SIS: case RSIS: case MKL: case UWLLR: case LLR:
+            case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:
                 ret = cmp::msr_with_prior(measure, ctr, mr, prior, prior_sum); break;
             default: throw NotImplementedError("Unsupported measure for soft clustering");
         }

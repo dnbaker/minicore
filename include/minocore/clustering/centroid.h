@@ -11,6 +11,7 @@ enum CentroidPol {
     L1_MEDIAN,          // L1
     TVD_MEDIAN,         // Total variation distance, which is L1 in probability space
     GEO_MEDIAN,         // L2 norm
+    JSM_MEDIAN,         // Unknown as of yet, but we will try weighted mean for now
     NOT_APPLICABLE
 };
 
@@ -20,6 +21,7 @@ static constexpr const char *cp2str(CentroidPol pol) {
      case L1_MEDIAN:          return "l1 median";
      case TVD_MEDIAN:         return "tvd median";
      case GEO_MEDIAN:         return "geo median";
+     case JSM_MEDIAN:         return "jsm median, same as full for now";
      default:
      case NOT_APPLICABLE:     return "not applicable";
     }
@@ -39,8 +41,10 @@ static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) 
         case REVERSE_POISSON: case REVERSE_MKL: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case RSYMMETRIC_ITAKURA_SAITO:
 
+        case SRULRT: case SRLRT: case JSM:
+            return JSM_MEDIAN;
         // These might work, but there's no guarantee it will work well.
-        case COSINE_DISTANCE: case JSM:
+        case COSINE_DISTANCE:
         case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: case HELLINGER:
 
             return FULL_WEIGHTED_MEAN;

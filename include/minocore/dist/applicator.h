@@ -79,7 +79,8 @@ public:
             measure == JSM ? JSD
                 : measure == COSINE_DISTANCE ? COSINE_SIMILARITY
                 : measure == PROBABILITY_COSINE_DISTANCE ? PROBABILITY_COSINE_SIMILARITY
-                : measure;
+                : measure == SRULRT ? UWLLR
+                                    : measure == SRLRT ? LLR: measure;
         for(size_t i = 0; i < nr; ++i) {
             if constexpr((blaze::IsDenseMatrix_v<MatrixType>)) {
                 for(size_t j = i + 1; j < nr; ++j) {
@@ -92,7 +93,7 @@ public:
                 }
             }
         }
-        if constexpr(measure == JSM) {
+        if constexpr(measure == JSM || measure == SRULRT || measure == SRLRT) {
             if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
                 m = blaze::sqrt(m);
             } else if constexpr(dm::is_distance_matrix_v<MatType>) {
@@ -155,22 +156,17 @@ public:
             case WEMD:                     set_distance_matrix<MatType, WEMD>(m, symmetrize); break;
             case REVERSE_POISSON:          set_distance_matrix<MatType, REVERSE_POISSON>(m, symmetrize); break;
             case POISSON:                  set_distance_matrix<MatType, POISSON>(m, symmetrize); break;
-            case HELLINGER:                set_distance_matrix<MatType, HELLINGER>(m, symmetrize); break;
-            case BHATTACHARYYA_METRIC:     set_distance_matrix<MatType, BHATTACHARYYA_METRIC>(m, symmetrize); break;
-            case BHATTACHARYYA_DISTANCE:   set_distance_matrix<MatType, BHATTACHARYYA_DISTANCE>(m, symmetrize); break;
-            case LLR:                      set_distance_matrix<MatType, LLR>(m, symmetrize); break;
-            case UWLLR:                    set_distance_matrix<MatType, UWLLR>(m, symmetrize); break;
-            case OLLR:                     set_distance_matrix<MatType, OLLR>(m, symmetrize); break;
             case ITAKURA_SAITO:            set_distance_matrix<MatType, ITAKURA_SAITO>(m, symmetrize); break;
             case REVERSE_ITAKURA_SAITO:    set_distance_matrix<MatType, REVERSE_ITAKURA_SAITO>(m, symmetrize); break;
-            case COSINE_DISTANCE:          set_distance_matrix<MatType, COSINE_DISTANCE>(m, symmetrize); break;
-            case PROBABILITY_COSINE_DISTANCE:
-                                           set_distance_matrix<MatType, PROBABILITY_COSINE_DISTANCE>(m, symmetrize); break;
-            case COSINE_SIMILARITY:        set_distance_matrix<MatType, COSINE_SIMILARITY>(m, symmetrize); break;
-            case PROBABILITY_COSINE_SIMILARITY:
-                                           set_distance_matrix<MatType, PROBABILITY_COSINE_SIMILARITY>(m, symmetrize); break;
-            case SYMMETRIC_ITAKURA_SAITO:  set_distance_matrix<MatType, SYMMETRIC_ITAKURA_SAITO>(m, symmetrize); break;
-            case RSYMMETRIC_ITAKURA_SAITO:  set_distance_matrix<MatType, RSYMMETRIC_ITAKURA_SAITO>(m, symmetrize); break;
+#define SET_CASE(x) case x: set_distance_matrix<MatType, x>(m, symmetrize); break
+            SET_CASE(SRULRT); SET_CASE(SRLRT);
+            SET_CASE(SYMMETRIC_ITAKURA_SAITO); SET_CASE(RSYMMETRIC_ITAKURA_SAITO)
+            SET_CASE(COSINE_DISTANCE) SET_CASE(COSINE_SIMILARITY)
+            SET_CASE(PROBABILITY_COSINE_DISTANCE) SET_CASE(PROBABILITY_COSINE_SIMILARITY)
+            SET_CASE(LLR) SET_CASE(OLLR) SET_CASE(UWLLR)
+            SET_CASE(BHATTACHARYYA_METRIC) SET_CASE(BHATTACHARYYA_DISTANCE)
+            SET_CASE(HELLINGER)
+#undef SET_CASE
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); throw std::invalid_argument("Placeholders");
             default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + dist::prob2str(measure));
         }
@@ -522,6 +518,10 @@ public:
             ret = sis(i, j);
         } else if constexpr(constexpr_measure == RSYMMETRIC_ITAKURA_SAITO) {
             ret = rsis(i, j);
+        } else if(constexpr(constexpr_measure == SRULRT) {
+            ret = std::sqrt(uwllr(i, j));
+        } else if(constexpr(constexpr_measure == SRLRT) {
+            ret = std::sqrt(llr(i, j));
         } else {
             throw std::runtime_error(std::string("Unknown measure: ") + std::to_string(int(constexpr_measure)));
         }
@@ -557,7 +557,9 @@ public:
             case BHATTACHARYYA_METRIC: ret = call<BHATTACHARYYA_METRIC>(o, i); break;
             case BHATTACHARYYA_DISTANCE: ret = call<BHATTACHARYYA_DISTANCE>(o, i); break;
             case LLR: ret = call<LLR>(o, i, cache); break;
+            case SRLRT: ret = std::sqrt(call<LLR>(o, i, cache)); break;
             case UWLLR: ret = call<UWLLR>(o, i, cache); break;
+            case SRULRT: ret = std::sqrt(call<UWLLR>(o, i, cache)); break;
             case OLLR: ret = call<OLLR>(o, i, cache); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(o, i, cache); break;
             case SYMMETRIC_ITAKURA_SAITO: ret = call<SYMMETRIC_ITAKURA_SAITO>(o, i, cache); break;
@@ -607,6 +609,8 @@ public:
             case LLR: ret = call<LLR>(i, o, cache); break;
             case UWLLR: ret = call<UWLLR>(i, o, cache); break;
             case OLLR: ret = call<OLLR>(i, o, cache); break;
+            case SRULRT: ret = std::sqrt(call<UWLLR>(i, o, cache)); break;
+            case SRLRT: ret = std::sqrt(call<LLR>(i, o, cache)); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, o, cache); break;
             case SYMMETRIC_ITAKURA_SAITO: ret = call<SYMMETRIC_ITAKURA_SAITO>(i, o, cache); break;
             case RSYMMETRIC_ITAKURA_SAITO: ret = call<RSYMMETRIC_ITAKURA_SAITO>(i, o, cache); break;
@@ -644,6 +648,8 @@ public:
             case BHATTACHARYYA_METRIC: ret = call<BHATTACHARYYA_METRIC>(i, j); break;
             case BHATTACHARYYA_DISTANCE: ret = call<BHATTACHARYYA_DISTANCE>(i, j); break;
             case LLR: ret = call<LLR>(i, j); break;
+            case SRLRT: ret = std::sqrt(call<LLR>(i, j)); break;
+            case SRULRT: ret = std::sqrt(call<UWLLR>(i, j)); break;
             case UWLLR: ret = call<UWLLR>(i, j); break;
             case OLLR: ret = call<OLLR>(i, j); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, j); break;
@@ -1259,12 +1265,14 @@ public:
             if(prior_data_)
                 return __llr_sparse_prior(i, j);
         }
-            //blaze::dot(row(i), logrow(i)) * row_sums_[i]
-            //+
-            //blaze::dot(row(j), logrow(j)) * row_sums_[j]
-            // X_j^Tlog(p_j)
-            // X_k^Tlog(p_k)
-            // (X_k + X_j)^Tlog(p_jk)
+        /*
+            blaze::dot(row(i), logrow(i)) * row_sums_[i]
+            +
+            blaze::dot(row(j), logrow(j)) * row_sums_[j]
+             X_j^Tlog(p_j)
+             X_k^Tlog(p_k)
+             (X_k + X_j)^Tlog(p_jk)
+        */
         const auto lhn = row_sums_[i], rhn = row_sums_[j];
         const auto lambda = lhn / (lhn + rhn), m1l = 1. - lambda;
         FT ret = lhn * __getjsc(i) + rhn * __getjsc(j)
@@ -1835,6 +1843,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 if(msr == JSM) ret = std::sqrt(ret);
             }
             break;
+            case SRULRT: case SRLRT:
             case LLR:
             case UWLLR: {
                 const auto bothsum = lhsum + rhsum;
@@ -1861,8 +1870,10 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         return lambda * lhinc * xvl + m1l * yv * yvl;
                     },
                     emptycontrib);
-                if(msr == LLR) ret *= bothsum;
+                if(msr == LLR || msr == SRLRT) ret *= bothsum;
                 ret = std::max(ret, FT(0)); // ensure non-negativity
+                if(msr == SRULRT || msr == SRLRT)
+                    ret = std::sqrt(ret);
             }
             break;
             case ITAKURA_SAITO: {
