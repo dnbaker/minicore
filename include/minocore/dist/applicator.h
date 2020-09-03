@@ -158,9 +158,9 @@ public:
     template<typename MatType>
     void set_distance_matrix(MatType &m, DissimilarityMeasure measure, bool symmetrize=false) const {
         switch(measure) {
-#define SET_CASE(x) case x: set_distance_matrix<MatType, x>(m, symmetrize); break;
-        DISPATCH_MSR_MACRO(SET_CASE)
-#undef SET_CASE
+#define SC1(x) case x: set_distance_matrix<MatType, x>(m, symmetrize); break;
+        DISPATCH_MSR_MACRO(SC1)
+#undef SC1
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); throw std::invalid_argument("Placeholders");
             default: throw std::invalid_argument(std::string("unknown dissimilarity measure: ") + std::to_string(int(measure)) + dist::prob2str(measure));
         }
@@ -624,9 +624,9 @@ public:
         }
         FT ret;
         switch(measure) {
-#define SET_CASE(x) case x: set = call<x>(i, j); break;
-        DISPATCH_MSR_MACRO(SET_CASE)
-#undef SET_CASE
+#define SC2(x) case x: ret = call<x>(i, j); break;
+        DISPATCH_MSR_MACRO(SC2)
+#undef SC2
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: std::fprintf(stderr, "These are placeholders and should not be called."); return 0.;
             default: __builtin_unreachable();
         }
