@@ -58,6 +58,8 @@ enum DissimilarityMeasure {
     PSL2,
     SYMMETRIC_ITAKURA_SAITO,
     REVERSE_SYMMETRIC_ITAKURA_SAITO,
+    SRLRT,
+    SRULRT,
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
     WASSERSTEIN=EMD,
@@ -108,13 +110,14 @@ static constexpr INLINE bool is_bregman(DissimilarityMeasure d)  {
         case JSD: case MKL: case POISSON: case ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO:
+        case SQRL2: case SRLRT: case SRULRT:
         return true;
         default: ;
     }
     return false;
 }
 static constexpr INLINE bool satisfies_d2(DissimilarityMeasure d) {
-    return d == LLR || d == UWLLR || d == OLLR || is_bregman(d) || d == SQRL2 || d == PSL2;
+    return d == LLR || d == UWLLR || d == OLLR || is_bregman(d) || d == PSL2;
 }
 static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
     switch(d) {
@@ -126,6 +129,7 @@ static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
         case HELLINGER:
         case ORACLE_METRIC:
         case PL2:
+        case SRLRT: case SRULRT: // Not sure, but probably
             return true;
         default: ;
     }
@@ -148,6 +152,7 @@ static constexpr INLINE bool satisfies_rho_metric(DissimilarityMeasure d) {
 static constexpr INLINE bool needs_logs(DissimilarityMeasure d)  {
     switch(d) {
         case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
+        case SRLRT: case SRULRT:
         case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: case REVERSE_ITAKURA_SAITO: case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO: return true;
         default: break;
     }
@@ -240,6 +245,7 @@ static constexpr INLINE bool is_symmetric(DissimilarityMeasure d) {
         case SYMMETRIC_ITAKURA_SAITO:
         case RSYMMETRIC_ITAKURA_SAITO:
         case PL2: case PSL2:
+        case SRULRT: case SRLRT:
             return true;
         default: ;
     }
@@ -292,6 +298,8 @@ static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {
         case PROBABILITY_COSINE_SIMILARITY: return "PROBABILITY_COSINE_SIMILARITY";
         case ORACLE_METRIC: return "ORACLE_METRIC";
         case ORACLE_PSEUDOMETRIC: return "ORACLE_PSEUDOMETRIC";
+        case SRULRT: return "SRULRT";
+        case SRLRT: return "SRLRT";
         case PSL2: return "PSL2";
         case PL2: return "PL2";
         case SYMMETRIC_ITAKURA_SAITO: return "SYMMETRIC_ITAKURA_SAITO";
@@ -333,6 +341,8 @@ static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
         case ORACLE_PSEUDOMETRIC: return "Placeholder for oracle pseudometrics";
         case PSL2: return "Probability squared L2 norm, k-means in probabilityspace";
         case PL2: return "Probability L2 norm";
+        case SRULRT: return "Square root of UWLLR, unweighted log likelihood ratio test; likely a metric: related to the JSM and Generalized JSD";
+        case SRLRT: return "Square root of LRT, the log likelihood ratio test; likely a metric: related to the JSM and Generalized JSD";
         default: return prob2str(d);
     }
 }
@@ -360,7 +370,9 @@ static constexpr DissimilarityMeasure USABLE_MEASURES []  {
     PL2,
     PSL2,
     SYMMETRIC_ITAKURA_SAITO,
-    RSYMMETRIC_ITAKURA_SAITO
+    RSYMMETRIC_ITAKURA_SAITO,
+    SRLRT,
+    SRULRT
     // Absent:
     // EMD/WEMB -- lacking proper evaluation
     // PROBABILITY_COSINE_DISTANCE/PROBABILITY_COSINE_SIMILARITY -- extensions to this space are not complete.
@@ -389,6 +401,7 @@ static constexpr bool is_valid_measure(DissimilarityMeasure measure) {
         case EMD: case WEMD: case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
         case SYMMETRIC_ITAKURA_SAITO:
         case RSYMMETRIC_ITAKURA_SAITO:
+        case SRLRT: case SRULRT:
         case PL2: case PSL2: return true;
         default: ;
     }
@@ -631,7 +644,7 @@ auto bhattacharyya_measure(const LHVec &lhs, const RHVec &rhs) {
     // Requires same storage.
     // TODO: generalize for different storage classes/transpose flags using DenseVector and SparseVector
     // base classes
-    return sqrt(lhs * rhs);
+    return sum(sqrt(lhs * rhs));
 }
 
 template<typename LHVec, typename RHVec>
@@ -780,6 +793,11 @@ template<typename VT, typename VT2, bool SO>
 static INLINE auto canberra_distance(const blz::DenseVector<VT, SO> &lhs, const blz::DenseVector<VT2, SO> &rhs) {
     const auto &lh(~lhs), &rh(~rhs);
     return blaze::sum(blaze::abs(lh - rh) / (blaze::abs(lh) + blaze::abs(rh)));
+}
+
+template<typename VT, typename VT2, bool SO>
+static INLINE auto hellinger(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs) {
+    return l2Norm(sqrt(~lhs) - sqrt(~rhs));
 }
 
 

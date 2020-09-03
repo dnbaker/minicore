@@ -55,6 +55,8 @@ Another question is whether or not a measure can be optimized over via EM.
 |UWLLR |UWLLR, a symmetric, linear combination of KL divergences| Weighted mean of points|
 |LLR |LLR, linear combination of KL divergences| Weighted mean of points|
 |Total variation distance|1/2 L1 distance in probability space| component-wise median|
+|SRLRT | square root of the log-likelihood ratio test; may be a metric| unknown, using weighted mean |
+|SRULRT | square root of the unweighted log-likelihood ratio test (UWLLR); may be a metric| unknown, using weighted mean |
 
 Measures for which we would like such an algorithm but don't have include:
 

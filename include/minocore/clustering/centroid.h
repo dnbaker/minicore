@@ -11,6 +11,7 @@ enum CentroidPol {
     L1_MEDIAN,          // L1
     TVD_MEDIAN,         // Total variation distance, which is L1 in probability space
     GEO_MEDIAN,         // L2 norm
+    JSM_MEDIAN,         // Unknown as of yet, but we will try weighted mean for now
     NOT_APPLICABLE
 };
 
@@ -20,6 +21,7 @@ static constexpr const char *cp2str(CentroidPol pol) {
      case L1_MEDIAN:          return "l1 median";
      case TVD_MEDIAN:         return "tvd median";
      case GEO_MEDIAN:         return "geo median";
+     case JSM_MEDIAN:         return "jsm median, same as full for now";
      default:
      case NOT_APPLICABLE:     return "not applicable";
     }
@@ -29,16 +31,21 @@ using namespace ::minocore::distance;
 
 static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) {
     switch(msr) {
-        case EMD: case WEMD: case JSM:
+        case EMD: case WEMD:
         case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
         default:
             return NOT_APPLICABLE;
 
-        case COSINE_DISTANCE: // I think this is right, but the rest I am sure are right.
 
         case UWLLR: case LLR: case MKL: case JSD: case SQRL2: case POISSON:
         case REVERSE_POISSON: case REVERSE_MKL: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case RSYMMETRIC_ITAKURA_SAITO:
+
+        case SRULRT: case SRLRT: case JSM:
+            return JSM_MEDIAN;
+        // These might work, but there's no guarantee it will work well.
+        case COSINE_DISTANCE:
+        case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: case HELLINGER:
 
             return FULL_WEIGHTED_MEAN;
 
@@ -380,8 +387,8 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     }
 }
 
-template<typename FT=double, typename Mat, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
-void set_centroids_tvd(const Mat &, AsnT &, CostsT &, CtrsT &, WeightsT *) {
+template<typename...Args>
+void set_centroids_tvd(Args &&...args) {
     throw std::invalid_argument("TVD clustering not supported explicitly; instead, normalize your count vectors and perform the clustering with L1");
 }
 
@@ -533,16 +540,14 @@ void set_centroids_full_mean(const Mat &mat,
         for(auto &x: assigned) x.clear();
         goto set_asn;
     }
-    std::fprintf(stderr, "Computing centroids\n");
     for(unsigned i = 0; i < k; ++i) {
-        std::fprintf(stderr, "Computing centroid %u\n", i);
         // Compute mean for centroid
         const auto nasn = assigned[i].size();
         const auto asp = assigned[i].data();
         auto &ctr = ctrs[i];
         if(nasn == 1) ctr = row(mat, *asp);
         else {
-            std::fprintf(stderr, "Selecting rows\n");
+            DBG_ONLY(std::fprintf(stderr, "Selecting rows\n");)
             auto rowsel = rows(mat, asp, nasn);
             if(weights) {
                 auto elsel = elements(*weights, asp, nasn);
@@ -550,7 +555,7 @@ void set_centroids_full_mean(const Mat &mat,
                 // weighted sum over total weight -> weighted mean
                 ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
             } else ctr = blaze::mean<blaze::columnwise>(rowsel);
-            std::fprintf(stderr, "Set center %u\n", i);
+            DBG_ONLY(std::fprintf(stderr, "Set center %u\n", i);)
         }
         // Adjust for prior
         if constexpr(blaze::IsDenseVector_v<CtrsT>) {
@@ -561,7 +566,51 @@ void set_centroids_full_mean(const Mat &mat,
             }
         }
     }
-    DBG_ONLY(std::fprintf(stderr, "Centroids set\n");)
+    DBG_ONLY(std::fprintf(stderr, "Centroids set, hard\n");)
+}
+
+template<typename FT=double, typename Mat, typename PriorT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
+void set_centroids_full_mean(const Mat &mat,
+    const dist::DissimilarityMeasure measure,
+    const PriorT &prior, CostsT &costs, CtrsT &ctrs,
+    WeightsT *weights, FT temp=1.)
+{
+    std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
+
+    VERBOSE_ONLY(std::fprintf(stderr, "[%s] Computing centroids\n", __func__);)
+    const unsigned k = ctrs.size();
+    blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
+    OMP_PFOR
+    for(unsigned i = 0; i < ctrs.size(); ++i) ctrs[i].reset(); // set to 0
+    // Currently, this locks each center uniquely
+    // This is not ideal, but it's hard to handle this atomically
+    // TODO: provide a better parallelization method, either
+    // 1. reduction
+    // 2. more fine-grained locking strategies (though would fail for low-dimension data)
+    for(uint64_t i = 0; i < costs.rows(); ++i) {
+        const auto r = row(costs, i, blaze::unchecked);
+        const auto mr = row(mat, i, blz::unchecked);
+        assert(asn.size() == r.size());
+        asn = softmax(r * temp);
+        if(unlikely(isnan(asn))) {
+            std::cerr << "asn: " << asn << " from softmax " << (r * temp) << " for temp = " << temp << '\n';
+            throw std::runtime_error("isnan");
+        }
+        const FT w = weights ? weights->operator[](i): FT(1);
+        for(unsigned j = 0; j < k; ++j) {
+            const auto aiv = asn[j];
+            if(aiv == 0.) continue;
+            OMP_ATOMIC
+            wsums[j] += w;
+            //OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
+            ctrs[j] += mr * (aiv * w);
+            //std::cerr << "ctr after at iter " << i << " and j " << j << " is " << ctrs[j] << '\n';
+        }
+    }
+    for(unsigned j = 0; j < k; ++j) {
+        ctrs[j] /= wsums[j];
+    }
+    DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
 }
 
 } } // namespace minocore::clustering
