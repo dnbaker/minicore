@@ -220,7 +220,7 @@ public:
             return trans(randproj_ * trans(~input));
     }
     template<typename...HArgs>
-    decltype(auto) hash(Args &&...args) const {
+    decltype(auto) hash(HArgs &&...args) const {
         return floor(project(std::forward<HArgs>(args)...));
     }
     const auto &matrix() const {return randproj_;}
