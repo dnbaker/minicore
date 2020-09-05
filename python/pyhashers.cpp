@@ -1,4 +1,5 @@
 #include "pyfgc.h"
+#include "smw.h"
 
 template<typename FT, template<typename> class Hasher>
 auto project_array(const Hasher<FT> &hasher, const py::object &obj, bool round=false) {
@@ -43,7 +44,31 @@ auto project_array(const Hasher<FT> &hasher, const py::object &obj, bool round=f
     return ret;
 }
 
+template<typename FT, template<typename> class Hasher>
+auto project_array(const Hasher<FT> &hasher, const SparseMatrixWrapper &smw, bool round=false) -> py::object {
+    const ssize_t nh = hasher.nh();
+    const ssize_t nr = smw.rows();
+    py::array_t<FT> rv(
+        py::buffer_info(nullptr, sizeof(FT), py::format_descriptor<FT>::format(),
+                        2,
+                        std::vector<Py_ssize_t>{nr, nh}, // shape
+                        // strides
+                        std::vector<Py_ssize_t>{Py_ssize_t(sizeof(FT) * nh),
+                                                Py_ssize_t(sizeof(FT))}
+        )
+    );
+    auto rvb = rv.request();
+    blaze::CustomMatrix<FT, blaze::unaligned, blaze::unpadded> cm((FT *)rvb.ptr, nr, nh);
+    if(round)
+        smw.perform([&](const auto &x){cm = hasher.hash(x);});
+    else
+        smw.perform([&](const auto &x){cm = hasher.project(x);});
+    return rv;
+}
+
 #define SETTINGS_GETTER(type, ftype) def("settings", [](const type<ftype> &hasher) -> LSHasherSettings {return hasher.settings_;}, "Get settings struct from hasher")
+#define SMW_HASH_DEC(type, ftype) def("hash", [](const type<ftype> &hasher, const SparseMatrixWrapper &smw) {return project_array(hasher, smw, true);}) \
+                                 .def("project", [](const type<ftype> &hasher, const SparseMatrixWrapper &smw) {return project_array(hasher, smw, false);})
 
 void init_hashers(py::module &m) {
     py::class_<LSHasherSettings>(m, "LSHSettings")
@@ -64,13 +89,15 @@ void init_hashers(py::module &m) {
         .def("hash", [](const JSDLSHasher<double> &hasher, py::object obj) -> py::object {
             return project_array(hasher, obj, true);
         })
-        .SETTINGS_GETTER(JSDLSHasher, double);
+        .SETTINGS_GETTER(JSDLSHasher, double)
+        .SMW_HASH_DEC(JSDLSHasher, double);
     py::class_<S2JSDLSHasher<double>>(m, "S2JSDLSHasher")
         .def(py::init<unsigned, unsigned, unsigned, double, uint64_t>(), py::arg("dim"), py::arg("k"), py::arg("l"), py::arg("w") = .1, py::arg("seed") = 0)
         .def(py::init<LSHasherSettings, double, uint64_t>(), py::arg("settings"), py::arg("w") = .1, py::arg("seed") = 0)
         .def("project", [](const S2JSDLSHasher<double> &hasher, py::object obj) {
             return project_array(hasher, obj);
         }).SETTINGS_GETTER(S2JSDLSHasher, double)
+        .SMW_HASH_DEC(S2JSDLSHasher, double)
         .def("hash", [](const S2JSDLSHasher<double> &hasher, py::object obj) {return project_array(hasher, obj, true);});
     py::class_<L1LSHasher<double>>(m, "L1LSHasher")
         .def(py::init<unsigned, unsigned, unsigned, double, uint64_t>(), py::arg("dim"), py::arg("k"), py::arg("l"), py::arg("w") = .1, py::arg("seed") = 0)
@@ -78,6 +105,7 @@ void init_hashers(py::module &m) {
         .def("project", [](const L1LSHasher<double> &hasher, py::object obj) {
             return project_array(hasher, obj);
         }).SETTINGS_GETTER(L1LSHasher, double)
+        .SMW_HASH_DEC(L1LSHasher, double)
         .def("hash", [](const L1LSHasher<double> &hasher, py::object obj) {return project_array(hasher, obj, true);});
     py::class_<ClippedL1LSHasher<double>>(m, "ClippedL1LSHasher")
         .def(py::init<unsigned, unsigned, unsigned, double, uint64_t>(), py::arg("dim"), py::arg("k"), py::arg("l"), py::arg("w") = .1, py::arg("seed") = 0)
@@ -85,19 +113,22 @@ void init_hashers(py::module &m) {
         .def("project", [](const ClippedL1LSHasher<double> &hasher, py::object obj) {
             return project_array(hasher, obj);
         }).SETTINGS_GETTER(ClippedL1LSHasher, double)
-        .def("hash", [](const ClippedL1LSHasher<double> &hasher, py::object obj) {return project_array(hasher, obj, true);});
+        .def("hash", [](const ClippedL1LSHasher<double> &hasher, py::object obj) {return project_array(hasher, obj, true);})
+        .SMW_HASH_DEC(ClippedL1LSHasher, double);
     py::class_<L2LSHasher<double>>(m, "L2LSHasher")
         .def(py::init<unsigned, unsigned, unsigned, double, uint64_t>(), py::arg("dim"), py::arg("k"), py::arg("l"), py::arg("w") = .1, py::arg("seed") = 0)
         .def(py::init<LSHasherSettings, double, uint64_t>(), py::arg("settings"), py::arg("w") = .1, py::arg("seed") = 0)
         .def("project", [](const L2LSHasher<double> &hasher, py::object obj) {
             return project_array(hasher, obj);
          }).SETTINGS_GETTER(L2LSHasher, double)
+        .SMW_HASH_DEC(L2LSHasher, double)
         .def("hash", [](const L2LSHasher<double> &hasher, py::object obj) {return project_array(hasher, obj, true);});
     py::class_<LpLSHasher<double>>(m, "LpLSHasher")
         .def(py::init<unsigned, unsigned, unsigned, double, double, uint64_t>(), py::arg("dim"), py::arg("k"), py::arg("l"), py::arg("p")=1.1, py::arg("w") = .1, py::arg("seed") = 0)
         .def(py::init<LSHasherSettings, double, double, uint64_t>(), py::arg("settings"), py::arg("p")=1.1, py::arg("w") = .1, py::arg("seed") = 0)
         .def("project", [](const LpLSHasher<double> &hasher, py::object obj) {return project_array(hasher, obj);})
         .SETTINGS_GETTER(L2LSHasher, double)
+        .SMW_HASH_DEC(LpLSHasher, double)
         .def("hash", [](const LpLSHasher<double> &hasher, py::object obj) {return project_array(hasher, obj, true);});
 
 
@@ -110,7 +141,8 @@ void init_hashers(py::module &m) {
         .def("hash", [](const JSDLSHasher<float> &hasher, py::object obj) -> py::object {
             return project_array(hasher, obj, true);
         })
-        .SETTINGS_GETTER(JSDLSHasher, float);
+        .SETTINGS_GETTER(JSDLSHasher, float)
+        .SMW_HASH_DEC(JSDLSHasher, float);
     py::class_<S2JSDLSHasher<float>>(m, "S2JSDLSHasher_f")
         .def(py::init<unsigned, unsigned, unsigned, float, uint64_t>(), py::arg("dim"), py::arg("k"), py::arg("l"), py::arg("w") = .1, py::arg("seed") = 0)
         .def(py::init<LSHasherSettings, float, uint64_t>(), py::arg("settings"), py::arg("w") = .1, py::arg("seed") = 0)
@@ -120,7 +152,8 @@ void init_hashers(py::module &m) {
         .def("hash", [](const S2JSDLSHasher<float> &hasher, py::object obj) {
             return project_array(hasher, obj, true);
         })
-        .SETTINGS_GETTER(S2JSDLSHasher, float);
+        .SETTINGS_GETTER(S2JSDLSHasher, float)
+        .SMW_HASH_DEC(S2JSDLSHasher, float);
     py::class_<L1LSHasher<float>>(m, "L1LSHasher_f")
         .def(py::init<unsigned, unsigned, unsigned, float, uint64_t>(), py::arg("dim"), py::arg("k"), py::arg("l"), py::arg("w") = .1, py::arg("seed") = 0)
         .def(py::init<LSHasherSettings, float, uint64_t>(), py::arg("settings"), py::arg("w") = .1, py::arg("seed") = 0)
@@ -129,7 +162,8 @@ void init_hashers(py::module &m) {
         }).SETTINGS_GETTER(L1LSHasher, float)
         .def("hash", [](const L1LSHasher<float> &hasher, py::object obj) {
             return project_array(hasher, obj, true);
-        });
+        })
+        .SMW_HASH_DEC(L1LSHasher, float);
     py::class_<ClippedL1LSHasher<float>>(m, "ClippedL1LSHasher_f")
         .def(py::init<unsigned, unsigned, unsigned, float, uint64_t>(), py::arg("dim"), py::arg("k"), py::arg("l"), py::arg("w") = .1, py::arg("seed") = 0)
         .def(py::init<LSHasherSettings, float, uint64_t>(), py::arg("settings"), py::arg("w") = .1, py::arg("seed") = 0)
@@ -139,7 +173,8 @@ void init_hashers(py::module &m) {
         .def("hash", [](const ClippedL1LSHasher<float> &hasher, py::object obj) {
             return project_array(hasher, obj, true);
         })
-        .SETTINGS_GETTER(ClippedL1LSHasher, float);
+        .SETTINGS_GETTER(ClippedL1LSHasher, float)
+        .SMW_HASH_DEC(ClippedL1LSHasher, float);
     py::class_<L2LSHasher<float>>(m, "L2LSHasher_f")
         .def(py::init<unsigned, unsigned, unsigned, float, uint64_t>(), py::arg("dim"), py::arg("k"), py::arg("l"), py::arg("w") = .1, py::arg("seed") = 0)
         .def(py::init<LSHasherSettings, float, uint64_t>(), py::arg("settings"), py::arg("w") = .1, py::arg("seed") = 0)
@@ -148,10 +183,15 @@ void init_hashers(py::module &m) {
          })
         .def("hash", [](const L2LSHasher<float> &hasher, py::object obj) {
             return project_array(hasher, obj, true);
-         }).SETTINGS_GETTER(L2LSHasher, float);
+         }).SETTINGS_GETTER(L2LSHasher, float)
+        .SMW_HASH_DEC(L2LSHasher, float);
     py::class_<LpLSHasher<float>>(m, "LpLSHasher_f")
         .def(py::init<unsigned, unsigned, unsigned, float, float, uint64_t>(), py::arg("dim"), py::arg("k"), py::arg("l"), py::arg("p")=1.1, py::arg("w") = .1, py::arg("seed") = 0)
         .def(py::init<LSHasherSettings, float, float, uint64_t>(), py::arg("settings"), py::arg("p")=1.1, py::arg("w") = .1, py::arg("seed") = 0)
         .def("project", [](const LpLSHasher<float> &hasher, py::object obj) {return project_array(hasher, obj);})
-        .SETTINGS_GETTER(LpLSHasher, float);
+        .SETTINGS_GETTER(LpLSHasher, float)
+        .SMW_HASH_DEC(LpLSHasher, float);
 }
+
+#undef SETTINGS_GETTER
+#undef SMW_HASH_DEC
