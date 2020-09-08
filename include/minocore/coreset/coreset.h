@@ -466,8 +466,9 @@ struct CoresetSampler {
     {
         // See https://arxiv.org/pdf/1106.1379.pdf, figures 2,3,4
         fl_asn_.reset(new IT[np_]);
-        blaze::CustomVector<IT, blaze::unaligned, blaze::unpadded>(fl_asn_.get(), np_) =
-            blaze::CustomVector<const IT, blaze::unaligned, blaze::unpadded>(asn, np_);
+        using cv_t = blaze::CustomVector<IT, blaze::unaligned, blaze::unpadded>;
+        cv_t flv(fl_asn_.get(), np_), aiv(const_cast<IT *>(asn), np_);
+        flv = aiv;
         if(bicriteria_centers) {
             if(!fl_bicriteria_points_) fl_bicriteria_points_.reset(new blaze::DynamicVector<IT>(b_));
             else fl_bicriteria_points_->resize(b_);

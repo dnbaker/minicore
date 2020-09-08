@@ -418,6 +418,15 @@ enum RestartMethodPol {
 
 } // detail
 
+inline namespace constants {
+
+template<typename FT>
+static constexpr FT RSIS_OFFSET = 0.1931471805599453;
+template<typename FT>
+static constexpr FT SIS_OFFSET = -.6931471805599453;
+
+}
+
 
 template<typename FT, bool SO>
 auto logsumexp(const blaze::DenseVector<FT, SO> &x) {
@@ -639,12 +648,12 @@ CT cosine_distance(const blz::Vector<VT1, SO> &x, const blz::Vector<VT2, OSO> &y
     return std::acos(cosine_similarity(x, y, blz::l2Norm(~x), blz::l2Norm(~y))) * PI_INV;
 }
 
-template<typename LHVec, typename RHVec>
-auto bhattacharyya_measure(const LHVec &lhs, const RHVec &rhs) {
+template<typename VT1, typename VT2, bool TF>
+auto bhattacharyya_measure(const blz::DenseVector<VT1, TF> &lhs, const blz::DenseVector<VT2, TF> &rhs) {
     // Requires same storage.
     // TODO: generalize for different storage classes/transpose flags using DenseVector and SparseVector
     // base classes
-    return sum(sqrt(lhs * rhs));
+    return sum(sqrt(~lhs * ~rhs));
 }
 
 template<typename LHVec, typename RHVec>
@@ -655,9 +664,18 @@ auto bhattacharyya_metric(const LHVec &lhs, const RHVec &rhs) {
     return std::sqrt(1. - bhattacharyya_measure(lhs, rhs));
 }
 template<typename LHVec, typename RHVec>
+auto bhattacharyya_distance(const LHVec &lhs, const RHVec &rhs) {
+    // Comaniciu, D., Ramesh, V. & Meer, P. (2003). Kernel-based object tracking.IEEE Transactionson Pattern Analysis and Machine Intelligence,25(5), 564-577.
+    // Proves that this extension is a valid metric
+    // See http://www.cse.yorku.ca/~kosta/CompVis_Notes/bhattacharyya.pdf
+    return -std::log(bhattacharyya_measure(lhs, rhs));
+}
+
+template<typename LHVec, typename RHVec>
 auto matusita_distance(const LHVec &lhs, const RHVec &rhs) {
     return sqrL2Dist(sqrt(lhs), sqrt(rhs));
 }
+
 template<typename...Args>
 INLINE decltype(auto) multinomial_jsm(Args &&...args) {
     using blaze::sqrt;

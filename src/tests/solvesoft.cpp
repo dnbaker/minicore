@@ -21,8 +21,12 @@ int main(int argc, char *argv[]) {
     }
     if(argc > 2) {
         temp = std::atof(argv[2]);
-        std::fprintf(stderr, "temp for soft clustering is %g\n", temp);
     }
+    if(argc > 3) {
+        prior[0] = std::atof(argv[3]);
+    }
+    std::fprintf(stderr, "prior for soft clustering is %g\n", prior[0]);
+    std::fprintf(stderr, "temp for soft clustering is %g\n", temp);
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
     std::vector<blaze::CompressedVector<double, blaze::rowVector>> centers;
     std::vector<int> ids{1018, 2624, 5481, 6006, 8972};
@@ -34,9 +38,11 @@ int main(int argc, char *argv[]) {
     for(const auto id: ids) centers.emplace_back(row(x, id));
     const size_t k = centers.size();
     const double psum = prior[0] * nc;
+    blz::DV<double> rowsums = blaze::sum<blz::rowwise>(x);
+    blz::DV<double> centersums = blaze::generate(k, [&](auto x) {return blz::sum(centers[x]);});
     blz::DV<uint32_t> asn(nr);
     blz::DM<double> complete_hardcosts = blaze::generate(nr, k, [&](auto row, auto col) {
-        return cmp::msr_with_prior(msr, blaze::row(x, row, blz::unchecked), centers[col], prior, psum);
+        return cmp::msr_with_prior(msr, blaze::row(x, row), centers[col], prior, psum, rowsums[row], centersums[col]);
     });
     blz::DV<double> hardcosts = blaze::generate(nr, [&](auto id) {
         auto r = row(complete_hardcosts, id, blaze::unchecked);
@@ -58,7 +64,7 @@ int main(int argc, char *argv[]) {
     // recalculate now
     std::cerr << "Calculate costs\n";
     complete_hardcosts = blaze::generate(nr, k, [&](auto r, auto col) {
-        return cmp::msr_with_prior(msr, row(x, r), centers[col], prior, psum);
+        return cmp::msr_with_prior(msr, row(x, r), centers[col], prior, psum, rowsums[r], centersums[col]);
     });
     std::cerr << "Perform clustering\n";
     clust::perform_soft_clustering(x, msr, prior, centers, complete_hardcosts, temp);

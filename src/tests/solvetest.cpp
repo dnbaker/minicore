@@ -9,6 +9,7 @@ using namespace minocore;
 int main(int argc, char *argv[]) {
     std::srand(0);
     std::ios_base::sync_with_stdio(false);
+    unsigned int k = 10;
     dist::print_measures();
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv)
         std::exit(1);
@@ -23,20 +24,31 @@ int main(int argc, char *argv[]) {
         temp = std::atof(argv[2]);
         std::fprintf(stderr, "temp for soft clustering is %g\n", temp);
     }
+    if(argc > 3) {
+        prior[0] = std::atof(argv[3]);
+    }
+    if(argc > 4) {
+        k = std::atoi(argv[4]);
+        if(k <= 0) std::abort();
+    }
+    std::fprintf(stderr, "prior: %g\n", prior[0]);
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
     std::vector<blaze::CompressedVector<double, blaze::rowVector>> centers;
     std::vector<int> ids{1018, 2624, 5481, 6006, 8972};
-    while(ids.size() < 10) {
+    while(ids.size() < k) {
         auto rid = std::rand() % x.rows();
         if(std::find(ids.begin(), ids.end(), rid) == ids.end())
             ids.emplace_back(rid);
     }
     for(const auto id: ids) centers.emplace_back(row(x, id));
-    const size_t k = centers.size();
     const double psum = prior[0] * nc;
     blz::DV<uint32_t> asn(nr);
-    blz::DM<double> complete_hardcosts = blaze::generate(nr, k, [&](auto row, auto col) {
-        return cmp::msr_with_prior(msr, blaze::row(x, row, blz::unchecked), centers[col], prior, psum);
+    blz::DV<double> rowsums = blaze::sum<blz::rowwise>(x);
+    blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
+    assert(rowsums.size() == x.rows());
+    assert(centersums.size() == centers.size());
+    blz::DM<double> complete_hardcosts = blaze::generate(nr, k, [&](auto r, auto col) {
+        return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
     });
     blz::DV<double> hardcosts = blaze::generate(nr, [&](auto id) {
         auto r = row(complete_hardcosts, id, blaze::unchecked);

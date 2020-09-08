@@ -411,7 +411,6 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         std::fprintf(stderr, "reseeding %zu centers\n", sa.size());
 #endif
         if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
-        auto &probs = *probup;
         FT *pd = probup->data(), *pe = pd + probup->size();
         if(weights) {
             ::std::partial_sum(costs.begin(), costs.end(), pd, [&weights,ds=&costs[0]](auto x, const auto &y) {
@@ -469,22 +468,24 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             ctrs[i] = row(mat, *asp);
         else {
             auto rowsel = rows(mat, asp, nasn);
-            std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << ctrs[i] << '\n';
+            VERBOSE_ONLY(std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << ctrs[i] << '\n';)
             if(weights)
                 blz::geomedian(rowsel, ctrs[i], elements(costs, asp, nasn), eps);
             else
                 blz::geomedian(rowsel, ctrs[i], eps);
-            std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';
+            VERBOSE_ONLY(std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';)
         }
     }
 }
-template<typename FT=double, typename Mat, typename PriorT, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
+template<typename FT=double, typename Mat, typename PriorT, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t, typename SumT>
 void set_centroids_full_mean(const Mat &mat,
     const dist::DissimilarityMeasure measure,
     const PriorT &prior, AsnT &asn, CostsT &costs, CtrsT &ctrs,
-    WeightsT *weights)
+    WeightsT *weights, SumT &ctrsums, const SumT &rowsums)
 {
-    std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p\n", (void *)weights);
+    assert(rowsums.size() == (~mat).rows());
+    assert(ctrsums.size() == ctrs.size());
+    DBG_ONLY(std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p\n", (void *)weights);)
     //
 
     assert(asn.size() == costs.size() || !std::fprintf(stderr, "asn size %zu, cost size %zu\n", asn.size(), costs.size()));
@@ -499,7 +500,7 @@ void set_centroids_full_mean(const Mat &mat,
         blz::push_back(assigned[asn[i]], i);
     }
 #ifndef NDEBUG
-    for(unsigned i = 0; i < assigned.size(); ++i) std::fprintf(stderr, "Center %zd has %zu assigned points\n", i, assigned[i].size());
+    for(unsigned i = 0; i < assigned.size(); ++i) std::fprintf(stderr, "Center %u has %zu assigned points\n", i, assigned[i].size());
 #endif
     for(unsigned i = 0; i < k; ++i)
         if(assigned[i].empty())
@@ -523,14 +524,24 @@ void set_centroids_full_mean(const Mat &mat,
                 r = rng() % costs.size();
             else
                 throw TODOError("D2 sampling-based restarting not yet completed; this simply uses a partial sum and selects by fraction of cost rather than greedily selecting the greatest.");
-            ctrs[id] = row(mat, r);
+            auto &ctr = ctrs[id];
+            ctr = row(mat, r);
+            ctrsums[id] = blz::sum(ctr);
+            OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
                 unsigned bestid = asn[i], obi = bestid;
                 auto r = row(mat, i, blaze::unchecked);
+                const auto rsum = rowsums[i];
+                assert(std::abs(blz::sum(r) - rsum) < 1e-6 || !std::fprintf(stderr, "rsum %g and summed %g\n", rsum, blz::sum(r)));
                 for(unsigned j = 0; j < k; ++j) {
-                    if(j == obi) continue;
-                    const auto c = cmp::msr_with_prior(measure, ctrs[j], r, prior, psum);
-                    if(c < costs[i]) costs[i] = c, bestid = j;
+                    const auto csum = ctrsums[j];
+                    DBG_ONLY(auto bsum = blz::sum(ctrs[j]);)
+                    assert(std::abs(csum - bsum) < 1e-10 || !std::fprintf(stderr, "csum %g but found bsum %g\n", csum, bsum));
+                    const auto c = cmp::msr_with_prior(measure, r, ctrs[j], prior, psum,
+                                                       rsum, csum);
+                    if(c < costs[i]) {
+                        costs[i] = c, bestid = j;
+                    }
                 }
                 if(bestid != obi)
                     asn[i] = bestid;
@@ -540,6 +551,9 @@ void set_centroids_full_mean(const Mat &mat,
         for(auto &x: assigned) x.clear();
         goto set_asn;
     }
+#if defined(_OPENMP) && !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
+    #pragma omp parallel for
+#endif
     for(unsigned i = 0; i < k; ++i) {
         // Compute mean for centroid
         const auto nasn = assigned[i].size();
@@ -547,7 +561,6 @@ void set_centroids_full_mean(const Mat &mat,
         auto &ctr = ctrs[i];
         if(nasn == 1) ctr = row(mat, *asp);
         else {
-            DBG_ONLY(std::fprintf(stderr, "Selecting rows\n");)
             auto rowsel = rows(mat, asp, nasn);
             if(weights) {
                 auto elsel = elements(*weights, asp, nasn);
@@ -555,9 +568,10 @@ void set_centroids_full_mean(const Mat &mat,
                 // weighted sum over total weight -> weighted mean
                 ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
             } else ctr = blaze::mean<blaze::columnwise>(rowsel);
-            DBG_ONLY(std::fprintf(stderr, "Set center %u\n", i);)
         }
+        ctrsums[i] = blz::sum(ctr);
         // Adjust for prior
+#if 0
         if constexpr(blaze::IsDenseVector_v<CtrsT>) {
             switch(prior.size()) {
                 case 1:  ctr += prior[0]; break;
@@ -565,17 +579,25 @@ void set_centroids_full_mean(const Mat &mat,
                 case 0:; // do nothing, IE, there is no prior
             }
         }
+#endif
     }
     DBG_ONLY(std::fprintf(stderr, "Centroids set, hard\n");)
 }
 
-template<typename FT=double, typename Mat, typename PriorT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
+template<typename FT=double, typename Mat, typename PriorT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t, typename SumT>
 void set_centroids_full_mean(const Mat &mat,
     const dist::DissimilarityMeasure measure,
     const PriorT &prior, CostsT &costs, CtrsT &ctrs,
-    WeightsT *weights, FT temp=1.)
+    WeightsT *weights, FT temp, SumT &ctrsums)
 {
+    assert(ctrsums.size() == ctrs.size());
     std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
+#ifndef NDEBUG
+    for(size_t i = 0; i < ctrs.size(); ++i) {
+        auto s = blz::sum(ctrs[i]);
+        assert(std::abs(s - ctrsums[i]) <= 1e-4 || !std::fprintf(stderr, "sum expected %g, got %g\n", s, ctrsums[i]));
+    }
+#endif
 
     VERBOSE_ONLY(std::fprintf(stderr, "[%s] Computing centroids\n", __func__);)
     const unsigned k = ctrs.size();
@@ -587,6 +609,9 @@ void set_centroids_full_mean(const Mat &mat,
     // TODO: provide a better parallelization method, either
     // 1. reduction
     // 2. more fine-grained locking strategies (though would fail for low-dimension data)
+#if defined(_OPENMP) && !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
+    #pragma omp parallel for
+#endif
     for(uint64_t i = 0; i < costs.rows(); ++i) {
         const auto r = row(costs, i, blaze::unchecked);
         const auto mr = row(mat, i, blz::unchecked);
@@ -607,8 +632,10 @@ void set_centroids_full_mean(const Mat &mat,
             //std::cerr << "ctr after at iter " << i << " and j " << j << " is " << ctrs[j] << '\n';
         }
     }
+    OMP_PFOR
     for(unsigned j = 0; j < k; ++j) {
         ctrs[j] /= wsums[j];
+        ctrsums[j] = blz::sum(ctrs[j]);
     }
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
 }

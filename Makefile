@@ -27,14 +27,14 @@ INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 LIBS=$(patsubst %,-L%,$(LIBPATHS))
 CXX?=g++
 STD?=c++17
-WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function \
+WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function -Wdeprecated -Wno-deprecated-declarations \
     -Wno-deprecated-copy # Because of Boost.Fusion
 OPT?=O3
 LDFLAGS+=$(LIBS) -lz $(LINKS)
 EXTRA?=
 DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(BLAS_LINKING_FLAGS) \
-    -DBOOST_NO_AUTO_PTR -lz
+    -DBOOST_NO_AUTO_PTR -lz # -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
 
 
 DEX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
@@ -173,6 +173,9 @@ libsleef.a:
 
 
 soft: solvetestdbg solvetest solvesoft solvesoftdbg
+ssoft: solvesoft solvesoftdbg
+hsoft: solvetest solvetestdbg
+
 
 
 

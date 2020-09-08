@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
     OMP_ONLY(omp_set_num_threads(nt);)
 #endif
     std::srand(0);
-    size_t n = argc == 1 ? 250000: std::atoi(argv[1]);
+    size_t n = argc == 1 ? 25000: std::atoi(argv[1]);
     size_t npoints = argc <= 2 ? 50: std::atoi(argv[2]);
     size_t nd = argc <= 3 ? 40: std::atoi(argv[3]);
     double eps = argc <= 4 ? 0.5: std::atof(argv[3]);

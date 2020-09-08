@@ -612,7 +612,8 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
                     std::cerr << "r squared should be " << (r * r) << '\n';
                 }
 #else
-                costs[i] = blz::l2Norm(row(_mat, i) - ~dv);
+                costs[i] = std::max(blz::l2Norm(row(_mat, i, blz::unchecked) - ~dv),
+                                    static_cast<blaze::ElementType_t<MT>>(1e-80));
 #endif
             }
 #else
@@ -621,14 +622,12 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
         }
         FT current_cost = sum(costs);
         FT dist;
-        std::fprintf(stderr, "Current cost: %g.\n", current_cost);
         if((dist = std::abs(prevcost - current_cost)) <= eps) break;
         if(unlikely(std::isnan(dist))) {
             std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
             throw std::runtime_error("Optimization failed: nan");
         }
         ++iternum;
-        std::cerr << "costs: " << costs << '\n';
         costs = 1. / costs;
         costs *= 1. / blaze::sum(costs);
         ~dv = trans(costs) * ~mat;
@@ -651,10 +650,9 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType
     for(;;) {
         OMP_PFOR
         for(size_t i = 0; i < _mat.rows(); ++i)
-            costs[i] = weights[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
+            costs[i] = std::max(weights[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv), FT(1e-80));
         FT current_cost = sum(costs);
         FT dist;
-        std::fprintf(stderr, "Current cost: %g.\n", current_cost);
         if((dist = std::abs(prevcost - current_cost)) <= eps) break;
         if(unlikely(std::isnan(dist))) {
             std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
