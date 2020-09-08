@@ -469,12 +469,12 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             ctrs[i] = row(mat, *asp);
         else {
             auto rowsel = rows(mat, asp, nasn);
-            std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << ctrs[i] << '\n';
+            VERBOSE_ONLY(std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << ctrs[i] << '\n';)
             if(weights)
                 blz::geomedian(rowsel, ctrs[i], elements(costs, asp, nasn), eps);
             else
                 blz::geomedian(rowsel, ctrs[i], eps);
-            std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';
+            VERBOSE_ONLY(std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';)
         }
     }
 }
@@ -486,7 +486,7 @@ void set_centroids_full_mean(const Mat &mat,
 {
     assert(rowsums.size() == (~mat).rows());
     assert(ctrsums.size() == ctrs.size());
-    std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p\n", (void *)weights);
+    DBG_ONLY(std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p\n", (void *)weights);)
     //
 
     assert(asn.size() == costs.size() || !std::fprintf(stderr, "asn size %zu, cost size %zu\n", asn.size(), costs.size()));

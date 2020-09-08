@@ -116,14 +116,13 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
     std::fprintf(stderr, "cost: %0.12g\n", cost);
     size_t iternum = 0;
     for(;;) {
-        std::fprintf(stderr, "Beginning iter %zu\n", iternum);
+        DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
         set_centroids_hard<FT>(~mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
-        std::fprintf(stderr, "Set centroids %zu\n", iternum);
+        DBG_ONLY(std::fprintf(stderr, "Set centroids %zu\n", iternum);)
 
         assign_points_hard<FT>(~mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
-        std::fprintf(stderr, "Assigning points %zu\n", iternum);
         auto newcost = compute_cost();
-        std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);
+        DBG_ONLY(std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);)
         if(newcost > cost) {
             auto msg = std::string("New cost ") + std::to_string(newcost) + " > original cost " + std::to_string(cost) + '\n';
             std::cerr << msg;
@@ -146,7 +145,9 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
         }
         cost = newcost;
     }
+#ifndef NDEBUG
     std::fprintf(stderr, "Completing clustering after %zu rounds. Initial cost %0.12g. Final cost %0.12g.\n", iternum, initcost, cost);
+#endif
     return std::make_tuple(initcost, cost, iternum);
 }
 
@@ -169,7 +170,7 @@ void set_centroids_hard(const Mat &mat,
 {
     MINOCORE_VALIDATE(dist::is_valid_measure(measure));
     const CentroidPol pol = msr2pol(measure);
-    std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));
+    DBG_ONLY(std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));)
     if(dist::is_bregman(measure)) {
         assert(FULL_WEIGHTED_MEAN == pol || JSM_MEDIAN == pol);
     }
@@ -219,7 +220,9 @@ void assign_points_hard(const Mat &mat,
                           : double(blz::sum(prior));
     assert(centersums.size() == centers.size());
     assert(rowsums.size() == (~mat).rows());
+#ifndef NDEBUG
     std::fprintf(stderr, "[%s]: %d-clustering with %s and %zu dimensions\n", __func__, k, dist::msr2str(measure), centers[0].size());
+#endif
 
     // Compute distance function
     // Handles similarity measure, caching, and the use of a prior for exponential family models
@@ -392,27 +395,19 @@ void set_centroids_soft(const Mat &mat,
     MINOCORE_VALIDATE(dist::is_valid_measure(measure));
     const CentroidPol pol = msr2pol(measure);
     assert(FULL_WEIGHTED_MEAN == pol || !dist::is_bregman(measure) || JSM_MEDIAN == pol); // sanity check
-#ifndef NDEBUG
-    std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));
-#endif
+    DBG_ONLY(std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));)
     switch(pol) {
         case JSM_MEDIAN:
         case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(mat, measure, prior, costs, centers, weights, temp, centersums);
             break;
+        case GEO_MEDIAN: throw NotImplementedError("TODO: implement weighted geometric median from soft clustering. It's just a lot of work.");
+        case L1_MEDIAN: throw NotImplementedError("TODO: implement weighted median from soft clustering. It's just a lot of work.");
         default: {
             const std::string msg("Cannot optimize without a valid centroid policy for soft clustering.");
             std::fputs(msg.data(), stderr);
             throw std::runtime_error(msg);
         }
     }
-#ifndef NDEBUG
-    for(auto i = 0u; i < centers.size(); ++i) {
-        auto diff = std::abs(blz::sum(centers[i]) - centersums[i]);
-        if(diff > 1e-10) {
-            assert(!std::fprintf(stderr, "sum %u is %g vs %g\n", i, blz::sum(centers[i]), centersums[i]));
-        }
-    }
-#endif
     const size_t np = costs.size();
     const unsigned k = centers.size();
     const FT prior_sum =
