@@ -484,6 +484,8 @@ void set_centroids_full_mean(const Mat &mat,
     const PriorT &prior, AsnT &asn, CostsT &costs, CtrsT &ctrs,
     WeightsT *weights, SumT &ctrsums, const SumT &rowsums)
 {
+    assert(rowsums.size() == (~mat).rows());
+    assert(ctrsums.size() == ctrs.size());
     std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p\n", (void *)weights);
     //
 
@@ -523,15 +525,24 @@ void set_centroids_full_mean(const Mat &mat,
                 r = rng() % costs.size();
             else
                 throw TODOError("D2 sampling-based restarting not yet completed; this simply uses a partial sum and selects by fraction of cost rather than greedily selecting the greatest.");
-            ctrs[id] = row(mat, r);
+            auto &ctr = ctrs[id];
+            ctr = row(mat, r);
+            ctrsums[id] = blz::sum(ctr);
+            OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
                 unsigned bestid = asn[i], obi = bestid;
                 auto r = row(mat, i, blaze::unchecked);
                 const auto rsum = rowsums[i];
+                assert(std::abs(blz::sum(r) - rsum) < 1e-6 || !std::fprintf(stderr, "rsum %g and summed %g\n", rsum, blz::sum(r)));
                 for(unsigned j = 0; j < k; ++j) {
-                    if(j == obi) continue;
-                    const auto c = cmp::msr_with_prior(measure, ctrs[j], r, prior, psum, ctrsums[j], rsum);
-                    if(c < costs[i]) costs[i] = c, bestid = j;
+                    const auto csum = ctrsums[j];
+                    DBG_ONLY(auto bsum = blz::sum(ctrs[j]);)
+                    assert(std::abs(csum - bsum) < 1e-10 || !std::fprintf(stderr, "csum %g but found bsum %g\n", csum, bsum));
+                    const auto c = cmp::msr_with_prior(measure, r, ctrs[j], prior, psum,
+                                                       rsum, csum);
+                    if(c < costs[i]) {
+                        costs[i] = c, bestid = j;
+                    }
                 }
                 if(bestid != obi)
                     asn[i] = bestid;
@@ -551,7 +562,6 @@ void set_centroids_full_mean(const Mat &mat,
         auto &ctr = ctrs[i];
         if(nasn == 1) ctr = row(mat, *asp);
         else {
-            DBG_ONLY(std::fprintf(stderr, "Selecting rows\n");)
             auto rowsel = rows(mat, asp, nasn);
             if(weights) {
                 auto elsel = elements(*weights, asp, nasn);
@@ -559,10 +569,10 @@ void set_centroids_full_mean(const Mat &mat,
                 // weighted sum over total weight -> weighted mean
                 ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
             } else ctr = blaze::mean<blaze::columnwise>(rowsel);
-            DBG_ONLY(std::fprintf(stderr, "Set center %u\n", i);)
         }
         ctrsums[i] = blz::sum(ctr);
         // Adjust for prior
+#if 0
         if constexpr(blaze::IsDenseVector_v<CtrsT>) {
             switch(prior.size()) {
                 case 1:  ctr += prior[0]; break;
@@ -570,6 +580,7 @@ void set_centroids_full_mean(const Mat &mat,
                 case 0:; // do nothing, IE, there is no prior
             }
         }
+#endif
     }
     DBG_ONLY(std::fprintf(stderr, "Centroids set, hard\n");)
 }

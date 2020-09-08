@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
     assert(rowsums.size() == x.rows());
     assert(centersums.size() == centers.size());
     blz::DM<double> complete_hardcosts = blaze::generate(nr, k, [&](auto r, auto col) {
-        return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, centersums[col], rowsums[r]);
+        return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
     });
     blz::DV<double> hardcosts = blaze::generate(nr, [&](auto id) {
         auto r = row(complete_hardcosts, id, blaze::unchecked);

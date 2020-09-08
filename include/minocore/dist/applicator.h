@@ -1764,7 +1764,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
         */
         FT ret;
-        assert(mrsum == blz::sum(mr) && ctrsum == blz::sum(ctr) || !std::fprintf(stderr, "Found %g and %g, expected %g and %g\n", blz::sum(mr), blz::sum(ctr), mrsum, ctrsum));
+        assert((std::abs(mrsum - blz::sum(mr)) < 1e-10 && std::abs(ctrsum - blz::sum(ctr)) < 1e-10)
+               || !std::fprintf(stderr, "Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", blz::sum(mr), blz::sum(ctr), mrsum, ctrsum));
         const FT lhsum = mrsum + prior_sum;
         const FT rhsum = ctrsum + prior_sum;
         const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum; // TODO: cache sums?
@@ -1859,6 +1860,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhrsi * (yval + rhinc));},
                     __isc(lhsum * rhrsi));
             break;
+            case POISSON:
             case MKL: {
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
@@ -1867,6 +1869,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     -lhinc * rhl);
             }
             break;
+            case REVERSE_POISSON:
             case REVERSE_MKL: {
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (yval + rhinc) * (std::log((yval + rhinc) / (xval + lhinc)));},

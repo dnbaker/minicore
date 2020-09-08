@@ -173,6 +173,9 @@ libsleef.a:
 
 
 soft: solvetestdbg solvetest solvesoft solvesoftdbg
+ssoft: solvesoft solvesoftdbg
+hsoft: solvetest solvetestdbg
+
 
 
 

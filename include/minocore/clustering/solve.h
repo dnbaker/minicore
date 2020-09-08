@@ -105,10 +105,12 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
     for(size_t i = 0; i < rowsums.size(); ++i)
         rowsums[i] = blz::sum(row(~mat, i, blz::unchecked));
     OMP_PFOR
-    for(size_t i = 0; i < rowsums.size(); ++i)
+    for(size_t i = 0; i < centers.size(); ++i)
         centersums[i] = blz::sum(centers[i]);
 #endif
+    std::fprintf(stderr, "Assigning\n");
     assign_points_hard<FT>(~mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
+    std::fprintf(stderr, "Assigned\n");
     const auto initcost = compute_cost();
     FT cost = initcost;
     std::fprintf(stderr, "cost: %0.12g\n", cost);
@@ -235,7 +237,7 @@ void assign_points_hard(const Mat &mat,
         assert(cid < centers.size() || !std::fprintf(stderr, "cid %u, size %zu\n", unsigned(cid), centers.size()));
         const auto &ctr = centers[cid];
         const auto rowsum = rowsums[id];
-        const auto centersum = centersums[id];
+        const auto centersum = centersums[cid];
         assert(ctr.size() == mr.size());
         auto mrmult = mr / rowsum;
         auto wctr = ctr * (1. / centersum);
@@ -320,18 +322,18 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
                              size_t maxiter=size_t(-1))
 {
     auto centers_cpy(centers);
-#if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
-    const blz::DV<FT> rowsums = blaze::sum<blz::rowwise>(~mat);
-    blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
-#else
-    blz::DV<FT> rowsums((~mat).rows());
     blz::DV<FT> centersums(centers.size());
+    blz::DV<FT> rowsums((~mat).rows());
+#if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
+    rowsums = blaze::sum<blz::rowwise>(~mat);
+    centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
+#else
     OMP_PFOR
     for(size_t i = 0; i < rowsums.size(); ++i)
-        rowsums[i] = blz::sum(row(~mat, i, blz::unchecked));
+        rowsums[i] = blz::sum(row(~mat, i));
     OMP_PFOR
-    for(size_t i = 0; i < centers.size(); ++i)
-        centersums[i] = blz::sum(centers[i]);
+    for(size_t i = 0; i < centers_cpy.size(); ++i)
+        centersums[i] = blz::sum(centers_cpy[i]);
 #endif
     auto compute_cost = [&]() {
         FT ret = 0.;
@@ -339,11 +341,15 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
         for(size_t i = 0; i < costs.rows(); ++i) {
             auto cr = row(costs, i, blaze::unchecked);
             FT pointcost;
+#if 0
             try {
                 pointcost = serial(sum(softmax(cr * temperature) * cr));
             } catch(const std::exception &ex) {
                 std::cerr << ex.what() << " for point " << i << '\n'; throw;
             }
+#else
+            pointcost = sum(softmax(cr * temperature) * cr);
+#endif
             if(weights) pointcost *= (*weights)[i];
             ret += pointcost;
         }
@@ -359,7 +365,9 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
         cost = compute_cost();
         std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
         if(oldcost > cost) // Update centers only if an improvement
-            std::swap_ranges(centers_cpy.begin(), centers_cpy.end(), centers.begin());
+        {
+            std::copy(centers_cpy.begin(), centers_cpy.end(), centers.begin());
+        }
         if(oldcost - cost < eps * initcost || ++iternum == maxiter) {
             break;
         }
@@ -407,7 +415,6 @@ void set_centroids_soft(const Mat &mat,
         if(diff > 1e-10) {
             assert(!std::fprintf(stderr, "sum %u is %g vs %g\n", i, blz::sum(centers[i]), centersums[i]));
         }
-
     }
 #endif
     const size_t np = costs.size();
