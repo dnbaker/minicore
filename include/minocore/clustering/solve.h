@@ -257,13 +257,9 @@ void assign_points_hard(const Mat &mat,
             // Discrete Probability Distribution Measures
             case TVD:       ret = .5 * blz::sum(blz::abs(wctr - mrmult)); break;
             case HELLINGER: ret = blz::l2Norm(blz::sqrt(wctr) - blz::sqrt(mrmult)); break;
-            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: {
-                const auto sim = blz::dot(blz::sqrt(wctr), blz::sqrt(mrmult));
-                ret = measure == BHATTACHARYYA_METRIC ? std::sqrt(1. - sim)
-                                                      : -std::log(sim);
-            } break;
 
-            // Bregman divergences + convex combinations thereof
+            // Bregman divergences + convex combinations thereof, and 
+            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
             case POISSON: case JSD: case JSM:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
             case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:
@@ -439,7 +435,7 @@ void set_centroids_soft(const Mat &mat,
             // Geometric
             case L1:
                 ret = l1Dist(ctr, mr);
-            break; // Replacing l1Norm with blz::sum(blz::abs due to error in norm backend
+            break;
             case L2:    ret = blz::l2Dist(ctr, mr); break;
             case SQRL2: ret = blz::sqrDist(ctr, mr); break;
             case PSL2:  ret = blz::sqrNorm(wctr - mrmult); break;
@@ -448,16 +444,9 @@ void set_centroids_soft(const Mat &mat,
             // Discrete Probability Distribution Measures
             case TVD:       ret = .5 * blz::sum(blz::abs(wctr - mrmult)); break;
             case HELLINGER: ret = blz::l2Norm(blz::sqrt(wctr) - blz::sqrt(mrmult)); break;
-            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: {
-                const auto sim = blz::dot(blz::sqrt(wctr), blz::sqrt(mrmult));
-                if(measure == BHATTACHARYYA_METRIC) {
-                    ret = std::sqrt(std::max(FT(1.) - sim, FT(0)));
-                } else {
-                    ret = -std::log(sim + 1e-50); // To ensure that the number is not a NAN;
-                }
-            } break;
 
-            // Bregman divergences + convex combinations thereof
+            // Bregman divergences, convex combinations thereof, and Bhattacharyya measures
+            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
             case POISSON: case JSD: case JSM:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
             case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:

@@ -23,6 +23,10 @@ int main(int argc, char *argv[]) {
         temp = std::atof(argv[2]);
         std::fprintf(stderr, "temp for soft clustering is %g\n", temp);
     }
+    if(argc > 3) {
+        prior[0] = std::atof(argv[3]);
+    }
+    std::fprintf(stderr, "prior: %g\n", prior[0]);
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
     std::vector<blaze::CompressedVector<double, blaze::rowVector>> centers;
     std::vector<int> ids{1018, 2624, 5481, 6006, 8972};

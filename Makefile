@@ -27,7 +27,7 @@ INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 LIBS=$(patsubst %,-L%,$(LIBPATHS))
 CXX?=g++
 STD?=c++17
-WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function \
+WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function -Wdeprecated \
     -Wno-deprecated-copy # Because of Boost.Fusion
 OPT?=O3
 LDFLAGS+=$(LIBS) -lz $(LINKS)
@@ -68,7 +68,8 @@ LINKS += -ltbb
 endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
-      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg
+      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg \
+        solvesoftdbg solvetestdbg
 
 tests: $(TESTS)
 print_tests:

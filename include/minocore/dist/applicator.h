@@ -655,10 +655,9 @@ public:
                 throw std::runtime_error(buf);
             }
             // FT sis(size_t i, size_t j) const
-            static constexpr const FT offset = 0.1931471805599453;
             auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
                 const auto ix = 1. / x, iy = 1. / y, isq = std::sqrt(ix * iy);
-                ret += .25 * (x * iy + y * ix) - std::log((x + y) * isq) + offset;
+                ret += .25 * (x * iy + y * ix) - std::log((x + y) * isq) + dist::RSIS_OFFSET<FT>;
             };
             const size_t dim = data_.columns();
             auto lhn = row_sums_[i] + prior_sum_, rhn = blz::sum(o) + prior_sum_;
@@ -699,10 +698,9 @@ public:
                 std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%zu\n", i, j);
                 throw std::runtime_error(buf);
             }
-            static constexpr const FT offset = 0.1931471805599453;
             auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
                 const auto ix = 1. / x, iy = 1. / y, isq = std::sqrt(ix * iy);
-                ret += .25 * (x * iy + y * ix) - std::log((x + y) * isq) + offset;
+                ret += .25 * (x * iy + y * ix) - std::log((x + y) * isq) + dist::RSIS_OFFSET<FT>;
             };
             const size_t dim = data_.columns();
             auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
@@ -715,7 +713,7 @@ public:
                     [&](auto, auto x, auto y) ALWAYS_INLINE {do_inc((x + lhrsi), (y + rhrsi));},
                     [&](auto, auto x) ALWAYS_INLINE {do_inc((x + lhrsi), rhrsi);},
                     [&](auto, auto y) ALWAYS_INLINE {do_inc(lhrsi, (y + rhrsi));});
-                ret += shared_zero * (std::log(lhrsi + rhrsi) - .5 * std::log(lhrsi * rhrsi) + offset);
+                ret += shared_zero * (std::log(lhrsi + rhrsi) - .5 * std::log(lhrsi * rhrsi) + dist::RSIS_OFFSET<FT>);
             } else {
                 auto &pd(*prior_data_);
                 merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
@@ -743,9 +741,8 @@ public:
             }
             // For derivation, see below in
             // FT sis(size_t i, size_t j) const
-            static constexpr FT offset = -.6931471805599453;
             auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
-                ret += std::log(x + y) - .5 * std::log(x * y) + offset;
+                ret += std::log(x + y) - .5 * std::log(x * y) + dist::SIS_OFFSET<FT>;
             };
             const size_t dim = data_.columns();
             auto lhn = row_sums_[i] + prior_sum_, rhn = blz::sum(o) + prior_sum_;
@@ -786,9 +783,8 @@ public:
                 std::sprintf(buf, "warning: Itakura-Saito cannot be computed to sparse vectors/matrices at %zu/%zu\n", i, j);
                 throw std::runtime_error(buf);
             }
-            static constexpr FT offset = -.6931471805599453;
             auto do_inc = [&](auto x, auto y) ALWAYS_INLINE {
-                ret += std::log(x + y) - .5 * std::log(x * y) + offset;
+                ret += std::log(x + y) - .5 * std::log(x * y) + dist::SIS_OFFSET<FT>;
             };
             const size_t dim = data_.columns();
             auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
@@ -801,7 +797,7 @@ public:
                     [&](auto, auto x, auto y) ALWAYS_INLINE {do_inc((x + lhrsi), (y + rhrsi));},
                     [&](auto, auto x) ALWAYS_INLINE {do_inc((x + lhrsi), rhrsi);},
                     [&](auto, auto y) ALWAYS_INLINE {do_inc(lhrsi, (y + rhrsi));});
-                ret += shared_zero * (std::log(lhrsi + rhrsi) - .5 * std::log(lhrsi * rhrsi) + offset);
+                ret += shared_zero * (std::log(lhrsi + rhrsi) - .5 * std::log(lhrsi * rhrsi) + dist::SIS_OFFSET<FT>);
             } else {
                 auto &pd(*prior_data_);
                 merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
@@ -1729,7 +1725,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case COSINE_DISTANCE: return cmp::cosine_distance(ctr, mr); // TODO: cache norms for each line
         }
     } else if constexpr(blaze::IsSparseVector_v<CtrT> && blaze::IsSparseVector_v<MatrixRowT>) {
-        // If geometric, 
+        // If geometric,
         switch(msr) {
             case L1: return blz::l1Dist(ctr, mr);
             case L2: return blz::l2Dist(ctr, mr);
@@ -1768,17 +1764,25 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                || !std::fprintf(stderr, "Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", blz::sum(mr), blz::sum(ctr), mrsum, ctrsum));
         const FT lhsum = mrsum + prior_sum;
         const FT rhsum = ctrsum + prior_sum;
-        const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum; // TODO: cache sums?
+        const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
         const FT lhinc = prior[0] * lhrsi, rhinc = prior[0] * rhrsi;
         const FT rhl = std::log(rhinc), rhincl = rhl * rhinc;
         const FT lhl = std::log(lhinc), lhincl = lhl * lhinc;
         const FT shl = std::log((lhinc + rhinc) * FT(.5)), shincl = (lhinc + rhinc) * shl;
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
-        assert(std::abs(blz::sum(wr)) < 1.);
+        assert(std::abs(blz::sum(wr)) < 1. || !std::fprintf(stderr, "sum(row) - 1 = %0.20g, which should be 0.\n", blz::sum(wr) - 1.));
         // TODO: consider batching logs from sparse vectors with some extra dispatching code
+        // For better vectorization
         auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
-        // Consider -ffast-math/-fassociative-math
+        auto get_inc_sis = [](auto x, auto y) ALWAYS_INLINE {
+            return std::log(x + y) - .5 * std::log(x * y) + dist::SIS_OFFSET<FT>;;
+        };
+        auto get_inc_rsis = [](auto x, auto y) ALWAYS_INLINE {
+            const auto ix = 1. / x, iy = 1. / y, isq = std::sqrt(ix * iy);
+            return .25 * (x * iy + y * ix) - std::log((x + y) * isq) + dist::RSIS_OFFSET<FT>;
+        };
+        // Consider -ffast-math/-fassociative-math?
         switch(msr) {
             case L1: ret = l1Dist(mr, ctr); break;
             case L2: ret = l2Dist(mr, ctr); break;
@@ -1883,10 +1887,25 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             break;
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
             {
-                FT tmp = dist::bhattacharyya_measure(mr / (lhsum - prior_sum),  ctr / (rhsum - prior_sum));
-                if(msr == BHATTACHARYYA_METRIC) tmp = std::sqrt(std::max(FT(1.) - tmp, FT(0)));
-                else                            tmp = -std::log(tmp + 1e-50);
-                ret = tmp;
+                const FT tmp = perform_core(wr, wc, 0.,
+                    [&](auto xval, auto yval) ALWAYS_INLINE {
+                        xval += lhinc;
+                        yval += rhinc;
+                        return std::sqrt(xval * yval);
+                    },
+                    [&](auto xval) ALWAYS_INLINE {
+                        xval += rhinc;
+                        return std::sqrt(rhinc * xval);
+                    },
+                    [&](auto yval) ALWAYS_INLINE {
+                        yval += rhinc;
+                        return std::sqrt(lhinc * yval);
+                    },
+                    std::sqrt(lhinc * rhinc));
+                if(msr == BHATTACHARYYA_METRIC)
+                    ret = std::sqrt(std::max(FT(1.) - tmp, FT(0)));
+                else
+                    ret = -std::log(tmp + FT(1e-50));
                 break;
             }
             case HELLINGER: {
@@ -1894,7 +1913,23 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 break;
             }
             case SIS:
+                ret = perform_core(wr, wc, FT(0),
+                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
+                        return get_inc_sis(xval + lhinc, yval + rhinc);
+                    },
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return get_inc_sis(xval + lhinc, rhinc);},
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return get_inc_sis(lhinc, yval + rhinc);},
+                    get_inc_sis(lhinc, rhinc));
+                break;
             case RSIS:
+                ret = perform_core(wr, wc, -FT(0),
+                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
+                        return get_inc_rsis(xval + lhinc, yval + rhinc);
+                    },
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return get_inc_rsis(xval + lhinc, rhinc);},
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return get_inc_rsis(lhinc, yval + rhinc);},
+                    get_inc_rsis(lhinc, rhinc));
+                    break;
             default: throw TODOError("unexpected msr; not yet supported");
         }
         return ret;
