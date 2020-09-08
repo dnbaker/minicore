@@ -1702,19 +1702,15 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
 }
 
 
-template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT>
-FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum)
+template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT>
+FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, SumT mrsum)
 {
-#if VERBOSE_AF
-    std::fprintf(stderr, "Calling msr_with_prior with data of dimension %zu, with a prior $\\Beta$ of %0.12g. Sums of center %0.12g and datapoint %0.12g\n", ctr.size(), prior[0],
-                 blz::sum(ctr), blz::sum(mr));
-#endif
     if constexpr(!blaze::IsSparseVector_v<CtrT> && !blaze::IsSparseVector_v<MatrixRowT>) {
         std::fprintf(stderr, "Using non-specialized form\n");
-        const auto div = 1. / (blz::sum(mr) + prior_sum);
+        const auto div = 1. / (mrsum + prior_sum);
         auto pv = prior[0];
         auto subr = (mr + pv) * div;
-        auto subc = (ctr + pv) / (blz::sum(ctr) + prior_sum);
+        auto subc = (ctr + pv) / (ctrsum + prior_sum);
         auto logr = blz::neginf2zero(blz::log(subr));
         auto logc = blz::neginf2zero(blz::log(subc));
         switch(msr) {
@@ -1768,8 +1764,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
         */
         FT ret;
-        const FT lhsum = blz::sum(mr) + prior_sum;
-        const FT rhsum = blz::sum(ctr) + prior_sum;
+        assert(mrsum == blz::sum(mr) && ctrsum == blz::sum(ctr) || !std::fprintf(stderr, "Found %g and %g, expected %g and %g\n", blz::sum(mr), blz::sum(ctr), mrsum, ctrsum));
+        const FT lhsum = mrsum + prior_sum;
+        const FT rhsum = ctrsum + prior_sum;
         const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum; // TODO: cache sums?
         const FT lhinc = prior[0] * lhrsi, rhinc = prior[0] * rhrsi;
         const FT rhl = std::log(rhinc), rhincl = rhl * rhinc;
@@ -1778,7 +1775,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
         assert(std::abs(blz::sum(wr)) < 1.);
-        //assert(blz::sum(wc) < 1. || !std::fprintf(stderr, "sum of wc: %g. rhrsi: %g. rhrsum: %g\n", blz::sum(wc), rhrsi, rhsum));
         // TODO: consider batching logs from sparse vectors with some extra dispatching code
         auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
         // Consider -ffast-math/-fassociative-math

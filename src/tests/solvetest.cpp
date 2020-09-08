@@ -35,8 +35,12 @@ int main(int argc, char *argv[]) {
     const size_t k = centers.size();
     const double psum = prior[0] * nc;
     blz::DV<uint32_t> asn(nr);
-    blz::DM<double> complete_hardcosts = blaze::generate(nr, k, [&](auto row, auto col) {
-        return cmp::msr_with_prior(msr, blaze::row(x, row, blz::unchecked), centers[col], prior, psum);
+    blz::DV<double> rowsums = blaze::sum<blz::rowwise>(x);
+    blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
+    assert(rowsums.size() == x.rows());
+    assert(centersums.size() == centers.size());
+    blz::DM<double> complete_hardcosts = blaze::generate(nr, k, [&](auto r, auto col) {
+        return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, centersums[col], rowsums[r]);
     });
     blz::DV<double> hardcosts = blaze::generate(nr, [&](auto id) {
         auto r = row(complete_hardcosts, id, blaze::unchecked);

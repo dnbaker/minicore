@@ -34,7 +34,7 @@ LDFLAGS+=$(LIBS) -lz $(LINKS)
 EXTRA?=
 DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(BLAS_LINKING_FLAGS) \
-    -DBOOST_NO_AUTO_PTR -lz
+    -DBOOST_NO_AUTO_PTR -lz # -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
 
 
 DEX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
