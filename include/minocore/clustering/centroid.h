@@ -411,7 +411,6 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         std::fprintf(stderr, "reseeding %zu centers\n", sa.size());
 #endif
         if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
-        auto &probs = *probup;
         FT *pd = probup->data(), *pe = pd + probup->size();
         if(weights) {
             ::std::partial_sum(costs.begin(), costs.end(), pd, [&weights,ds=&costs[0]](auto x, const auto &y) {
@@ -501,7 +500,7 @@ void set_centroids_full_mean(const Mat &mat,
         blz::push_back(assigned[asn[i]], i);
     }
 #ifndef NDEBUG
-    for(unsigned i = 0; i < assigned.size(); ++i) std::fprintf(stderr, "Center %zd has %zu assigned points\n", i, assigned[i].size());
+    for(unsigned i = 0; i < assigned.size(); ++i) std::fprintf(stderr, "Center %u has %zu assigned points\n", i, assigned[i].size());
 #endif
     for(unsigned i = 0; i < k; ++i)
         if(assigned[i].empty())

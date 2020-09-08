@@ -203,7 +203,7 @@ void assign_points_hard(const Mat &mat,
                         std::vector<CtrT> &centers,
                         AsnT &asn,
                         CostsT &costs,
-                        const WeightT *weights,
+                        const WeightT *,
                         SumT &centersums,
                         const SumT &rowsums)
 {
@@ -355,7 +355,6 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
         return ret;
     };
     auto cost = compute_cost();
-    const int k = centers.size();
     const auto initcost = cost;
     size_t iternum = 0;
     for(;;) {

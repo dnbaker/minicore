@@ -149,7 +149,7 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT, TF> &
         std::fprintf(stderr, "val %g at %zu\n", val, i);
 #endif
         __assign(rr, i,  val);
-        assert(rr[i] == val || !std::fprintf(stderr, "rr[i] %g vs %g\n", rr[i], val));
+        assert(rr[i] == val || !std::fprintf(stderr, "rr[i] %g vs %g\n", double(rr[i]), val));
     }
 }
 
