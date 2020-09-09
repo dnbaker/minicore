@@ -108,12 +108,10 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
     for(size_t i = 0; i < centers.size(); ++i)
         centersums[i] = blz::sum(centers[i]);
 #endif
-    std::fprintf(stderr, "Assigning\n");
     assign_points_hard<FT>(~mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
-    std::fprintf(stderr, "Assigned\n");
     const auto initcost = compute_cost();
     FT cost = initcost;
-    std::fprintf(stderr, "cost: %0.12g\n", cost);
+    std::fprintf(stderr, "initial cost: %0.12g\n", cost);
     size_t iternum = 0;
     for(;;) {
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)

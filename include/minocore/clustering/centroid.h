@@ -492,6 +492,7 @@ void set_centroids_full_mean(const Mat &mat,
     using asn_t = std::decay_t<decltype(asn[0])>;
     blaze::SmallArray<asn_t, 16> sa;
     wy::WyRand<asn_t, 4> rng(costs.size()); // Used for restarting orphaned centers
+    blz::DV<FT> pdf;
     const size_t np = costs.size(), k = ctrs.size();
     std::vector<std::vector<asn_t>> assigned(k);
     std::unique_ptr<blz::DV<FT>> probup;
@@ -522,8 +523,13 @@ void set_centroids_full_mean(const Mat &mat,
                 r = std::max_element(costs.begin(), costs.end()) - costs.begin();
             else if(restartpol == RESTART_RANDOM)
                 r = rng() % costs.size();
-            else
-                throw TODOError("D2 sampling-based restarting not yet completed; this simply uses a partial sum and selects by fraction of cost rather than greedily selecting the greatest.");
+            else {
+                assert(restartpol == RESTART_D2);
+                if(pdf.size() != costs.size()) pdf.resize(costs.size());
+                std::partial_sum(costs.begin(), costs.end(), pdf.begin());
+                std::uniform_real_distribution<FT> urd;
+                r = std::lower_bound(pdf.begin(), pdf.end(), urd(rng) * costs[costs.size() - 1]) - pdf.begin();
+            }
             auto &ctr = ctrs[id];
             ctr = row(mat, r);
             ctrsums[id] = blz::sum(ctr);
@@ -570,18 +576,7 @@ void set_centroids_full_mean(const Mat &mat,
             } else ctr = blaze::mean<blaze::columnwise>(rowsel);
         }
         ctrsums[i] = blz::sum(ctr);
-        // Adjust for prior
-#if 0
-        if constexpr(blaze::IsDenseVector_v<CtrsT>) {
-            switch(prior.size()) {
-                case 1:  ctr += prior[0]; break;
-                default: ctr += prior;    break;
-                case 0:; // do nothing, IE, there is no prior
-            }
-        }
-#endif
     }
-    DBG_ONLY(std::fprintf(stderr, "Centroids set, hard\n");)
 }
 
 template<typename FT=double, typename Mat, typename PriorT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t, typename SumT>
