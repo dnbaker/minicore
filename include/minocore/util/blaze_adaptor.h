@@ -1,7 +1,39 @@
 #pragma once
 #if defined(__has_include) && __has_include("sleef.h")
   extern "C" {
-#  include "sleef.h"
+#if 0
+#  if INLINE_SLEEF
+#    include <limits.h>
+#    include <float.h>
+#    ifdef __GNUC__
+#      define SLEEF_ALWAYS_INLINE __attribute((always_inline)) inline
+#    else
+#      define SLEEF_ALWAYS_INLINE
+#    endif
+#    define SLEEF_INLINE inline
+#    define SLEEF_CONST __attribute__((const))
+#    ifdef __AVX512F__
+#      ifdef __AVX5124FMAPS__
+#        include "sleefinline_avx512f.h"
+#      else
+#        include "sleefinline_avx512fnofma.h"
+#      endif
+#    elif __AVX__
+#    include "sleefinline_avx.h"
+#    elif __SSE4__
+#    include "sleefinline_sse4.h"
+#    elif __SSE2__
+#    include "sleefinline_sse2.h"
+#    else
+#    include "sleefinline_purecfma_scalar.h"
+#    endif
+#  else
+#    error("hello")
+#    include "sleef.h"
+#  endif
+#else
+#   include "sleef.h"
+#endif
   }
 #endif
 #include "aesctr/wy.h"

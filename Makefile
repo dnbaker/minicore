@@ -14,7 +14,7 @@ endif
 
 ifdef HOSLEEF_DIR
 INCLUDE_PATHS+= $(HOSLEEF_DIR)
-CXXFLAGS+=-DBLAZE_USE_SLEEF=1
+CXXFLAGS+=-DBLAZE_USE_SLEEF=1 -DINLINE_SLEEF=1
 endif
 
 ifdef SLEEF_DIR
@@ -94,10 +94,10 @@ HEADERS=$(shell find include -name '*.h')
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS)
 
 %dbg: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(OMP_STR)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR)
 
 %: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(OMP_STR)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR)
 
 printlibs:
 	echo $(LIBPATHS)

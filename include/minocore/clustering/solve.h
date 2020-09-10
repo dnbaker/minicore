@@ -257,7 +257,7 @@ void assign_points_hard(const Mat &mat,
             case TVD:       ret = .5 * blz::sum(blz::abs(wctr - mrmult)); break;
             case HELLINGER: ret = blz::l2Norm(blz::sqrt(wctr) - blz::sqrt(mrmult)); break;
 
-            // Bregman divergences + convex combinations thereof, and 
+            // Bregman divergences + convex combinations thereof, and Bhattacharyya
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
             case POISSON: case JSD: case JSM:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
@@ -339,7 +339,16 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
 #endif
         for(size_t i = 0; i < costs.rows(); ++i) {
             auto cr = row(costs, i, blaze::unchecked);
-            FT pointcost = sum(softmax(cr * temperature) * cr);
+            auto smeval = evaluate(softmax(cr * temperature));
+            FT pointcost;
+            if(isnan(smeval)) {
+                auto maxind = std::max_element(smeval.begin(), smeval.end()) - smeval.begin();
+                smeval.reset();
+                smeval[maxind] = 1.;
+                pointcost = cr[maxind];
+            } else {
+                pointcost = dot(smeval, cr);
+            }
             if(weights) pointcost *= (*weights)[i];
             ret += pointcost;
         }

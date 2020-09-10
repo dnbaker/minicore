@@ -612,26 +612,34 @@ void set_centroids_full_mean(const Mat &mat,
     for(uint64_t i = 0; i < costs.rows(); ++i) {
         const auto r = row(costs, i, unchecked);
         const auto mr = row(mat, i, unchecked);
+        const FT w = weights ? weights->operator[](i): FT(1);
         assert(asn.size() == r.size());
         asn = softmax(r * temp);
-#ifndef NDEBUG
-        if(unlikely(isnan(asn))) {
-            std::cerr << "asn: " << asn << " from softmax " << (r * temp) << " for temp = " << temp << '\n';
-            throw std::runtime_error("isnan");
-        }
-#endif
-        const FT w = weights ? weights->operator[](i): FT(1);
-        for(unsigned j = 0; j < k; ++j) {
-            const auto aiv = asn[j];
-            if(aiv == 0.) continue;
+        if(isnan(asn)) {
+            auto maxind = std::max_element(r.begin(), r.end()) - r.begin();
+            asn.reset();
+            asn[maxind] = 1.;
 #if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
             OMP_ATOMIC
 #endif
-            wsums[j] += w;
+            wsums[maxind] += w;
 #if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
-            OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
+            OMP_ONLY(std::lock_guard<std::mutex> lock(locks[maxind]);)
 #endif
-            ctrs[j] += mr * (aiv * w);
+            ctrs[maxind] += mr;
+        } else {
+            for(unsigned j = 0; j < k; ++j) {
+                const auto aiv = asn[j];
+                if(aiv == 0.) continue;
+#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
+                OMP_ATOMIC
+#endif
+                wsums[j] += w;
+#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
+                OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
+#endif
+                ctrs[j] += mr * (aiv * w);
+            }
         }
     }
     OMP_PFOR
