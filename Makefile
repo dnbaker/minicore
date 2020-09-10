@@ -12,11 +12,18 @@ LINKS+=-lhdf5  -lhdf5_hl  -lhdf5_hl_cpp -lhdf5_cpp
 endif
 
 
+ifdef HOSLEEF_DIR
+INCLUDE_PATHS+= $(HOSLEEF_DIR)
+CXXFLAGS+=-DBLAZE_USE_SLEEF=1
+endif
+
 ifdef SLEEF_DIR
+ifndef HOSLEEF_DIR
 INCLUDE_PATHS+= $(SLEEF_DIR)/include
 LIBPATHS+= $(SLEEF_DIR)/lib
 LINKS+= -lsleef
 CXXFLAGS+=-DBLAZE_USE_SLEEF=1
+endif
 endif
 
 ifdef CBLASFILE

@@ -209,8 +209,6 @@ void assign_points_hard(const Mat &mat,
     // Setup helpers
     // -- Parameters
     using asn_t = std::decay_t<decltype(asn[0])>;
-    const size_t np = costs.size();
-    const unsigned k = centers.size();
     const FT prior_sum =
         prior.size() == 0 ? 0.
                           : prior.size() == 1
@@ -219,7 +217,7 @@ void assign_points_hard(const Mat &mat,
     assert(centersums.size() == centers.size());
     assert(rowsums.size() == (~mat).rows());
 #ifndef NDEBUG
-    std::fprintf(stderr, "[%s]: %d-clustering with %s and %zu dimensions\n", __func__, k, dist::msr2str(measure), centers[0].size());
+    std::fprintf(stderr, "[%s]: %zu-clustering with %s and %zu dimensions\n", __func__, centers.size(), dist::msr2str(measure), centers[0].size());
 #endif
 
     // Compute distance function
@@ -234,8 +232,8 @@ void assign_points_hard(const Mat &mat,
     //       Also, if there are enough centers, a nearest neighbor structure
     //       could make centroid assignment faster
     auto compute_cost = [&](auto id, auto cid) {
-        auto mr = row(mat, id);
-        assert(cid < centers.size() || !std::fprintf(stderr, "cid %u, size %zu\n", unsigned(cid), centers.size()));
+        assert(size_t(id) < (~mat).rows());
+        auto mr = row(mat, id, blaze::unchecked);
         const auto &ctr = centers[cid];
         const auto rowsum = rowsums[id];
         const auto centersum = centersums[cid];
@@ -286,8 +284,9 @@ void assign_points_hard(const Mat &mat,
         } else if(std::isnan(ret)) ret = 0.;
         return ret;
     };
+    const size_t e = costs.size(), k = centers.size();
     OMP_PFOR
-    for(size_t i = 0; i < np; ++i) {
+    for(size_t i = 0; i < e; ++i) {
         auto cost = compute_cost(i, 0);
         asn_t bestid = 0;
         for(unsigned j = 1; j < k; ++j)
@@ -406,8 +405,6 @@ void set_centroids_soft(const Mat &mat,
             throw std::runtime_error(msg);
         }
     }
-    const size_t np = costs.size();
-    const unsigned k = centers.size();
     const FT prior_sum =
         prior.size() == 0 ? 0.
                           : prior.size() == 1

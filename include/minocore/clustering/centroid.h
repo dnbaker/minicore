@@ -583,8 +583,8 @@ void set_centroids_full_mean(const Mat &mat,
 
 template<typename FT=double, typename Mat, typename PriorT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t, typename SumT>
 void set_centroids_full_mean(const Mat &mat,
-    const dist::DissimilarityMeasure measure,
-    const PriorT &prior, CostsT &costs, CtrsT &ctrs,
+    const dist::DissimilarityMeasure,
+    const PriorT &, CostsT &costs, CtrsT &ctrs,
     WeightsT *weights, FT temp, SumT &ctrsums)
 {
     assert(ctrsums.size() == ctrs.size());
