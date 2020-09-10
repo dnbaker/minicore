@@ -4,7 +4,6 @@
 #include "diskmat/diskmat.h"
 #include "minocore/util/oracle.h"
 #include "minocore/optim/kcenter.h"
-#include "pdqsort/pdqsort.h"
 #include "discreture/include/discreture.hpp"
 #include <atomic>
 

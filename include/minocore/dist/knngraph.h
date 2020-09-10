@@ -58,6 +58,9 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
             }
         }
     };
+    auto update_both = [&](auto d, auto i, auto j) ALWAYS_INLINE {
+        update_fwd(d, i, j); update_fwd(d, j, i);
+    };
 
     // Sort
     auto perform_sort = [&](auto ptr) {
@@ -73,9 +76,7 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
         OMP_PFOR
         for(size_t i = 0; i < np; ++i) {
             for(size_t j = i + 1; j < np; ++j) {
-                auto d = app(i, j);
-                update_fwd(d, i, j);
-                update_fwd(d, j, i);
+                update_both(app(i, j), i, j);
             }
             perform_sort(ptr);
             std::fprintf(stderr, "[Symmetric:%s] Completed %zu/%zu\n", dist::prob2str(measure), i + 1, np);
@@ -113,9 +114,8 @@ make_knns_by_lsh(const jsd::DissimilarityApplicator<MatrixType> &app, hash::LSHT
     std::vector<packed::pair<FT, IT>> ret(k * np);
     std::vector<unsigned> in_set(np);
     const bool measure_is_sym = dist::is_symmetric(measure);
-    const bool measure_is_dist = measure_is_dist;
-    std::unique_ptr<std::mutex[]> locks;
-    OMP_ONLY(locks.reset(new std::mutex[np]);)
+    const bool measure_is_dist = dist::is_dissimilarity(measure);
+    OMP_ONLY(std::unique_ptr<std::mutex[]> locks(new std::mutex[np]);)
     table.add(app.data());
     table.sort();
 

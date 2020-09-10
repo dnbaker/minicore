@@ -572,7 +572,7 @@ using functional::indices_if;
 
 // Solve geometric median for a set of points.
 template<typename MT, bool SO, typename VT, typename WeightType>
-auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType *weights, double eps=0)
+auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *const weights, double eps=0)
 {
     if((~mat).rows() == 1) return ~dv = row((~mat), 0);
     const auto &_mat = ~mat;
@@ -585,7 +585,11 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType 
     if(weights)
         cv.reset(new CustomVector<WeightType, unaligned, unpadded, SO>(const_cast<WeightType *>(weights), _mat.rows()));
     for(;;) {
-        if(cv) {
+#ifndef NDEBUG
+        std::fprintf(stderr, "Iteration %zu for matrix %zu/%zu and vector %zu with weights at %p\n",
+                     iternum + 1, (~mat).rows(), (~mat).columns(), (~dv).size(), (void *)weights);
+#endif
+        if(weights) {
             auto &cvr = *cv;
             OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i)
@@ -593,18 +597,66 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType 
         } else {
 #if 1
             OMP_PFOR
-            for(size_t i = 0; i < _mat.rows(); ++i)
-                costs[i] = blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
+            for(size_t i = 0; i < _mat.rows(); ++i) {
+#if 0
+                const auto r = row(_mat, i, blaze::unchecked) - ~dv;
+                std::cerr << "row #" << i << " is " << r << '\n';
+                std::cerr << "cost before is: " << costs[i] << '\n';
+                std::cerr << "Row: " << row(_mat, i) << '\n';
+                std::cerr << "center: " << ~dv << '\n';
+                costs[i] = blz::sqrt(blz::sum(r * r));
+                std::cerr << "cost after is " << costs[i] << '\n';
+                if(std::isnan(costs[i])) {
+                    std::cerr << "cost after is NAN: " << costs[i] << '\n';
+                    std::cerr << r << '\n';
+                    std::cerr << "r squared should be " << (r * r) << '\n';
+                }
 #else
-            costs = sqrt(sum<rowwise>(blz::pow(_mat - exp, 2))); // pow2 seems broken
+                costs[i] = std::max(blz::l2Norm(row(_mat, i, blz::unchecked) - ~dv),
+                                    static_cast<blaze::ElementType_t<MT>>(1e-80));
+#endif
+            }
+#else
+            costs = sqrt(sum<rowwise>(blz::pow(_mat - blaze::expand(~dv, (~mat).rows()), 2))); // pow2 seems broken
 #endif
         }
         FT current_cost = sum(costs);
         FT dist;
-        std::fprintf(stderr, "Current cost: %g.\n", current_cost);
         if((dist = std::abs(prevcost - current_cost)) <= eps) break;
         if(unlikely(std::isnan(dist))) {
             std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+            throw std::runtime_error("Optimization failed: nan");
+        }
+        ++iternum;
+        costs = 1. / costs;
+        costs *= 1. / blaze::sum(costs);
+        ~dv = trans(costs) * ~mat;
+        prevcost = current_cost;
+    }
+    return ~dv;
+}
+// Solve geometric median for a set of points.
+template<typename MT, bool SO, typename VT, typename WeightType, typename=std::enable_if_t<!std::is_arithmetic_v<WeightType>>>
+auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType &weights, double eps=0.)
+{
+    if((~mat).rows() == 1) return ~dv = row((~mat), 0);
+    const auto &_mat = ~mat;
+    using FT = typename std::decay_t<decltype(~mat)>::ElementType;
+    FT prevcost = std::numeric_limits<FT>::max();
+    size_t iternum = 0;
+    assert((~dv).size() == (~mat).columns());
+    DV<FT, SO> costs(_mat.rows());
+    std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
+    for(;;) {
+        OMP_PFOR
+        for(size_t i = 0; i < _mat.rows(); ++i)
+            costs[i] = std::max(weights[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv), FT(1e-80));
+        FT current_cost = sum(costs);
+        FT dist;
+        if((dist = std::abs(prevcost - current_cost)) <= eps) break;
+        if(unlikely(std::isnan(dist))) {
+            std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
+            throw std::runtime_error("Optimization failed: nan");
             break;
         }
         ++iternum;
@@ -616,7 +668,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, WeightType 
     return ~dv;
 }
 template<typename MT, bool SO, typename VT>
-auto &geomedian(const Matrix<MT, SO> &mat, DenseVector<VT, !SO> &dv, double eps=0) {
+auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, double eps=0) {
     return geomedian<MT, SO, VT, blz::ElementType_t<MT>>(mat, dv, static_cast<blaze::ElementType_t<MT> *>(nullptr), eps);
 }
 

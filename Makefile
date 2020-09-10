@@ -1,4 +1,4 @@
-INCLUDE_PATHS=. include include/minocore blaze libosmium/include protozero/include pdqsort third_party
+INCLUDE_PATHS=. include include/minocore blaze libosmium/include protozero/include pdqsort include/thirdparty
 LIBPATHS+=
 
 ifdef BOOST_DIR
@@ -27,14 +27,14 @@ INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 LIBS=$(patsubst %,-L%,$(LIBPATHS))
 CXX?=g++
 STD?=c++17
-WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function \
+WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function -Wdeprecated -Wno-deprecated-declarations \
     -Wno-deprecated-copy # Because of Boost.Fusion
 OPT?=O3
 LDFLAGS+=$(LIBS) -lz $(LINKS)
 EXTRA?=
 DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(BLAS_LINKING_FLAGS) \
-    -DBOOST_NO_AUTO_PTR -lz
+    -DBOOST_NO_AUTO_PTR -lz # -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
 
 
 DEX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
@@ -106,16 +106,16 @@ printlibs:
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
 
 mtx%: src/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -DNDEBUG # -fsanitize=undefined -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG # -fsanitize=undefined -fsanitize=address
 
 mtx%: src/utils/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -DNDEBUG # -fsanitize=undefined -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG # -fsanitize=undefined -fsanitize=address
 
 mtx%dbg: src/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0  # -fsanitize=undefined -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  # -fsanitize=undefined -fsanitize=address
 
 mtx%dbg: src/utils/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0  # -fsanitize=undefined -fsanitize=address
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  # -fsanitize=undefined -fsanitize=address
 
 alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
@@ -124,10 +124,10 @@ dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB
 
 jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS)
 
 jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0 -lz $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
@@ -170,6 +170,12 @@ osm2dimacspg: src/utils/osm2dimacs.cpp
 
 libsleef.a:
 	+cd sleef && mkdir -p __build && cd __build && cmake .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd .. && rm -r __build
+
+
+soft: solvetestdbg solvetest solvesoft solvesoftdbg
+ssoft: solvesoft solvesoftdbg
+hsoft: solvetest solvetestdbg
+
 
 
 

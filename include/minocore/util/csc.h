@@ -5,7 +5,7 @@
 #include "./blaze_adaptor.h"
 #include "./io.h"
 #include "./exception.h"
-#include "mio/single_include/mio/mio.hpp"
+#include "thirdparty/mio.hpp"
 #include <fstream>
 
 
@@ -16,6 +16,19 @@ namespace util {
 static inline bool is_file(std::string path) noexcept {
     return ::access(path.data(), F_OK) != -1;
 }
+template<typename DataType>
+struct SView: public std::pair<DataType *, size_t> {
+    size_t index() const {return this->second;}
+    size_t &index() {return this->second;}
+    DataType &value() {return *this->first;}
+    const DataType &value() const {return *this->first;}
+};
+template<typename DataType>
+struct ConstSView: public std::pair<const DataType*, size_t> {
+    size_t index() const {return this->second;}
+    size_t &index() {return this->second;}
+    const DataType &value() const {return *this->first;}
+};
 
 template<typename IndPtrType=uint64_t, typename IndicesType=uint64_t, typename DataType=uint32_t>
 struct CSCMatrixView {
@@ -37,15 +50,8 @@ struct CSCMatrixView {
         nf_(nfeat), n_(nitems)
     {
     }
-    struct CView: public std::pair<DataType *, size_t> {
-        size_t index() const {return this->second;}
-        DataType &value() {return *this->first;}
-        const DataType &value() const {return *this->first;}
-    };
-    struct ConstCView: public std::pair<const DataType*, size_t> {
-        size_t index() const {return this->second;}
-        const DataType &value() const {return *this->first;}
-    };
+    using CView = SView<DataType>;
+    using ConstCView = ConstSView<DataType>;
     struct Column {
         const CSCMatrixView &mat_;
         size_t start_;
@@ -163,6 +169,109 @@ size_t nonZeros(const CSCMatrixView<IndPtrType, IndicesType, DataType> &mat) {
     return mat.nnz();
 }
 
+template<typename VT, typename IT>
+struct CSparseVector {
+    VT *data_;
+    IT *indices_;
+    size_t n_, dim_;
+
+    CSparseVector(VT *data, IT *indices, size_t n, size_t dim=-1): data_(data), indices_(indices), n_(n), dim_(dim)
+    {
+    }
+    size_t nnz() const {return n_;}
+    size_t size() const {return dim_;}
+    using CView = SView<VT>;
+    using ConstCView = ConstSView<VT>;
+    using DataType = VT;
+    template<bool is_const>
+    struct CSparseVectorIteratorBase {
+        using ViewType = std::conditional_t<is_const, ConstCView, CView>;
+        using ColType = std::conditional_t<is_const, std::add_const_t<CSparseVector>, CSparseVector>;
+        using ViewedType = std::conditional_t<is_const, std::add_const_t<DataType>, DataType>;
+        using difference_type = std::ptrdiff_t;
+        using value_type = ViewedType;
+        using reference = ViewedType &;
+        using pointer = ViewedType *;
+        using iterator_category = std::random_access_iterator_tag;
+        ColType &col_;
+        size_t index_;
+        private:
+        mutable ViewType data_;
+        public:
+
+        template<bool oconst>
+        bool operator==(const CSparseVectorIteratorBase<oconst> &o) const {
+            return index_ == o.index_;
+        }
+        template<bool oconst>
+        bool operator!=(const CSparseVectorIteratorBase<oconst> &o) const {
+            return index_ != o.index_;
+        }
+        template<bool oconst>
+        bool operator<(const CSparseVectorIteratorBase<oconst> &o) const {
+            return index_ < o.index_;
+        }
+        template<bool oconst>
+        bool operator>(const CSparseVectorIteratorBase<oconst> &o) const {
+            return index_ > o.index_;
+        }
+        template<bool oconst>
+        bool operator<=(const CSparseVectorIteratorBase<oconst> &o) const {
+            return index_ <= o.index_;
+        }
+        template<bool oconst>
+        bool operator>=(const CSparseVectorIteratorBase<oconst> &o) const {
+            return index_ >= o.index_;
+        }
+        template<bool oconst>
+        difference_type operator-(const CSparseVectorIteratorBase<oconst> &o) const {
+            return this->index_ - o.index_;
+        }
+        CSparseVectorIteratorBase<is_const> &operator++() {
+            ++index_;
+            return *this;
+        }
+        CSparseVectorIteratorBase<is_const> operator++(int) {
+            CSparseVectorIteratorBase ret(col_, index_);
+            ++index_;
+            return ret;
+        }
+        const CView &operator*() const {
+            set();
+            return data_;
+        }
+        CView &operator*() {
+            set();
+            return data_;
+        }
+        void set() const {
+            data_.first = const_cast<ViewedType *>(std::addressof(col_.data_[index_]));
+            data_.second = col_.indices_[index_];
+        }
+        ViewType *operator->() {
+            set();
+            return &data_;
+        }
+        const ViewType *operator->() const {
+            set();
+            return &data_;
+        }
+        CSparseVectorIteratorBase(ColType &col, size_t ind): col_(col), index_(ind) {
+        }
+    };
+    using ConstCSparseIterator = CSparseVectorIteratorBase<true>;
+    using CSparseIterator = CSparseVectorIteratorBase<false>;
+    CSparseIterator begin() {return CSparseIterator(*this, 0);}
+    CSparseIterator end()   {return CSparseIterator(*this, n_);}
+    ConstCSparseIterator begin() const {return ConstCSparseIterator(*this, 0);}
+    ConstCSparseIterator end()   const {return ConstCSparseIterator(*this, n_);}
+};
+
+template<typename VT, typename IT>
+auto make_csparse_view(VT *data, IT *idx, size_t n, size_t dim=-1) {
+    return CSparseVector<VT, IT>(data, idx, n, dim);
+}
+
 template<typename FT=float, typename IndPtrType, typename IndicesType, typename DataType>
 blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesType, DataType> &mat, bool skip_empty=false) {
     blz::SM<FT, blaze::rowMajor> ret(mat.n_, mat.nf_);
@@ -177,7 +286,12 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
         }
         ret.finalize(used_rows++);
     }
-    if(used_rows != i) std::fprintf(stderr, "Only used %zu/%zu rows, skipping empty rows\n", used_rows, i);
+    if(used_rows != i) {
+        const auto nr = used_rows;
+        std::fprintf(stderr, "Only used %zu/%zu rows, skipping empty rows\n", used_rows, i);
+        while(used_rows < mat.n_) ret.finalize(used_rows++);
+        ret.resize(nr, ret.columns(), /*preserve_values=*/true);
+    }
     std::fprintf(stderr, "Parsed matrix of %zu/%zu\n", ret.rows(), ret.columns());
     return ret;
 }

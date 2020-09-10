@@ -25,7 +25,7 @@ using blz::sqrL2Norm;
 
 
 /*
- * However, using https://arxiv.org/abs/1508.05243 (Strong Coresets for Hard and Soft Bregman Clustering withApplications to Exponential Family Mixtures)
+ * However, using https://arxiv.org/abs/1508.05243 (Strong Coresets for Hard and Soft Bregman Clustering with Applications to Exponential Family Mixtures)
  * any squared Bregman divergence will work for the kmeanspp, including regular exponential families.
  * See http://www.jmlr.org/papers/volume6/banerjee05b/banerjee05b.pdf
  * http://www.cs.utexas.edu/users/inderjit/Talks/bregtut.pdf
@@ -111,7 +111,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         });
         else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
     }
-    
+
     std::fprintf(stderr, "Completed kmeans++. Optional ls++\n");
     if(lspprounds > 0)
         localsearchpp_rounds(oracle, rng, distances, cdf, centers, assignments, np, lspprounds, weights);
@@ -272,9 +272,11 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
                        CMatrixType &centers, MatrixType &data,
                        const Functor &func=Functor(),
                        const WFT *weights=nullptr,
+                       uint64_t seed=0,
                        bool use_moving_average=false)
 {
     static_assert(std::is_floating_point_v<WFT>, "WTF must be floating point for weighted kmeans");
+    std::mt19937_64 mt(seed);
     // make sure this is only rowwise/rowMajor
     assert(counts.size() == centers.rows() || !std::fprintf(stderr, "counts size: %zu. centers rows: %zu\n", counts.size(), centers.rows()));
     assert(centers.columns() == data.columns());
@@ -344,7 +346,6 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
         VERBOSE_ONLY(std::fprintf(stderr, "center %zu has count %g\n", i, counts[i]);)
         if(!counts[i]) {
             if(!costs) {
-                std::srand(std::time(nullptr));
                 costs.reset(new typename MatrixType::ElementType[nr]);
                 OMP_PFOR
                 for(size_t j = 0; j < nr; ++j) {
@@ -353,10 +354,11 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
                     //std::fprintf(stderr, "costs[%zu] = %g\n", j, costs[j]);
                 }
             }
+            std::uniform_real_distribution<typename MatrixType::ElementType> urd;
             ::std::partial_sum(costs.get(), costs.get() + nr, costs.get());
             //for(unsigned i = 0; i < nr; ++i) std::fprintf(stderr, "%u:%g\t", i, costs[i]);
             //std::fputc('\n', stderr);
-            size_t item = std::lower_bound(costs.get(), costs.get() + nr, costs[nr - 1] * double(std::rand()) / RAND_MAX) - costs.get();
+            size_t item = std::lower_bound(costs.get(), costs.get() + nr, urd(mt)) - costs.get();
             costs[item] = 0.;
             assignments[item] = i;
             //std::fprintf(stderr, "Reassigning center %zu to row %zu because it has lost all support\n", i, item);
@@ -394,11 +396,11 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
 template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double,
          typename Functor=blz::sqrL2Norm>
 double lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
-                CMatrixType &centers, MatrixType &data,
-                double tolerance=0., size_t maxiter=-1,
-                const Functor &func=Functor(),
-                const WFT *weights=nullptr,
-                bool use_moving_average=false)
+                  CMatrixType &centers, MatrixType &data,
+                  double tolerance=0., size_t maxiter=-1,
+                  const Functor &func=Functor(),
+                  const WFT *weights=nullptr,
+                  bool use_moving_average=false)
 {
     if(tolerance < 0.) throw 1;
     size_t iternum = 0;

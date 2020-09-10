@@ -19,12 +19,6 @@
 [submodule "code/pybind11"]
 	path = pybind11
 	url = https://github.com/pybind/pybind11
-[submodule "code/pdqsort"]
-	path = pdqsort
-	url = https://github.com/orlp/pdqsort
-[submodule "code/mio"]
-	path = mio
-	url = https://github.com/mandreyel/mio
 [submodule "code/sleef"]
 	path = sleef
 	url = https://github.com/shibatch/sleef
