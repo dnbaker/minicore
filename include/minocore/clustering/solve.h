@@ -127,7 +127,7 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
             //DBG_ONLY(std::abort();)
             break;
         }
-        std::swap_ranges(centers.begin(), centers.end(), centers_cpy.begin());
+        std::copy(centers.begin(), centers.end(), centers_cpy.begin());
         if(cost - newcost < eps * initcost) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g init cost\n",
@@ -321,8 +321,9 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
     auto centers_cpy(centers);
     blz::DV<FT> centersums(centers.size());
     blz::DV<FT> rowsums((~mat).rows());
+    std::cerr << "Compute sums\n";
 #if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
-    rowsums = blaze::sum<blz::rowwise>(~mat);
+    rowsums = blz::sum<blz::rowwise>(~mat);
     centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
 #else
     OMP_PFOR
@@ -334,19 +335,12 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
 #endif
     auto compute_cost = [&]() {
         FT ret = 0.;
+#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
         OMP_PRAGMA("omp parallel for reduction(+:ret)")
+#endif
         for(size_t i = 0; i < costs.rows(); ++i) {
             auto cr = row(costs, i, blaze::unchecked);
-            FT pointcost;
-#if 0
-            try {
-                pointcost = serial(sum(softmax(cr * temperature) * cr));
-            } catch(const std::exception &ex) {
-                std::cerr << ex.what() << " for point " << i << '\n'; throw;
-            }
-#else
-            pointcost = sum(softmax(cr * temperature) * cr);
-#endif
+            FT pointcost = sum(softmax(cr * temperature) * cr);
             if(weights) pointcost *= (*weights)[i];
             ret += pointcost;
         }
@@ -354,6 +348,7 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
     };
     auto cost = compute_cost();
     const auto initcost = cost;
+    std::fprintf(stderr, "initial cost: %0.20g\n", cost);
     size_t iternum = 0;
     for(;;) {
         auto oldcost = cost;
@@ -362,7 +357,13 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
         std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
         if(oldcost > cost) // Update centers only if an improvement
         {
+#if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
             std::copy(centers_cpy.begin(), centers_cpy.end(), centers.begin());
+#else
+            OMP_PFOR
+            for(unsigned i = 0; i < centers.size(); ++i)
+                centers[i] = centers_cpy[i];
+#endif
         }
         if(oldcost - cost < eps * initcost || ++iternum == maxiter) {
             break;

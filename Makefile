@@ -87,7 +87,7 @@ HEADERS=$(shell find include -name '*.h')
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS)
 
 %dbg: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(OMP_STR)
 
 %: src/tests/%.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(OMP_STR)

@@ -66,7 +66,11 @@ int main(int argc, char *argv[]) {
     }
     assert(min(asn) == 0);
     assert(max(asn) == centers.size() - 1);
+    auto t1 = std::chrono::high_resolution_clock::now();
     clust::perform_hard_clustering(x, msr, prior, centers, asn, hardcosts);
+    auto t2 = std::chrono::high_resolution_clock::now();
+    std::fprintf(stderr, "Wall time for clustering: %gms\n", std::chrono::duration<double, std::milli>(t2 - t1).count());
+#if 0
     // generate a coreset
     coresets::CoresetSampler<double, uint32_t> cs;
     coresets::SensitivityMethod sm = coresets::BFL;
@@ -75,5 +79,6 @@ int main(int argc, char *argv[]) {
         sm = coresets::LBK;
     } else if(msr == dist::L1 || msr == dist::L2) sm = coresets::VX;
     cs.make_sampler(x.rows(), k, hardcosts.data(), asn.data(), nullptr, /*seed=*/13, sm);
+#endif
     // recalculate now
 }

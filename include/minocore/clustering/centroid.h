@@ -6,6 +6,8 @@
 
 namespace minocore { namespace clustering {
 
+using blaze::unchecked;
+
 enum CentroidPol {
     FULL_WEIGHTED_MEAN, // SQRL2, Bregman Divergences (+ convex combinations), cosine distance
     L1_MEDIAN,          // L1
@@ -176,7 +178,7 @@ struct CentroidPolicy {
                         assert(ri < mat.rows());
                         auto rsri = pv;
                         if(!use_scaled_centers(measure)) rsri /= rs[ri];
-                        for(const auto &pair: row(mat, ri, blz::unchecked))
+                        for(const auto &pair: row(mat, ri, unchecked))
                             c[pair.index()] -= rsri;
                     }
                 }
@@ -265,13 +267,13 @@ struct CentroidPolicy {
             for(size_t i = 0; i < data.rows(); ++i) {
                 auto item_weight = wc ? wc->operator[](i): static_cast<FT>(1.);
                 const auto row_sum = rs[i];
-                auto asn(row(assignments, i, blz::unchecked));
+                auto asn(row(assignments, i, unchecked));
                 for(size_t j = 0; j < newcon.size(); ++j) {
                     auto &cw = summed_contribs[j];
                     if(auto asnw = asn[j]; asnw > 0.) {
                         auto neww = item_weight * asnw;
                         OMP_ONLY(if(mutptr) mutptr[j].lock();)
-                        __perform_increment(neww, cw, newcon[j], row(data, i, blz::unchecked), row_sum, measure);
+                        __perform_increment(neww, cw, newcon[j], row(data, i, unchecked), row_sum, measure);
                         OMP_ONLY(if(mutptr) mutptr[j].unlock();)
                         OMP_ATOMIC
                         cw += neww;
@@ -340,7 +342,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             assert(found < (std::ptrdiff_t)(pe - pd));
             ctrs[idx] = row(mat, found);
             for(size_t i = 0; i < mat.rows(); ++i) {
-                const auto c = blz::l1Norm(ctrs[idx] - row(mat, i, blz::unchecked));
+                const auto c = blz::l1Norm(ctrs[idx] - row(mat, i, unchecked));
                 if(c < costs[i]) {
                     asn[i] = idx;
                     costs[i] = c;
@@ -370,7 +372,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
                     auto tw = w0 + w1;
                     ctrs[i] = (1. / tw) * (row(mat, asnv[0]) * w[w0] + row(mat, asnv[1]) * w[w1]);
                 } else {
-                    ctrs[i] = .5 * (row(mat, asnv[0], blz::unchecked) + row(mat, asnv[1], blz::unchecked));
+                    ctrs[i] = .5 * (row(mat, asnv[0], unchecked) + row(mat, asnv[1], unchecked));
                 }
                 break;
             }
@@ -445,7 +447,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             assert(found < (std::ptrdiff_t)(pe - pd));
             ctrs[idx] = row(mat, found);
             for(size_t i = 0; i < mat.rows(); ++i) {
-                const auto c = blz::l2Norm(ctrs[idx] - row(mat, i, blz::unchecked));
+                const auto c = blz::l2Norm(ctrs[idx] - row(mat, i, unchecked));
                 if(c < costs[i]) {
                     asn[i] = idx;
                     costs[i] = c;
@@ -536,7 +538,7 @@ void set_centroids_full_mean(const Mat &mat,
             OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
                 unsigned bestid = asn[i], obi = bestid;
-                auto r = row(mat, i, blaze::unchecked);
+                auto r = row(mat, i, unchecked);
                 const auto rsum = rowsums[i];
                 assert(std::abs(blz::sum(r) - rsum) < 1e-6 || !std::fprintf(stderr, "rsum %g and summed %g\n", rsum, blz::sum(r)));
                 for(unsigned j = 0; j < k; ++j) {
@@ -594,7 +596,6 @@ void set_centroids_full_mean(const Mat &mat,
     }
 #endif
 
-    VERBOSE_ONLY(std::fprintf(stderr, "[%s] Computing centroids\n", __func__);)
     const unsigned k = ctrs.size();
     blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
     OMP_PFOR
@@ -604,27 +605,33 @@ void set_centroids_full_mean(const Mat &mat,
     // TODO: provide a better parallelization method, either
     // 1. reduction
     // 2. more fine-grained locking strategies (though would fail for low-dimension data)
-#if defined(_OPENMP) && !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
+#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
+    auto locks = std::make_unique<std::mutex[]>(k);
     #pragma omp parallel for
 #endif
     for(uint64_t i = 0; i < costs.rows(); ++i) {
-        const auto r = row(costs, i, blaze::unchecked);
-        const auto mr = row(mat, i, blz::unchecked);
+        const auto r = row(costs, i, unchecked);
+        const auto mr = row(mat, i, unchecked);
         assert(asn.size() == r.size());
         asn = softmax(r * temp);
+#ifndef NDEBUG
         if(unlikely(isnan(asn))) {
             std::cerr << "asn: " << asn << " from softmax " << (r * temp) << " for temp = " << temp << '\n';
             throw std::runtime_error("isnan");
         }
+#endif
         const FT w = weights ? weights->operator[](i): FT(1);
         for(unsigned j = 0; j < k; ++j) {
             const auto aiv = asn[j];
             if(aiv == 0.) continue;
+#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
             OMP_ATOMIC
+#endif
             wsums[j] += w;
-            //OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
+#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
+            OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
+#endif
             ctrs[j] += mr * (aiv * w);
-            //std::cerr << "ctr after at iter " << i << " and j " << j << " is " << ctrs[j] << '\n';
         }
     }
     OMP_PFOR
