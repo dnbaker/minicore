@@ -615,34 +615,36 @@ void set_centroids_full_mean(const Mat &mat,
         const FT w = weights ? weights->operator[](i): FT(1);
         assert(asn.size() == r.size());
         asn = softmax(r * -temp);
+#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
+#define WSUMINC(ind) do {OMP_ATOMIC wsums[ind] += w; } while(0)
+#define GETLOCK(ind) std::lock_guard<std::mutex> lock(locks[ind])
+#else
+#define WSUMINC(ind) do {wsums[ind] += w;} while(0)
+#define GETLOCK(ind)
+#endif
+
+#if VERBOSE_AF
+        std::cerr << "assignments are " << asn << " from costs " << r << '\n';
+#endif
         if(isnan(asn)) {
-            auto maxind = std::max_element(r.begin(), r.end()) - r.begin();
+            auto bestind = std::min_element(r.begin(), r.end()) - r.begin();
             asn.reset();
-            asn[maxind] = 1.;
-#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
-            OMP_ATOMIC
-#endif
-            wsums[maxind] += w;
-#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
-            OMP_ONLY(std::lock_guard<std::mutex> lock(locks[maxind]);)
-#endif
-            ctrs[maxind] += mr;
+            asn[bestind] = 1.;
+            WSUMINC(bestind);
+            GETLOCK(bestind);
+            ctrs[bestind] += mr * w;
         } else {
             for(unsigned j = 0; j < k; ++j) {
                 const auto aiv = asn[j];
                 if(aiv == 0.) continue;
-#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
-                OMP_ATOMIC
-#endif
-                wsums[j] += w;
-#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
-                OMP_ONLY(std::lock_guard<std::mutex> lock(locks[j]);)
-#endif
+                WSUMINC(j);
+                GETLOCK(j);
                 ctrs[j] += mr * (aiv * w);
             }
         }
     }
-    OMP_PFOR
+#undef GETLOCK
+#undef WSUMINC
     for(unsigned j = 0; j < k; ++j) {
         ctrs[j] /= wsums[j];
         ctrsums[j] = blz::sum(ctrs[j]);
