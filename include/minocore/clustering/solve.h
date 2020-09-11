@@ -96,7 +96,7 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
     };
     std::fprintf(stderr, "Beginning perform_hard_clustering with%s weights.\n", weights ? "": "out");
 #if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
-    const blz::DV<FT> rowsums = blaze::sum<blz::rowwise>(~mat);
+    const blz::DV<FT> rowsums = sum<blz::rowwise>(~mat);
     blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
 #else
     blz::DV<FT> rowsums((~mat).rows());
