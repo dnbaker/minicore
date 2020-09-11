@@ -339,10 +339,10 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
 #endif
         for(size_t i = 0; i < costs.rows(); ++i) {
             auto cr = row(costs, i, blaze::unchecked);
-            auto smeval = evaluate(softmax(cr * temperature));
+            auto smeval = evaluate(softmax(cr * -temperature));
             FT pointcost;
             if(isnan(smeval)) {
-                auto maxind = std::max_element(smeval.begin(), smeval.end()) - smeval.begin();
+                auto maxind = std::min_element(cr.begin(), cr.end()) - cr.begin();
                 smeval.reset();
                 smeval[maxind] = 1.;
                 pointcost = cr[maxind];

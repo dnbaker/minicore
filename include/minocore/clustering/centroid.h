@@ -614,7 +614,7 @@ void set_centroids_full_mean(const Mat &mat,
         const auto mr = row(mat, i, unchecked);
         const FT w = weights ? weights->operator[](i): FT(1);
         assert(asn.size() == r.size());
-        asn = softmax(r * temp);
+        asn = softmax(r * -temp);
         if(isnan(asn)) {
             auto maxind = std::max_element(r.begin(), r.end()) - r.begin();
             asn.reset();
