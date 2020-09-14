@@ -25,7 +25,8 @@ class get_pybind_include(object):
 extra_compile_args = ['-march=native',
                       '-Wno-char-subscripts', '-Wno-unused-function',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
-                      '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1"]
+                      '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
+                      '-Wno-deprecated-declarations']
 
 if 'BOOST_DIR' in environ:
     extra_compile_args.append("-I%s" % environ['BOOST_DIR'])

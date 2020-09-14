@@ -7,5 +7,7 @@
 #include "minocore/clustering/l2.h"
 #include "minocore/clustering/sqrl2.h"
 #include "minocore/clustering/l1.h"
+#include "minocore/clustering/centroid.h"
+#include "minocore/clustering/solve.h"
 
 #endif /* MINOCORE_CLUSTERING_HEADERS_H__ */

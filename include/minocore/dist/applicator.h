@@ -1904,8 +1904,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     std::sqrt(lhinc * rhinc));
                 if(msr == BHATTACHARYYA_METRIC)
                     ret = std::sqrt(std::max(FT(1.) - tmp, FT(0)));
-                else
-                    ret = -std::log(tmp + FT(1e-50));
+                else {
+                    ret = std::max(tmp <= 0 ? FT(0): -std::log(tmp), FT(0));
+                }
                 break;
             }
             case HELLINGER: {
@@ -1913,22 +1914,26 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 break;
             }
             case SIS:
-                ret = perform_core(wr, wc, FT(0),
+                ret = std::max(perform_core(wr, wc, FT(0),
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
                         return get_inc_sis(xval + lhinc, yval + rhinc);
                     },
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return get_inc_sis(xval + lhinc, rhinc);},
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return get_inc_sis(lhinc, yval + rhinc);},
-                    get_inc_sis(lhinc, rhinc));
+                    get_inc_sis(lhinc, rhinc))
+                , FT(0));
                 break;
             case RSIS:
-                ret = perform_core(wr, wc, -FT(0),
-                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
-                        return get_inc_rsis(xval + lhinc, yval + rhinc);
-                    },
-                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return get_inc_rsis(xval + lhinc, rhinc);},
-                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return get_inc_rsis(lhinc, yval + rhinc);},
-                    get_inc_rsis(lhinc, rhinc));
+                ret = std::max(
+                        perform_core(wr, wc, FT(0),
+                            /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
+                                return get_inc_rsis(xval + lhinc, yval + rhinc);
+                            },
+                            /* xonly */    [&](auto xval) ALWAYS_INLINE  {return get_inc_rsis(xval + lhinc, rhinc);},
+                            /* yonly */    [&](auto yval) ALWAYS_INLINE  {return get_inc_rsis(lhinc, yval + rhinc);},
+                            get_inc_rsis(lhinc, rhinc)
+                        )
+                    , FT(0));
                     break;
             default: throw TODOError("unexpected msr; not yet supported");
         }

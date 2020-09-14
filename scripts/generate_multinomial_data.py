@@ -1,10 +1,10 @@
 import numpy as np
 from numpy.random import poisson, multinomial
 
-def maked(nd, basen): 
-    import numpy as np 
-    samples = poisson(4, size=(nd,)) 
-    return poisson(basen), samples / np.sum(samples).astype(float) 
+def maked(nd, basen):
+    import numpy as np
+    samples = poisson(4, size=(nd,))
+    return poisson(basen), samples / np.sum(samples).astype(float)
 
 NGRP = 5
 
