@@ -77,7 +77,7 @@ struct SumOpts {
  * TODO: perform 1 or 2 rounds of EM before saving costs, which might be a better heuristic
  */
 template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm>
-auto get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
+auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
                          unsigned k, unsigned kmc2rounds, const Norm &norm) {
     using FT = blaze::ElementType_t<MT>;
     const size_t nr = (~matrix).rows();
@@ -105,7 +105,7 @@ auto get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
 }
 
 template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm>
-auto repeatedly_get_initial_centers(blaze::Matrix<MT, SO> &matrix, RNG &rng,
+auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
                                     unsigned k, unsigned kmc2rounds, unsigned ntimes, const Norm &norm=Norm()) {
     using FT = blaze::ElementType_t<MT>;
 #ifdef _OPENMP

@@ -644,8 +644,9 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
                     std::cerr << "r squared should be " << (r * r) << '\n';
                 }
 #else
+                using res_t = std::decay_t<decltype(blz::l2Norm(row(_mat, i, blz::unchecked) - ~dv))>;
                 costs[i] = std::max(blz::l2Norm(row(_mat, i, blz::unchecked) - ~dv),
-                                    static_cast<blaze::ElementType_t<MT>>(1e-80));
+                                    static_cast<res_t>(1e-80));
 #endif
             }
 #else
@@ -681,8 +682,10 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType
     std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
     for(;;) {
         OMP_PFOR
-        for(size_t i = 0; i < _mat.rows(); ++i)
-            costs[i] = std::max(weights[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv), FT(1e-80));
+        for(size_t i = 0; i < _mat.rows(); ++i) {
+            using res_t = std::decay_t<decltype(weights[0] * blz::l2Norm(row(_mat, 0) - ~dv))>;
+            costs[i] = std::max(weights[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv), res_t(1e-80));
+        }
         FT current_cost = sum(costs);
         FT dist;
         if((dist = std::abs(prevcost - current_cost)) <= eps) break;

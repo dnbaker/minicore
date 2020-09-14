@@ -94,7 +94,6 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
         if(w) return blz::dot(costs, *w);
         else  return blz::sum(costs);
     };
-    std::fprintf(stderr, "Beginning perform_hard_clustering with%s weights.\n", weights ? "": "out");
 #if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
     const blz::DV<FT> rowsums = sum<blz::rowwise>(~mat);
     blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
@@ -127,7 +126,7 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
             //DBG_ONLY(std::abort();)
             break;
         }
-        std::copy(centers.begin(), centers.end(), centers_cpy.begin());
+        std::swap_ranges(centers.begin(), centers.end(), centers_cpy.begin());
         if(cost - newcost < eps * initcost) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g init cost\n",
