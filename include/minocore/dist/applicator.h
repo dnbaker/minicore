@@ -1771,7 +1771,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         const FT shl = std::log((lhinc + rhinc) * FT(.5)), shincl = (lhinc + rhinc) * shl;
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
-        assert(std::abs(blz::sum(wr)) < 1. || !std::fprintf(stderr, "sum(row) - 1 = %0.20g, which should be 0.\n", blz::sum(wr) - 1.));
+        assert(std::abs(blz::sum(wr)) < 1. ||
+               std::fprintf(stderr, "Warning: sum(row) - 1 = %0.20g, which should be 0.\n", blz::sum(wr) - 1.));
         // TODO: consider batching logs from sparse vectors with some extra dispatching code
         // For better vectorization
         auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
