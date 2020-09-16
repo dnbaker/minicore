@@ -53,6 +53,13 @@ public:
         perform([&](auto &x) {ret = x.rows();});
         return ret;
     }
+    template<typename IpT, typename IdxT, typename DataT>
+    SparseMatrixWrapper(IpT *indptr, IdxT *idx, DataT *data, size_t xdim, size_t ydim, size_t nnz, bool use_float=true, bool skip_empty=true) {
+        if(use_float)
+            matrix_ = csc2sparse<float>(CSCMatrixView<IpT, IdxT, DataT>(indptr, idx, data, nnz, ydim, xdim));
+        else
+            matrix_ = csc2sparse<double>(CSCMatrixView<IpT, IdxT, DataT>(indptr, idx, data, nnz, ydim, xdim));
+    }
     SparseMatrixWrapper(py::object spmat, py::object use_float_py, py::object skip_empty_py) {
         py::array indices = spmat.attr("indices"), indptr = spmat.attr("indptr"), data = spmat.attr("data");
         py::tuple shape = py::cast<py::tuple>(spmat.attr("shape"));

@@ -26,10 +26,12 @@ void init_smw(py::module &m) {
         return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
     })
     .def("__repr__", [](SparseMatrixWrapper &wrap) {
+        std::string ret;
         wrap.perform([&](auto &x) {
             std::stringstream ss; ss << x;
-            return ss.str();
+            ret = ss.str();
         });
+        return ret;
     }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();}
     ).def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();});
 
@@ -179,6 +181,7 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("data"), py::arg("sumopts"));
+#if 0
     m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers;
         std::vector<double> dret;
@@ -197,6 +200,7 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("smw"), py::arg("sumopts"));
+#endif
     m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers;
         std::vector<double> dret;

@@ -6,7 +6,7 @@ using blaze::unpadded;
 
 
 template<typename FT, typename WFT>
-py::dict cpp_pycluster(const blz::SM<FT> &mat, int k, double beta,
+py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
                dist::DissimilarityMeasure measure,
                WFT *weights=static_cast<WFT *>(nullptr),
                double eps=1e-10,
