@@ -185,7 +185,6 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts)
          pcp = nullptr;
      auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
      wy::WyRand<uint64_t, 2> rng(opts.seed);
-     std::vector<uint32_t> centers;
      if(opts.outlier_fraction) {
          return coresets::kcenter_greedy_2approx_outliers_costs(
              app, app.size(), rng, opts.k,
