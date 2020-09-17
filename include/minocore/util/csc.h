@@ -160,14 +160,6 @@ template<typename T>
 static constexpr bool is_csc_view_v = is_csc_view<T>::value;
 
 
-template<typename DataType, typename IndPtrType, typename IndicesType>
-size_t nonZeros(const typename CSCMatrixView<IndPtrType, IndicesType, DataType>::Column &col) {
-    return col.nnz();
-}
-template<typename DataType, typename IndPtrType, typename IndicesType>
-size_t nonZeros(const CSCMatrixView<IndPtrType, IndicesType, DataType> &mat) {
-    return mat.nnz();
-}
 
 template<typename VT, typename IT>
 struct CSparseVector {
@@ -180,6 +172,7 @@ struct CSparseVector {
     }
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
+    auto sum() const {return blz::sum(blz::CustomVector<VT,blz::unaligned,blz::unpadded>(data_, n_));}
     using CView = SView<VT>;
     using ConstCView = ConstSView<VT>;
     using DataType = VT;
@@ -270,6 +263,125 @@ struct CSparseVector {
 template<typename VT, typename IT>
 auto make_csparse_view(VT *data, IT *idx, size_t n, size_t dim=-1) {
     return CSparseVector<VT, IT>(data, idx, n, dim);
+}
+
+template<typename DataType, typename IndPtrType, typename IndicesType>
+size_t nonZeros(const typename CSCMatrixView<IndPtrType, IndicesType, DataType>::Column &col) {
+    return col.nnz();
+}
+template<typename DataType, typename IndPtrType, typename IndicesType>
+size_t nonZeros(const CSCMatrixView<IndPtrType, IndicesType, DataType> &mat) {
+    return mat.nnz();
+}
+
+template<typename VT, typename IT>
+struct COOMatrixView {
+    IT *x, *y;
+    VT *data;
+    size_t nr_, nc_, nnz_;
+    size_t nnz() const {return nnz_;}
+    size_t rows() const {return nr_;}
+    size_t columns() const {return nc_;}
+};
+
+template<typename VT, typename IT>
+struct COOMatrix {
+    std::vector<IT> x_, y_;
+    std::vector<VT> data_;
+    operator COOMatrixView<VT, IT> &() {
+        return COOMatrixView<VT, IT> {x_.data(), y_.data(), data_.data()};
+    }
+    operator COOMatrixView<const VT, const IT> &() const {
+        return COOMatrixView<const VT, const IT> {x_.data(), y_.data(), data_.data()};
+    }
+    size_t nr_, nc_;
+    size_t nnz() const {return x_.size();}
+    size_t rows() const {return nr_;}
+    size_t columns() const {return nc_;}
+    void add(IT x, IT y, VT data) {
+        x_.push_back(x); y_.push_back(y); data_.push_back(data_);
+    }
+#if 0
+    void sort(bool rowMajor=true) {
+        if(rowMajor) {
+            
+        }
+    }
+#endif
+};
+
+
+template<typename VT, typename IT, typename IPtrT>
+struct CSparseMatrix {
+    VT *data_;
+    IT *indices_;
+    IPtrT *indptr_;
+    size_t nr_, nc_, nnz_;
+    constexpr CSparseMatrix(VT *data, IT *indices, IPtrT *indptr, size_t nr, size_t nc, size_t nnz):
+        data_(data), indices_(indices), indptr_(indptr), nr_(nr), nc_(nc), nnz_(nnz)
+    {
+    }
+    size_t nnz() const {return nnz_;}
+    size_t rows() const {return nr_;}
+    size_t columns() const {return nc_;}
+    auto row(size_t i) {
+        return CSparseVector<VT, IT>(data_ + indptr_[i], indices_ + indptr_[i], indptr_[i + 1] - indptr_[i], nc_);
+    }
+    auto row(size_t i) const {
+        return CSparseVector<const VT, IT>(data_ + indptr_[i], indices_ + indptr_[i], indptr_[i + 1] - indptr_[i], nc_);
+    }
+    auto sum() const {
+        return blz::sum(blz::CustomVector<VT, blaze::unaligned, blaze::unpadded>(data_, nnz_));
+    }
+    auto &operator~() {return *this;}
+    const auto &operator~() const {return *this;}
+};
+
+template<typename VT, typename IT, typename IPtrT, bool checked=true>
+auto row(CSparseMatrix<VT, IT, IPtrT> &mat, size_t i, blaze::Check<checked>()) {
+    if constexpr(checked)  {
+        if(unlikely(i > mat.rows())) throw std::out_of_range();
+    }
+    return mat.row(i);
+}
+
+template<typename VT, typename IT, typename IPtrT>
+INLINE auto sum(const CSparseMatrix<VT, IT, IPtrT> &sm) {
+    return sm.sum();
+}
+
+template<typename VT, typename IT>
+INLINE auto sum(const CSparseVector<VT, IT> &sm) {
+    return sm.sum();
+}
+
+template<bool SO, typename VT, typename IT, typename IPtrT, typename RVT=VT>
+inline auto sum(const CSparseMatrix<VT, IT, IPtrT> &sm) {
+    if constexpr(SO == blz::rowwise) {
+        blaze::DynamicVector<RVT, blz::columnVector> ret = blaze::generate(
+            sm.rows(),[smd=sm.data_, ip=sm.indptr_](auto x) {
+                return blz::sum(blz::CustomVector<VT, blaze::unaligned, blaze::unpadded>(
+                    smd + ip[x], ip[x + 1] - ip[x]));
+            }
+        );
+        return ret;
+    } else {
+        throw NotImplementedError("Not supported: columnwise sums\n");
+    }
+}
+
+
+template<typename VT, typename IT, typename IPtrT>
+constexpr inline size_t nonZeros(const CSparseMatrix<VT, IT, IPtrT> &x) {
+    return x.nnz();
+}
+template<typename VT, typename IT>
+constexpr inline size_t nonZeros(const CSparseVector<VT, IT> &x) {
+    return x.nnz();
+}
+template<typename VT, typename IT>
+constexpr inline size_t size(const CSparseVector<VT, IT> &x) {
+    return x.size();
 }
 
 template<typename FT=float, typename IndPtrType, typename IndicesType, typename DataType>

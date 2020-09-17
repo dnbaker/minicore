@@ -240,7 +240,7 @@ public:
     {
     }
     template<typename...Args>
-    L2LSHasher(unsigned d, unsigned k, unsigned l, double w, uint64_t seed=0, Args &&...args): 
+    L2LSHasher(unsigned d, unsigned k, unsigned l, double w, uint64_t seed=0, Args &&...args):
         L2LSHasher(LSHasherSettings(d, k, l), w, seed, std::forward<Args>(args)...) {}
 };
 
@@ -253,7 +253,7 @@ public:
     {
     }
     template<typename...Args>
-    L1LSHasher(unsigned d, unsigned k, unsigned l, double w, uint64_t seed=0, Args &&...args): 
+    L1LSHasher(unsigned d, unsigned k, unsigned l, double w, uint64_t seed=0, Args &&...args):
         L1LSHasher(LSHasherSettings(d, k, l), w, seed, std::forward<Args>(args)...) {}
 };
 template<typename FT=double, bool SO=blaze::rowMajor, bool use_offsets=true>
@@ -265,7 +265,7 @@ public:
     {
     }
     template<typename...Args>
-    LpLSHasher(unsigned d, unsigned k, unsigned l, double p, double w, uint64_t seed=0, Args &&...args): 
+    LpLSHasher(unsigned d, unsigned k, unsigned l, double p, double w, uint64_t seed=0, Args &&...args):
         LpLSHasher(LSHasherSettings(d, k, l), p, w, seed, std::forward<Args>(args)...) {}
 };
 

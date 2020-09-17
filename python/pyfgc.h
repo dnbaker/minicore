@@ -3,8 +3,10 @@
 #include "pybind11/numpy.h"
 #include "aesctr/wy.h"
 #include "minocore/minocore.h"
-using namespace minocore;
-namespace py = pybind11;
+
+#include "./pyhelpers.h"
+
+
 void init_smw(py::module &);
 void init_merge(py::module &);
 void init_coreset(py::module &);

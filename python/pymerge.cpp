@@ -56,7 +56,7 @@ Py_ssize_t count_nonzeros(const IT1 *srcrow, const IT2 *srccol, const FT1 *srcda
         auto idx = srccol[i];
         //std::fprintf(stderr, "Getting ii (%p + %zu) (integer size: %zu)\n", (void *)indices.data(), idx, sizeof(IT2));
         auto ii = indices.at(idx);
-        auto v = srcdat[i];
+        //auto v = srcdat[i];
         //std::fprintf(stderr, "ii: %zd. value there: %g\n", ii, double(v));
         if(ii >= 0) {
             //std::fprintf(stderr, "ii (%zd) > 0\n", ii);

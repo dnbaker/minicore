@@ -6,8 +6,7 @@
 #include <queue>
 #include "alias_sampler/alias_sampler.h"
 #include "minocore/util/shared.h"
-#include "blaze/math/CustomVector.h"
-#include "blaze/math/DynamicVector.h"
+#include "minocore/util/blaze_adaptor.h"
 #include <zlib.h>
 #ifdef _OPENMP
 #  include <omp.h>
