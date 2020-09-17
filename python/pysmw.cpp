@@ -3,9 +3,10 @@
 #include <sstream>
 #include <map>
 
+using smw_t = SparseMatrixWrapper;
 
 void init_smw(py::module &m) {
-    py::class_<SparseMatrixWrapper>(m, "SparseMatrixWrapper")
+    py::class_<SparseMatrixWrapper>(m, "SparseMatrix")
     .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=false)
     .def("is_float", [](SparseMatrixWrapper &wrap) {
         return wrap.is_float();
@@ -26,12 +27,47 @@ void init_smw(py::module &m) {
         return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
     })
     .def("__repr__", [](SparseMatrixWrapper &wrap) {
+#if 1
+        char buf[1024];
+        return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
+#else
+        std::string ret;
         wrap.perform([&](auto &x) {
             std::stringstream ss; ss << x;
-            return ss.str();
+            ret = ss.str();
         });
+        return ret;
+#endif
     }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();}
-    ).def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();});
+    ).def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();})
+    .def("sum", [](SparseMatrixWrapper &wrap, int byrow, bool usefloat) -> py::object
+    {
+        switch(byrow) {case -1: case 0: case 1: break; default: throw std::invalid_argument("byrow must be -1 (total sum), 0 (by column) or by row (1)");}
+        if(byrow == -1) {
+            double ret;
+            wrap.perform([&ret](const auto &x) {ret = blaze::sum(x);});
+            return py::float_(ret);
+        }
+        py::array ret;
+        if(usefloat) ret = py::array_t<float>(byrow ? wrap.rows(): wrap.columns());
+                else ret = py::array_t<double>(byrow ? wrap.rows(): wrap.columns());
+        auto bi = ret.request();
+        auto ptr = bi.ptr;
+        if(usefloat) {
+            blaze::CustomVector<float, blz::unaligned, blz::unpadded> cv((float *)ptr, bi.size);
+            wrap.perform([&](const auto &x) {
+                if(byrow) cv = blz::sum<blz::rowwise>(x);
+                else      cv = trans(blz::sum<blz::columnwise>(x));
+            });
+        } else {
+            blaze::CustomVector<double, blz::unaligned, blz::unpadded> cv((double *)ptr, bi.size);
+            wrap.perform([&](const auto &x) {
+                if(byrow) cv = blz::sum<blz::rowwise>(x);
+                else      cv = trans(blz::sum<blz::columnwise>(x));
+            });
+        }
+        return ret;
+    }, py::arg("kind")=-1, py::arg("usefloat")=true);
 
 
     // Utilities
@@ -179,24 +215,6 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("data"), py::arg("sumopts"));
-    m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
-        std::vector<uint32_t> centers;
-        std::vector<double> dret;
-        std::vector<float> fret;
-        if(smw.is_float()) {
-            std::tie(centers, fret) = minocore::m2greedysel(smw.getfloat(), so);
-        } else {
-            std::tie(centers, dret) = minocore::m2greedysel(smw.getdouble(), so);
-        }
-        py::array_t<uint32_t> ret(centers.size());
-        py::array_t<double> costs(smw.rows());
-        auto rpi = ret.request(), cpi = costs.request();
-        std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
-        if(fret.size()) std::copy(fret.begin(), fret.end(), (double *)cpi.ptr);
-        else            std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
-        return py::make_tuple(ret, costs);
-    }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
-       py::arg("smw"), py::arg("sumopts"));
     m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers;
         std::vector<double> dret;

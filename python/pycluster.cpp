@@ -6,7 +6,7 @@ using blaze::unpadded;
 
 
 template<typename FT, typename WFT>
-py::dict cpp_pycluster(const blz::SM<FT> &mat, int k, double beta,
+py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
                dist::DissimilarityMeasure measure,
                WFT *weights=static_cast<WFT *>(nullptr),
                double eps=1e-10,
@@ -43,6 +43,7 @@ py::dict cpp_pycluster_from_centers(const blz::SM<FT> &mat, unsigned int k, doub
                double eps,
                size_t kmeansmaxiter)
 {
+    std::fprintf(stderr, "[%s]\n", __PRETTY_FUNCTION__);
     blz::DV<FT> prior{FT(beta)};
     auto [initcost, finalcost, numiter] = perform_hard_clustering(mat, measure, prior, ctrs, asn, costs, weights, eps, kmeansmaxiter);
     auto pyctrs = centers2pylist(ctrs);
@@ -80,6 +81,7 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
                size_t kmcrounds,
                size_t kmeansmaxiter)
 {
+    std::fprintf(stderr, "[%s] beginning cpp_pycluster\n", __PRETTY_FUNCTION__);
     blz::DV<FT> prior{FT(beta)};
     const FT psum = beta * mat.columns();
     auto cmp = [measure, psum,&prior](const auto &x, const auto &y) {
@@ -90,7 +92,9 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
         std::fprintf(stderr, "D2 sampling may not provide a bicriteria approximation alone. TODO: use more expensive metric clustering for better objective functions.\n");
     }
     wy::WyRand<uint32_t> rng(seed);
+    std::fprintf(stderr, "About to try to get initial centers\n");
     auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, kmcrounds, ntimes, cmp);
+    std::fprintf(stderr, "Got initial centers\n");
     auto &[idx, asn, costs] = initial_sol;
     std::vector<blz::CompressedVector<FT, blz::rowVector>> centers(k);
     for(unsigned i = 0; i < k; ++i)
@@ -164,8 +168,10 @@ void init_clustering(py::module &m) {
         } else measure = dist::str2msr(py::cast<std::string>(msr));
         std::unique_ptr<std::vector<blz::CompressedVector<double, blz::rowVector>>>dptr;
         std::unique_ptr<std::vector<blz::CompressedVector<float, blz::rowVector>>> fptr;
-        if(smw.is_float()) fptr.reset(new std::vector<blz::CompressedVector<float, blz::rowVector>>);
-        else               dptr.reset(new std::vector<blz::CompressedVector<double, blz::rowVector>>);
+        const bool isf = smw.is_float();
+        if(isf) fptr.reset(new std::vector<blz::CompressedVector<float, blz::rowVector>>);
+        else    dptr.reset(new std::vector<blz::CompressedVector<double, blz::rowVector>>);
+        std::fprintf(stderr, "Created %cptr\n", isf ? 'f': 'd');
         if(py::isinstance<py::array>(centers)) {
             auto cbuf = py::cast<py::array>(centers).request();
             if(dptr) set_centers(dptr.get(), cbuf);

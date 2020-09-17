@@ -277,8 +277,8 @@ static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {
         case BHATTACHARYYA_METRIC: return "BHATTACHARYYA_METRIC";
         case EMD: return "EMD";
         case HELLINGER: return "HELLINGER";
-        case JSD: return "JSD/PSD";
-        case JSM: return "JSM/PSM";
+        case JSD: return "JSD";
+        case JSM: return "JSM";
         case L1: return "L1";
         case L2: return "L2";
         case LLR: return "LLR";
