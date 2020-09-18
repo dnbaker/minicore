@@ -6,8 +6,6 @@
 #include "./io.h"
 #include "./exception.h"
 #include "thirdparty/mio.hpp"
-#include "thirdparty/ZipIterator.hpp"
-#include "thirdparty/span.hpp"
 #include <fstream>
 
 
@@ -62,7 +60,6 @@ struct CSCMatrixView {
         Column(const CSCMatrixView &mat, size_t start, size_t stop)
             : mat_(mat), start_(start), stop_(stop)
         {
-            //sort_if_not_const();
         }
 #if 0
         void sort_if_not_const() {
