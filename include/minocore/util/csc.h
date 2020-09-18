@@ -62,13 +62,15 @@ struct CSCMatrixView {
         Column(const CSCMatrixView &mat, size_t start, size_t stop,
                bool perform_sort=!std::is_const_v<IndicesType> && !std::is_const_v<DataType>): mat_(mat), start_(start), stop_(stop)
         {
-            if(perform_sort) sort();
+            sort_if_not_const();
         }
-        void sort() {
-            nonstd::span<DataType> dspan(mat_.data_ + start_, mat_.data_ + stop_);
-            nonstd::span<IndicesType> ispan(mat_.indices_ + start_, mat_.indices_ + stop_);
-            auto zip = Zip(ispan, dspan);
-            shared::sort(zip.begin(), zip.end());
+        void sort_if_not_const() {
+            if constexpr(!std::is_const_v<IndicesType> && !std::is_const_v<DataType>) {
+                nonstd::span<DataType> dspan(mat_.data_ + start_, mat_.data_ + stop_);
+                nonstd::span<IndicesType> ispan(mat_.indices_ + start_, mat_.indices_ + stop_);
+                auto zip = Zip(ispan, dspan);
+                shared::sort(zip.begin(), zip.end());
+            }
         }
         size_t nnz() const {return stop_ - start_;}
         size_t size() const {return mat_.columns();}
@@ -401,7 +403,8 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
     blz::SM<FT, blaze::rowMajor> ret(mat.n_, mat.nf_);
     ret.reserve(mat.nnz_);
     size_t used_rows = 0, i;
-    blz::DV<IndicesType> idxtmp, iotatmp;
+    using itype_t = std::remove_const_t<IndicesType>;
+    blz::DV<itype_t> idxtmp, iotatmp;
     static constexpr bool either_is_const = (std::is_const_v<IndicesType> || std::is_const_v<DataType>);
     if constexpr(either_is_const) {
         idxtmp.resize(mat.columns());
@@ -421,8 +424,8 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
                 subvector(idxtmp, 0, cnnz) = subvector(iotatmp, 0, cnnz);
                 shared::sort(idxtmp.begin(), idxtmp.begin() + cnnz,
                              [&](auto x, auto y) {return mat.indices_[x] < mat.indices_[y];});
-                const auto indstart = mat.indices_[col.start_];
-                const auto datastart = mat.data_[col.start_];
+                const auto indstart = &mat.indices_[col.start_];
+                const auto datastart = &mat.data_[col.start_];
                 for(auto i = 0u; i < cnnz; ++i) {
                     const auto ind = idxtmp[i];
                     ret.append(used_rows, indstart[ind], datastart[ind]);

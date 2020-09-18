@@ -67,14 +67,22 @@ public:
         size_t xdim = py::cast<size_t>(shape[0]), ydim = py::cast<size_t>(shape[1]);
         size_t nnz = py::cast<size_t>(spmat.attr("nnz"));
         auto indbuf = indices.request(), indpbuf = indptr.request(), databuf = data.request();
-        const void *datptr = databuf.ptr, *indptrptr = indpbuf.ptr, *indicesptr = indbuf.ptr;
+        void *datptr = databuf.ptr, *indptrptr = indpbuf.ptr, *indicesptr = indbuf.ptr;
 
 #define __DISPATCH(T1, T2, T3) do { \
-        std::fprintf(stderr, "Dispatching!\n"); \
-        if(use_float) \
-            matrix_ = csc2sparse<float>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<const T1 *>(indptrptr), reinterpret_cast<const T2 *>(indicesptr), reinterpret_cast<const T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
-        else \
-            matrix_ = csc2sparse<double>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<const T1 *>(indptrptr), reinterpret_cast<const T2 *>(indicesptr), reinterpret_cast<const T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
+        if(use_float) {\
+            if(databuf.readonly || indbuf.readonly) {\
+                matrix_ = csc2sparse<float>(CSCMatrixView<T1, const T2, const T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<const T2 *>(const_cast<const void *>(indicesptr)), reinterpret_cast<const T3 *>(const_cast<const void *>(datptr)), nnz, ydim, xdim), skip_empty); \
+            } else { \
+                matrix_ = csc2sparse<float>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<T2 *>(indicesptr), reinterpret_cast<T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
+            }\
+        } else { \
+            if(databuf.readonly || indbuf.readonly) {\
+                matrix_ = csc2sparse<double>(CSCMatrixView<T1, const T2, const T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<const T2 *>(const_cast<const void *>(indicesptr)), reinterpret_cast<const T3 *>(const_cast<const void *>(datptr)), nnz, ydim, xdim), skip_empty); \
+            } else { \
+                matrix_ = csc2sparse<double>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<T2 *>(indicesptr), reinterpret_cast<T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
+            }\
+        }\
         return; \
     } while(0)
 #define __DISPATCH_IF(T1, T2, T3) do { \
