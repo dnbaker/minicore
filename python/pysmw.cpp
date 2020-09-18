@@ -6,7 +6,7 @@
 using smw_t = SparseMatrixWrapper;
 
 void init_smw(py::module &m) {
-    py::class_<SparseMatrixWrapper>(m, "SparseMatrix")
+    py::class_<SparseMatrixWrapper>(m, "SparseMatrixWrapper")
     .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=false)
     .def("is_float", [](SparseMatrixWrapper &wrap) {
         return wrap.is_float();
