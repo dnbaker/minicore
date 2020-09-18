@@ -6,8 +6,6 @@
 #include "./io.h"
 #include "./exception.h"
 #include "thirdparty/mio.hpp"
-#include "thirdparty/ZipIterator.hpp"
-#include "thirdparty/span.hpp"
 #include <fstream>
 
 
@@ -62,7 +60,6 @@ struct CSCMatrixView {
         Column(const CSCMatrixView &mat, size_t start, size_t stop)
             : mat_(mat), start_(start), stop_(stop)
         {
-            //sort_if_not_const();
         }
 #if 0
         void sort_if_not_const() {
@@ -410,7 +407,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
     using itype_t = std::remove_const_t<IndicesType>;
     blz::DV<itype_t> idxtmp(mat.columns());
     const blz::DV<itype_t> iotatmp = blaze::generate(mat.columns(), [](auto x) {return x;});
-    static constexpr bool either_is_const = (std::is_const_v<IndicesType> || std::is_const_v<DataType>);
+    //static constexpr bool either_is_const = (std::is_const_v<IndicesType> || std::is_const_v<DataType>);
     for(i = 0; i < mat.n_; ++i, ret.finalize(used_rows++)) {
         auto col = mat.column(i);
         if(mat.n_ > 100000 && i % 10000 == 0) std::fprintf(stderr, "%zu/%u\r", i, mat.n_);
