@@ -422,12 +422,19 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
     // Sort after, which is faster than ensuring that every row is sorted at the beginning
     OMP_PFOR
     for(size_t i = 0; i < ret.rows(); ++i) {
+        auto cmp = [](auto &x, auto &y) {return x.index() < y.index();};
+        auto rcmp = [](auto &x, auto &y) {return x.index() > y.index();};
         DBG_ONLY(std::fprintf(stderr, "sorting %zu/%zu\n", i, ret.rows());)
         auto r = row(ret, i, blz::unchecked);
         switch(nonZeros(r)) {
             case 0: case 1: continue;
-            default:
-                shared::sort(r.begin(), r.end(), [](auto &x, auto &y) {return x.index() < y.index();});
+            default: ;
+        }
+        if(!std::is_sorted(r.begin(), r.end(), cmp)) {
+            if(std::is_sorted(r.begin(), r.end(), rcmp))
+                std::reverse(r.begin(), r.end());
+            else
+                shared::sort(r.begin(), r.end(), cmp);
         }
     }
     std::fprintf(stderr, "Parsed matrix of %zu/%zu\n", ret.rows(), ret.columns());
