@@ -251,5 +251,13 @@ void init_smw(py::module &m) {
         else            std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
-       py::arg("data"), py::arg("sumopts"));
+       py::arg("data"), py::arg("sumopts"))
+    .def("__eq__", [](SparseMatrixWrapper &lhs, SparseMatrixWrapper &rhs) {
+        switch((lhs.is_float() << 1) | rhs.is_float()) {
+            case 3: return lhs.getfloat() == rhs.getfloat();
+            case 0: return lhs.getdouble() == rhs.getdouble();
+            default: ;
+        }
+        throw std::invalid_argument("Cannot compare matrices of different values");
+    });
 }
