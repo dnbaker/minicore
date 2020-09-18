@@ -52,7 +52,7 @@ void init_smw(py::module &m) {
         }
         assert(bi.size == nelem);
         if(usefloat) {
-            blaze::CustomVector<float, blz::unaligned, blz::unpadded> cv((float *)ptr, nelen);
+            blaze::CustomVector<float, blz::unaligned, blz::unpadded> cv((float *)ptr, nelem);
             wrap.perform([&](const auto &x) {
                 if(byrow) cv = blz::sum<blz::rowwise>(x);
                 else      cv = trans(blz::sum<blz::columnwise>(x));

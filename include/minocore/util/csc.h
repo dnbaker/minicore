@@ -407,7 +407,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
     for(i = 0; i < mat.n_; ++i) {
         auto col = mat.column(i);
         const unsigned cnnz = col.nnz();
-        std::fprintf(stderr, "%zu/%u (%u nnz) \r", i, mat.n_, cnnz);
+        DBG_ONLY(std::fprintf(stderr, "%zu/%u (%u nnz) \r", i, mat.n_, cnnz);)
         if(skip_empty && 0u == cnnz) continue;
         for(auto s = col.start_; s < col.stop_; ++s) {
             ret.append(used_rows, mat.indices_[s], mat.data_[s]);
