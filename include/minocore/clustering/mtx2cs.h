@@ -80,7 +80,7 @@ template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm>
 auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
                          unsigned k, unsigned kmc2rounds, const Norm &norm) {
     using FT = blaze::ElementType_t<MT>;
-    const size_t nr = (~matrix).rows();
+    const size_t nr = (*matrix).rows();
     std::vector<uint32_t> indices, asn;
     blz::DV<FT> costs(nr);
     if(kmc2rounds) {
@@ -88,7 +88,7 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
         indices = coresets::kmc2(matrix, rng, k, kmc2rounds, norm);
         // Return distance from item at reference i to item at j
         auto oracle = [&](size_t i, size_t j) {
-            return norm(row(~matrix, i, blz::unchecked), row(~matrix, j, blz::unchecked));
+            return norm(row(*matrix, i, blz::unchecked), row(*matrix, j, blz::unchecked));
         };
         auto [oasn, ncosts] = coresets::get_oracle_costs(oracle, nr, indices);
         costs = std::move(ncosts);
@@ -155,7 +155,7 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts)
     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
     else if(opts.prior == dist::NONE)
         pcp = nullptr;
-    auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
+    auto app = jsd::make_probdiv_applicator(*sm, opts.dis, opts.prior, pcp);
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), true);
     auto csum = blz::sum(costs);
@@ -183,7 +183,7 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts)
      else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
      else if(opts.prior == dist::NONE)
          pcp = nullptr;
-     auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
+     auto app = jsd::make_probdiv_applicator(*sm, opts.dis, opts.prior, pcp);
      wy::WyRand<uint64_t, 2> rng(opts.seed);
      if(opts.outlier_fraction) {
          return coresets::kcenter_greedy_2approx_outliers_costs(

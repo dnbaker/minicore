@@ -88,28 +88,28 @@ struct CentroidPolicy {
             FT total_sum_inv;
             if(wc) {
                 total_sum_inv = 1. / blz::dot(rs, *wc);
-                ~ret = blaze::sum<blz::columnwise>(r % blz::expand(trans(*wc * rs), r.columns())) * total_sum_inv;
+                *ret = blaze::sum<blz::columnwise>(r % blz::expand(trans(*wc * rs), r.columns())) * total_sum_inv;
             } else {
                 total_sum_inv = 1. / blaze::sum(rs);
-                ~ret = blaze::sum<blz::columnwise>(r % blz::expand(trans(rs), r.columns())) * total_sum_inv;
+                *ret = blaze::sum<blz::columnwise>(r % blz::expand(trans(rs), r.columns())) * total_sum_inv;
             }
         } else if(wc) {
             PRETTY_SAY << "Weighted, anything but L1 or LLR (" << dist::detail::prob2str(measure) << ")\n";
-            assert((~(*wc)).size() == r.rows());
-            assert(blz::expand(~(*wc), r.columns()).rows() == r.rows());
-            assert(blz::expand(~(*wc), r.columns()).columns() == r.columns());
+            assert((*(*wc)).size() == r.rows());
+            assert(blz::expand(*(*wc), r.columns()).rows() == r.rows());
+            assert(blz::expand(*(*wc), r.columns()).columns() == r.columns());
             auto wsuminv = 1. / blaze::sum(*wc);
             if(!dist::detail::is_probability(measure)) { // e.g., take mean of unscaled values
-                auto mat2schur = blz::expand(~(*wc) * rs, r.columns());
+                auto mat2schur = blz::expand(*(*wc) * rs, r.columns());
                 PRETTY_SAY << "NOTPROB r dims: " << r.rows() << "/" << r.columns() << '\n';
                 PRETTY_SAY << "NOTPROB mat2schur dims: " << mat2schur.rows() << "/" << mat2schur.columns() << '\n';
-                ~ret = blaze::sum<blz::columnwise>(r % blz::expand(~(*wc) * rs, r.columns())) * wsuminv;
+                *ret = blaze::sum<blz::columnwise>(r % blz::expand(*(*wc) * rs, r.columns())) * wsuminv;
             } else {                                    // Else take mean of scaled values
-                auto mat2schur = blz::expand(~(*wc), r.columns());
+                auto mat2schur = blz::expand(*(*wc), r.columns());
                 PRETTY_SAY << "PROB r dims: " << r.rows() << "/" << r.columns() << '\n';
                 PRETTY_SAY << "PROB mat2schur dims: " << mat2schur.rows() << "/" << mat2schur.columns() << '\n';
-                ~ret = blaze::sum<blz::columnwise>(r % blz::expand(~(*wc), r.columns())) * wsuminv;
-                assert(blaze::max(~ret) < 1. || !std::fprintf(stderr, "max in ret: %g for a probability distribution.", blaze::max(~ret)));
+                *ret = blaze::sum<blz::columnwise>(r % blz::expand(*(*wc), r.columns())) * wsuminv;
+                assert(blaze::max(*ret) < 1. || !std::fprintf(stderr, "max in ret: %g for a probability distribution.", blaze::max(*ret)));
             }
         } else {
             PRETTY_SAY << "Unweighted, anything but L1 or LLR (" << dist::detail::prob2str(measure) << ")\n";
@@ -120,8 +120,8 @@ struct CentroidPolicy {
                 PRETTY_SAY << "PROB r dims: " << r.rows() << "/" << r.columns() << '\n';
                 PRETTY_SAY << "NOTPROB expansion dims: " << expansion.rows() << "/" << expansion.columns() << '\n';
 #endif
-                ~ret = blaze::sum<blz::columnwise>(r % blz::expand(trans(rs), r.columns())) * (1. / (blaze::sum(rs) * r.rows()));
-            } else ~ret = blz::mean<blz::columnwise>(r % blz::expand(trans(rs), r.columns()));
+                *ret = blaze::sum<blz::columnwise>(r % blz::expand(trans(rs), r.columns())) * (1. / (blaze::sum(rs) * r.rows()));
+            } else *ret = blz::mean<blz::columnwise>(r % blz::expand(trans(rs), r.columns()));
         }
     }
     template<typename Matrix, typename RSVec, typename PriorData=RSVec, typename FT=blz::ElementType_t<Matrix>, typename AsnV, typename WPT=blz::DV<FT, blz::rowVector>, bool WSO=blz::rowVector>
@@ -136,9 +136,9 @@ struct CentroidPolicy {
             assignv.at(assignments[i]).pushBack(i);
         }
         if(measure == dist::TVD || measure == dist::L1) {
-            using ptr_t = decltype((~*weight_cv).data());
+            using ptr_t = decltype((**weight_cv).data());
             ptr_t ptr = nullptr;
-            if(weight_cv) ptr = (~*weight_cv).data();
+            if(weight_cv) ptr = (**weight_cv).data();
             OMP_PFOR
             for(unsigned i = 0; i < centers.size(); ++i) {
                 coresets::l1_median(mat, centers[i], assignv[i], ptr);
@@ -158,7 +158,7 @@ struct CentroidPolicy {
             if(weight_cv) {
                 c = blaze::sum<blaze::columnwise>(
                     blz::rows(mat, aip, ain)
-                    % blaze::expand(blaze::elements(trans(~*weight_cv), aip, ain), mat.columns()));
+                    % blaze::expand(blaze::elements(trans(**weight_cv), aip, ain), mat.columns()));
             } else {
                 std::fprintf(stderr, "Performing unweighted sum of %zu rows\n", ain);
                 c = blaze::sum<blaze::columnwise>(blz::rows(mat, aip, ain));
@@ -169,7 +169,7 @@ struct CentroidPolicy {
                 if(pd) {
                     std::fprintf(stderr, "Sparse prior handling\n");
                     if(weight_cv) {
-                        c += pv * blz::sum(blz::elements(rs * ~*weight_cv, aip, ain));
+                        c += pv * blz::sum(blz::elements(rs * **weight_cv, aip, ain));
                     } else {
                         c += pv * ain;
                     }
@@ -186,13 +186,13 @@ struct CentroidPolicy {
             double div;
             if(measure == dist::LLR || measure == dist::OLLR || measure == dist::UWLLR) {
                 if(weight_cv)
-                    div = blz::sum(blz::elements(rs * ~*weight_cv, aip, ain));
+                    div = blz::sum(blz::elements(rs * **weight_cv, aip, ain));
                 else
                     div = blz::sum(blz::elements(rs, aip, ain));
             } else {
                 if(weight_cv) {
                     std::fprintf(stderr, "weighted, nonLLR\n");
-                    div = blz::sum(~*weight_cv);
+                    div = blz::sum(**weight_cv);
                 } else {
                     std::fprintf(stderr, "unweighted, nonLLR\n");
                     div = ain;
@@ -485,7 +485,7 @@ void set_centroids_full_mean(const Mat &mat,
     const PriorT &prior, AsnT &asn, CostsT &costs, CtrsT &ctrs,
     WeightsT *weights, SumT &ctrsums, const SumT &rowsums)
 {
-    assert(rowsums.size() == (~mat).rows());
+    assert(rowsums.size() == (*mat).rows());
     assert(ctrsums.size() == ctrs.size());
     DBG_ONLY(std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p\n", (void *)weights);)
     //

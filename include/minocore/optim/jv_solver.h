@@ -603,9 +603,9 @@ public:
 
     template<typename VT, bool TF>
     void set_fac_cost(const blaze::Vector<VT, TF> &val) {
-        if((~val).size() != client_w_.rows()) throw std::invalid_argument("Val has wrong number of rows");
-        facility_cost_.resize((~val).size());
-        facility_cost_ = (~val);
+        if((*val).size() != client_w_.rows()) throw std::invalid_argument("Val has wrong number of rows");
+        facility_cost_.resize((*val).size());
+        facility_cost_ = (*val);
     }
     template<typename CostType, typename=std::enable_if_t<std::is_convertible_v<CostType, FT> > >
     void set_fac_cost(CostType val) {

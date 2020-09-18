@@ -257,13 +257,13 @@ void set_cache(const blz::Vector<VT, TF> &src, blz::Vector<VT2, TF> &dest, Dissi
     if(!cp) {
         if(needs_logs(d)) {
             if(is_probability(d))
-                ~dest = neginf2zero(log(~src));
+                *dest = neginf2zero(log(*src));
             else
-                ~dest = neginf2zero(log(~src / blaze::sum(~src)));
+                *dest = neginf2zero(log(*src / blaze::sum(*src)));
             return;
         }
         if(needs_sqrt(d)) {
-            ~dest = sqrt(~src);
+            *dest = sqrt(*src);
             return;
         }
     } else {
@@ -430,18 +430,18 @@ static constexpr FT SIS_OFFSET = -.6931471805599453;
 
 template<typename FT, bool SO>
 auto logsumexp(const blaze::DenseVector<FT, SO> &x) {
-    const auto maxv = blaze::max(~x);
-    return maxv + std::log(blaze::sum(blaze::exp(~x - maxv)));
+    const auto maxv = blaze::max(*x);
+    return maxv + std::log(blaze::sum(blaze::exp(*x - maxv)));
 }
 
 template<typename FT, bool SO>
 auto logsumexp(const blaze::SparseVector<FT, SO> &x) {
-    auto maxv = blaze::max(~x);
+    auto maxv = blaze::max(*x);
     auto s = 0.;
-    for(const auto p: ~x) {
+    for(const auto p: *x) {
         s += std::exp(p.value() - maxv); // Sum over sparse elements
     }
-    s += ((~x).size() - nonZeros(~x)) * std::exp(-maxv);  // Handle the ones we skipped
+    s += ((*x).size() - nonZeros(*x)) * std::exp(-maxv);  // Handle the ones we skipped
     return maxv + std::log(s);
 }
 
@@ -449,7 +449,7 @@ template<typename VT1, typename VT2, typename Scalar, bool TF>
 auto logsumexp(const SVecScalarMultExpr<SVecSVecAddExpr<VT1, VT2, TF>, Scalar, TF> &exp) {
     // Specifically for calculating the logsumexp of the mean of the two sparse vectors.
     // SVecScalarMultExpr doesn't provide a ConstIterator, so we're rolling our own specialized function.
-    auto maxv = blaze::max(~exp), mmax = -maxv;
+    auto maxv = blaze::max(*exp), mmax = -maxv;
     auto s = 0.;
     auto lit = exp.leftOperand().leftOperand().begin(), rit = exp.leftOperand().rightOperand().begin(),
          lie = exp.leftOperand().leftOperand().end(),   rie = exp.leftOperand().rightOperand().end();
@@ -483,7 +483,7 @@ auto logsumexp(const SVecScalarMultExpr<SVecSVecAddExpr<VT1, VT2, TF>, Scalar, T
             ++lit, ++rit;
         }
     }
-    s += ((~exp).size() - nnz) * std::exp(-maxv);  // Handle the ones we skipped
+    s += ((*exp).size() - nnz) * std::exp(-maxv);  // Handle the ones we skipped
     return maxv + std::log(s);
 }
 
@@ -523,10 +523,10 @@ INLINE auto multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
                             const blaze::DenseVector<VT2, SO> &lhlog,
                             const blaze::DenseVector<VT2, SO> &rhlog)
 {
-    auto mn = (~lhs + ~rhs) * RT(0.5);
-    auto mnlog = blaze::evaluate(blaze::neginf2zero(blaze::log(~mn)));
-    auto lhc = blaze::dot(~lhs, ~lhlog - mnlog);
-    auto rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    auto mn = (*lhs + *rhs) * RT(0.5);
+    auto mnlog = blaze::evaluate(blaze::neginf2zero(blaze::log(*mn)));
+    auto lhc = blaze::dot(*lhs, *lhlog - mnlog);
+    auto rhc = blaze::dot(*rhs, *rhlog - mnlog);
     return RT(0.5) * (lhc + rhc);
 }
 
@@ -537,9 +537,9 @@ INLINE auto multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
                             const blaze::SparseVector<VT2, SO> &rhlog)
 {
     using RT = blz::CommonType_t<blz::ElementType_t<VT>, blz::ElementType_t<VT2>>;
-    auto mnlog = blaze::evaluate(blaze::log((~lhs + ~rhs) * RT(0.5)));
-    auto lhc = blaze::dot(~lhs, ~lhlog - mnlog);
-    auto rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    auto mnlog = blaze::evaluate(blaze::log((*lhs + *rhs) * RT(0.5)));
+    auto lhc = blaze::dot(*lhs, *lhlog - mnlog);
+    auto rhc = blaze::dot(*rhs, *rhlog - mnlog);
     return RT(0.5) * (lhc + rhc);
 }
 template<typename VT, bool SO>
@@ -549,9 +549,9 @@ INLINE auto multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
     using RT = blz::ElementType_t<VT>;
     auto lhlog = blaze::evaluate(neginf2zero(log(lhs)));
     auto rhlog = blaze::evaluate(neginf2zero(log(rhs)));
-    auto mnlog = blaze::evaluate(neginf2zero(log((~lhs + ~rhs) * RT(0.5))));
-    auto lhc = blaze::dot(~lhs, ~lhlog - mnlog);
-    auto rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    auto mnlog = blaze::evaluate(neginf2zero(log((*lhs + *rhs) * RT(0.5))));
+    auto lhc = blaze::dot(*lhs, *lhlog - mnlog);
+    auto rhc = blaze::dot(*rhs, *rhlog - mnlog);
     return RT(0.5) * (lhc + rhc);
 }
 template<typename VT, typename VT2, bool SO>
@@ -559,11 +559,11 @@ INLINE auto multinomial_jsd(const blaze::Vector<VT, SO> &lhs,
                             const blaze::Vector<VT2, SO> &rhs)
 {
     using RT = blz::ElementType_t<VT>;
-    auto lhlog = blaze::evaluate(neginf2zero(log(~lhs)));
-    auto rhlog = blaze::evaluate(neginf2zero(log(~rhs)));
-    auto mnlog = blaze::evaluate(neginf2zero(log((~lhs + ~rhs) * RT(0.5))));
-    auto lhc = blaze::dot(~lhs, ~lhlog - mnlog);
-    auto rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    auto lhlog = blaze::evaluate(neginf2zero(log(*lhs)));
+    auto rhlog = blaze::evaluate(neginf2zero(log(*rhs)));
+    auto mnlog = blaze::evaluate(neginf2zero(log((*lhs + *rhs) * RT(0.5))));
+    auto lhc = blaze::dot(*lhs, *lhlog - mnlog);
+    auto rhc = blaze::dot(*rhs, *rhlog - mnlog);
     return RT(0.5) * (lhc + rhc);
 }
 template<typename VT, bool SO>
@@ -572,9 +572,9 @@ INLINE auto multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
 {
     using RT = blz::ElementType_t<VT>;
     auto lhlog = blaze::log(lhs), rhlog = blaze::log(rhs);
-    auto mnlog = blaze::evaluate(blaze::log((~lhs + ~rhs) * RT(0.5)));
-    auto lhc = blaze::dot(~lhs, ~lhlog - mnlog);
-    auto rhc = blaze::dot(~rhs, ~rhlog - mnlog);
+    auto mnlog = blaze::evaluate(blaze::log((*lhs + *rhs) * RT(0.5)));
+    auto lhc = blaze::dot(*lhs, *lhlog - mnlog);
+    auto rhc = blaze::dot(*rhs, *rhlog - mnlog);
     return RT(0.5) * (lhc + rhc);
 }
 
@@ -631,11 +631,11 @@ static constexpr const char *prior2desc(Prior p) {
 
 template<typename VT1, typename VT2, bool SO, bool OSO, typename CT=CommonType_t<ElementType_t<VT1>, ElementType_t<VT2>>, typename OFT>
 CT cosine_similarity(const blz::Vector<VT1, SO> &x, const blz::Vector<VT2, OSO> &y, OFT xnorm, OFT ynorm) {
-    return blz::dot(~x, ~y) / (xnorm * ynorm);
+    return blz::dot(*x, *y) / (xnorm * ynorm);
 }
 template<typename VT1, typename VT2, bool SO, bool OSO, typename CT=CommonType_t<ElementType_t<VT1>, ElementType_t<VT2>>>
 CT cosine_similarity(const blz::Vector<VT1, SO> &x, const blz::Vector<VT2, OSO> &y) {
-    return blz::dot(~x, ~y) / (blz::l2Norm(~x) * blz::l2Norm(~y));
+    return blz::dot(*x, *y) / (blz::l2Norm(*x) * blz::l2Norm(*y));
 }
 template<typename VT1, typename VT2, bool SO, bool OSO, typename CT=CommonType_t<ElementType_t<VT1>, ElementType_t<VT2>>, typename OFT>
 CT cosine_distance(const blz::Vector<VT1, SO> &x, const blz::Vector<VT2, OSO> &y, OFT xnorm, OFT ynorm) {
@@ -645,7 +645,7 @@ CT cosine_distance(const blz::Vector<VT1, SO> &x, const blz::Vector<VT2, OSO> &y
 template<typename VT1, typename VT2, bool SO, bool OSO, typename CT=CommonType_t<ElementType_t<VT1>, ElementType_t<VT2>>>
 CT cosine_distance(const blz::Vector<VT1, SO> &x, const blz::Vector<VT2, OSO> &y) {
     static constexpr CT PI_INV = 1. / 3.14159265358979323846264338327950288;
-    return std::acos(cosine_similarity(x, y, blz::l2Norm(~x), blz::l2Norm(~y))) * PI_INV;
+    return std::acos(cosine_similarity(x, y, blz::l2Norm(*x), blz::l2Norm(*y))) * PI_INV;
 }
 
 template<typename VT1, typename VT2, bool TF>
@@ -653,21 +653,21 @@ auto bhattacharyya_measure(const blz::DenseVector<VT1, TF> &lhs, const blz::Dens
     // Requires same storage.
     // TODO: generalize for different storage classes/transpose flags using DenseVector and SparseVector
     // base classes
-    return sum(sqrt(~lhs * ~rhs));
+    return sum(sqrt(*lhs * *rhs));
 }
 
 template<typename LHVec, typename RHVec>
 auto bhattacharyya_metric(const LHVec &lhs, const RHVec &rhs) {
     // Comaniciu, D., Ramesh, V. & Meer, P. (2003). Kernel-based object tracking.IEEE Transactionson Pattern Analysis and Machine Intelligence,25(5), 564-577.
     // Proves that this extension is a valid metric
-    // See http://www.cse.yorku.ca/~kosta/CompVis_Notes/bhattacharyya.pdf
+    // See http://www.cse.yorku.ca/*kosta/CompVis_Notes/bhattacharyya.pdf
     return std::sqrt(1. - bhattacharyya_measure(lhs, rhs));
 }
 template<typename LHVec, typename RHVec>
 auto bhattacharyya_distance(const LHVec &lhs, const RHVec &rhs) {
     // Comaniciu, D., Ramesh, V. & Meer, P. (2003). Kernel-based object tracking.IEEE Transactionson Pattern Analysis and Machine Intelligence,25(5), 564-577.
     // Proves that this extension is a valid metric
-    // See http://www.cse.yorku.ca/~kosta/CompVis_Notes/bhattacharyya.pdf
+    // See http://www.cse.yorku.ca/*kosta/CompVis_Notes/bhattacharyya.pdf
     return -std::log(bhattacharyya_measure(lhs, rhs));
 }
 
@@ -686,14 +686,14 @@ INLINE decltype(auto) multinomial_jsm(Args &&...args) {
 template<typename VT, typename VT2, bool SO>
 inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &rhs) {
     // Approximate jsd function for use in LSH tables.
-    return std::sqrt(blz::sum(blz::pow(~lhs - ~rhs, 2) / (~lhs + ~rhs)) * ElementType_t<VT>(0.5));
+    return std::sqrt(blz::sum(blz::pow(*lhs - *rhs, 2) / (*lhs + *rhs)) * ElementType_t<VT>(0.5));
 }
 
 
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
 CT scipy_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {
-    auto &xr = ~x;
-    auto &yr = ~y;
+    auto &xr = *x;
+    auto &yr = *y;
     const size_t sz = xr.size();
     std::unique_ptr<uint32_t[]> ptr(new uint32_t[sz * 2]);
     auto xptr = ptr.get(), yptr = ptr.get() + sz;
@@ -741,8 +741,8 @@ CT scipy_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVect
 
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
 CT scipy_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1.) {
-    auto &xr = ~x;
-    auto &yr = ~y;
+    auto &xr = *x;
+    auto &yr = *y;
     const size_t sz = xr.size();
     std::unique_ptr<uint32_t[]> ptr(new uint32_t[sz * 2]);
     auto xptr = ptr.get(), yptr = ptr.get() + sz;
@@ -795,27 +795,27 @@ CT p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, do
 
 template<typename VT, bool SO, typename VT2>
 auto wasserstein_p2(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y) {
-    return p_wasserstein(~x, ~y, 2.);
+    return p_wasserstein(*x, *y, 2.);
 }
 template<typename VT, bool SO, typename VT2>
 auto wasserstein_p2(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, !SO> &y) {
-    return p_wasserstein(~x, trans(~y), 2.);
+    return p_wasserstein(*x, trans(*y), 2.);
 }
 
 template<typename VT, typename VT2, bool SO>
 static INLINE auto discrete_total_variation_distance(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs) {
-    return ElementType_t<CommonType_t<VT, VT2>>(0.5) * blz::l1Norm(~lhs - ~rhs);
+    return ElementType_t<CommonType_t<VT, VT2>>(0.5) * blz::l1Norm(*lhs - *rhs);
 }
 
 template<typename VT, typename VT2, bool SO>
 static INLINE auto canberra_distance(const blz::DenseVector<VT, SO> &lhs, const blz::DenseVector<VT2, SO> &rhs) {
-    const auto &lh(~lhs), &rh(~rhs);
+    const auto &lh(*lhs), &rh(*rhs);
     return blaze::sum(blaze::abs(lh - rh) / (blaze::abs(lh) + blaze::abs(rh)));
 }
 
 template<typename VT, typename VT2, bool SO>
 static INLINE auto hellinger(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs) {
-    return l2Norm(sqrt(~lhs) - sqrt(~rhs));
+    return l2Norm(sqrt(*lhs) - sqrt(*rhs));
 }
 
 

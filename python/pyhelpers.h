@@ -10,7 +10,7 @@ namespace py = pybind11;
 
 template<typename VT, bool SO>
 py::object sparse2pysr(const blaze::CompressedVector<VT, SO> &_x) {
-    const auto &x = ~_x;
+    const auto &x = *_x;
     size_t nnz = nonZeros(x);
     py::object ret;
     py::array_t<uint32_t> idx(nnz);

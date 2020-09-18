@@ -350,6 +350,8 @@ struct CSparseMatrix {
     }
     auto &operator~() {return *this;}
     const auto &operator~() const {return *this;}
+    auto &operator*() {return *this;}
+    const auto &operator*() const {return *this;}
 };
 
 template<typename VT, typename IT, typename IPtrT, bool checked=true>
@@ -598,17 +600,17 @@ template<typename MT, bool SO>
 std::pair<std::vector<size_t>, std::vector<size_t>>
 erase_empty(blaze::Matrix<MT, SO> &mat) {
     std::pair<std::vector<size_t>, std::vector<size_t>> ret;
-    std::fprintf(stderr, "Before resizing, %zu/%zu\n", (~mat).rows(), (~mat).columns());
-    size_t orn = (~mat).rows(), ocn = (~mat).columns();
-    auto rs = blaze::evaluate(blaze::sum<blaze::rowwise>(~mat));
+    std::fprintf(stderr, "Before resizing, %zu/%zu\n", (*mat).rows(), (*mat).columns());
+    size_t orn = (*mat).rows(), ocn = (*mat).columns();
+    auto rs = blaze::evaluate(blaze::sum<blaze::rowwise>(*mat));
     auto rsn = blz::functional::indices_if([&rs](auto x) {return rs[x] > 0.;}, rs.size());
     ret.first.assign(rsn.begin(), rsn.end());
     std::fprintf(stderr, "Eliminating %zu empty rows\n", orn - rsn.size());
-    ~mat = rows(~mat, rsn);
-    auto cs = blaze::evaluate(blaze::sum<blaze::columnwise>(~mat));
+    *mat = rows(*mat, rsn);
+    auto cs = blaze::evaluate(blaze::sum<blaze::columnwise>(*mat));
     auto csn = blz::functional::indices_if([&cs](auto x) {return cs[x] > 0.;}, cs.size());
     ret.second.assign(csn.begin(), csn.end());
-    ~mat = columns(~mat, csn);
+    *mat = columns(*mat, csn);
     std::fprintf(stderr, "Eliminating %zu empty columns\n", ocn - rsn.size());
     return ret;
 }

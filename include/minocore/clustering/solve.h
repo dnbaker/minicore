@@ -95,29 +95,29 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
         else  return blz::sum(costs);
     };
 #if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
-    const blz::DV<FT> rowsums = sum<blz::rowwise>(~mat);
+    const blz::DV<FT> rowsums = sum<blz::rowwise>(*mat);
     blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
 #else
-    blz::DV<FT> rowsums((~mat).rows());
+    blz::DV<FT> rowsums((*mat).rows());
     blz::DV<FT> centersums(centers.size());
     OMP_PFOR
     for(size_t i = 0; i < rowsums.size(); ++i)
-        rowsums[i] = blz::sum(row(~mat, i, blz::unchecked));
+        rowsums[i] = blz::sum(row(*mat, i, blz::unchecked));
     OMP_PFOR
     for(size_t i = 0; i < centers.size(); ++i)
         centersums[i] = blz::sum(centers[i]);
 #endif
-    assign_points_hard<FT>(~mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
+    assign_points_hard<FT>(*mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
     const auto initcost = compute_cost();
     FT cost = initcost;
     std::fprintf(stderr, "initial cost: %0.12g\n", cost);
     size_t iternum = 0;
     for(;;) {
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
-        set_centroids_hard<FT>(~mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
+        set_centroids_hard<FT>(*mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
         DBG_ONLY(std::fprintf(stderr, "Set centroids %zu\n", iternum);)
 
-        assign_points_hard<FT>(~mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
+        assign_points_hard<FT>(*mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
         auto newcost = compute_cost();
         DBG_ONLY(std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);)
         if(newcost > cost) {
@@ -214,7 +214,7 @@ void assign_points_hard(const Mat &mat,
                           ? double(prior[0] * mat.columns())
                           : double(blz::sum(prior));
     assert(centersums.size() == centers.size());
-    assert(rowsums.size() == (~mat).rows());
+    assert(rowsums.size() == (*mat).rows());
 #ifndef NDEBUG
     std::fprintf(stderr, "[%s]: %zu-clustering with %s and %zu dimensions\n", __func__, centers.size(), dist::msr2str(measure), centers[0].size());
 #endif
@@ -231,7 +231,7 @@ void assign_points_hard(const Mat &mat,
     //       Also, if there are enough centers, a nearest neighbor structure
     //       could make centroid assignment faster
     auto compute_cost = [&](auto id, auto cid) {
-        assert(size_t(id) < (~mat).rows());
+        assert(size_t(id) < (*mat).rows());
         auto mr = row(mat, id, blaze::unchecked);
         const auto &ctr = centers[cid];
         const auto rowsum = rowsums[id];
@@ -318,15 +318,15 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
 {
     auto centers_cpy(centers);
     blz::DV<FT> centersums(centers.size());
-    blz::DV<FT> rowsums((~mat).rows());
+    blz::DV<FT> rowsums((*mat).rows());
     std::cerr << "Compute sums\n";
 #if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
-    rowsums = blz::sum<blz::rowwise>(~mat);
+    rowsums = blz::sum<blz::rowwise>(*mat);
     centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
 #else
     OMP_PFOR
     for(size_t i = 0; i < rowsums.size(); ++i)
-        rowsums[i] = blz::sum(row(~mat, i));
+        rowsums[i] = blz::sum(row(*mat, i));
     OMP_PFOR
     for(size_t i = 0; i < centers_cpy.size(); ++i)
         centersums[i] = blz::sum(centers_cpy[i]);
@@ -359,7 +359,7 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
     size_t iternum = 0;
     for(;;) {
         auto oldcost = cost;
-        set_centroids_soft<FT>(~mat, measure, prior, centers_cpy, costs, weights, temperature, centersums, rowsums);
+        set_centroids_soft<FT>(*mat, measure, prior, centers_cpy, costs, weights, temperature, centersums, rowsums);
         cost = compute_cost();
         std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
         if(oldcost > cost) // Update centers only if an improvement
