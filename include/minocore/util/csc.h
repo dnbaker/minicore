@@ -404,32 +404,11 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
     blz::SM<FT, blaze::rowMajor> ret(mat.n_, mat.nf_);
     ret.reserve(mat.nnz_);
     size_t used_rows = 0, i;
-    using itype_t = std::remove_const_t<IndicesType>;
-    blz::DV<itype_t> idxtmp(mat.columns());
-    const blz::DV<itype_t> iotatmp = blaze::generate(mat.columns(), [](auto x) {return x;});
-    //static constexpr bool either_is_const = (std::is_const_v<IndicesType> || std::is_const_v<DataType>);
     for(i = 0; i < mat.n_; ++i, ret.finalize(used_rows++)) {
         auto col = mat.column(i);
         if(mat.n_ > 100000 && i % 10000 == 0) std::fprintf(stderr, "%zu/%u\r", i, mat.n_);
         const auto cnnz = col.nnz();
         if(skip_empty && 0u == cnnz) continue;
-        // check if data and indices are sorted
-        // before use. If not, argsort and append in order.
-        // Otherwise, parse in order directly.
-        if(!std::is_sorted(&mat.indices_[col.start_], &mat.indices_[col.stop_])) {
-            subvector(idxtmp, 0, cnnz) = subvector(iotatmp, 0, cnnz);
-            DBG_ONLY(std::cerr << trans(idxtmp) << '\n';)
-            const auto indstart = &mat.indices_[col.start_];
-            const auto datastart = &mat.data_[col.start_];
-            shared::sort(idxtmp.begin(), idxtmp.begin() + cnnz,
-                         [&](auto x, auto y) {return indstart[x] < indstart[y];});
-            DBG_ONLY(std::cerr << "sorted: " << trans(idxtmp) << '\n';)
-            for(auto i = 0u; i < cnnz; ++i) {
-                const auto ind = idxtmp[i];
-                ret.append(used_rows, indstart[ind], datastart[ind]);
-            }
-            continue;
-        }
         for(auto s = col.start_; s < col.stop_; ++s) {
             ret.append(used_rows, mat.indices_[s], mat.data_[s]);
         }
@@ -439,6 +418,16 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
         std::fprintf(stderr, "Only used %zu/%zu rows, skipping empty rows\n", used_rows, i);
         while(used_rows < mat.n_) ret.finalize(used_rows++);
         ret.resize(nr, ret.columns(), /*preserve_values=*/true);
+    }
+    // Sort after, which is faster than ensuring that every row is sorted at the beginning
+    OMP_PFOR
+    for(size_t i = 0; i < ret.rows(); ++i) {
+        auto r = row(ret, i, blz::unchecked);
+        switch(r.size()) {
+            case 0: case 1: continue;
+            default:
+                shared::sort(r.begin(), r.end(), [](auto &x, auto &y) {return x.index() < y.index();});
+        }
     }
     std::fprintf(stderr, "Parsed matrix of %zu/%zu\n", ret.rows(), ret.columns());
     return ret;
