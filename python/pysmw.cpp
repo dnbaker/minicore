@@ -40,18 +40,25 @@ void init_smw(py::module &m) {
             return py::float_(ret);
         }
         py::array ret;
-        if(usefloat) ret = py::array_t<float>(byrow ? wrap.rows(): wrap.columns());
-                else ret = py::array_t<double>(byrow ? wrap.rows(): wrap.columns());
+        size_t nelem = byrow ? wrap.rows(): wrap.columns();
+        if(usefloat) ret = py::array_t<float>(nelem);
+                else ret = py::array_t<double>(nelem);
         auto bi = ret.request();
         auto ptr = bi.ptr;
+        if(bi.size != nelem) {
+            char buf[256];
+            auto n = std::sprintf(buf, "bi size: %u. nelem: %u\n", int(bi.size), int(nelem));
+            throw std::invalid_argument(std::string(buf, buf + n));
+        }
+        assert(bi.size == nelem);
         if(usefloat) {
-            blaze::CustomVector<float, blz::unaligned, blz::unpadded> cv((float *)ptr, bi.size);
+            blaze::CustomVector<float, blz::unaligned, blz::unpadded> cv((float *)ptr, nelen);
             wrap.perform([&](const auto &x) {
                 if(byrow) cv = blz::sum<blz::rowwise>(x);
                 else      cv = trans(blz::sum<blz::columnwise>(x));
             });
         } else {
-            blaze::CustomVector<double, blz::unaligned, blz::unpadded> cv((double *)ptr, bi.size);
+            blaze::CustomVector<double, blz::unaligned, blz::unpadded> cv((double *)ptr, nelem);
             wrap.perform([&](const auto &x) {
                 if(byrow) cv = blz::sum<blz::rowwise>(x);
                 else      cv = trans(blz::sum<blz::columnwise>(x));
@@ -258,6 +265,6 @@ void init_smw(py::module &m) {
             case 0: return lhs.getdouble() == rhs.getdouble();
             default: ;
         }
-        throw std::invalid_argument("Cannot compare matrices of different values");
+        return false;
     });
 }
