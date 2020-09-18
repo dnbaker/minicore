@@ -70,6 +70,7 @@ struct CSCMatrixView {
                 nonstd::span<IndicesType> ispan(mat_.indices_ + start_, mat_.indices_ + stop_);
                 auto zip = Zip(ispan, dspan);
                 shared::sort(zip.begin(), zip.end());
+                assert(std::is_sorted(ispan.begin(), ispan.end()));
             }
         }
         size_t nnz() const {return stop_ - start_;}
