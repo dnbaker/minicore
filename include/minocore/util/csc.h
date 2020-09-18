@@ -418,10 +418,12 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
         // Otherwise, parse in order directly.
         if(!std::is_sorted(&mat.indices_[col.start_], &mat.indices_[col.stop_])) {
             subvector(idxtmp, 0, cnnz) = subvector(iotatmp, 0, cnnz);
-            shared::sort(idxtmp.begin(), idxtmp.begin() + cnnz,
-                         [&](auto x, auto y) {return mat.indices_[x] < mat.indices_[y];});
+            DBG_ONLY(std::cerr << trans(idxtmp) << '\n';)
             const auto indstart = &mat.indices_[col.start_];
             const auto datastart = &mat.data_[col.start_];
+            shared::sort(idxtmp.begin(), idxtmp.begin() + cnnz,
+                         [&](auto x, auto y) {return indstart[x] < indstart[y];});
+            DBG_ONLY(std::cerr << "sorted: " << trans(idxtmp) << '\n';)
             for(auto i = 0u; i < cnnz; ++i) {
                 const auto ind = idxtmp[i];
                 ret.append(used_rows, indstart[ind], datastart[ind]);
