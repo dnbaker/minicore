@@ -50,7 +50,6 @@ void init_smw(py::module &m) {
             auto n = std::sprintf(buf, "bi size: %u. nelem: %u\n", int(bi.size), int(nelem));
             throw std::invalid_argument(std::string(buf, buf + n));
         }
-        assert(bi.size == nelem);
         if(usefloat) {
             blaze::CustomVector<float, blz::unaligned, blz::unpadded> cv((float *)ptr, nelem);
             wrap.perform([&](const auto &x) {

@@ -123,7 +123,7 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
 }
 
 void init_clustering(py::module &m) {
-    m.def("cluster", [](const SparseMatrixWrapper &smw, int k, double beta,
+    auto func1 = [](const SparseMatrixWrapper &smw, int k, double beta,
                         py::object msr, py::object weights, double eps,
                         int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
     {
@@ -133,6 +133,7 @@ void init_clustering(py::module &m) {
             measure = static_cast<dist::DissimilarityMeasure>(
                 py::cast<Py_ssize_t>(msr));
         } else measure = dist::str2msr(py::cast<std::string>(msr));
+        std::fprintf(stderr, "Beginning pycluster (v1)\n");
         if(weights.is_none()) {
             if(smw.is_float())
                 return pycluster(smw, k, beta, measure, (blz::DV<float> *)nullptr, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
@@ -148,17 +149,21 @@ void init_clustering(py::module &m) {
             return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
         }
         throw std::invalid_argument("Weights were not float, double, or None.");
-    },
+    };
+    m.def("cluster", func1,
     py::arg("smw"), py::arg("k"), py::arg("betaprior") = -1., py::arg("msr") = 5, py::arg("weights") = py::none(),
     py::arg("ntimes") = 2,
     py::arg("eps") = 1e-10, py::arg("seed") = 13,
-    py::arg("lspprounds") = 1, py::arg("kmcrounds") = 1000, py::arg("kmeansmaxiter") = 1000);
+    py::arg("lspprounds") = 1, py::arg("kmcrounds") = 10000, py::arg("kmeansmaxiter") = 1000);
 
     m.def("cluster", [](const SparseMatrixWrapper &smw, py::object centers, double beta,
                         py::object msr, py::object weights, double eps,
-                        uint64_t kmeansmaxiter)
+                        uint64_t kmeansmaxiter, size_t kmcrounds)
     -> py::object
     {
+        if(py::isinstance<py::int_>(centers)) {
+            return func1(smw, centers.cast<int>(), beta, msr, weights, eps, kmeansmaxiter, kmcrounds);
+        }
         if(beta < 0) beta = 1. / smw.columns();
         blz::DV<double> prior{double(beta)};
         dist::DissimilarityMeasure measure;
@@ -166,6 +171,7 @@ void init_clustering(py::module &m) {
             measure = static_cast<dist::DissimilarityMeasure>(
                 py::cast<Py_ssize_t>(msr));
         } else measure = dist::str2msr(py::cast<std::string>(msr));
+        std::fprintf(stderr, "Beginning pycluster (v2)\n");
         std::unique_ptr<std::vector<blz::CompressedVector<double, blz::rowVector>>>dptr;
         std::unique_ptr<std::vector<blz::CompressedVector<float, blz::rowVector>>> fptr;
         const bool isf = smw.is_float();
@@ -198,7 +204,7 @@ void init_clustering(py::module &m) {
                     emp(cv);
                 }
             }
-        }
+        } else throw std::invalid_argument("Centers must be a 2d numpy array or a list of numpy arrays");
         const unsigned k = fptr ? fptr->size(): dptr->size();
         blz::DV<uint32_t> asn(smw.rows());
         const auto psum = beta * smw.columns();
@@ -261,6 +267,7 @@ void init_clustering(py::module &m) {
     py::arg("msr") = 5,
     py::arg("weights") = py::none(),
     py::arg("eps") = 1e-10,
-    py::arg("maxiter") = 1000);
+    py::arg("maxiter") = 1000,
+    py::arg("kmcrounds") = 10000);
 
 } // init_clustering
