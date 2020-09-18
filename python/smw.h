@@ -6,7 +6,7 @@
 struct SparseMatrixWrapper {
 private:
     template<typename IndPtrT, typename IndicesT, typename Data>
-    SparseMatrixWrapper(const IndPtrT *indptr, const IndicesT *indices, const Data *data,
+    SparseMatrixWrapper(IndPtrT *indptr, IndicesT *indices, Data *data,
                   size_t nnz, uint32_t nfeat, uint32_t nitems, bool skip_empty=false, bool use_float=false) {
         if(use_float) {
             matrix_ = csc2sparse<float>(CSCMatrixView<IndPtrT, IndicesT, Data>(indptr, indices, data, nnz, nfeat, nitems), skip_empty);
@@ -72,14 +72,18 @@ public:
 #define __DISPATCH(T1, T2, T3) do { \
         if(use_float) {\
             if(databuf.readonly || indbuf.readonly) {\
+                std::fprintf(stderr, "Read only floats\n"); \
                 matrix_ = csc2sparse<float>(CSCMatrixView<T1, const T2, const T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<const T2 *>(const_cast<const void *>(indicesptr)), reinterpret_cast<const T3 *>(const_cast<const void *>(datptr)), nnz, ydim, xdim), skip_empty); \
             } else { \
+                std::fprintf(stderr, "Const reading of floats\n"); \
                 matrix_ = csc2sparse<float>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<T2 *>(indicesptr), reinterpret_cast<T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
             }\
         } else { \
             if(databuf.readonly || indbuf.readonly) {\
+                std::fprintf(stderr, "Read only reading of doubles\n"); \
                 matrix_ = csc2sparse<double>(CSCMatrixView<T1, const T2, const T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<const T2 *>(const_cast<const void *>(indicesptr)), reinterpret_cast<const T3 *>(const_cast<const void *>(datptr)), nnz, ydim, xdim), skip_empty); \
             } else { \
+                std::fprintf(stderr, "Const reading of doubles\n"); \
                 matrix_ = csc2sparse<double>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<T2 *>(indicesptr), reinterpret_cast<T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
             }\
         }\

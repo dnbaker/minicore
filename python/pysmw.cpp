@@ -7,7 +7,7 @@ using smw_t = SparseMatrixWrapper;
 
 void init_smw(py::module &m) {
     py::class_<SparseMatrixWrapper>(m, "SparseMatrix")
-    .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=false)
+    .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=true, py::arg("use_float")=false)
     .def("is_float", [](SparseMatrixWrapper &wrap) {
         return wrap.is_float();
     })
@@ -27,17 +27,8 @@ void init_smw(py::module &m) {
         return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
     })
     .def("__repr__", [](SparseMatrixWrapper &wrap) {
-#if 1
         char buf[1024];
         return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
-#else
-        std::string ret;
-        wrap.perform([&](auto &x) {
-            std::stringstream ss; ss << x;
-            ret = ss.str();
-        });
-        return ret;
-#endif
     }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();}
     ).def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();})
     .def("sum", [](SparseMatrixWrapper &wrap, int byrow, bool usefloat) -> py::object

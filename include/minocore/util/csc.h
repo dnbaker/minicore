@@ -59,8 +59,8 @@ struct CSCMatrixView {
         size_t start_;
         size_t stop_;
 
-        Column(const CSCMatrixView &mat, size_t start, size_t stop,
-               bool perform_sort=!std::is_const_v<IndicesType> && !std::is_const_v<DataType>): mat_(mat), start_(start), stop_(stop)
+        Column(const CSCMatrixView &mat, size_t start, size_t stop)
+            : mat_(mat), start_(start), stop_(stop)
         {
             sort_if_not_const();
         }
@@ -69,8 +69,10 @@ struct CSCMatrixView {
                 nonstd::span<DataType> dspan(mat_.data_ + start_, mat_.data_ + stop_);
                 nonstd::span<IndicesType> ispan(mat_.indices_ + start_, mat_.indices_ + stop_);
                 auto zip = Zip(ispan, dspan);
+                DBG_ONLY(std::fprintf(stderr, "Sorting since not const\n");)
                 shared::sort(zip.begin(), zip.end());
                 assert(std::is_sorted(ispan.begin(), ispan.end()));
+                DBG_ONLY(std::fprintf(stderr, "Sorted. First two: %u, %u\n", int(ispan[0]), int(ispan[ispan.size() > 1 ? 1u: 0u]));)
             }
         }
         size_t nnz() const {return stop_ - start_;}
@@ -319,7 +321,6 @@ struct COOMatrix {
 #if 0
     void sort(bool rowMajor=true) {
         if(rowMajor) {
-            
         }
     }
 #endif
@@ -421,6 +422,7 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
         // before use. If not, argsort and append in order.
         // Otherwise, parse in order directly.
         if constexpr(either_is_const) {
+            std::fprintf(stderr, "either is const\n");
             if(!std::is_sorted(&mat.indices_[col.start_], &mat.indices_[col.stop_])) {
                 subvector(idxtmp, 0, cnnz) = subvector(iotatmp, 0, cnnz);
                 shared::sort(idxtmp.begin(), idxtmp.begin() + cnnz,
