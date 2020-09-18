@@ -40,7 +40,7 @@ void init_smw(py::module &m) {
             return py::float_(ret);
         }
         py::array ret;
-        size_t nelem = byrow ? wrap.rows(): wrap.columns();
+        Py_ssize_t nelem = byrow ? wrap.rows(): wrap.columns();
         if(usefloat) ret = py::array_t<float>(nelem);
                 else ret = py::array_t<double>(nelem);
         auto bi = ret.request();
