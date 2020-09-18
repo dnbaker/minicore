@@ -62,8 +62,9 @@ struct CSCMatrixView {
         Column(const CSCMatrixView &mat, size_t start, size_t stop)
             : mat_(mat), start_(start), stop_(stop)
         {
-            sort_if_not_const();
+            //sort_if_not_const();
         }
+#if 0
         void sort_if_not_const() {
             if constexpr(!std::is_const_v<IndicesType> && !std::is_const_v<DataType>) {
                 nonstd::span<DataType> dspan(mat_.data_ + start_, mat_.data_ + stop_);
@@ -75,6 +76,7 @@ struct CSCMatrixView {
                 DBG_ONLY(std::fprintf(stderr, "Sorted. First two: %u, %u\n", int(ispan[0]), int(ispan[ispan.size() > 1 ? 1u: 0u]));)
             }
         }
+#endif
         size_t nnz() const {return stop_ - start_;}
         size_t size() const {return mat_.columns();}
         template<bool is_const>
@@ -406,13 +408,9 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
     ret.reserve(mat.nnz_);
     size_t used_rows = 0, i;
     using itype_t = std::remove_const_t<IndicesType>;
-    blz::DV<itype_t> idxtmp, iotatmp;
+    blz::DV<itype_t> idxtmp(mat.columns());
+    const blz::DV<itype_t> iotatmp = blaze::generate(mat.columns(), [](auto x) {return x;});
     static constexpr bool either_is_const = (std::is_const_v<IndicesType> || std::is_const_v<DataType>);
-    if constexpr(either_is_const) {
-        idxtmp.resize(mat.columns());
-        iotatmp.resize(mat.columns());
-        std::iota(iotatmp.begin(), iotatmp.end(), 0u);
-    }
     for(i = 0; i < mat.n_; ++i, ret.finalize(used_rows++)) {
         auto col = mat.column(i);
         if(mat.n_ > 100000 && i % 10000 == 0) std::fprintf(stderr, "%zu/%u\r", i, mat.n_);
@@ -421,20 +419,17 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
         // if data or indices are const, then check if they are sorted
         // before use. If not, argsort and append in order.
         // Otherwise, parse in order directly.
-        if constexpr(either_is_const) {
-            std::fprintf(stderr, "either is const\n");
-            if(!std::is_sorted(&mat.indices_[col.start_], &mat.indices_[col.stop_])) {
-                subvector(idxtmp, 0, cnnz) = subvector(iotatmp, 0, cnnz);
-                shared::sort(idxtmp.begin(), idxtmp.begin() + cnnz,
-                             [&](auto x, auto y) {return mat.indices_[x] < mat.indices_[y];});
-                const auto indstart = &mat.indices_[col.start_];
-                const auto datastart = &mat.data_[col.start_];
-                for(auto i = 0u; i < cnnz; ++i) {
-                    const auto ind = idxtmp[i];
-                    ret.append(used_rows, indstart[ind], datastart[ind]);
-                }
-                continue;
+        if(!std::is_sorted(&mat.indices_[col.start_], &mat.indices_[col.stop_])) {
+            subvector(idxtmp, 0, cnnz) = subvector(iotatmp, 0, cnnz);
+            shared::sort(idxtmp.begin(), idxtmp.begin() + cnnz,
+                         [&](auto x, auto y) {return mat.indices_[x] < mat.indices_[y];});
+            const auto indstart = &mat.indices_[col.start_];
+            const auto datastart = &mat.data_[col.start_];
+            for(auto i = 0u; i < cnnz; ++i) {
+                const auto ind = idxtmp[i];
+                ret.append(used_rows, indstart[ind], datastart[ind]);
             }
+            continue;
         }
         for(auto s = col.start_; s < col.stop_; ++s) {
             ret.append(used_rows, mat.indices_[s], mat.data_[s]);
