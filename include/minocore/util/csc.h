@@ -410,13 +410,13 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
     using itype_t = std::remove_const_t<IndicesType>;
     blz::DV<itype_t> idxtmp(mat.columns());
     const blz::DV<itype_t> iotatmp = blaze::generate(mat.columns(), [](auto x) {return x;});
-    static constexpr bool either_is_const = (std::is_const_v<IndicesType> || std::is_const_v<DataType>);
+    //static constexpr bool either_is_const = (std::is_const_v<IndicesType> || std::is_const_v<DataType>);
     for(i = 0; i < mat.n_; ++i, ret.finalize(used_rows++)) {
         auto col = mat.column(i);
         if(mat.n_ > 100000 && i % 10000 == 0) std::fprintf(stderr, "%zu/%u\r", i, mat.n_);
         const auto cnnz = col.nnz();
         if(skip_empty && 0u == cnnz) continue;
-        // if data or indices are const, then check if they are sorted
+        // check if data and indices are sorted
         // before use. If not, argsort and append in order.
         // Otherwise, parse in order directly.
         if(!std::is_sorted(&mat.indices_[col.start_], &mat.indices_[col.stop_])) {
