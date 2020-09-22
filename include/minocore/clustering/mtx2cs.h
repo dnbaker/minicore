@@ -10,9 +10,6 @@ template<typename FT>
 using CType = blz::DV<FT, blz::rowVector>;
 
 struct SumOpts {
-    size_t kmc2_rounds = 0;
-    // If nonzero, performs KMC2 with m kmc2_rounds as chain length
-    // Otherwise, performs standard D2 sampling
 
     bool load_csr = false, transpose_data = false, load_blaze = false;
     dist::DissimilarityMeasure dis = dist::JSD;
@@ -30,6 +27,9 @@ struct SumOpts {
     bool soft = false;
     bool discrete_metric_search = false; // Search in metric solver before performing EM
     double outlier_fraction = 0.;
+    // If nonzero, performs KMC2 with m kmc2_rounds as chain length
+    // Otherwise, performs standard D2 sampling
+    size_t kmc2_rounds = 0;
     std::shared_ptr<util::TimeStamper> stamper_;
     std::string to_string() const {
         constexpr const char *fmt = "K: %d. Construction method: %d. Seed:%zu. gamma: %g. prior: %d/%s."
@@ -39,30 +39,37 @@ struct SumOpts {
         int nb = std::snprintf(nullptr, 0, fmt, k, (int)sm, size_t(seed), gamma, (int)prior, dist::prior2desc(prior), extra_sample_tries, coreset_samples, eps, (int)dis, dist::detail::prob2str(dis), softstr, dmsstr);
         std::string buf(nb, '\0');
         std::sprintf(buf.data(), fmt, k, (int)sm, size_t(seed), gamma, (int)prior, dist::prior2desc(prior), extra_sample_tries, coreset_samples, eps, (int)dis, dist::detail::prob2str(dis), softstr, dmsstr);
+        std::string ret(buf);
+        if(kmc2_rounds) {
+            ret += "kmc2_rounds: ";
+            ret += std::to_string(kmc2_rounds);
+            ret += ".";
+        }
         return buf;
     }
     SumOpts(SumOpts &&) = default;
     SumOpts(const SumOpts &) = delete;
     SumOpts() {}
     SumOpts(dist::DissimilarityMeasure measure, unsigned k=10, double prior_value=0., coresets::SensitivityMethod sm=coresets::BFL,
-            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false): dis(measure), prior(prior_value == 0. ? dist::NONE: prior_value == 1. ? dist::DIRICHLET: dist::GAMMA_BETA), gamma(prior_value), k(k),
+            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false, size_t kmc2_rounds=0): dis(measure), prior(prior_value == 0. ? dist::NONE: prior_value == 1. ? dist::DIRICHLET: dist::GAMMA_BETA), gamma(prior_value), k(k),
             lloyd_max_rounds(max_rounds),
             sm(sm),
             soft(soft),
-            outlier_fraction(outlier_fraction)
+            outlier_fraction(outlier_fraction),
+            kmc2_rounds(kmc2_rounds)
     {
     }
     SumOpts(int measure, unsigned k=10, double prior_value=0., std::string sm="BFL",
-            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false)
-            : SumOpts((dist::DissimilarityMeasure)measure, k, prior_value, coresets::str2sm(sm), outlier_fraction, max_rounds, soft) {}
+            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false, size_t kmc2_rounds=0)
+            : SumOpts((dist::DissimilarityMeasure)measure, k, prior_value, coresets::str2sm(sm), outlier_fraction, max_rounds, soft, kmc2_rounds) {}
     SumOpts(int measure, unsigned k=10, double prior_value=0., int smi=static_cast<int>(minocore::coresets::BFL),
-            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false)
-        : SumOpts((dist::DissimilarityMeasure)measure, k, prior_value, static_cast<coresets::SensitivityMethod>(smi), outlier_fraction, max_rounds, soft) {}
+            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false, size_t kmc2_rounds=0)
+        : SumOpts((dist::DissimilarityMeasure)measure, k, prior_value, static_cast<coresets::SensitivityMethod>(smi), outlier_fraction, max_rounds, soft, kmc2_rounds) {}
     SumOpts(std::string msr, unsigned k=10, double prior_value=0., int smi=static_cast<int>(minocore::coresets::BFL),
-            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false)
-           : SumOpts(dist::str2msr(msr), k, prior_value, static_cast<coresets::SensitivityMethod>(smi), outlier_fraction, max_rounds, soft) {}
-    SumOpts(std::string msr, unsigned k=10, double prior_value=0., std::string sm="BFL", double outlier_fraction=0., size_t max_rounds=1000, bool soft=false)
-        : SumOpts(dist::str2msr(msr), k, prior_value, coresets::str2sm(sm), outlier_fraction, max_rounds, soft) {}
+            double outlier_fraction=0., size_t max_rounds=1000, bool soft=false, size_t kmc2_rounds=0)
+           : SumOpts(dist::str2msr(msr), k, prior_value, static_cast<coresets::SensitivityMethod>(smi), outlier_fraction, max_rounds, soft, kmc2_rounds) {}
+    SumOpts(std::string msr, unsigned k=10, double prior_value=0., std::string sm="BFL", double outlier_fraction=0., size_t max_rounds=1000, bool soft=false, size_t kmc2_rounds=0)
+        : SumOpts(dist::str2msr(msr), k, prior_value, coresets::str2sm(sm), outlier_fraction, max_rounds, soft, kmc2_rounds) {}
 };
 
 
@@ -78,17 +85,27 @@ struct SumOpts {
  */
 template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm>
 auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
-                         unsigned k, unsigned kmc2rounds, const Norm &norm) {
+                         unsigned k, unsigned kmc2_rounds, const Norm &norm) {
     using FT = blaze::ElementType_t<MT>;
-    const size_t nr = (~matrix).rows();
+    const size_t nr = (*matrix).rows();
     std::vector<uint32_t> indices, asn;
     blz::DV<FT> costs(nr);
-    if(kmc2rounds) {
+    if(kmc2_rounds == -1u) {
+        std::fprintf(stderr, "Performing streaming kmeanspp\n");
+        std::vector<FT> fcosts;
+        std::tie(indices, asn, fcosts) = coresets::reservoir_kmeanspp(matrix, rng, k, norm);
+        //indices = std::move(initcenters);
+        std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
+    } else if(kmc2_rounds > 0) {
         std::fprintf(stderr, "Performing kmc\n");
-        indices = coresets::kmc2(matrix, rng, k, kmc2rounds, norm);
+        indices = coresets::kmc2(matrix, rng, k, kmc2_rounds, norm);
+#ifndef NDEBUG
+        std::fprintf(stderr, "Got indices of size %zu\n", indices.size());
+        for(const auto idx: indices) if(idx > nr) std::fprintf(stderr, "idx %zu > max %zu\n", size_t(idx), nr);
+#endif
         // Return distance from item at reference i to item at j
         auto oracle = [&](size_t i, size_t j) {
-            return norm(row(~matrix, i, blz::unchecked), row(~matrix, j, blz::unchecked));
+            return norm(row(*matrix, i, blz::unchecked), row(*matrix, j, blz::unchecked));
         };
         auto [oasn, ncosts] = coresets::get_oracle_costs(oracle, nr, indices);
         costs = std::move(ncosts);
@@ -106,17 +123,15 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
 
 template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm>
 auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
-                                    unsigned k, unsigned kmc2rounds, unsigned ntimes, const Norm &norm=Norm()) {
+                                    unsigned k, unsigned kmc2_rounds, unsigned ntimes, const Norm &norm=Norm()) {
     using FT = blaze::ElementType_t<MT>;
-#ifdef _OPENMP
-    using res_t = decltype(get_initial_centers(matrix, rng, k, kmc2rounds, norm));
-    res_t best;
-    FT cost_value = std::numeric_limits<FT>::max();
-    OMP_PFOR
-    for(size_t i = 0; i < ntimes; ++i) {
+#if 0
+    auto best = get_initial_centers(matrix, rng, k, kmc2_rounds, norm);
+    FT cost_value = blz::sum(std::get<2>(best));
+    for(size_t i = 1; i < ntimes; ++i) {
         const int tid = omp_get_thread_num();
         RNG rngc(rng() ^ tid);
-        auto res = get_initial_centers(matrix, rngc, k, kmc2rounds, norm);
+        auto res = get_initial_centers(matrix, rngc, k, kmc2_rounds, norm);
         auto ncost = blz::sum(std::get<2>(res));
         if(ncost < cost_value) {
             OMP_CRITICAL {
@@ -129,10 +144,10 @@ auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rn
     }
     auto [idx, asn, costs] = std::move(best);
 #else
-    auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2rounds, norm);
+    auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, norm);
     auto tcost = blz::sum(costs);
     for(;--ntimes;) {
-        auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2rounds, norm);
+        auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, norm);
         auto ncost = blz::sum(_costs);
         if(ncost < tcost) {
             std::fprintf(stderr, "%g->%g: %g\n", tcost, ncost, tcost - ncost);
@@ -155,19 +170,14 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts)
     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
     else if(opts.prior == dist::NONE)
         pcp = nullptr;
-    auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
+    auto app = jsd::make_probdiv_applicator(*sm, opts.dis, opts.prior, pcp);
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), true);
     auto csum = blz::sum(costs);
-    OMP_PFOR
     for(unsigned i = 0; i < opts.extra_sample_tries; ++i) {
         auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), /*multithread=*/false);
         if(auto csum2 = blz::sum(costs2); csum2 < csum) {
-            OMP_CRITICAL
-            {
-                if(csum2 < csum)
-                    std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
-            }
+            std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
         }
     }
     CType<FT> modcosts(costs.size());
@@ -183,9 +193,8 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts)
      else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
      else if(opts.prior == dist::NONE)
          pcp = nullptr;
-     auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
+     auto app = jsd::make_probdiv_applicator(*sm, opts.dis, opts.prior, pcp);
      wy::WyRand<uint64_t, 2> rng(opts.seed);
-     std::vector<uint32_t> centers;
      if(opts.outlier_fraction) {
          return coresets::kcenter_greedy_2approx_outliers_costs(
              app, app.size(), rng, opts.k,

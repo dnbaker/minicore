@@ -10,7 +10,7 @@ namespace py = pybind11;
 
 template<typename VT, bool SO>
 py::object sparse2pysr(const blaze::CompressedVector<VT, SO> &_x) {
-    const auto &x = ~_x;
+    const auto &x = *_x;
     size_t nnz = nonZeros(x);
     py::object ret;
     py::array_t<uint32_t> idx(nnz);
@@ -50,7 +50,6 @@ template<typename T, typename DestT=float>
 auto vec2fnp(const T &x) {
     py::array_t<DestT> ret(x.size());
     auto rbi = ret.request();
-    auto rptr = (DestT *)rbi.ptr;
     std::copy(std::begin(x), std::end(x), (DestT *)rbi.ptr);
     return ret;
 }

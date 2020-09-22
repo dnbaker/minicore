@@ -54,7 +54,7 @@ void fill_graph_distmat(const Graph &x, MatType &mat, const VType *sources=nullp
         assert(ncol == boost::num_vertices(x));
         OMP_PFOR
         for(size_t i = 0; i < nrows; ++i) {
-            auto mr = row(~mat, i BLAZE_CHECK_DEBUG);
+            auto mr = row(*mat, i BLAZE_CHECK_DEBUG);
             auto vtx = all_sources || sources == nullptr ? vertices[i]: (*sources)[i];
             assert(vtx < boost::num_vertices(x));
             boost::dijkstra_shortest_paths(x, vtx, distance_map(&mr[0]));

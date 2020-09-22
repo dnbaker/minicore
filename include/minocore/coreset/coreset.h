@@ -427,12 +427,12 @@ struct CoresetSampler {
                          const CFT *costs, const IT *assignments,
                          uint64_t seed=137)
     {
-        auto cv = blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded>(const_cast<CFT *>(costs), np_);
+        const auto cv = blz::make_cv(const_cast<CFT *>(costs), np_);
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                      : blaze::sum(cv);
         probs_.reset(new FT[np_]);
-        blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> sensitivies(probs_.get(), np_);
+        auto sensitivies = blz::make_cv(probs_.get(), np_);
         std::vector<IT> center_counts(ncenters);
         OMP_PFOR
         for(size_t i = 0; i < np_; ++i) {
@@ -471,9 +471,9 @@ struct CoresetSampler {
         if(bicriteria_centers) {
             if(!fl_bicriteria_points_) fl_bicriteria_points_.reset(new blaze::DynamicVector<IT>(b_));
             else fl_bicriteria_points_->resize(b_);
-            *fl_bicriteria_points_ = blaze::CustomVector<const IT, blaze::unaligned, blaze::unpadded>(bicriteria_centers, b_);
+            *fl_bicriteria_points_ = blz::make_cv(bicriteria_centers, b_);
         }
-        auto cv = blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded>(const_cast<CFT *>(costs), np_);
+        auto cv = blz::make_cv(const_cast<CFT *>(costs), np_);
         auto total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                      : blaze::sum(cv);
@@ -486,7 +486,7 @@ struct CoresetSampler {
                 probs_[i] = getweight(i) * (costs[i]) * total_cost_inv;
             }
         } else {
-            blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> probv(const_cast<FT *>(probs_.get()), np_);
+            auto probv(blz::make_cv(const_cast<FT *>(probs_.get()), np_));
             probv = blaze::ceil(FT(np_) * total_cost_inv * cv) + 1.;
         }
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
@@ -540,7 +540,7 @@ struct CoresetSampler {
         // This is for a bicriteria approximation
         // Use make_sampler_vx for a constant approximation for arbitrary metric spaces,
         // and make_sampler_lbk for bicriteria approximations for \mu-similar divergences.
-        auto cv = blaze::CustomVector<CFT, blaze::unaligned, blaze::unpadded>(const_cast<CFT *>(costs), np_);
+        const auto cv = blz::make_cv(const_cast<CFT *>(costs), np_);
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                     : blaze::sum(cv);
