@@ -165,4 +165,6 @@ public:
     }
 };
 
+dist::DissimilarityMeasure assure_dm(py::object obj);
+
 #endif

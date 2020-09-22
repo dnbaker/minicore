@@ -105,7 +105,6 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
 #endif
         // Return distance from item at reference i to item at j
         auto oracle = [&](size_t i, size_t j) {
-            std::fprintf(stderr, "Computing oracle for %zu/%zu\n", i, j);
             return norm(row(*matrix, i, blz::unchecked), row(*matrix, j, blz::unchecked));
         };
         auto [oasn, ncosts] = coresets::get_oracle_costs(oracle, nr, indices);

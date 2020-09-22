@@ -138,11 +138,7 @@ py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
 {
     if(beta < 0) beta = 1. / smw.columns();
-    dist::DissimilarityMeasure measure;
-    if(py::isinstance<py::int_>(msr)) {
-        measure = static_cast<dist::DissimilarityMeasure>(
-            py::cast<Py_ssize_t>(msr));
-    } else measure = dist::str2msr(py::cast<std::string>(msr));
+    const dist::DissimilarityMeasure measure = assure_dm(msr);
     std::fprintf(stderr, "Beginning pycluster (v1)\n");
     if(weights.is_none()) {
         if(smw.is_float())
@@ -198,11 +194,7 @@ void init_clustering(py::module &m) {
         }
         if(beta < 0) beta = 1. / smw.columns();
         blz::DV<double> prior{double(beta)};
-        dist::DissimilarityMeasure measure;
-        if(py::isinstance<py::int_>(msr)) {
-            measure = static_cast<dist::DissimilarityMeasure>(
-                py::cast<Py_ssize_t>(msr));
-        } else measure = dist::str2msr(py::cast<std::string>(msr));
+        const dist::DissimilarityMeasure measure = assure_dm(msr);
         std::fprintf(stderr, "Beginning pycluster (v2)\n");
         std::unique_ptr<std::vector<blz::CompressedVector<double, blz::rowVector>>>dptr;
         std::unique_ptr<std::vector<blz::CompressedVector<float, blz::rowVector>>> fptr;
