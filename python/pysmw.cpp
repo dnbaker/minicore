@@ -3,10 +3,26 @@
 #include <sstream>
 #include <map>
 
+using smw_t = SparseMatrixWrapper;
+
+dist::DissimilarityMeasure assure_dm(py::object obj) {
+    dist::DissimilarityMeasure ret;
+    if(py::isinstance<py::str>(obj)) {
+        auto s = py::cast<std::string>(obj);
+        ret = dist::str2msr(s);
+    } else if(py::isinstance<py::int_>(obj)) {
+        ret = static_cast<dist::DissimilarityMeasure>(obj.cast<Py_ssize_t>());
+    } else {
+        throw std::invalid_argument("assure_dm received object containing neither a string or an integer.");
+    }
+    if(!dist::is_valid_measure(ret)) throw std::invalid_argument(std::to_string(ret) + " is not a valid measure");
+    return ret;
+}
 
 void init_smw(py::module &m) {
     py::class_<SparseMatrixWrapper>(m, "SparseMatrixWrapper")
-    .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=false)
+    .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=true)
+    .def(py::init<std::string, bool>(), py::arg("path"), py::arg("use_float") = true)
     .def("is_float", [](SparseMatrixWrapper &wrap) {
         return wrap.is_float();
     })
@@ -26,12 +42,85 @@ void init_smw(py::module &m) {
         return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
     })
     .def("__repr__", [](SparseMatrixWrapper &wrap) {
-        wrap.perform([&](auto &x) {
-            std::stringstream ss; ss << x;
-            return ss.str();
-        });
-    }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();}
-    ).def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();});
+        char buf[1024];
+        return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
+    }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();})
+    .def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();})
+    .def("nonzeros", [](SparseMatrixWrapper &wrap) {return wrap.nnz();})
+    .def("rowsel", [](SparseMatrixWrapper &smw, py::array idx) {
+        auto info = idx.request();
+        switch(info.format[0]) {
+            case 'd': case 'f': throw std::invalid_argument("Unexpected type");
+        }
+        py::object ret;
+        if(smw.is_float()) {
+            py::array_t<float> arr(std::vector<size_t>{size_t(info.size), smw.columns()});
+            auto ari = arr.request();
+            auto mat = blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> ((float *)ari.ptr, info.size, smw.columns());
+            switch(info.itemsize) {
+                case 8: {
+                    mat = rows(smw.getfloat(), (uint64_t *)info.ptr, info.size); break;
+                }
+                case 4: {
+                    mat = rows(smw.getfloat(), (uint32_t *)info.ptr, info.size); break;
+                }
+                default: throw std::invalid_argument("rows must be integral and of 4 or 8 bytes");
+            }
+            ret = arr;
+        } else {
+            py::array_t<double> arr(std::vector<size_t>{size_t(info.size), smw.columns()});
+            auto ari = arr.request();
+            auto mat = blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded>((double *)ari.ptr, info.size, smw.columns());
+            switch(info.itemsize) {
+                case 8: {
+                    mat = rows(smw.getfloat(), (uint64_t *)info.ptr, info.size); break;
+                }
+                case 4: {
+                    mat = rows(smw.getfloat(), (uint32_t *)info.ptr, info.size); break;
+                }
+                default: throw std::invalid_argument("rows must be integral and of 4 or 8 bytes");
+            }
+            ret = arr;
+        }
+        return ret;
+    }, "Select rows in numpy array idx from matrix smw, returning as dense numpy arrays", py::arg("idx"))
+    .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
+        lhs.tofile(path);
+    }, py::arg("path"))
+    .def("sum", [](SparseMatrixWrapper &wrap, int byrow, bool usefloat) -> py::object
+    {
+        switch(byrow) {case -1: case 0: case 1: break; default: throw std::invalid_argument("byrow must be -1 (total sum), 0 (by column) or by row (1)");}
+        if(byrow == -1) {
+            double ret;
+            wrap.perform([&ret](const auto &x) {ret = blaze::sum(x);});
+            return py::float_(ret);
+        }
+        py::array ret;
+        Py_ssize_t nelem = byrow ? wrap.rows(): wrap.columns();
+        if(usefloat) ret = py::array_t<float>(nelem);
+                else ret = py::array_t<double>(nelem);
+        auto bi = ret.request();
+        auto ptr = bi.ptr;
+        if(bi.size != nelem) {
+            char buf[256];
+            auto n = std::sprintf(buf, "bi size: %u. nelem: %u\n", int(bi.size), int(nelem));
+            throw std::invalid_argument(std::string(buf, buf + n));
+        }
+        if(usefloat) {
+            blaze::CustomVector<float, blz::unaligned, blz::unpadded> cv((float *)ptr, nelem);
+            wrap.perform([&](const auto &x) {
+                if(byrow) cv = blz::sum<blz::rowwise>(x);
+                else      cv = trans(blz::sum<blz::columnwise>(x));
+            });
+        } else {
+            blaze::CustomVector<double, blz::unaligned, blz::unpadded> cv((double *)ptr, nelem);
+            wrap.perform([&](const auto &x) {
+                if(byrow) cv = blz::sum<blz::rowwise>(x);
+                else      cv = trans(blz::sum<blz::columnwise>(x));
+            });
+        }
+        return ret;
+    }, py::arg("kind")=-1, py::arg("usefloat")=true);
 
 
     // Utilities
@@ -62,13 +151,13 @@ void init_smw(py::module &m) {
     // SumOpts
     // Used for providing a pythonic interface for summary options
     py::class_<SumOpts>(m, "SumOpts")
-    .def(py::init<std::string, Py_ssize_t, double, std::string, double, Py_ssize_t, bool>(), py::arg("measure"), py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+    .def(py::init<std::string, Py_ssize_t, double, std::string, double, Py_ssize_t, bool, size_t>(), py::arg("measure"), py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and a string key for the coreest construction format.")
-    .def(py::init<int, Py_ssize_t, double, std::string, double, Py_ssize_t, bool>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+    .def(py::init<int, Py_ssize_t, double, std::string, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and a string key for the coreest construction format.")
-    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and an integer key for the coreest construction format.")
-    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and an integer key for the coreest construction format.")
     .def("__str__", &SumOpts::to_string)
     .def("__repr__", [](const SumOpts &x) {
@@ -78,6 +167,7 @@ void init_smw(py::module &m) {
         ret += std::string(". Address: ") + buf;
         return ret;
     })
+    .def_readwrite("kmc2n", &SumOpts::kmc2_rounds)
     .def_readwrite("gamma", &SumOpts::gamma).def_readwrite("k", &SumOpts::k)
     .def_readwrite("search_max_rounds", &SumOpts::lloyd_max_rounds).def_readwrite("extra_sample_rounds", &SumOpts::extra_sample_tries)
     .def_readwrite("soft", &SumOpts::soft)
@@ -131,6 +221,36 @@ void init_smw(py::module &m) {
             obj.prior = (dist::Prior)x;
         }
     });
+    m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
+        const auto mmsr = assure_dm(msr);
+        std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
+        auto ki = k.cast<Py_ssize_t>();
+        wy::WyRand<uint64_t> rng(seed);
+        const auto psum = gamma_beta * smw.columns();
+        const blz::StaticVector<double, 1> prior({gamma_beta});
+        auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
+            // Note that this has been transposed
+            return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
+        };
+        py::array_t<uint32_t> ret(ki), retasn(smw.rows());
+        auto reti = ret.request(), retai = retasn.request();
+        auto rptr = (uint32_t *)reti.ptr, raptr = (uint32_t *)retai.ptr;
+        py::array_t<float> costs(smw.rows());
+        auto costsi = costs.request();
+        auto costp = (float *)costsi.ptr;
+        smw.perform([&](auto &x) {
+            auto sol = repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp);
+            auto &[lidx, lasn, lcosts] = sol;
+            assert(lidx.size() == ki);
+            assert(lasn.size() == smw.rows());
+            std::copy(lasn.begin(), lasn.end(), raptr);
+            std::copy(lidx.begin(), lidx.end(), rptr);
+            std::copy(lcosts.begin(), lcosts.end(), costp);
+        });
+        return py::make_tuple(ret, retasn, costs);
+    }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
+       "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
+       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("beta") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1);
     m.def("d2_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
@@ -197,24 +317,9 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("smw"), py::arg("sumopts"));
-    m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
-        std::vector<uint32_t> centers;
-        std::vector<double> dret;
-        std::vector<float> fret;
-        if(smw.is_float()) {
-            std::tie(centers, fret) = minocore::m2greedysel(smw.getfloat(), so);
-        } else {
-            std::tie(centers, dret) = minocore::m2greedysel(smw.getdouble(), so);
-        }
-        py::array_t<uint32_t> ret(centers.size());
-        py::array_t<double> costs(smw.rows());
-        auto rpi = ret.request(), cpi = costs.request();
-        std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
-        if(fret.size()) std::copy(fret.begin(), fret.end(), (double *)cpi.ptr);
-        else            std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
-        return py::make_tuple(ret, costs);
-    }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
-       py::arg("smw"), py::arg("sumopts"));
+
+
+
     m.def("greedy_select",  [](py::array arr, const SumOpts &so) {
         std::vector<uint32_t> centers;
         std::vector<double> dret;
@@ -243,4 +348,5 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("data"), py::arg("sumopts"));
-}
+
+} // init_smw

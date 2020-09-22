@@ -1,13 +1,22 @@
 #ifndef SMW_H
 #define SMW_H
 #include "pyfgc.h"
+#include "blaze/util/Serialization.h"
 
 
 struct SparseMatrixWrapper {
+    SparseMatrixWrapper(std::string path, bool use_float=true) {
+        blaze::Archive<std::ifstream> arch(path);
+        perform([&arch](auto &x) {arch >> x;});
+    }
+    void tofile(std::string path) {
+        blaze::Archive<std::ofstream> arch(path);
+        perform([&arch](auto &x) {arch << x;});
+    }
 private:
     template<typename IndPtrT, typename IndicesT, typename Data>
-    SparseMatrixWrapper(const IndPtrT *indptr, const IndicesT *indices, const Data *data,
-                  size_t nnz, uint32_t nfeat, uint32_t nitems, bool skip_empty=false, bool use_float=false) {
+    SparseMatrixWrapper(IndPtrT *indptr, IndicesT *indices, Data *data,
+                  size_t nnz, uint32_t nfeat, uint32_t nitems, bool skip_empty=false, bool use_float=true) {
         if(use_float) {
             matrix_ = csc2sparse<float>(CSCMatrixView<IndPtrT, IndicesT, Data>(indptr, indices, data, nnz, nfeat, nitems), skip_empty);
             auto &m(getfloat());
@@ -53,21 +62,40 @@ public:
         perform([&](auto &x) {ret = x.rows();});
         return ret;
     }
-    SparseMatrixWrapper(py::object spmat, py::object use_float_py, py::object skip_empty_py) {
+    template<typename IpT, typename IdxT, typename DataT>
+    SparseMatrixWrapper(IpT *indptr, IdxT *idx, DataT *data, size_t xdim, size_t ydim, size_t nnz, bool use_float=true, bool skip_empty=true) {
+        if(use_float)
+            matrix_ = csc2sparse<float>(CSCMatrixView<IpT, IdxT, DataT>(indptr, idx, data, nnz, ydim, xdim));
+        else
+            matrix_ = csc2sparse<double>(CSCMatrixView<IpT, IdxT, DataT>(indptr, idx, data, nnz, ydim, xdim));
+    }
+    SparseMatrixWrapper(py::object spmat, py::object skip_empty_py, py::object use_float_py) {
         py::array indices = spmat.attr("indices"), indptr = spmat.attr("indptr"), data = spmat.attr("data");
         py::tuple shape = py::cast<py::tuple>(spmat.attr("shape"));
         const bool use_float = py::cast<bool>(use_float_py), skip_empty = py::cast<bool>(skip_empty_py);
         size_t xdim = py::cast<size_t>(shape[0]), ydim = py::cast<size_t>(shape[1]);
         size_t nnz = py::cast<size_t>(spmat.attr("nnz"));
         auto indbuf = indices.request(), indpbuf = indptr.request(), databuf = data.request();
-        const void *datptr = databuf.ptr, *indptrptr = indpbuf.ptr, *indicesptr = indbuf.ptr;
+        void *datptr = databuf.ptr, *indptrptr = indpbuf.ptr, *indicesptr = indbuf.ptr;
 
 #define __DISPATCH(T1, T2, T3) do { \
-        std::fprintf(stderr, "Dispatching!\n"); \
-        if(use_float) \
-            matrix_ = csc2sparse<float>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<const T1 *>(indptrptr), reinterpret_cast<const T2 *>(indicesptr), reinterpret_cast<const T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
-        else \
-            matrix_ = csc2sparse<double>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<const T1 *>(indptrptr), reinterpret_cast<const T2 *>(indicesptr), reinterpret_cast<const T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
+        if(use_float) {\
+            if(databuf.readonly || indbuf.readonly) {\
+                std::fprintf(stderr, "Read only floats\n"); \
+                matrix_ = csc2sparse<float>(CSCMatrixView<T1, const T2, const T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<const T2 *>(const_cast<const void *>(indicesptr)), reinterpret_cast<const T3 *>(const_cast<const void *>(datptr)), nnz, ydim, xdim), skip_empty); \
+            } else { \
+                std::fprintf(stderr, "Const reading of floats\n"); \
+                matrix_ = csc2sparse<float>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<T2 *>(indicesptr), reinterpret_cast<T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
+            }\
+        } else { \
+            if(databuf.readonly || indbuf.readonly) {\
+                std::fprintf(stderr, "Read only reading of doubles\n"); \
+                matrix_ = csc2sparse<double>(CSCMatrixView<T1, const T2, const T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<const T2 *>(const_cast<const void *>(indicesptr)), reinterpret_cast<const T3 *>(const_cast<const void *>(datptr)), nnz, ydim, xdim), skip_empty); \
+            } else { \
+                std::fprintf(stderr, "Const reading of doubles\n"); \
+                matrix_ = csc2sparse<double>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<T2 *>(indicesptr), reinterpret_cast<T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
+            }\
+        }\
         return; \
     } while(0)
 #define __DISPATCH_IF(T1, T2, T3) do { \
@@ -122,10 +150,21 @@ public:
         if(is_float()) func(std::get<SMF>(matrix_));
         else           func(std::get<SMD>(matrix_));
     }
+    std::vector<std::pair<uint32_t, double>> row2tups(size_t r) const {
+        if(r > rows()) throw std::invalid_argument("Cannot get tuples from a row that dne");
+        std::vector<std::pair<uint32_t, double>> ret;
+        perform([&ret,r](const auto &x) {
+            for(const auto &pair: row(x, r))
+                ret.emplace_back(pair.index(), pair.value());
+        });
+        return ret;
+    }
     std::pair<void *, bool> get_opaque() {
         return {is_float() ? static_cast<void *>(&std::get<SMF>(matrix_)): static_cast<void *>(&std::get<SMD>(matrix_)),
                 is_float()};
     }
 };
+
+dist::DissimilarityMeasure assure_dm(py::object obj);
 
 #endif

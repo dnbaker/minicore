@@ -72,21 +72,21 @@ BLAZE_ALWAYS_INLINE const SIMDfloat neginf2zero( const SIMDf32<T>& a ) noexcept
 {
    const auto v = _mm512_set1_ps(-std::numeric_limits<float>::infinity());
    const auto z = _mm512_set1_ps(float(0.));
-   auto value = (~a).eval().value;
+   auto value = (*a).eval().value;
    return _mm512_mask_blend_ps(_mm512_cmpeq_ps_mask(value, v), value, z);
 }
 #elif BLAZE_AVX_MODE
 {
    const auto v = _mm256_set1_ps(-std::numeric_limits<float>::infinity());
    const auto z = _mm256_set1_ps(float(0.));
-   auto value = (~a).eval().value;
+   auto value = (*a).eval().value;
    return _mm256_blendv_ps(value, z, _mm256_cmp_ps(value, v, _CMP_EQ_OQ));
 }
 #elif BLAZE_SSE_MODE
 {
    const auto v = _mm_set1_ps(-std::numeric_limits<float>::infinity());
    const auto z = _mm_set1_ps(float(0.));
-   auto value = (~a).eval().value;
+   auto value = (*a).eval().value;
    return _mm_blendv_ps(value, z, _mm_cmpeq_ps(value, v));
 }
 #else
@@ -118,21 +118,21 @@ BLAZE_ALWAYS_INLINE const SIMDdouble neginf2zero( const SIMDf64<T>& a ) noexcept
 {
    const auto v = _mm512_set1_pd(-std::numeric_limits<double>::infinity());
    const auto z = _mm512_set1_pd(0.);
-   auto value = (~a).eval().value;
+   auto value = (*a).eval().value;
    return _mm512_mask_blend_pd(_mm512_cmpeq_pd_mask(value, v), value, z);
 }
 #elif BLAZE_AVX_MODE
 {
    const auto v = _mm256_set1_pd(-std::numeric_limits<double>::infinity());
    const auto z = _mm256_set1_pd(0.);
-   auto value = (~a).eval().value;
+   auto value = (*a).eval().value;
    return _mm256_blendv_pd(value, z, _mm256_cmp_pd(value, v, _CMP_EQ_OQ));
 }
 #elif BLAZE_SSE_MODE
 {
    const auto v = _mm_set1_pd(-std::numeric_limits<double>::infinity());
    const auto z = _mm_set1_pd(0.);
-   auto value = (~a).eval().value;
+   auto value = (*a).eval().value;
    return _mm_blendv_pd(value, z, _mm_cmpeq_pd(value, v));
 }
 #else
@@ -229,7 +229,7 @@ inline decltype(auto) neginf2zero( const DenseVector<VT,TF>& dv )
 {
    BLAZE_FUNCTION_TRACE;
 
-   return map( ~dv, NegInf2Zero() );
+   return map( *dv, NegInf2Zero() );
 }
 
 template< typename VT  // Type of the sparse vector
@@ -238,7 +238,7 @@ inline decltype(auto) neginf2zero( const SparseVector<VT,TF>& sv )
 {
    BLAZE_FUNCTION_TRACE;
 
-   return ~sv;
+   return *sv;
 }
 
 template< typename MT  // Type of the sparse matrix
@@ -247,7 +247,7 @@ inline decltype(auto) neginf2zero( const SparseMatrix<MT,TF>& sm )
 {
    BLAZE_FUNCTION_TRACE;
 
-   return ~sm;
+   return *sm;
 }
 
 template< typename MT  // Type of the sparse matrix
@@ -256,7 +256,7 @@ inline decltype(auto) neginf2zero( const DenseMatrix<MT,TF>& dm )
 {
    BLAZE_FUNCTION_TRACE;
 
-   return map( ~dm, NegInf2Zero() );
+   return map( *dm, NegInf2Zero() );
 }
 
 

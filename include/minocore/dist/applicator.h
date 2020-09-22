@@ -113,7 +113,7 @@ public:
             if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
                 m = blaze::sqrt(m);
             } else if constexpr(dm::is_distance_matrix_v<MatType>) {
-                blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> cv(const_cast<FT *>(m.data()), m.size());
+                auto cv = blz::make_cv(const_cast<FT *>(m.data()), m.size());
                 cv = blaze::sqrt(cv);
             } else {
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
@@ -122,7 +122,7 @@ public:
             if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
                 m = blaze::acos(m) * PI_INV;
             } else if constexpr(dm::is_distance_matrix_v<MatType>) {
-                blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> cv(const_cast<FT *>(m.data()), m.size());
+                auto cv = blz::make_cv(const_cast<FT *>(m.data()), m.size());
                 cv = blaze::acos(cv) * PI_INV;
             } else {
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::acos(x) * PI_INV;});
@@ -1344,7 +1344,6 @@ private:
             if(prior_data_->size() == 1) prior_sum_ = data_.columns() * prior_data_->operator[](0);
             else                         prior_sum_ = std::accumulate(prior_data_->begin(), prior_data_->end(), 0.);
         }
-        std::fprintf(stderr, "Set up prior data\n");
         row_sums_.resize(data_.rows());
         {
             for(size_t i = 0; i < data_.rows(); ++i) {
@@ -1771,7 +1770,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         const FT shl = std::log((lhinc + rhinc) * FT(.5)), shincl = (lhinc + rhinc) * shl;
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
-        assert(std::abs(blz::sum(wr)) < 1. || !std::fprintf(stderr, "sum(row) - 1 = %0.20g, which should be 0.\n", blz::sum(wr) - 1.));
         // TODO: consider batching logs from sparse vectors with some extra dispatching code
         // For better vectorization
         auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
@@ -1788,8 +1786,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case L2: ret = l2Dist(mr, ctr); break;
             case SQRL2: ret = sqrDist(mr, ctr); break;
             case TVD: ret = l1Dist(mr / (lhsum - prior_sum), ctr / (rhsum - prior_sum)); break;
-            case JSM:
-            case JSD: {
+            case JSM: case JSD: {
                 ret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
                         auto xv = xval + lhinc, yv = yval + rhinc;
@@ -1845,7 +1842,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     ret = std::sqrt(ret);
             }
             break;
-            case ITAKURA_SAITO: {
+            case ITAKURA_SAITO:
+            {
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
                         return __isc((xval + lhinc) / (yval + rhinc));
@@ -1865,7 +1863,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     __isc(lhsum * rhrsi));
             break;
             case POISSON:
-            case MKL: {
+            case MKL:
+            {
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
@@ -1874,7 +1873,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             }
             break;
             case REVERSE_POISSON:
-            case REVERSE_MKL: {
+            case REVERSE_MKL:
+            {
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (yval + rhinc) * (std::log((yval + rhinc) / (xval + lhinc)));},
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return rhinc * (rhl - std::log(xval + lhinc));},
@@ -1934,7 +1934,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                             get_inc_rsis(lhinc, rhinc)
                         )
                     , FT(0));
-                    break;
+                break;
             default: throw TODOError("unexpected msr; not yet supported");
         }
         return ret;

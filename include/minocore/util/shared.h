@@ -60,7 +60,9 @@ struct Deleter {
 };
 
 template<typename It, typename Cmp=std::less<>,
-         typename=std::enable_if_t<!std::is_integral_v<std::decay_t<decltype(*std::declval<It>())>>>>
+         typename=std::enable_if_t<!std::is_integral_v<std::decay_t<decltype(*std::declval<It>())>>
+                                   || !std::is_same_v<Cmp, std::less<>>>
+        >
 INLINE void sort(It beg, It end, Cmp cmp=Cmp()) {
     pdqsort(beg, end, cmp);
 }

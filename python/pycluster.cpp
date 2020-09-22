@@ -6,7 +6,7 @@ using blaze::unpadded;
 
 
 template<typename FT, typename WFT>
-py::dict cpp_pycluster(const blz::SM<FT> &mat, int k, double beta,
+py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
                dist::DissimilarityMeasure measure,
                WFT *weights=static_cast<WFT *>(nullptr),
                double eps=1e-10,
@@ -43,6 +43,7 @@ py::dict cpp_pycluster_from_centers(const blz::SM<FT> &mat, unsigned int k, doub
                double eps,
                size_t kmeansmaxiter)
 {
+    std::fprintf(stderr, "[%s]\n", __PRETTY_FUNCTION__);
     blz::DV<FT> prior{FT(beta)};
     auto [initcost, finalcost, numiter] = perform_hard_clustering(mat, measure, prior, ctrs, asn, costs, weights, eps, kmeansmaxiter);
     auto pyctrs = centers2pylist(ctrs);
@@ -80,6 +81,7 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
                size_t kmcrounds,
                size_t kmeansmaxiter)
 {
+    std::fprintf(stderr, "[%s] beginning cpp_pycluster\n", __PRETTY_FUNCTION__);
     blz::DV<FT> prior{FT(beta)};
     const FT psum = beta * mat.columns();
     auto cmp = [measure, psum,&prior](const auto &x, const auto &y) {
@@ -90,7 +92,9 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
         std::fprintf(stderr, "D2 sampling may not provide a bicriteria approximation alone. TODO: use more expensive metric clustering for better objective functions.\n");
     }
     wy::WyRand<uint32_t> rng(seed);
+    std::fprintf(stderr, "About to try to get initial centers\n");
     auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, kmcrounds, ntimes, cmp);
+    std::fprintf(stderr, "Got initial centers\n");
     auto &[idx, asn, costs] = initial_sol;
     std::vector<blz::CompressedVector<FT, blz::rowVector>> centers(k);
     for(unsigned i = 0; i < k; ++i)
@@ -104,68 +108,100 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
     switch(bi.format.front()) {
         case 'f':
         for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            blaze::CustomVector<float, unaligned, unpadded> cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            auto cv = blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
             v.emplace_back(trans(cv));
         }
         break;
+        case 'i': {
+        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
+            auto cv = blz::make_cv((int *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            v.emplace_back(trans(cv));
+        }
+        }
+        case 'u': {
+        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
+            auto cv = blz::make_cv((unsigned *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            v.emplace_back(trans(cv));
+        }
+        }
         case 'd':
         for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            blaze::CustomVector<double, unaligned, unpadded> cv((double *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            auto cv = blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
             v.emplace_back(trans(cv));
         }
         break;
         default: throw std::invalid_argument(std::string("Invalid format string: ") + bi.format);
     }
 }
+py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
+                 py::object msr, py::object weights, double eps,
+                 int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
+{
+    if(beta < 0) beta = 1. / smw.columns();
+    const dist::DissimilarityMeasure measure = assure_dm(msr);
+    std::fprintf(stderr, "Beginning pycluster (v1)\n");
+    if(weights.is_none()) {
+        if(smw.is_float())
+            return pycluster(smw, k, beta, measure, (blz::DV<float> *)nullptr, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+        else
+            return pycluster(smw, k, beta, measure, (blz::DV<double> *)nullptr, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+    auto weightinfo = py::cast<py::array>(weights).request();
+    switch(weightinfo.format.front()) {
+    case 'b': case 'B': {
+        auto cv = blz::make_cv((uint8_t *)weightinfo.ptr, smw.rows());
+        return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+    case 'h': case 'H': {
+        auto cv = blz::make_cv((uint16_t *)weightinfo.ptr, smw.rows());
+        return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+    case 'u': {
+        auto cv = blz::make_cv((unsigned *)weightinfo.ptr, smw.rows());
+        return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+    case 'i': {
+        auto cv = blz::make_cv((int *)weightinfo.ptr, smw.rows());
+        return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+    case 'f': {
+        auto cv = blz::make_cv((float *)weightinfo.ptr, smw.rows());
+        return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+    case 'd': {
+        auto cv = blz::make_cv((double *)weightinfo.ptr, smw.rows());
+        return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+        default: throw std::invalid_argument(std::string("Unspported weight type: ") + weightinfo.format);
+    }
+    throw std::invalid_argument("Weights were not float, double, or None.");
+}
 
 void init_clustering(py::module &m) {
-    m.def("cluster", [](const SparseMatrixWrapper &smw, int k, double beta,
-                        py::object msr, py::object weights, double eps,
-                        int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
-    {
-        if(beta < 0) beta = 1. / smw.columns();
-        dist::DissimilarityMeasure measure;
-        if(py::isinstance<py::int_>(msr)) {
-            measure = static_cast<dist::DissimilarityMeasure>(
-                py::cast<Py_ssize_t>(msr));
-        } else measure = dist::str2msr(py::cast<std::string>(msr));
-        if(weights.is_none()) {
-            if(smw.is_float())
-                return pycluster(smw, k, beta, measure, (blz::DV<float> *)nullptr, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
-            else
-                return pycluster(smw, k, beta, measure, (blz::DV<double> *)nullptr, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
-        }
-        auto weightinfo = py::cast<py::array>(weights).request();
-        if(weightinfo.itemsize == 4)  {
-            blz::CustomVector<float, unaligned, unpadded> cv((float *)weightinfo.ptr, smw.rows());
-            return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
-        } else if(weightinfo.itemsize == 8) {
-            blz::CustomVector<double, unaligned, unpadded> cv((double *)weightinfo.ptr, smw.rows());
-            return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
-        }
-        throw std::invalid_argument("Weights were not float, double, or None.");
-    },
-    py::arg("smw"), py::arg("k"), py::arg("betaprior") = -1., py::arg("msr") = 5, py::arg("weights") = py::none(),
+    m.def("cluster", func1,
+    py::arg("smw"), py::arg("k")=py::int_(10), py::arg("betaprior") = -1., py::arg("msr") = 5, py::arg("weights") = py::none(),
     py::arg("ntimes") = 2,
     py::arg("eps") = 1e-10, py::arg("seed") = 13,
-    py::arg("lspprounds") = 1, py::arg("kmcrounds") = 1000, py::arg("kmeansmaxiter") = 1000);
+    py::arg("lspprounds") = 1, py::arg("kmcrounds") = 10000, py::arg("kmeansmaxiter") = 1000);
 
-    m.def("cluster", [](const SparseMatrixWrapper &smw, py::object centers, double beta,
+    m.def("cluster_from_centers", [](SparseMatrixWrapper &smw, py::object centers, double beta,
                         py::object msr, py::object weights, double eps,
-                        uint64_t kmeansmaxiter)
+                        uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed)
     -> py::object
     {
+        if(py::isinstance<py::int_>(centers)) {
+            return func1(smw, centers.cast<int>(), beta, msr, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+        }
         if(beta < 0) beta = 1. / smw.columns();
         blz::DV<double> prior{double(beta)};
-        dist::DissimilarityMeasure measure;
-        if(py::isinstance<py::int_>(msr)) {
-            measure = static_cast<dist::DissimilarityMeasure>(
-                py::cast<Py_ssize_t>(msr));
-        } else measure = dist::str2msr(py::cast<std::string>(msr));
+        const dist::DissimilarityMeasure measure = assure_dm(msr);
+        std::fprintf(stderr, "Beginning pycluster (v2)\n");
         std::unique_ptr<std::vector<blz::CompressedVector<double, blz::rowVector>>>dptr;
         std::unique_ptr<std::vector<blz::CompressedVector<float, blz::rowVector>>> fptr;
-        if(smw.is_float()) fptr.reset(new std::vector<blz::CompressedVector<float, blz::rowVector>>);
-        else               dptr.reset(new std::vector<blz::CompressedVector<double, blz::rowVector>>);
+        const bool isf = smw.is_float();
+        if(isf) fptr.reset(new std::vector<blz::CompressedVector<float, blz::rowVector>>);
+        else    dptr.reset(new std::vector<blz::CompressedVector<double, blz::rowVector>>);
+        std::fprintf(stderr, "Created %cptr\n", isf ? 'f': 'd');
         if(py::isinstance<py::array>(centers)) {
             auto cbuf = py::cast<py::array>(centers).request();
             if(dptr) set_centers(dptr.get(), cbuf);
@@ -185,14 +221,14 @@ void init_clustering(py::module &m) {
                     }
                 };
                 if(fmt == 'd') {
-                    auto cv = blaze::CustomVector<double, unaligned, unpadded>((double *)bi.ptr, bi.size);
+                    auto cv = blz::make_cv((double *)bi.ptr, bi.size);
                     emp(cv);
                 } else {
-                    auto cv = blaze::CustomVector<float, unaligned, unpadded>((float *)bi.ptr, bi.size);
+                    auto cv = blz::make_cv((float *)bi.ptr, bi.size);
                     emp(cv);
                 }
             }
-        }
+        } else throw std::invalid_argument("Centers must be a 2d numpy array or a list of numpy arrays");
         const unsigned k = fptr ? fptr->size(): dptr->size();
         blz::DV<uint32_t> asn(smw.rows());
         const auto psum = beta * smw.columns();
@@ -233,18 +269,23 @@ void init_clustering(py::module &m) {
             return bestcost;
         });
         if(weights.is_none()) {
-            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, (blz::DV<float> *)nullptr, eps, kmeansmaxiter); 
-            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter); 
+            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, (blz::DV<float> *)nullptr, eps, kmeansmaxiter);
+            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter);
         }
         auto weightinfo = py::cast<py::array>(weights).request();
-        if(weightinfo.itemsize == 4)  {
-            blz::CustomVector<float, unaligned, unpadded> cv((float *)weightinfo.ptr, smw.rows());
-            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, &cv, eps, kmeansmaxiter);
-            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, &cv, eps, kmeansmaxiter);
-        } else if(weightinfo.itemsize == 8) {
-            blz::CustomVector<double, unaligned, unpadded> cv((double *)weightinfo.ptr, smw.rows());
-            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, &cv, eps, kmeansmaxiter);
-            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, &cv, eps, kmeansmaxiter);
+        if(weightinfo.format.size() != 1) throw std::invalid_argument("Weights must be 0 or contain a fundamental type");
+        switch(weightinfo.format[0]) {
+#define CASE_MCR(x, type) case x: {\
+    auto cv = blz::make_cv((type *)weightinfo.ptr, smw.rows()); \
+            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, &cv, eps, kmeansmaxiter); \
+            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, &cv, eps, kmeansmaxiter); \
+            } break
+            CASE_MCR('u', unsigned);
+            CASE_MCR('f', float);
+            CASE_MCR('d', double);
+            CASE_MCR('i', unsigned int);
+            default: throw std::invalid_argument(std::string("Invalid weights value type: ") + weightinfo.format);
+#undef CASE_MCR
         }
         throw std::invalid_argument("Weights were not float, double, or None.");
         return py::none();
@@ -255,6 +296,10 @@ void init_clustering(py::module &m) {
     py::arg("msr") = 5,
     py::arg("weights") = py::none(),
     py::arg("eps") = 1e-10,
-    py::arg("maxiter") = 1000);
-
+    py::arg("maxiter") = 1000,
+    py::arg("kmcrounds") = 10000,
+    py::arg("ntimes") = 1,
+    py::arg("lspprounds") = 1,
+    py::arg("seed") = 0
+    );
 } // init_clustering

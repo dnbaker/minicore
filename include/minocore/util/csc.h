@@ -33,15 +33,15 @@ struct ConstSView: public std::pair<const DataType*, size_t> {
 template<typename IndPtrType=uint64_t, typename IndicesType=uint64_t, typename DataType=uint32_t>
 struct CSCMatrixView {
     using ElementType = DataType;
-    const IndPtrType *const indptr_;
-    const IndicesType *const indices_;
-    const DataType *const data_;
+    IndPtrType *const indptr_;
+    IndicesType *const indices_;
+    DataType *const data_;
     const uint64_t nnz_;
     const uint32_t nf_, n_;
     static_assert(std::is_integral_v<IndPtrType>, "IndPtr must be integral");
     static_assert(std::is_integral_v<IndicesType>, "Indices must be integral");
     static_assert(std::is_arithmetic_v<IndicesType>, "Data must be arithmetic");
-    CSCMatrixView(const IndPtrType *indptr, const IndicesType *indices, const DataType *data,
+    CSCMatrixView(IndPtrType *indptr, IndicesType *indices, DataType *data,
                   uint64_t nnz, uint32_t nfeat, uint32_t nitems):
         indptr_(indptr),
         indices_(indices),
@@ -57,7 +57,23 @@ struct CSCMatrixView {
         size_t start_;
         size_t stop_;
 
-        Column(const CSCMatrixView &mat, size_t start, size_t stop): mat_(mat), start_(start), stop_(stop) {}
+        Column(const CSCMatrixView &mat, size_t start, size_t stop)
+            : mat_(mat), start_(start), stop_(stop)
+        {
+        }
+#if 0
+        void sort_if_not_const() {
+            if constexpr(!std::is_const_v<IndicesType> && !std::is_const_v<DataType>) {
+                nonstd::span<DataType> dspan(mat_.data_ + start_, mat_.data_ + stop_);
+                nonstd::span<IndicesType> ispan(mat_.indices_ + start_, mat_.indices_ + stop_);
+                auto zip = Zip(ispan, dspan);
+                DBG_ONLY(std::fprintf(stderr, "Sorting since not const\n");)
+                shared::sort(zip.begin(), zip.end());
+                assert(std::is_sorted(ispan.begin(), ispan.end()));
+                DBG_ONLY(std::fprintf(stderr, "Sorted. First two: %u, %u\n", int(ispan[0]), int(ispan[ispan.size() > 1 ? 1u: 0u]));)
+            }
+        }
+#endif
         size_t nnz() const {return stop_ - start_;}
         size_t size() const {return mat_.columns();}
         template<bool is_const>
@@ -304,7 +320,6 @@ struct COOMatrix {
 #if 0
     void sort(bool rowMajor=true) {
         if(rowMajor) {
-            
         }
     }
 #endif
@@ -335,6 +350,8 @@ struct CSparseMatrix {
     }
     auto &operator~() {return *this;}
     const auto &operator~() const {return *this;}
+    auto &operator*() {return *this;}
+    const auto &operator*() const {return *this;}
 };
 
 template<typename VT, typename IT, typename IPtrT, bool checked=true>
@@ -391,8 +408,9 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
     size_t used_rows = 0, i;
     for(i = 0; i < mat.n_; ++i) {
         auto col = mat.column(i);
-        if(mat.n_ > 100000 && i % 10000 == 0) std::fprintf(stderr, "%zu/%u\r", i, mat.n_);
-        if(skip_empty && 0u == col.nnz()) continue;
+        const unsigned cnnz = col.nnz();
+        DBG_ONLY(std::fprintf(stderr, "%zu/%u (%u nnz) \r", i, mat.n_, cnnz);)
+        if(skip_empty && 0u == cnnz) continue;
         for(auto s = col.start_; s < col.stop_; ++s) {
             ret.append(used_rows, mat.indices_[s], mat.data_[s]);
         }
@@ -404,6 +422,44 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
         while(used_rows < mat.n_) ret.finalize(used_rows++);
         ret.resize(nr, ret.columns(), /*preserve_values=*/true);
     }
+    // Sort after, which is faster than ensuring that every row is sorted at the beginning
+    OMP_PFOR
+    for(size_t i = 0; i < ret.rows(); ++i) {
+        auto cmp = [](auto &x, auto &y) {return x.index() < y.index();};
+        auto rcmp = [](auto &x, auto &y) {return x.index() > y.index();};
+        auto r = row(ret, i, blz::unchecked);
+        switch(nonZeros(r)) {
+            case 0: case 1: continue;
+            default: ;
+        }
+        DBG_ONLY(std::fprintf(stderr, "sorting %zu/%zu\n", i, ret.rows());)
+        if(!std::is_sorted(r.begin(), r.end(), cmp)) {
+            if(std::is_sorted(r.begin(), r.end(), rcmp)) {
+                //std::fprintf(stderr, "Row %zu is reverse-sorted; reversing!\n", i);
+                std::reverse(r.begin(), r.end());
+            } else {
+                //std::fprintf(stderr, "Row %zu is not sorted; sorting!\n", i);
+                shared::sort(r.begin(), r.end(), cmp);
+            }
+        }
+        // DBG_ONLY(else std::fprintf(stderr, "Note: row %zu is already sorted by index\n", i);)
+    }
+#ifndef NDEBUG
+    for(size_t i = 0; i < ret.rows(); ++i) {
+        auto beg = ret.begin(i), e = ret.end(i), next = beg;
+        if(beg == e || ++next == e) continue;
+        bool anyfail = false;
+        while(next != e) {
+            std::fprintf(stderr, "%zu: %zu/%g\n", i, beg->index(), beg->value());
+            anyfail |= (next->index() <= beg->index());
+            ++beg; ++next;
+        }
+        if(anyfail) {
+            std::fprintf(stderr, "Row %zu failed for being unsorted\n", i);
+            throw 1;
+        }
+    }
+#endif
     std::fprintf(stderr, "Parsed matrix of %zu/%zu\n", ret.rows(), ret.columns());
     return ret;
 }
@@ -428,8 +484,8 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(std::string prefix, bool skip_empty=fals
     using mmapper = mio::mmap_source;
     mmapper indptr(indptrn), indices(indicesn), data(datan);
     CSCMatrixView<IndPtrType, IndicesType, DataType>
-        matview((const IndPtrType *)indptr.data(), (const IndicesType *)indices.data(),
-                (const DataType *)data.data(), indices.size() / sizeof(IndicesType),
+        matview((IndPtrType *)indptr.data(), (IndicesType *)indices.data(),
+                (DataType *)data.data(), indices.size() / sizeof(IndicesType),
                  nfeat, nsamples);
     std::fprintf(stderr, "[%s] indptr size: %zu\n", __PRETTY_FUNCTION__, indptr.size() / sizeof(IndPtrType));
     std::fprintf(stderr, "[%s] indices size: %zu\n", __PRETTY_FUNCTION__, indices.size() / sizeof(IndicesType));
@@ -564,17 +620,17 @@ template<typename MT, bool SO>
 std::pair<std::vector<size_t>, std::vector<size_t>>
 erase_empty(blaze::Matrix<MT, SO> &mat) {
     std::pair<std::vector<size_t>, std::vector<size_t>> ret;
-    std::fprintf(stderr, "Before resizing, %zu/%zu\n", (~mat).rows(), (~mat).columns());
-    size_t orn = (~mat).rows(), ocn = (~mat).columns();
-    auto rs = blaze::evaluate(blaze::sum<blaze::rowwise>(~mat));
+    std::fprintf(stderr, "Before resizing, %zu/%zu\n", (*mat).rows(), (*mat).columns());
+    size_t orn = (*mat).rows(), ocn = (*mat).columns();
+    auto rs = blaze::evaluate(blaze::sum<blaze::rowwise>(*mat));
     auto rsn = blz::functional::indices_if([&rs](auto x) {return rs[x] > 0.;}, rs.size());
     ret.first.assign(rsn.begin(), rsn.end());
     std::fprintf(stderr, "Eliminating %zu empty rows\n", orn - rsn.size());
-    ~mat = rows(~mat, rsn);
-    auto cs = blaze::evaluate(blaze::sum<blaze::columnwise>(~mat));
+    *mat = rows(*mat, rsn);
+    auto cs = blaze::evaluate(blaze::sum<blaze::columnwise>(*mat));
     auto csn = blz::functional::indices_if([&cs](auto x) {return cs[x] > 0.;}, cs.size());
     ret.second.assign(csn.begin(), csn.end());
-    ~mat = columns(~mat, csn);
+    *mat = columns(*mat, csn);
     std::fprintf(stderr, "Eliminating %zu empty columns\n", ocn - rsn.size());
     return ret;
 }

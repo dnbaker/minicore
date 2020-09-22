@@ -10,14 +10,14 @@ using namespace blz;
 
 template<typename VT, bool TF, typename FT, typename IT>
 static INLINE void __assign(blaze::DenseVector<VT, TF> &vec, IT ind, FT val) {
-    (~vec)[ind] = val;
+    (*vec)[ind] = val;
 }
 #if 1
 template<typename VT, bool TF, typename FT, typename IT>
 static INLINE void __assign(blaze::SparseVector<VT, TF> &vec, IT ind, FT val) {
     static_assert(std::is_integral_v<IT>, "Sanity1");
     static_assert(std::is_arithmetic_v<FT>, "Sanity2");
-    auto &rr = ~vec;
+    auto &rr = *vec;
     if(val != FT(0.)) {
         if(rr.capacity() <= rr.nonZeros() + 1)
             rr.reserve(std::max((rr.nonZeros() + 1) << 1, size_t(4)));
@@ -27,7 +27,7 @@ static INLINE void __assign(blaze::SparseVector<VT, TF> &vec, IT ind, FT val) {
 #else
 template<typename VT, bool TF, typename FT, typename IT>
 static INLINE void __assign(blaze::SparseVector<VT, TF> &vec, IT ind, FT val) {
-    (~vec).set(ind, val);
+    (*vec).set(ind, val);
 }
 #endif
 
@@ -62,25 +62,25 @@ struct IndexPQ: public std::priority_queue<std::pair<CI, IT>, std::vector<std::p
 template<typename MT, bool SO, typename VT, bool TF>
 void sparse_l1_unweighted_median(const blz::SparseMatrix<MT, SO> &data, blz::Vector<VT, TF> &ret) {
     std::fprintf(stderr, "Sparse unweighted l1 median\n");
-    if((~data).rows() == 1) {
-        ~ret = row(~data, 0);
+    if((*data).rows() == 1) {
+        *ret = row(*data, 0);
         return;
     }
     using FT = blaze::ElementType_t<MT>;
-    auto &ctr = ~ret;
+    auto &ctr = *ret;
     if constexpr(blaze::IsSparseVector_v<VT>) {
         ctr.reset();
     }
     using CI = typename MT::ConstIterator;
-    const size_t nd = (~data).columns(), nr = (~data).rows(), hlf = nr / 2, odd = nr & 1;
+    const size_t nd = (*data).columns(), nr = (*data).rows(), hlf = nr / 2, odd = nr & 1;
     detail::IndexPQ<CI, uint32_t> pq(nr);
     std::unique_ptr<CI[]> ve(new CI[nr]);
     for(unsigned i = 0; i < nr; ++i) {
-        auto r(row(~data, i));
+        auto r(row(*data, i));
         pq.push(std::pair<CI, uint32_t>(r.begin(), i));
         ve[i] = r.end();
     }
-    assert(pq.size() == (~data).rows());
+    assert(pq.size() == (*data).rows());
     uint32_t cid = 0;
     std::vector<FT> vals;
     assert(pq.empty() || pq.top().first->index() == std::min_element(pq.getc().begin(), pq.getc().end(), [](auto x, auto y) {return x.first->index() < y.first->index();})->first->index());
@@ -126,19 +126,19 @@ template<typename MT, bool SO, typename VT, bool TF>
 void l1_unweighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret) {
 #if 0
     if constexpr(blz::IsSparseMatrix_v<MT>) {
-        sparse_l1_unweighted_median(~data, ret);
+        sparse_l1_unweighted_median(*data, ret);
         return;
     }
 #endif
-    std::fprintf(stderr, "%s unweighted l1 median. data shape: %zu/%zu. Return shape: %zu\n", blaze::IsDenseMatrix_v<MT> ? "Dense": "Sparse", (~data).rows(), (~data).columns(), (~ret).size());
-    assert((~ret).size() == (~data).columns());
-    auto &rr(~ret);
-    const auto &dr(~data);
+    std::fprintf(stderr, "%s unweighted l1 median. data shape: %zu/%zu. Return shape: %zu\n", blaze::IsDenseMatrix_v<MT> ? "Dense": "Sparse", (*data).rows(), (*data).columns(), (*ret).size());
+    assert((*ret).size() == (*data).columns());
+    auto &rr(*ret);
+    const auto &dr(*data);
     const bool odd = dr.rows() % 2;
     const size_t hlf = dr.rows() / 2;
     blaze::DynamicVector<ElementType_t<MT>, blaze::columnVector> dv;
     if constexpr(blaze::IsSparseVector_v<VT>) {
-        (~ret).reset();
+        (*ret).reset();
     }
     for(size_t i = 0; i < dr.columns(); ++i) {
         dv = column(dr, i);
@@ -156,15 +156,15 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT, TF> &
 
 template<typename MT, bool SO, typename VT, bool TF, typename Rows>
 void l1_unweighted_median(const blz::Matrix<MT, SO> &_data, const Rows &rs, blz::Vector<VT, TF> &ret) {
-    assert((~ret).size() == (~_data).columns());
-    auto &rr(~ret);
-    const auto &dr(~_data);
+    assert((*ret).size() == (*_data).columns());
+    auto &rr(*ret);
+    const auto &dr(*_data);
     const bool odd = rs.size() % 2;
     const size_t hlf = rs.size() / 2;
     const size_t nc = dr.columns();
     blaze::DynamicMatrix<ElementType_t<MT>, SO> tmpind;
     if constexpr(blaze::IsSparseVector_v<VT>) {
-        (~ret).reset();
+        (*ret).reset();
     }
     size_t i;
     for(i = 0; i < nc;) {
@@ -183,21 +183,21 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &_data, const Rows &rs, blz:
 
 template<typename MT, bool SO, typename VT2, bool TF2, typename IT=uint32_t, typename WT>
 static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT2, TF2> &ret, const WT &weights) {
-    const size_t nc = (~data).columns();
-    if((~ret).size() != nc) {
-        (~ret).resize(nc);
+    const size_t nc = (*data).columns();
+    if((*ret).size() != nc) {
+        (*ret).resize(nc);
     }
     if constexpr(blaze::IsSparseVector_v<VT2>) {
-        (~ret).reset();
+        (*ret).reset();
     }
-    if(unlikely((~data).columns() > ((uint64_t(1) << (sizeof(IT) * CHAR_BIT)) - 1)))
+    if(unlikely((*data).columns() > ((uint64_t(1) << (sizeof(IT) * CHAR_BIT)) - 1)))
         throw std::runtime_error("Use a different index type, there are more features than fit in IT");
-    const size_t nr = (~data).rows();
+    const size_t nr = (*data).rows();
     auto pairs = std::make_unique<std::pair<ElementType_t<MT>, IT>[]>(nr);
     using FT = blaze::CommonType_t<blz::ElementType_t<MT>, blz::ElementType_t<VT2>, std::decay_t<decltype(weights[0])>>;
     std::unique_ptr<FT[]> cw(new FT[nr]); //
     for(size_t i = 0; i < nc; ++i) {
-        auto col = column(~data, i);
+        auto col = column(*data, i);
         for(size_t j = 0; j < nr; ++j)
             pairs[j] = {col[j], j};
         shared::sort(pairs.get(), pairs.get() + nr);
@@ -210,7 +210,7 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<
         }
         if(maxw > wsum * .5) {
             // Return the value of the tuple with maximum weight
-            __assign(~ret, i, pairs[maxind].first);
+            __assign(*ret, i, pairs[maxind].first);
             continue;
         }
         FT mid = wsum * .5;
@@ -219,7 +219,7 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<
         {
             return x.first < y;
         });
-        __assign(~ret, i, it->first == mid ? FT(.5 * (it->first + it[1].first)): FT(it[1].first));
+        __assign(*ret, i, it->first == mid ? FT(.5 * (it->first + it[1].first)): FT(it[1].first));
     }
 }
 
@@ -241,7 +241,7 @@ template<typename MT, bool SO, typename VT, bool TF, typename Rows, typename VT3
 void l1_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret, const Rows &rows, const VT3 *weights=static_cast<VT3 *>(nullptr)) {
     if(weights) {
         auto dr(blaze::rows(data, rows.data(), rows.size()));
-        const blz::CustomVector<VT3, blaze::unaligned, blaze::unpadded> cv((VT3 *)weights, (~data).rows());
+        const blz::CustomVector<VT3, blaze::unaligned, blaze::unpadded> cv((VT3 *)weights, (*data).rows());
         blz::DynamicVector<VT3> selected_weights(blaze::elements(cv, rows.data(), rows.size()));
         weighted_median(dr, ret, selected_weights.data());
     } else l1_unweighted_median(data, rows, ret);
