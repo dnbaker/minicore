@@ -1786,8 +1786,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case L2: ret = l2Dist(mr, ctr); break;
             case SQRL2: ret = sqrDist(mr, ctr); break;
             case TVD: ret = l1Dist(mr / (lhsum - prior_sum), ctr / (rhsum - prior_sum)); break;
-            case JSM:
-            case JSD: {
+            case JSM: case JSD: {
                 ret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
                         auto xv = xval + lhinc, yv = yval + rhinc;
@@ -1853,8 +1852,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhinc / (yval + rhinc));},
                     __isc(rhsum * lhrsi));
             }
-            case REVERSE_ITAKURA_SAITO:
             break;
+            case REVERSE_ITAKURA_SAITO:
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
                         return __isc((yval + rhinc) / (xval + lhinc));
@@ -1935,7 +1934,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                             get_inc_rsis(lhinc, rhinc)
                         )
                     , FT(0));
-                    break;
+                break;
             default: throw TODOError("unexpected msr; not yet supported");
         }
         return ret;

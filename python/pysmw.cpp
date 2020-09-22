@@ -215,7 +215,7 @@ void init_smw(py::module &m) {
             }
             ret = arr;
         } else {
-            py::array_t<double> arr(std::vector<Py_ssize_t>{info.size, smw.columns()});
+            py::array_t<double> arr(std::vector<size_t>{info.size, smw.columns()});
             auto ari = arr.request();
             auto mat = blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded>((double *)ari.ptr, info.size, smw.columns());
             switch(info.itemsize) {
@@ -329,8 +329,7 @@ void init_smw(py::module &m) {
         switch((lhs.is_float() << 1) | rhs.is_float()) {
             case 3: return lhs.getfloat() == rhs.getfloat();
             case 0: return lhs.getdouble() == rhs.getdouble();
-            default: ;
+            default: return false;
         }
-        return false;
     });
 }
