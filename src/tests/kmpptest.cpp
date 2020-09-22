@@ -89,9 +89,10 @@ int main(int argc, char *argv[]) {
     auto kmc2_centers = kmc2(ptr, ptr + n, gen, npoints, 200);
     stop = t();
     std::fprintf(stderr, "Time for kmc^2: %0.12gs\n", double((stop - start).count()) / 1e9);
-    auto kmccosts = get_oracle_costs([&](size_t i, size_t j) {
+    auto [kmcasn, kmccosts] = get_oracle_costs([&](size_t i, size_t j) {
         return blz::sqrL2Dist(ptr[i], ptr[j]);
     }, n, kmc2_centers);
+    std::fprintf(stderr, "cost for kmc2: %0.12g\n", blz::sum(kmccosts));
     // then, a coreset can be constructed
     start = t();
     auto kc = kcenter_greedy_2approx(ptr, ptr + n, gen, npoints);

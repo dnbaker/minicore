@@ -167,39 +167,8 @@ void init_smw(py::module &m) {
     })
     .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
         lhs.tofile(path);
-    }, py::arg("path"));
-    m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::int_ msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
-        const auto mmsr = (dist::DissimilarityMeasure)msr.cast<int>();
-        auto ki = k.cast<Py_ssize_t>();
-        wy::WyRand<uint64_t> rng(seed);
-        const auto psum = gamma_beta * smw.columns();
-        const blz::StaticVector<double, 1> prior({gamma_beta});
-        auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
-            // Note that this has been transposed
-            return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
-        };
-        py::array_t<uint32_t> ret(ki), retasn(smw.rows());
-        auto reti = ret.request(), retai = retasn.request();
-        py::array_t<float> costs(smw.rows());
-        auto costsi = costs.request();
-        if(smw.is_float()) {
-            auto sol = repeatedly_get_initial_centers(smw.getfloat(), rng, ki, nkmc, ntimes, cmp);
-            auto &[lidx, lasn, lcosts] = sol;
-            std::copy(lasn.begin(), lasn.end(), (uint32_t *)retai.ptr);
-            std::copy(lidx.begin(), lidx.end(), (uint32_t *)reti.ptr);
-            std::copy(lcosts.begin(), lcosts.end(), (float *)costsi.ptr);
-        } else {
-            auto sol = repeatedly_get_initial_centers(smw.getdouble(), rng, ki, nkmc, ntimes, cmp);
-            auto &[lidx, lasn, lcosts] = sol;
-            std::copy(lasn.begin(), lasn.end(), (uint32_t *)retai.ptr);
-            std::copy(lidx.begin(), lidx.end(), (uint32_t *)reti.ptr);
-            std::copy(lcosts.begin(), lcosts.end(), (float *)costsi.ptr);
-        }
-        return py::make_tuple(ret, retasn, costs);
-    }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
-       "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
-       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("beta") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 0);
-    m.def("rowsel", [](SparseMatrixWrapper &smw, py::array idx) {
+    }, py::arg("path"))
+    .def("rowsel", [](SparseMatrixWrapper &smw, py::array idx) {
         auto info = idx.request();
         switch(info.format[0]) {
             case 'd': case 'f': throw std::invalid_argument("Unexpected type");
@@ -235,7 +204,38 @@ void init_smw(py::module &m) {
             ret = arr;
         }
         return ret;
-    });
+    }, py::arg("idx"));
+    m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::int_ msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
+        const auto mmsr = (dist::DissimilarityMeasure)msr.cast<int>();
+        auto ki = k.cast<Py_ssize_t>();
+        wy::WyRand<uint64_t> rng(seed);
+        const auto psum = gamma_beta * smw.columns();
+        const blz::StaticVector<double, 1> prior({gamma_beta});
+        auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
+            // Note that this has been transposed
+            return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
+        };
+        py::array_t<uint32_t> ret(ki), retasn(smw.rows());
+        auto reti = ret.request(), retai = retasn.request();
+        py::array_t<float> costs(smw.rows());
+        auto costsi = costs.request();
+        if(smw.is_float()) {
+            auto sol = repeatedly_get_initial_centers(smw.getfloat(), rng, ki, nkmc, ntimes, cmp);
+            auto &[lidx, lasn, lcosts] = sol;
+            std::copy(lasn.begin(), lasn.end(), (uint32_t *)retai.ptr);
+            std::copy(lidx.begin(), lidx.end(), (uint32_t *)reti.ptr);
+            std::copy(lcosts.begin(), lcosts.end(), (float *)costsi.ptr);
+        } else {
+            auto sol = repeatedly_get_initial_centers(smw.getdouble(), rng, ki, nkmc, ntimes, cmp);
+            auto &[lidx, lasn, lcosts] = sol;
+            std::copy(lasn.begin(), lasn.end(), (uint32_t *)retai.ptr);
+            std::copy(lidx.begin(), lidx.end(), (uint32_t *)reti.ptr);
+            std::copy(lcosts.begin(), lcosts.end(), (float *)costsi.ptr);
+        }
+        return py::make_tuple(ret, retasn, costs);
+    }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
+       "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
+       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("beta") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 0);
     m.def("d2_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;

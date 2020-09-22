@@ -200,8 +200,8 @@ reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *wei
     shared::flat_hash_set<IT> hashset(centers.begin(), centers.end());
 
     while(centers.size() < k) {
-        auto x = 0;
-        while(hashset.find(x) != hashset.end()) ++x;
+        size_t x;
+        do x = rng() % np; while(hashset.find(x) != hashset.end());
         double xdist = mindist(x);
         auto xdi = 1. / xdist;
         const auto baseseed = IT(rng());
@@ -228,10 +228,10 @@ reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *wei
             if(multithread) {
                 OMP_PFOR
                 for(unsigned j = 1; j < np; ++j) {
-                    lfunc(j);
+                    lfunc(div.mod(j + x));
                 }
             } else {
-                for(unsigned j = 1; j < np; ++j)
+                for(unsigned j = x + 1; j != x; j = div.mod(j + 1))
                     lfunc(j);
             }
         }
