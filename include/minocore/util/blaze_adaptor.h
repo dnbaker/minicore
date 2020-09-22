@@ -602,6 +602,17 @@ auto columns_if(const M &mat, const F &func) {
 } // namespace blz::functional
 using functional::indices_if;
 
+
+template<typename FT, typename IT>
+auto make_cv(FT *data, IT size) {
+    using T = std::remove_const_t<FT>;
+    using BaseRetT = CustomVector<T, unaligned, unpadded>;
+    using RetT = std::conditional_t<std::is_const_v<FT>, const BaseRetT, BaseRetT>;
+    return RetT(const_cast<T *>(data), size);
+}
+
+
+
 // Solve geometric median for a set of points.
 template<typename MT, bool SO, typename VT, typename WeightType>
 auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *const weights, double eps=0)
