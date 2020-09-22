@@ -83,7 +83,7 @@ void init_smw(py::module &m) {
             ret = arr;
         }
         return ret;
-    })
+    }, "Select rows in numpy array idx from matrix smw, returning as dense numpy arrays", py::arg("idx"))
     .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
         lhs.tofile(path);
     }, py::arg("path"))
