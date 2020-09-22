@@ -439,7 +439,24 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
             else
                 shared::sort(r.begin(), r.end(), cmp);
         }
+        DBG_ONLY(else std::fprintf(stderr, "Note: row %zu is already sorted by index\n", i);)
     }
+#ifndef NDEBUG
+    for(size_t i = 0; i < ret.rows(); ++i) {
+        auto beg = ret.begin(i), e = ret.end(i), next = beg;
+        if(beg == e || ++next == e) continue;
+        bool anyfail = false;
+        while(next != e) {
+            std::fprintf(stderr, "%zu: %zu/%g\n", i, beg->index(), beg->value());
+            anyfail |= (next->index() <= beg->index());
+            ++beg; ++next;
+        }
+        if(anyfail) {
+            std::fprintf(stderr, "Row %zu failed for being unsorted\n", i);
+            throw 1;
+        }
+    }
+#endif
     std::fprintf(stderr, "Parsed matrix of %zu/%zu\n", ret.rows(), ret.columns());
     return ret;
 }
