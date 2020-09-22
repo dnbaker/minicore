@@ -1344,7 +1344,6 @@ private:
             if(prior_data_->size() == 1) prior_sum_ = data_.columns() * prior_data_->operator[](0);
             else                         prior_sum_ = std::accumulate(prior_data_->begin(), prior_data_->end(), 0.);
         }
-        std::fprintf(stderr, "Set up prior data\n");
         row_sums_.resize(data_.rows());
         {
             for(size_t i = 0; i < data_.rows(); ++i) {

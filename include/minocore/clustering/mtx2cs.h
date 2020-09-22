@@ -159,15 +159,10 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts)
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), true);
     auto csum = blz::sum(costs);
-    OMP_PFOR
     for(unsigned i = 0; i < opts.extra_sample_tries; ++i) {
         auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), /*multithread=*/false);
         if(auto csum2 = blz::sum(costs2); csum2 < csum) {
-            OMP_CRITICAL
-            {
-                if(csum2 < csum)
-                    std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
-            }
+            std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
         }
     }
     CType<FT> modcosts(costs.size());

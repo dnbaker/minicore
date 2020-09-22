@@ -427,19 +427,22 @@ blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesT
     for(size_t i = 0; i < ret.rows(); ++i) {
         auto cmp = [](auto &x, auto &y) {return x.index() < y.index();};
         auto rcmp = [](auto &x, auto &y) {return x.index() > y.index();};
-        DBG_ONLY(std::fprintf(stderr, "sorting %zu/%zu\n", i, ret.rows());)
         auto r = row(ret, i, blz::unchecked);
         switch(nonZeros(r)) {
             case 0: case 1: continue;
             default: ;
         }
+        DBG_ONLY(std::fprintf(stderr, "sorting %zu/%zu\n", i, ret.rows());)
         if(!std::is_sorted(r.begin(), r.end(), cmp)) {
-            if(std::is_sorted(r.begin(), r.end(), rcmp))
+            if(std::is_sorted(r.begin(), r.end(), rcmp)) {
+                //std::fprintf(stderr, "Row %zu is reverse-sorted; reversing!\n", i);
                 std::reverse(r.begin(), r.end());
-            else
+            } else {
+                //std::fprintf(stderr, "Row %zu is not sorted; sorting!\n", i);
                 shared::sort(r.begin(), r.end(), cmp);
+            }
         }
-        DBG_ONLY(else std::fprintf(stderr, "Note: row %zu is already sorted by index\n", i);)
+        // DBG_ONLY(else std::fprintf(stderr, "Note: row %zu is already sorted by index\n", i);)
     }
 #ifndef NDEBUG
     for(size_t i = 0; i < ret.rows(); ++i) {
