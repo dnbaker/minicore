@@ -164,28 +164,28 @@ void init_smw(py::module &m) {
             obj.prior = (dist::Prior)x;
         }
     });
-    m.def("kmeanspp2",  [](SparseMatrixWrapper &smw, py::int_ msr, py::int_ k, double gamma_beta, uint64_t seed) -> py::object {
+    m.def("kmeanspp2",  [](SparseMatrixWrapper &smw, py::int_ msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
         const auto mmsr = (dist::DissimilarityMeasure)msr.cast<int>();
+        auto ki = k.cast<Py_ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
-        Py_ssize_t fp = rng() % smw.rows();
         const auto psum = gamma_beta * smw.columns();
         const auto prior = gamma_beta;
-        auto cmp = [measure, psum,&prior](const auto &x, const auto &y) {
+        auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
             // Note that this has been transposed
             return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
         };
-        py::array_t<uint32_t> ret(centers.size()), retasn(smw.rows());
+        py::array_t<uint32_t> ret(ki), retasn(smw.rows());
         auto reti = ret.request(), retai = retasn.request();
         py::array_t<float> costs(smw.rows());
         auto costsi = costs.request();
         if(smw.is_float()) {
-            auto sol = repeatedly_get_initial_centers(smw.getfloat(), rng, k.cast<int>(), nkmc, ntimes, cmp);
+            auto sol = repeatedly_get_initial_centers(smw.getfloat(), rng, ki, nkmc, ntimes, cmp);
             auto &[lidx, lasn, lcosts] = sol;
             std::copy(lasn.begin(), lasn.end(), (uint32_t *)retai.ptr);
             std::copy(lidx.begin(), lidx.end(), (uint32_t *)reti.ptr);
             std::copy(lcosts.begin(), lcosts.end(), (float *)costsi.ptr);
         } else {
-            auto sol = repeatedly_get_initial_centers(smw.getdouble(), rng, k.cast<int>(), nkmc, ntimes, cmp);
+            auto sol = repeatedly_get_initial_centers(smw.getdouble(), rng, ki, nkmc, ntimes, cmp);
             auto &[lidx, lasn, lcosts] = sol;
             std::copy(lasn.begin(), lasn.end(), (uint32_t *)retai.ptr);
             std::copy(lidx.begin(), lidx.end(), (uint32_t *)reti.ptr);
@@ -193,33 +193,37 @@ void init_smw(py::module &m) {
         }
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
-       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("beta") = 0., py::arg("seed") = 0);
+       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("beta") = 0., py::arg("seed") = 0, py::arg("nkmc") = 1000, py::arg("ntimes") = 0);
     m.def("rowsel", [](SparseMatrixWrapper &smw, py::array idx) {
-        auto ptr = idx.request();
-        switch(ptr.format[0]) {
+        auto info = idx.request();
+        switch(info.format[0]) {
             case 'd': case 'f': throw std::invalid_argument("Unexpected type");
         }
         py::object ret;
-        if(smw.isfloat()) {
-            py::array_t<float> arr({ptr.size, smw.columns()});
-            switch(idx.itemsize) {
+        if(smw.is_float()) {
+            py::array_t<float> arr(std::vector<size_t>{info.size, smw.columns()});
+            auto ari = arr.request();
+            auto mat = blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> ((float *)ari.ptr, info.size, smw.columns());
+            switch(info.itemsize) {
                 case 8: {
-                    arr = rows(smw.getfloat(), (uint64_t *)ptr.ptr, ptr.size); break;
+                    mat = rows(smw.getfloat(), (uint64_t *)info.ptr, info.size); break;
                 }
                 case 4: {
-                    arr = rows(smw.getfloat(), (uint32_t *)ptr.ptr, ptr.size); break;
+                    mat = rows(smw.getfloat(), (uint32_t *)info.ptr, info.size); break;
                 }
                 default: throw std::invalid_argument("rows must be integral and of 4 or 8 bytes");
             }
             ret = arr;
         } else {
-            py::array_t<double> arr({ptr.size, smw.columns()});
-            switch(idx.itemsize) {
+            py::array_t<double> arr(std::vector<Py_ssize_t>{info.size, smw.columns()});
+            auto ari = arr.request();
+            auto mat = blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded>((double *)ari.ptr, info.size, smw.columns());
+            switch(info.itemsize) {
                 case 8: {
-                    arr = rows(smw.getfloat(), (uint64_t *)ptr.ptr, ptr.size); break;
+                    mat = rows(smw.getfloat(), (uint64_t *)info.ptr, info.size); break;
                 }
                 case 4: {
-                    arr = rows(smw.getfloat(), (uint32_t *)ptr.ptr, ptr.size); break;
+                    mat = rows(smw.getfloat(), (uint32_t *)info.ptr, info.size); break;
                 }
                 default: throw std::invalid_argument("rows must be integral and of 4 or 8 bytes");
             }

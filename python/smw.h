@@ -144,7 +144,7 @@ public:
     std::vector<std::pair<uint32_t, double>> row2tups(size_t r) const {
         if(r > rows()) throw std::invalid_argument("Cannot get tuples from a row that dne");
         std::vector<std::pair<uint32_t, double>> ret;
-        perform([r](const auto &x) {
+        perform([&ret,r](const auto &x) {
             for(const auto &pair: row(x, r))
                 ret.emplace_back(pair.index(), pair.value());
         });
