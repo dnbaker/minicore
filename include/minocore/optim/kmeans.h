@@ -274,7 +274,6 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000, bool 
     // Helper function for minimum distance
     auto mindist = [&centers,&oracle](auto newind) {
         typename shared::flat_hash_set<IT>::const_iterator it = centers.begin(), end = centers.end();
-        assert(centers.size());
         auto dist = oracle(*it, newind);
         while(++it != end) {
             dist = std::min(dist, oracle(*it, newind));
@@ -283,12 +282,14 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000, bool 
     };
 
     while(centers.size() < k) {
+        std::fprintf(stderr, "Got center %zu\n", centers.size());
         auto x = div.mod(IT(rng()));
         double xdist = mindist(x);
         auto xdi = 1. / xdist;
         auto baseseed = IT(rng());
         const double max64inv = 1. / std::numeric_limits<uint64_t>::max();
         auto lfunc = [&](unsigned j) {
+            if(centers.find(j) != centers.end()) return;
             uint64_t local_seed = baseseed + j;
             wy::wyhash64_stateless(&local_seed);
             auto y = div.mod(local_seed);
