@@ -32,6 +32,13 @@ void init_smw(py::module &m) {
         return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
     }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();}
     ).def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();})
+    .def("__eq__", [](SparseMatrixWrapper &lhs, SparseMatrixWrapper &rhs) {
+        switch((lhs.is_float() << 1) | rhs.is_float()) {
+            case 3: return lhs.getfloat() == rhs.getfloat();
+            case 0: return lhs.getdouble() == rhs.getdouble();
+            default: return false;
+        }
+    })
     .def("sum", [](SparseMatrixWrapper &wrap, int byrow, bool usefloat) -> py::object
     {
         switch(byrow) {case -1: case 0: case 1: break; default: throw std::invalid_argument("byrow must be -1 (total sum), 0 (by column) or by row (1)");}
@@ -332,12 +339,5 @@ void init_smw(py::module &m) {
         else            std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
-       py::arg("data"), py::arg("sumopts"))
-    .def("__eq__", [](SparseMatrixWrapper &lhs, SparseMatrixWrapper &rhs) {
-        switch((lhs.is_float() << 1) | rhs.is_float()) {
-            case 3: return lhs.getfloat() == rhs.getfloat();
-            case 0: return lhs.getdouble() == rhs.getdouble();
-            default: return false;
-        }
-    });
+       py::arg("data"), py::arg("sumopts"));
 }
