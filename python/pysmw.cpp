@@ -152,6 +152,7 @@ void init_smw(py::module &m) {
         ret += std::string(". Address: ") + buf;
         return ret;
     })
+    .def_readwrite("kmc2n", &SumOpts::kmc2_rounds)
     .def_readwrite("gamma", &SumOpts::gamma).def_readwrite("k", &SumOpts::k)
     .def_readwrite("search_max_rounds", &SumOpts::lloyd_max_rounds).def_readwrite("extra_sample_rounds", &SumOpts::extra_sample_tries)
     .def_readwrite("soft", &SumOpts::soft)
@@ -235,7 +236,7 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
        "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
-       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("beta") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 0);
+       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("beta") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1);
     m.def("d2_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
