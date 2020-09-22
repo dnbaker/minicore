@@ -1844,7 +1844,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     ret = std::sqrt(ret);
             }
             break;
-            case ITAKURA_SAITO: {
+            case ITAKURA_SAITO:
+            {
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
                         return __isc((xval + lhinc) / (yval + rhinc));
@@ -1853,8 +1854,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhinc / (yval + rhinc));},
                     __isc(rhsum * lhrsi));
             }
-            break;
             case REVERSE_ITAKURA_SAITO:
+            break;
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
                         return __isc((yval + rhinc) / (xval + lhinc));
@@ -1864,7 +1865,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     __isc(lhsum * rhrsi));
             break;
             case POISSON:
-            case MKL: {
+            case MKL:
+            {
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
@@ -1873,7 +1875,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             }
             break;
             case REVERSE_POISSON:
-            case REVERSE_MKL: {
+            case REVERSE_MKL:
+            {
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (yval + rhinc) * (std::log((yval + rhinc) / (xval + lhinc)));},
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return rhinc * (rhl - std::log(xval + lhinc));},

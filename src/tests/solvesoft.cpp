@@ -71,6 +71,6 @@ int main(int argc, char *argv[]) {
     clust::perform_soft_clustering(x, msr, prior, centers, complete_hardcosts, temp);
     auto t2 = std::chrono::high_resolution_clock::now();
     std::fprintf(stderr, "Wall time for clustering: %gms\n", std::chrono::duration<double, std::milli>(t2 - t1).count());
-    auto centerdistmat = evaluate(blaze::generate(k, k, [&centers](auto x, auto y) {return blz::l2Norm(centers[x] - centers[y]);}));
+    auto centerdistmat = evaluate(blaze::generate(k, k, [&centers](auto x, auto y) {return blz::l1Norm(blz::abs(centers[x] - centers[y]));}));
     std::cerr << centerdistmat << '\n';
 }

@@ -156,7 +156,7 @@ void init_clustering(py::module &m) {
     py::arg("eps") = 1e-10, py::arg("seed") = 13,
     py::arg("lspprounds") = 1, py::arg("kmcrounds") = 10000, py::arg("kmeansmaxiter") = 1000);
 
-    m.def("cluster_from_centers", [](const SparseMatrixWrapper &smw, py::object centers, double beta,
+    m.def("cluster_from_centers", [](SparseMatrixWrapper &smw, py::object centers, double beta,
                         py::object msr, py::object weights, double eps,
                         uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed)
     -> py::object

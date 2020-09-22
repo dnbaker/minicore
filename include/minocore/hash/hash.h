@@ -129,23 +129,23 @@ public:
     {}
     template<typename VT>
     decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
-        //std::fprintf(stderr, "Regular input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
-        return randproj_ * blaze::sqrt(~input) + boffsets_;
+        //std::fprintf(stderr, "Regular input size: %zu. my rows/col:%zu/%zu\n", (*input).size(), randproj_.rows(), randproj_.columns());
+        return randproj_ * blaze::sqrt(*input) + boffsets_;
     }
     template<typename VT>
     decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
-        //std::fprintf(stderr, "Reversed input size: %zu. my rows/col:%zu/%zu\n", (~input).size(), randproj_.rows(), randproj_.columns());
-        return randproj_ * trans(blaze::sqrt(~input)) + boffsets_;
+        //std::fprintf(stderr, "Reversed input size: %zu. my rows/col:%zu/%zu\n", (*input).size(), randproj_.rows(), randproj_.columns());
+        return randproj_ * trans(blaze::sqrt(*input)) + boffsets_;
     }
     template<typename VT>
     decltype(auto) project(const blaze::Matrix<VT, SO> &input) const {
-        //std::fprintf(stderr, "Regular input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (~input).rows(), (~input).columns(), randproj_.rows(), randproj_.columns());
-        return trans(randproj_ * trans(blaze::sqrt(~input)) + blaze::expand(boffsets_, (~input).rows()));
+        //std::fprintf(stderr, "Regular input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (*input).rows(), (*input).columns(), randproj_.rows(), randproj_.columns());
+        return trans(randproj_ * trans(blaze::sqrt(*input)) + blaze::expand(boffsets_, (*input).rows()));
     }
     template<typename VT>
     decltype(auto) project(const blaze::Matrix<VT, !SO> &input) const {
-        //std::fprintf(stderr, "Reversed SO input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (~input).rows(), (~input).columns(), randproj_.rows(), randproj_.columns());
-        return trans(randproj_ * blaze::sqrt(~input) + blaze::expand(boffsets_, (~input).columns()));
+        //std::fprintf(stderr, "Reversed SO input rows/col: %zu/%zu. my rows/col:%zu/%zu\n", (*input).rows(), (*input).columns(), randproj_.rows(), randproj_.columns());
+        return trans(randproj_ * blaze::sqrt(*input) + blaze::expand(boffsets_, (*input).columns()));
     }
     template<typename...Args>
     decltype(auto) hash(Args &&...args) const {
@@ -197,27 +197,27 @@ public:
     }
     template<typename VT>
     decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
-        if constexpr(use_offsets) return randproj_ * (~input) + 1. + boffsets_;
-        else                      return randproj_ * (~input);
+        if constexpr(use_offsets) return randproj_ * (*input) + 1. + boffsets_;
+        else                      return randproj_ * (*input);
     }
     template<typename VT>
     decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
-        if constexpr(use_offsets) return randproj_ * trans(~input) + 1. + boffsets_;
-        else                      return randproj_ * trans(~input);
+        if constexpr(use_offsets) return randproj_ * trans(*input) + 1. + boffsets_;
+        else                      return randproj_ * trans(*input);
     }
     template<typename MT>
     decltype(auto) project(const blaze::Matrix<MT, SO> &input) const {
         if constexpr(use_offsets)
-            return trans(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).rows()));
+            return trans(randproj_ * trans(*input) + blaze::expand(boffsets_, (*input).rows()));
         else
-            return trans(randproj_ * trans(~input));
+            return trans(randproj_ * trans(*input));
     }
     template<typename MT>
     decltype(auto) project(const blaze::Matrix<MT, !SO> &input) const {
         if constexpr(use_offsets)
-            return trans(randproj_ * trans(~input) + blaze::expand(boffsets_, (~input).columns()));
+            return trans(randproj_ * trans(*input) + blaze::expand(boffsets_, (*input).columns()));
         else
-            return trans(randproj_ * trans(~input));
+            return trans(randproj_ * trans(*input));
     }
     template<typename...HArgs>
     decltype(auto) hash(HArgs &&...args) const {
@@ -322,19 +322,19 @@ public:
     }
     template<typename VT>
     decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
-        return blaze::sqrt(randproj_ * (~input) + 1.) + boffsets_;
+        return blaze::sqrt(randproj_ * (*input) + 1.) + boffsets_;
     }
     template<typename VT>
     decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
-        return blaze::sqrt(randproj_ * trans(~input) + 1.) + boffsets_;
+        return blaze::sqrt(randproj_ * trans(*input) + 1.) + boffsets_;
     }
     template<typename MT>
     decltype(auto) project(const blaze::Matrix<MT, SO> &input) const {
-        return trans(blaze::sqrt(randproj_ * trans(~input) + 1.) + blaze::expand(boffsets_, (~input).rows()));
+        return trans(blaze::sqrt(randproj_ * trans(*input) + 1.) + blaze::expand(boffsets_, (*input).rows()));
     }
     template<typename MT>
     decltype(auto) project(const blaze::Matrix<MT, !SO> &input) const {
-        return trans(blaze::sqrt(randproj_ * (trans(~input)) + 1.) + blaze::expand(boffsets_, (~input).columns()));
+        return trans(blaze::sqrt(randproj_ * (trans(*input)) + 1.) + blaze::expand(boffsets_, (*input).columns()));
     }
     template<typename...Args>
     decltype(auto) hash(Args &&...args) const {
@@ -449,11 +449,11 @@ public:
             std::fprintf(stderr, "[%s] nh_: %u. hv.columns: %zu\n", __PRETTY_FUNCTION__, nh_, hv.columns());
             std::exit(1);
         }
-        if((~input).rows() != hv.rows()) {
-            std::fprintf(stderr, "[%s] nh_: %u. hv.columns: %zu. input rows: %zu\n", __PRETTY_FUNCTION__, nh_, hv.rows(), (~input).rows());
+        if((*input).rows() != hv.rows()) {
+            std::fprintf(stderr, "[%s] nh_: %u. hv.columns: %zu. input rows: %zu\n", __PRETTY_FUNCTION__, nh_, hv.rows(), (*input).rows());
             std::exit(1);
         }
-        const size_t nr = (~input).rows();
+        const size_t nr = (*input).rows();
         const auto _l = l(), _k = k();
         OMP_PFOR
         for(unsigned i = 0; i < nr; ++i) {
@@ -509,11 +509,11 @@ public:
     std::vector<shared::flat_hash_map<IT, unsigned>>
     query(const blaze::Matrix<MT, OSO> &query) const {
         auto hv = evaluate(hash(query));
-        //std::fprintf(stderr, "hv rows: %zu. columns: %zu. nh: %u. input num rows: %zu. input col: %zu\n", hv.rows(), hv.columns(), nh_, (~query).rows(), (~query).columns());
+        //std::fprintf(stderr, "hv rows: %zu. columns: %zu. nh: %u. input num rows: %zu. input col: %zu\n", hv.rows(), hv.columns(), nh_, (*query).rows(), (*query).columns());
         if(hv.columns() != nh_) throw std::runtime_error("Wrong number of columns");
-        if(hv.rows() != (~query).rows()) throw std::runtime_error("Wrong number of rows");
+        if(hv.rows() != (*query).rows()) throw std::runtime_error("Wrong number of rows");
         std::vector<shared::flat_hash_map<IT, unsigned>> ret(hv.rows());
-        assert(hv.rows() == (~query).rows());
+        assert(hv.rows() == (*query).rows());
         OMP_PFOR
         for(unsigned j = 0; j < hv.rows(); ++j) {
             auto &map = ret[j];

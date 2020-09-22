@@ -238,10 +238,10 @@ kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=
     using FT = typename MT::ElementType;
     std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
     if(rowwise) {
-        auto rowit = blz::rowiterator(~mat);
+        auto rowit = blz::rowiterator(*mat);
         ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, multithread, lspprounds);
     } else { // columnwise
-        auto columnit = blz::columniterator(~mat);
+        auto columnit = blz::columniterator(*mat);
         ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, multithread, lspprounds);
     }
     return ret;
@@ -258,10 +258,10 @@ kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
 {
     std::vector<IT> ret;
     if(rowwise) {
-        auto rowit = blz::rowiterator(~mat);
+        auto rowit = blz::rowiterator(*mat);
         ret = kmc2(rowit.begin(), rowit.end(), rng, k, m, norm, multithread);
     } else { // columnwise
-        auto columnit = blz::columniterator(~mat);
+        auto columnit = blz::columniterator(*mat);
         ret = kmc2(columnit.begin(), columnit.end(), rng, k, m, norm, multithread);
     }
     return ret;
@@ -542,7 +542,7 @@ auto kmeans_index_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng, 
                            const blz::ElementType_t<MT> *weights=nullptr, bool rowwise=true)
 {
     if(!rowwise) throw std::runtime_error("Not implemented");
-    return kmeans_coreset(blz::rowiterator(~mat).begin(), blz::rowiterator(~mat).end(),
+    return kmeans_coreset(blz::rowiterator(*mat).begin(), blz::rowiterator(*mat).end(),
                           k, rng, cs_size, weights);
 }
 template<typename MT, bool SO,
@@ -553,10 +553,10 @@ auto kmeans_matrix_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng,
     auto ics = kmeans_index_coreset(mat, k, rng, cs_size, weights, rowwise);
 #ifndef NDEBUG
     for(auto idx: ics.indices_)
-        assert(idx < rowwise ? (~mat).rows(): (~mat).columns());
+        assert(idx < rowwise ? (*mat).rows(): (*mat).columns());
     std::fprintf(stderr, "Got kmeans coreset of size %zu\n", ics.size());
 #endif
-    return index2matrix(ics, ~mat);
+    return index2matrix(ics, *mat);
 }
 
 

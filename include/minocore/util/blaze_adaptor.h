@@ -157,7 +157,7 @@ struct ConstColumnViewer: public ColumnViewer<const MatType> {
     ConstColumnViewer(const MatType &mat): ColumnViewer<const MatType>(mat) {}
 };
 
-#define DOFUNC(fn) auto fn() const {return (~*this).fn();}
+#define DOFUNC(fn) auto fn() const {return (**this).fn();}
 #define ADD_FUNCS\
     DOFUNC(rows)\
     DOFUNC(spacing)\
@@ -349,8 +349,8 @@ INLINE decltype(auto) mean(Args &&...args) {return blaze::mean(std::forward<Args
 
 template<typename VT, bool SO, typename VT2, bool SO2>
 size_t number_shared_zeros(const blaze::SparseVector<VT, SO> &_lhs, const blaze::SparseVector<VT2, SO2> &_rhs) {
-     auto &lhs = ~_lhs;
-     auto &rhs = ~_rhs;
+     auto &lhs = *_lhs;
+     auto &rhs = *_rhs;
      assert(lhs.size() == rhs.size());
      //const size_t sz = lhs.size();
      auto lhit = lhs.begin();
@@ -382,10 +382,10 @@ size_t number_shared_zeros(const blaze::SparseVector<VT, SO> &_lhs, const blaze:
 
 template<typename MT, bool SO>
 void fill_helper(blaze::Matrix<MT, SO> &mat) {
-    diagonal(~mat) = 0.;
-    const size_t nr = (~mat).rows();
+    diagonal(*mat) = 0.;
+    const size_t nr = (*mat).rows();
     for(size_t i = 0; i < nr - 1; ++i) {
-        submatrix(~mat, i + 1, i, nr - i - 1, 1) = trans(submatrix(~mat, i, i + 1, 1, nr - i - 1));
+        submatrix(*mat, i + 1, i, nr - i - 1, 1) = trans(submatrix(*mat, i, i + 1, 1, nr - i - 1));
     }
 }
 
@@ -409,12 +409,12 @@ using namespace blaze;
 template<typename MT, bool SO>
 void normalize(Matrix<MT, SO> &mat, bool rowwise=IsRowMajorMatrix_v<MT>) {
     if(rowwise) {
-        for(auto r: rowiterator(~mat)) {
+        for(auto r: rowiterator(*mat)) {
             auto n = l2Norm(r);
             if(n) r /= l2Norm(r);
         }
     } else {
-        for(auto r: columniterator(~mat)) {
+        for(auto r: columniterator(*mat)) {
             auto n = l2Norm(r);
             if(n) r /= l2Norm(r);
         }
@@ -434,22 +434,22 @@ INLINE auto norm##Dist(const blaze::DynamicVector<FT, SO> &lhs, const blaze::Dyn
 }\
 template<typename VT, typename VT2, bool SO>\
 INLINE auto norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, SO> &rhs) {\
-    return norm##Norm(~rhs - ~lhs);\
+    return norm##Norm(*rhs - *lhs);\
 }\
 \
 template<typename VT, typename VT2, bool SO>\
 INLINE auto norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, !SO> &rhs) {\
-    return norm##Norm(~rhs - trans(~lhs));\
+    return norm##Norm(*rhs - trans(*lhs));\
 }\
 \
 template<typename VT, typename VT2, bool SO>\
 INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, SO> &rhs) {\
-    return norm##Norm(~rhs - ~lhs);\
+    return norm##Norm(*rhs - *lhs);\
 }\
 \
 template<typename VT, typename VT2, bool SO>\
 INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, !SO> &rhs) {\
-    return norm##Norm(~rhs - trans(~lhs));\
+    return norm##Norm(*rhs - trans(*lhs));\
 }\
 
 DECL_DIST(l1)
@@ -468,7 +468,7 @@ inline auto l2Dist(const std::vector<FT, A> &lhs, const std::vector<FT, OA> &rhs
 
 template<typename FT, typename FT2, bool SO>
 inline auto sqrL2Dist(const blz::Vector<FT, SO> &v1, const blz::Vector<FT2, SO> &v2) {
-    return sqrDist(~v1, ~v2);
+    return sqrDist(*v1, *v2);
 }
 template<typename FT, blaze::AlignmentFlag AF, blaze::PaddingFlag PF, bool SO, blaze::AlignmentFlag OAF, blaze::PaddingFlag OPF, bool OSO>
 inline auto sqrL2Dist(const blz::CustomVector<FT, AF, PF, SO> &v1, const blz::CustomVector<FT, OAF, OPF, OSO> &v2) {
@@ -617,12 +617,12 @@ auto make_cv(FT *data, IT size) {
 template<typename MT, bool SO, typename VT, typename WeightType>
 auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *const weights, double eps=0)
 {
-    if((~mat).rows() == 1) return ~dv = row((~mat), 0);
-    const auto &_mat = ~mat;
-    using FT = typename std::decay_t<decltype(~mat)>::ElementType;
+    if((*mat).rows() == 1) return *dv = row((*mat), 0);
+    const auto &_mat = *mat;
+    using FT = typename std::decay_t<decltype(*mat)>::ElementType;
     FT prevcost = std::numeric_limits<FT>::max();
     size_t iternum = 0;
-    assert((~dv).size() == (~mat).columns());
+    assert((*dv).size() == (*mat).columns());
     DV<FT, SO> costs(_mat.rows());
     std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
     if(weights)
@@ -630,23 +630,23 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
     for(;;) {
 #ifndef NDEBUG
         std::fprintf(stderr, "Iteration %zu for matrix %zu/%zu and vector %zu with weights at %p\n",
-                     iternum + 1, (~mat).rows(), (~mat).columns(), (~dv).size(), (void *)weights);
+                     iternum + 1, (*mat).rows(), (*mat).columns(), (*dv).size(), (void *)weights);
 #endif
         if(weights) {
             auto &cvr = *cv;
             OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i)
-                costs[i] = cvr[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv);
+                costs[i] = cvr[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - *dv);
         } else {
 #if 1
             OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i) {
 #if 0
-                const auto r = row(_mat, i, blaze::unchecked) - ~dv;
+                const auto r = row(_mat, i, blaze::unchecked) - *dv;
                 std::cerr << "row #" << i << " is " << r << '\n';
                 std::cerr << "cost before is: " << costs[i] << '\n';
                 std::cerr << "Row: " << row(_mat, i) << '\n';
-                std::cerr << "center: " << ~dv << '\n';
+                std::cerr << "center: " << *dv << '\n';
                 costs[i] = blz::sqrt(blz::sum(r * r));
                 std::cerr << "cost after is " << costs[i] << '\n';
                 if(std::isnan(costs[i])) {
@@ -655,13 +655,13 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
                     std::cerr << "r squared should be " << (r * r) << '\n';
                 }
 #else
-                using res_t = std::decay_t<decltype(blz::l2Norm(row(_mat, i, blz::unchecked) - ~dv))>;
-                costs[i] = std::max(blz::l2Norm(row(_mat, i, blz::unchecked) - ~dv),
+                using res_t = std::decay_t<decltype(blz::l2Norm(row(_mat, i, blz::unchecked) - *dv))>;
+                costs[i] = std::max(blz::l2Norm(row(_mat, i, blz::unchecked) - *dv),
                                     static_cast<res_t>(1e-80));
 #endif
             }
 #else
-            costs = sqrt(sum<rowwise>(blz::pow(_mat - blaze::expand(~dv, (~mat).rows()), 2))); // pow2 seems broken
+            costs = sqrt(sum<rowwise>(blz::pow(_mat - blaze::expand(*dv, (*mat).rows()), 2))); // pow2 seems broken
 #endif
         }
         FT current_cost = sum(costs);
@@ -674,28 +674,28 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
         ++iternum;
         costs = 1. / costs;
         costs *= 1. / blaze::sum(costs);
-        ~dv = trans(costs) * ~mat;
+        *dv = trans(costs) * *mat;
         prevcost = current_cost;
     }
-    return ~dv;
+    return *dv;
 }
 // Solve geometric median for a set of points.
 template<typename MT, bool SO, typename VT, typename WeightType, typename=std::enable_if_t<!std::is_arithmetic_v<WeightType>>>
 auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType &weights, double eps=0.)
 {
-    if((~mat).rows() == 1) return ~dv = row((~mat), 0);
-    const auto &_mat = ~mat;
-    using FT = typename std::decay_t<decltype(~mat)>::ElementType;
+    if((*mat).rows() == 1) return *dv = row((*mat), 0);
+    const auto &_mat = *mat;
+    using FT = typename std::decay_t<decltype(*mat)>::ElementType;
     FT prevcost = std::numeric_limits<FT>::max();
     size_t iternum = 0;
-    assert((~dv).size() == (~mat).columns());
+    assert((*dv).size() == (*mat).columns());
     DV<FT, SO> costs(_mat.rows());
     std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
     for(;;) {
         OMP_PFOR
         for(size_t i = 0; i < _mat.rows(); ++i) {
-            using res_t = std::decay_t<decltype(weights[0] * blz::l2Norm(row(_mat, 0) - ~dv))>;
-            costs[i] = std::max(weights[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - ~dv), res_t(1e-80));
+            using res_t = std::decay_t<decltype(weights[0] * blz::l2Norm(row(_mat, 0) - *dv))>;
+            costs[i] = std::max(weights[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - *dv), res_t(1e-80));
         }
         FT current_cost = sum(costs);
         FT dist;
@@ -708,10 +708,10 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType
         ++iternum;
         costs = 1. / costs;
         costs *= 1. / blaze::sum(costs);
-        ~dv = trans(costs) * ~mat;
+        *dv = trans(costs) * *mat;
         prevcost = current_cost;
     }
-    return ~dv;
+    return *dv;
 }
 template<typename MT, bool SO, typename VT>
 auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, double eps=0) {
