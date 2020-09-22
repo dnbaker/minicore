@@ -133,15 +133,15 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT 
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights=static_cast<WFT *>(nullptr), bool multithread=true, int lspprounds=0);
+reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights=static_cast<WFT *>(nullptr), bool multithread=true, int lspprounds=0, int ntimes=1);
 
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-reservoir_kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0) {
+reservoir_kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0, int ntimes=1) {
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    return reservoir_kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, multithread, lspprounds);
+    return reservoir_kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, multithread, lspprounds, ntimes);
 }
 
 
@@ -173,7 +173,7 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
 template<typename Oracle, typename FT,
          typename IT, typename RNG, typename WFT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights, bool multithread, int lspprounds)
+reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights, bool multithread, int lspprounds, int ntimes)
 {
     schism::Schismatic<IT> div(np);
     std::vector<IT> centers({div.mod(IT(rng()))});
@@ -224,13 +224,15 @@ reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *wei
                 }
             }
         };
-        if(multithread) {
-            OMP_PFOR
-            for(unsigned j = 1; j < np; ++j) {
-                lfunc(j);
+        for(int i = ntimes; i--;) {
+            if(multithread) {
+                OMP_PFOR
+                for(unsigned j = 1; j < np; ++j) {
+                    lfunc(j);
+                }
+            } else {
+                for(unsigned j = 1; j < np; lfunc(j++));
             }
-        } else {
-            for(unsigned j = 1; j < np; lfunc(j++));
         }
         centers.emplace_back(x);
         hashset.insert(x);
@@ -346,15 +348,15 @@ kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=
 template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
 auto
-reservoir_kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0) {
+reservoir_kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0, int ntimes=1) {
     using FT = typename MT::ElementType;
     std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(*mat);
-        ret = reservoir_kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, multithread, lspprounds);
+        ret = reservoir_kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, multithread, lspprounds, ntimes);
     } else { // columnwise
         auto columnit = blz::columniterator(*mat);
-        ret = reservoir_kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, multithread, lspprounds);
+        ret = reservoir_kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, multithread, lspprounds, ntimes);
     }
     return ret;
 }

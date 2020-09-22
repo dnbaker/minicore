@@ -7,7 +7,8 @@ using smw_t = SparseMatrixWrapper;
 
 void init_smw(py::module &m) {
     py::class_<SparseMatrixWrapper>(m, "SparseMatrixWrapper")
-    .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=false)
+    .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=true)
+    .def(py::init<std::string, bool>(), py::arg("path"), py::arg("use_float") = true)
     .def("is_float", [](SparseMatrixWrapper &wrap) {
         return wrap.is_float();
     })
@@ -95,13 +96,13 @@ void init_smw(py::module &m) {
     // SumOpts
     // Used for providing a pythonic interface for summary options
     py::class_<SumOpts>(m, "SumOpts")
-    .def(py::init<std::string, Py_ssize_t, double, std::string, double, Py_ssize_t, bool>(), py::arg("measure"), py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+    .def(py::init<std::string, Py_ssize_t, double, std::string, double, Py_ssize_t, bool, size_t>(), py::arg("measure"), py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and a string key for the coreest construction format.")
-    .def(py::init<int, Py_ssize_t, double, std::string, double, Py_ssize_t, bool>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+    .def(py::init<int, Py_ssize_t, double, std::string, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and a string key for the coreest construction format.")
-    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and an integer key for the coreest construction format.")
-    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100,
+    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and an integer key for the coreest construction format.")
     .def("__str__", &SumOpts::to_string)
     .def("__repr__", [](const SumOpts &x) {
@@ -163,7 +164,10 @@ void init_smw(py::module &m) {
             if(x > 3) throw std::out_of_range("x must be <= 3 if an integer, to represent various priors");
             obj.prior = (dist::Prior)x;
         }
-    });
+    })
+    .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
+        lhs.tofile(path);
+    }, py::arg("path"));
     m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::int_ msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
         const auto mmsr = (dist::DissimilarityMeasure)msr.cast<int>();
         auto ki = k.cast<Py_ssize_t>();
@@ -202,7 +206,7 @@ void init_smw(py::module &m) {
         }
         py::object ret;
         if(smw.is_float()) {
-            py::array_t<float> arr(std::vector<size_t>{info.size, smw.columns()});
+            py::array_t<float> arr(std::vector<size_t>{size_t(info.size), smw.columns()});
             auto ari = arr.request();
             auto mat = blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> ((float *)ari.ptr, info.size, smw.columns());
             switch(info.itemsize) {
@@ -216,7 +220,7 @@ void init_smw(py::module &m) {
             }
             ret = arr;
         } else {
-            py::array_t<double> arr(std::vector<size_t>{info.size, smw.columns()});
+            py::array_t<double> arr(std::vector<size_t>{size_t(info.size), smw.columns()});
             auto ari = arr.request();
             auto mat = blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded>((double *)ari.ptr, info.size, smw.columns());
             switch(info.itemsize) {
@@ -298,6 +302,9 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("smw"), py::arg("sumopts"));
+
+
+
     m.def("greedy_select",  [](py::array arr, const SumOpts &so) {
         std::vector<uint32_t> centers;
         std::vector<double> dret;

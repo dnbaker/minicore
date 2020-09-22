@@ -1,13 +1,22 @@
 #ifndef SMW_H
 #define SMW_H
 #include "pyfgc.h"
+#include "blaze/util/Serialization.h"
 
 
 struct SparseMatrixWrapper {
+    SparseMatrixWrapper(std::string path, bool use_float=true) {
+        blaze::Archive<std::ifstream> arch(path);
+        perform([&arch](auto &x) {arch >> x;});
+    }
+    void tofile(std::string path) {
+        blaze::Archive<std::ofstream> arch(path);
+        perform([&arch](auto &x) {arch << x;});
+    }
 private:
     template<typename IndPtrT, typename IndicesT, typename Data>
     SparseMatrixWrapper(IndPtrT *indptr, IndicesT *indices, Data *data,
-                  size_t nnz, uint32_t nfeat, uint32_t nitems, bool skip_empty=false, bool use_float=false) {
+                  size_t nnz, uint32_t nfeat, uint32_t nitems, bool skip_empty=false, bool use_float=true) {
         if(use_float) {
             matrix_ = csc2sparse<float>(CSCMatrixView<IndPtrT, IndicesT, Data>(indptr, indices, data, nnz, nfeat, nitems), skip_empty);
             auto &m(getfloat());

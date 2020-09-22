@@ -73,4 +73,6 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "Wall time for clustering: %gms\n", std::chrono::duration<double, std::milli>(t2 - t1).count());
     auto centerdistmat = evaluate(blaze::generate(k, k, [&centers](auto x, auto y) {return blz::l1Norm(blz::abs(centers[x] - centers[y]));}));
     std::cerr << centerdistmat << '\n';
+    for(const auto ctr: centers)
+        std::cerr << ctr << '\n';
 }
