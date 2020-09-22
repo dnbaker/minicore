@@ -261,6 +261,7 @@ void assign_points_hard(const Mat &mat,
             case POISSON: case JSD: case JSM:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
             case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:
+            case REVERSE_POISSON: case REVERSE_MKL:
                 ret = cmp::msr_with_prior(measure, mr, ctr, prior, prior_sum, rowsum, centersum); break;
             case COSINE_DISTANCE:
                 ret = blz::dot(mr, ctr) * (1. / (blz::l2Norm(mr) * blz::l2Norm(ctr)));
@@ -448,6 +449,7 @@ void set_centroids_soft(const Mat &mat,
             case POISSON: case JSD: case JSM:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
             case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:
+            case REVERSE_MKL: case REVERSE_POISSON:
                 ret = cmp::msr_with_prior(measure, mr, ctr, prior, prior_sum, rsum, csum); break;
             default: throw NotImplementedError("Unsupported measure for soft clustering");
         }
