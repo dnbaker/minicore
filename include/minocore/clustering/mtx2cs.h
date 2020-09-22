@@ -83,7 +83,13 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
     const size_t nr = (*matrix).rows();
     std::vector<uint32_t> indices, asn;
     blz::DV<FT> costs(nr);
-    if(kmc2rounds) {
+    if(kmc2rounds == -1u) {
+        std::fprintf(stderr, "Performing streaming kmeanspp\n");
+        std::vector<FT> fcosts;
+        std::tie(indices, asn, fcosts) = coresets::reservoir_kmeanspp(matrix, rng, k, norm);
+        //indices = std::move(initcenters);
+        std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
+    } else if(kmc2rounds > 0) {
         std::fprintf(stderr, "Performing kmc\n");
         indices = coresets::kmc2(matrix, rng, k, kmc2rounds, norm);
         // Return distance from item at reference i to item at j

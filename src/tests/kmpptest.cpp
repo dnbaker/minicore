@@ -76,7 +76,12 @@ int main(int argc, char *argv[]) {
     auto stop = t();
     std::fprintf(stderr, "Time for kmeans++: %0.12gs\n", double((stop - start).count()) / 1e9);
     std::fprintf(stderr, "cost for kmeans++: %0.12g\n", std::accumulate(std::get<2>(centers).begin(), std::get<2>(centers).end(), 0.));
-
+    start = t();
+    auto centers3 = reservoir_kmeanspp(ptr, ptr + n, gen, npoints);
+    stop = t();
+    std::fprintf(stderr, "Time for reservoir_kmeans++: %0.12gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "cost for reservoir_kmeans++: %0.12g\n", std::accumulate(std::get<2>(centers3).begin(), std::get<2>(centers3).end(), 0.));
+    
     // centers contains [centers, assignments, distances]
     start = t();
     auto kmc2_centers = kmc2(ptr, ptr + n, gen, npoints, 200);
