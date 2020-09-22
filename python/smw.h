@@ -141,6 +141,15 @@ public:
         if(is_float()) func(std::get<SMF>(matrix_));
         else           func(std::get<SMD>(matrix_));
     }
+    std::vector<std::pair<uint32_t, double>> row2tups(size_t r) const {
+        if(r > rows()) throw std::invalid_argument("Cannot get tuples from a row that dne");
+        std::vector<std::pair<uint32_t, double>> ret;
+        perform([&ret,r](const auto &x) {
+            for(const auto &pair: row(x, r))
+                ret.emplace_back(pair.index(), pair.value());
+        });
+        return ret;
+    }
     std::pair<void *, bool> get_opaque() {
         return {is_float() ? static_cast<void *>(&std::get<SMF>(matrix_)): static_cast<void *>(&std::get<SMD>(matrix_)),
                 is_float()};

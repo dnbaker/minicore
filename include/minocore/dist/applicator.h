@@ -1344,7 +1344,6 @@ private:
             if(prior_data_->size() == 1) prior_sum_ = data_.columns() * prior_data_->operator[](0);
             else                         prior_sum_ = std::accumulate(prior_data_->begin(), prior_data_->end(), 0.);
         }
-        std::fprintf(stderr, "Set up prior data\n");
         row_sums_.resize(data_.rows());
         {
             for(size_t i = 0; i < data_.rows(); ++i) {
@@ -1787,8 +1786,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case L2: ret = l2Dist(mr, ctr); break;
             case SQRL2: ret = sqrDist(mr, ctr); break;
             case TVD: ret = l1Dist(mr / (lhsum - prior_sum), ctr / (rhsum - prior_sum)); break;
-            case JSM:
-            case JSD: {
+            case JSM: case JSD: {
                 ret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
                         auto xv = xval + lhinc, yv = yval + rhinc;
@@ -1936,7 +1934,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                             get_inc_rsis(lhinc, rhinc)
                         )
                     , FT(0));
-                    break;
+                break;
             default: throw TODOError("unexpected msr; not yet supported");
         }
         return ret;

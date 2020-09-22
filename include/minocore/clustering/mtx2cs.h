@@ -83,7 +83,13 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
     const size_t nr = (*matrix).rows();
     std::vector<uint32_t> indices, asn;
     blz::DV<FT> costs(nr);
-    if(kmc2rounds) {
+    if(kmc2rounds == -1u) {
+        std::fprintf(stderr, "Performing streaming kmeanspp\n");
+        std::vector<FT> fcosts;
+        std::tie(indices, asn, fcosts) = coresets::reservoir_kmeanspp(matrix, rng, k, norm);
+        //indices = std::move(initcenters);
+        std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
+    } else if(kmc2rounds > 0) {
         std::fprintf(stderr, "Performing kmc\n");
         indices = coresets::kmc2(matrix, rng, k, kmc2rounds, norm);
         // Return distance from item at reference i to item at j
@@ -159,15 +165,10 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts)
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), true);
     auto csum = blz::sum(costs);
-    OMP_PFOR
     for(unsigned i = 0; i < opts.extra_sample_tries; ++i) {
         auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), /*multithread=*/false);
         if(auto csum2 = blz::sum(costs2); csum2 < csum) {
-            OMP_CRITICAL
-            {
-                if(csum2 < csum)
-                    std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
-            }
+            std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
         }
     }
     CType<FT> modcosts(costs.size());
