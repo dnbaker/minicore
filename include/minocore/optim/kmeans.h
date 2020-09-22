@@ -231,7 +231,8 @@ reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *wei
                     lfunc(j);
                 }
             } else {
-                for(unsigned j = 1; j < np; lfunc(j++));
+                for(unsigned j = 1; j < np; ++j)
+                    lfunc(j);
             }
         }
         centers.emplace_back(x);
