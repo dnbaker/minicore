@@ -218,21 +218,19 @@ void init_smw(py::module &m) {
         };
         py::array_t<uint32_t> ret(ki), retasn(smw.rows());
         auto reti = ret.request(), retai = retasn.request();
+        auto rptr = (uint32_t *)reti.ptr, raptr = (uint32_t *)retai.ptr;
         py::array_t<float> costs(smw.rows());
         auto costsi = costs.request();
-        if(smw.is_float()) {
-            auto sol = repeatedly_get_initial_centers(smw.getfloat(), rng, ki, nkmc, ntimes, cmp);
+        auto costp = (float *)costsi.ptr;
+        smw.perform([&](auto &x) {
+            auto sol = repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp);
             auto &[lidx, lasn, lcosts] = sol;
-            std::copy(lasn.begin(), lasn.end(), (uint32_t *)retai.ptr);
-            std::copy(lidx.begin(), lidx.end(), (uint32_t *)reti.ptr);
-            std::copy(lcosts.begin(), lcosts.end(), (float *)costsi.ptr);
-        } else {
-            auto sol = repeatedly_get_initial_centers(smw.getdouble(), rng, ki, nkmc, ntimes, cmp);
-            auto &[lidx, lasn, lcosts] = sol;
-            std::copy(lasn.begin(), lasn.end(), (uint32_t *)retai.ptr);
-            std::copy(lidx.begin(), lidx.end(), (uint32_t *)reti.ptr);
-            std::copy(lcosts.begin(), lcosts.end(), (float *)costsi.ptr);
-        }
+            assert(lidx.size() == ki);
+            assert(lasn.size() == smw.rows());
+            std::copy(lasn.begin(), lasn.end(), raptr);
+            std::copy(lidx.begin(), lidx.end(), rptr);
+            std::copy(lcosts.begin(), lcosts.end(), costp);
+        });
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
        "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",

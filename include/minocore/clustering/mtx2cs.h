@@ -99,8 +99,13 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
     } else if(kmc2_rounds > 0) {
         std::fprintf(stderr, "Performing kmc\n");
         indices = coresets::kmc2(matrix, rng, k, kmc2_rounds, norm);
+#ifndef NDEBUG
+        std::fprintf(stderr, "Got indices of size %zu\n", indices.size());
+        for(const auto idx: indices) if(idx > nr) std::fprintf(stderr, "idx %zu > max %zu\n", size_t(idx), nr);
+#endif
         // Return distance from item at reference i to item at j
         auto oracle = [&](size_t i, size_t j) {
+            std::fprintf(stderr, "Computing oracle for %zu/%zu\n", i, j);
             return norm(row(*matrix, i, blz::unchecked), row(*matrix, j, blz::unchecked));
         };
         auto [oasn, ncosts] = coresets::get_oracle_costs(oracle, nr, indices);
@@ -121,12 +126,10 @@ template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm>
 auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
                                     unsigned k, unsigned kmc2_rounds, unsigned ntimes, const Norm &norm=Norm()) {
     using FT = blaze::ElementType_t<MT>;
-#ifdef _OPENMP
-    using res_t = decltype(get_initial_centers(matrix, rng, k, kmc2_rounds, norm));
-    res_t best;
-    FT cost_value = std::numeric_limits<FT>::max();
-    OMP_PFOR
-    for(size_t i = 0; i < ntimes; ++i) {
+#if 0
+    auto best = get_initial_centers(matrix, rng, k, kmc2_rounds, norm);
+    FT cost_value = blz::sum(std::get<2>(best));
+    for(size_t i = 1; i < ntimes; ++i) {
         const int tid = omp_get_thread_num();
         RNG rngc(rng() ^ tid);
         auto res = get_initial_centers(matrix, rngc, k, kmc2_rounds, norm);
