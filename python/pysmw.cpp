@@ -208,6 +208,7 @@ void init_smw(py::module &m) {
     });
     m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::int_ msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
         const auto mmsr = (dist::DissimilarityMeasure)msr.cast<int>();
+        std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
         auto ki = k.cast<Py_ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
         const auto psum = gamma_beta * smw.columns();
