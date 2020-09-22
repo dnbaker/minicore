@@ -32,6 +32,46 @@ void init_smw(py::module &m) {
         return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
     }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();}
     ).def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();})
+    .def("rowsel", [](SparseMatrixWrapper &smw, py::array idx) {
+        auto info = idx.request();
+        switch(info.format[0]) {
+            case 'd': case 'f': throw std::invalid_argument("Unexpected type");
+        }
+        py::object ret;
+        if(smw.is_float()) {
+            py::array_t<float> arr(std::vector<size_t>{size_t(info.size), smw.columns()});
+            auto ari = arr.request();
+            auto mat = blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> ((float *)ari.ptr, info.size, smw.columns());
+            switch(info.itemsize) {
+                case 8: {
+                    mat = rows(smw.getfloat(), (uint64_t *)info.ptr, info.size); break;
+                }
+                case 4: {
+                    mat = rows(smw.getfloat(), (uint32_t *)info.ptr, info.size); break;
+                }
+                default: throw std::invalid_argument("rows must be integral and of 4 or 8 bytes");
+            }
+            ret = arr;
+        } else {
+            py::array_t<double> arr(std::vector<size_t>{size_t(info.size), smw.columns()});
+            auto ari = arr.request();
+            auto mat = blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded>((double *)ari.ptr, info.size, smw.columns());
+            switch(info.itemsize) {
+                case 8: {
+                    mat = rows(smw.getfloat(), (uint64_t *)info.ptr, info.size); break;
+                }
+                case 4: {
+                    mat = rows(smw.getfloat(), (uint32_t *)info.ptr, info.size); break;
+                }
+                default: throw std::invalid_argument("rows must be integral and of 4 or 8 bytes");
+            }
+            ret = arr;
+        }
+        return ret;
+    })
+    .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
+        lhs.tofile(path);
+    }, py::arg("path"))
     .def("sum", [](SparseMatrixWrapper &wrap, int byrow, bool usefloat) -> py::object
     {
         switch(byrow) {case -1: case 0: case 1: break; default: throw std::invalid_argument("byrow must be -1 (total sum), 0 (by column) or by row (1)");}
@@ -164,10 +204,7 @@ void init_smw(py::module &m) {
             if(x > 3) throw std::out_of_range("x must be <= 3 if an integer, to represent various priors");
             obj.prior = (dist::Prior)x;
         }
-    })
-    .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
-        lhs.tofile(path);
-    }, py::arg("path"));
+    });
     m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::int_ msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
         const auto mmsr = (dist::DissimilarityMeasure)msr.cast<int>();
         auto ki = k.cast<Py_ssize_t>();
@@ -199,6 +236,7 @@ void init_smw(py::module &m) {
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
        "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
        py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("beta") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 0);
+#if 0
     m.def("rowsel", [](SparseMatrixWrapper &smw, py::array idx) {
         auto info = idx.request();
         switch(info.format[0]) {
@@ -236,6 +274,7 @@ void init_smw(py::module &m) {
         }
         return ret;
     });
+#endif
     m.def("d2_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
