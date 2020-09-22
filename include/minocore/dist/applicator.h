@@ -113,7 +113,7 @@ public:
             if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
                 m = blaze::sqrt(m);
             } else if constexpr(dm::is_distance_matrix_v<MatType>) {
-                blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> cv(const_cast<FT *>(m.data()), m.size());
+                auto cv = blz::make_cv(const_cast<FT *>(m.data()), m.size());
                 cv = blaze::sqrt(cv);
             } else {
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
@@ -122,7 +122,7 @@ public:
             if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
                 m = blaze::acos(m) * PI_INV;
             } else if constexpr(dm::is_distance_matrix_v<MatType>) {
-                blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded> cv(const_cast<FT *>(m.data()), m.size());
+                auto cv = blz::make_cv(const_cast<FT *>(m.data()), m.size());
                 cv = blaze::acos(cv) * PI_INV;
             } else {
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::acos(x) * PI_INV;});
@@ -1854,8 +1854,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhinc / (yval + rhinc));},
                     __isc(rhsum * lhrsi));
             }
-            case REVERSE_ITAKURA_SAITO:
             break;
+            case REVERSE_ITAKURA_SAITO:
                 ret = perform_core(wr, wc, -FT(nd),
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
                         return __isc((yval + rhinc) / (xval + lhinc));

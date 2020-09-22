@@ -108,13 +108,25 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
     switch(bi.format.front()) {
         case 'f':
         for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            blaze::CustomVector<float, unaligned, unpadded> cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            auto cv = blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
             v.emplace_back(trans(cv));
         }
         break;
+        case 'i': {
+        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
+            auto cv = blz::make_cv((int *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            v.emplace_back(trans(cv));
+        }
+        }
+        case 'u': {
+        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
+            auto cv = blz::make_cv((unsigned *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            v.emplace_back(trans(cv));
+        }
+        }
         case 'd':
         for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            blaze::CustomVector<double, unaligned, unpadded> cv((double *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            auto cv = blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
             v.emplace_back(trans(cv));
         }
         break;
@@ -139,12 +151,32 @@ py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
             return pycluster(smw, k, beta, measure, (blz::DV<double> *)nullptr, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
     }
     auto weightinfo = py::cast<py::array>(weights).request();
-    if(weightinfo.itemsize == 4)  {
-        blz::CustomVector<float, unaligned, unpadded> cv((float *)weightinfo.ptr, smw.rows());
+    switch(weightinfo.format.front()) {
+    case 'b': case 'B': {
+        auto cv = blz::make_cv((uint8_t *)weightinfo.ptr, smw.rows());
         return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
-    } else if(weightinfo.itemsize == 8) {
-        blz::CustomVector<double, unaligned, unpadded> cv((double *)weightinfo.ptr, smw.rows());
+    }
+    case 'h': case 'H': {
+        auto cv = blz::make_cv((uint16_t *)weightinfo.ptr, smw.rows());
         return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+    case 'u': {
+        auto cv = blz::make_cv((unsigned *)weightinfo.ptr, smw.rows());
+        return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+    case 'i': {
+        auto cv = blz::make_cv((int *)weightinfo.ptr, smw.rows());
+        return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+    case 'f': {
+        auto cv = blz::make_cv((float *)weightinfo.ptr, smw.rows());
+        return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+    case 'd': {
+        auto cv = blz::make_cv((double *)weightinfo.ptr, smw.rows());
+        return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+    }
+        default: throw std::invalid_argument(std::string("Unspported weight type: ") + weightinfo.format);
     }
     throw std::invalid_argument("Weights were not float, double, or None.");
 }
@@ -245,8 +277,8 @@ void init_clustering(py::module &m) {
             return bestcost;
         });
         if(weights.is_none()) {
-            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, (blz::DV<float> *)nullptr, eps, kmeansmaxiter); 
-            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter); 
+            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, (blz::DV<float> *)nullptr, eps, kmeansmaxiter);
+            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter);
         }
         auto weightinfo = py::cast<py::array>(weights).request();
         if(weightinfo.format.size() != 1) throw std::invalid_argument("Weights must be 0 or contain a fundamental type");
