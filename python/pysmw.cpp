@@ -4,6 +4,19 @@
 #include <map>
 
 using smw_t = SparseMatrixWrapper;
+dist::DissimilarityMeasure assure_dm(py::object obj) {
+    dist::DissimilarityMeasure ret;
+    if(py::isinstance<py::str>(obj)) {
+        auto s = py::cast<std::string>(obj);
+        ret = dist::str2msr(s);
+    } else if(py::isinstance<py::int_>(obj)) {
+        ret = static_cast<dist::DissimilarityMeasure>(obj.cast<Py_ssize_t>());
+    } else {
+        throw std::invalid_argument("assure_dm received object containing neither a string or an integer.");
+    }
+    if(!dist::is_valid_measure(ret)) throw std::invalid_argument(std::to_string(ret) + " is not a valid measure");
+    return ret;
+}
 
 void init_smw(py::module &m) {
     py::class_<SparseMatrixWrapper>(m, "SparseMatrixWrapper")
@@ -30,8 +43,9 @@ void init_smw(py::module &m) {
     .def("__repr__", [](SparseMatrixWrapper &wrap) {
         char buf[1024];
         return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
-    }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();}
-    ).def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();})
+    }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();})
+    .def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();})
+    .def("nonzeros", [](SparseMatrixWrapper &wrap) {return wrap.nnz();})
     .def("rowsel", [](SparseMatrixWrapper &smw, py::array idx) {
         auto info = idx.request();
         switch(info.format[0]) {
@@ -68,7 +82,7 @@ void init_smw(py::module &m) {
             ret = arr;
         }
         return ret;
-    })
+    }, "Select rows in numpy array idx from matrix smw, returning as dense numpy arrays", py::arg("idx"))
     .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
         lhs.tofile(path);
     }, py::arg("path"))
@@ -206,8 +220,9 @@ void init_smw(py::module &m) {
             obj.prior = (dist::Prior)x;
         }
     });
-    m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::int_ msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
-        const auto mmsr = (dist::DissimilarityMeasure)msr.cast<int>();
+    m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
+        const auto mmsr = assure_dm(msr);
+        std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
         auto ki = k.cast<Py_ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
         const auto psum = gamma_beta * smw.columns();
@@ -332,4 +347,5 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("data"), py::arg("sumopts"));
-}
+
+} // init_smw
