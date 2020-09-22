@@ -169,7 +169,7 @@ void init_smw(py::module &m) {
         auto ki = k.cast<Py_ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
         const auto psum = gamma_beta * smw.columns();
-        const auto prior = gamma_beta;
+        const blz::StaticVector<double, 1> prior({gamma_beta});
         auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
             // Note that this has been transposed
             return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
