@@ -46,6 +46,8 @@
 #include "./Inf2Zero.h"
 
 namespace blz {
+template<typename FT, typename IT>
+auto make_cv(FT *data, IT size);
 
 
 // These blaze adaptors exist for the purpose of
@@ -306,19 +308,20 @@ void _assert_all_nonzero_(const MatType &x, const char *funcname, const char *fi
 
 template<typename FT, typename Alloc>
 INLINE auto sum(const std::vector<FT, Alloc> &vec) {
-    return blaze::sum(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
+    return blaze::sum(make_cv(const_cast<FT *>(vec.data()), vec.size()));
 }
+
 template<typename FT, typename Alloc>
 INLINE auto max(const std::vector<FT, Alloc> &vec) {
-    return blaze::max(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
+    return blaze::max(make_cv(const_cast<FT *>(vec.data()), vec.size()));
 }
 template<typename FT, typename Alloc>
 INLINE auto min(const std::vector<FT, Alloc> &vec) {
-    return blaze::min(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
+    return blaze::min(make_cv(const_cast<FT *>(vec.data()), vec.size()));
 }
 template<typename FT, typename Alloc>
 INLINE auto mean(const std::vector<FT, Alloc> &vec) {
-    return blaze::mean(blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(const_cast<FT *>(vec.data()), vec.size()));
+    return blaze::mean(make_cv(const_cast<FT *>(vec.data()), vec.size()));
 }
 
 template<typename OT>
