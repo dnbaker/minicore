@@ -32,13 +32,46 @@ void init_smw(py::module &m) {
         return std::string(buf, std::sprintf(buf, "Matrix of %zu/%zu elements of %s, %zu nonzeros", wrap.rows(), wrap.columns(), wrap.is_float() ? "float32": "double", wrap.nnz()));
     }).def("rows", [](SparseMatrixWrapper &wrap) {return wrap.rows();}
     ).def("columns", [](SparseMatrixWrapper &wrap) {return wrap.columns();})
-    .def("__eq__", [](SparseMatrixWrapper &lhs, SparseMatrixWrapper &rhs) {
-        switch((lhs.is_float() << 1) | rhs.is_float()) {
-            case 3: return lhs.getfloat() == rhs.getfloat();
-            case 0: return lhs.getdouble() == rhs.getdouble();
-            default: return false;
+    .def("rowsel", [](SparseMatrixWrapper &smw, py::array idx) {
+        auto info = idx.request();
+        switch(info.format[0]) {
+            case 'd': case 'f': throw std::invalid_argument("Unexpected type");
         }
+        py::object ret;
+        if(smw.is_float()) {
+            py::array_t<float> arr(std::vector<size_t>{size_t(info.size), smw.columns()});
+            auto ari = arr.request();
+            auto mat = blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> ((float *)ari.ptr, info.size, smw.columns());
+            switch(info.itemsize) {
+                case 8: {
+                    mat = rows(smw.getfloat(), (uint64_t *)info.ptr, info.size); break;
+                }
+                case 4: {
+                    mat = rows(smw.getfloat(), (uint32_t *)info.ptr, info.size); break;
+                }
+                default: throw std::invalid_argument("rows must be integral and of 4 or 8 bytes");
+            }
+            ret = arr;
+        } else {
+            py::array_t<double> arr(std::vector<size_t>{size_t(info.size), smw.columns()});
+            auto ari = arr.request();
+            auto mat = blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded>((double *)ari.ptr, info.size, smw.columns());
+            switch(info.itemsize) {
+                case 8: {
+                    mat = rows(smw.getfloat(), (uint64_t *)info.ptr, info.size); break;
+                }
+                case 4: {
+                    mat = rows(smw.getfloat(), (uint32_t *)info.ptr, info.size); break;
+                }
+                default: throw std::invalid_argument("rows must be integral and of 4 or 8 bytes");
+            }
+            ret = arr;
+        }
+        return ret;
     })
+    .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
+        lhs.tofile(path);
+    }, py::arg("path"))
     .def("sum", [](SparseMatrixWrapper &wrap, int byrow, bool usefloat) -> py::object
     {
         switch(byrow) {case -1: case 0: case 1: break; default: throw std::invalid_argument("byrow must be -1 (total sum), 0 (by column) or by row (1)");}
@@ -171,47 +204,7 @@ void init_smw(py::module &m) {
             if(x > 3) throw std::out_of_range("x must be <= 3 if an integer, to represent various priors");
             obj.prior = (dist::Prior)x;
         }
-    })
-    .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
-        lhs.tofile(path);
-    }, py::arg("path"))
-    .def("rowsel", [](SparseMatrixWrapper &smw, py::array idx) {
-        auto info = idx.request();
-        switch(info.format[0]) {
-            case 'd': case 'f': throw std::invalid_argument("Unexpected type");
-        }
-        py::object ret;
-        if(smw.is_float()) {
-            py::array_t<float> arr(std::vector<size_t>{size_t(info.size), smw.columns()});
-            auto ari = arr.request();
-            auto mat = blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> ((float *)ari.ptr, info.size, smw.columns());
-            switch(info.itemsize) {
-                case 8: {
-                    mat = rows(smw.getfloat(), (uint64_t *)info.ptr, info.size); break;
-                }
-                case 4: {
-                    mat = rows(smw.getfloat(), (uint32_t *)info.ptr, info.size); break;
-                }
-                default: throw std::invalid_argument("rows must be integral and of 4 or 8 bytes");
-            }
-            ret = arr;
-        } else {
-            py::array_t<double> arr(std::vector<size_t>{size_t(info.size), smw.columns()});
-            auto ari = arr.request();
-            auto mat = blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded>((double *)ari.ptr, info.size, smw.columns());
-            switch(info.itemsize) {
-                case 8: {
-                    mat = rows(smw.getfloat(), (uint64_t *)info.ptr, info.size); break;
-                }
-                case 4: {
-                    mat = rows(smw.getfloat(), (uint32_t *)info.ptr, info.size); break;
-                }
-                default: throw std::invalid_argument("rows must be integral and of 4 or 8 bytes");
-            }
-            ret = arr;
-        }
-        return ret;
-    }, py::arg("idx"));
+    });
     m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::int_ msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
         const auto mmsr = (dist::DissimilarityMeasure)msr.cast<int>();
         auto ki = k.cast<Py_ssize_t>();
