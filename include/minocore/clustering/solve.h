@@ -41,7 +41,7 @@ void assign_points_hard(const Mat &mat,
                         const std::vector<CtrT> &centers,
                         AsnT &asn,
                         CostsT &costs,
-                        const WeightT *weights,
+                        const WeightT *,
                         SumT &centersums,
                         const SumT &rowsums);
 template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT, typename SumT>
