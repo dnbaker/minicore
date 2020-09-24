@@ -38,7 +38,7 @@ template<typename FT, typename Mat, typename PriorT, typename CtrT, typename Cos
 void assign_points_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
-                        std::vector<CtrT> &centers,
+                        const std::vector<CtrT> &centers,
                         AsnT &asn,
                         CostsT &costs,
                         const WeightT *weights,
