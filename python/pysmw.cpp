@@ -150,13 +150,13 @@ void init_smw(py::module &m) {
     // SumOpts
     // Used for providing a pythonic interface for summary options
     py::class_<SumOpts>(m, "SumOpts")
-    .def(py::init<std::string, Py_ssize_t, double, std::string, double, Py_ssize_t, bool, size_t>(), py::arg("measure"), py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
+    .def(py::init<std::string, Py_ssize_t, double, std::string, double, Py_ssize_t, bool, size_t>(), py::arg("measure"), py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and a string key for the coreest construction format.")
-    .def(py::init<int, Py_ssize_t, double, std::string, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
+    .def(py::init<int, Py_ssize_t, double, std::string, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and a string key for the coreest construction format.")
-    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
+    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and an integer key for the coreest construction format.")
-    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("beta") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
+    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and an integer key for the coreest construction format.")
     .def("__str__", &SumOpts::to_string)
     .def("__repr__", [](const SumOpts &x) {
@@ -220,9 +220,22 @@ void init_smw(py::module &m) {
             obj.prior = (dist::Prior)x;
         }
     });
-    m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes) -> py::object {
+    m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+                          py::object weights) -> py::object {
+        const void *wptr = nullptr;
+        int kind = -1;
         const auto mmsr = assure_dm(msr);
         std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
+        if(py::isinstance<py::array>(weights)) {
+            auto arr = py::cast<py::array>(weights);
+            auto info = arr.request();
+            if(info.format.size() > 1) throw std::invalid_argument(std::string("Invalid array format: ") + info.format);
+            switch(info.format.front()) {
+                case 'i': case 'u': case 'f': case 'd': kind = info.format.front(); break;
+                default:throw std::invalid_argument(std::string("Invalid array format: ") + info.format + ". Expected 'd', 'f', 'i', or 'u'.\n");
+            }
+            wptr = info.ptr;
+        }
         auto ki = k.cast<Py_ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
         const auto psum = gamma_beta * smw.columns();
@@ -238,7 +251,14 @@ void init_smw(py::module &m) {
         auto costsi = costs.request();
         auto costp = (float *)costsi.ptr;
         smw.perform([&](auto &x) {
-            auto sol = repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp);
+            //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
+            auto sol = 
+                kind == -1 ?
+                repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp)
+                : kind == 'f' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp, (const float *)wptr)
+                : kind == 'd' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp, (const double *)wptr)
+                : kind == 'u' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp, (const unsigned *)wptr)
+                : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp, (const int *)wptr);
             auto &[lidx, lasn, lcosts] = sol;
             assert(lidx.size() == ki);
             assert(lasn.size() == smw.rows());
@@ -249,7 +269,9 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
        "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
-       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("beta") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1);
+       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("betaprior") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1,
+       py::arg("weights") = py::none()
+    );
     m.def("d2_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
