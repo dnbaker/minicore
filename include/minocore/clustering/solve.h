@@ -38,10 +38,10 @@ template<typename FT, typename Mat, typename PriorT, typename CtrT, typename Cos
 void assign_points_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
-                        std::vector<CtrT> &centers,
+                        const std::vector<CtrT> &centers,
                         AsnT &asn,
                         CostsT &costs,
-                        const WeightT *weights,
+                        const WeightT *,
                         SumT &centersums,
                         const SumT &rowsums);
 template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT, typename SumT>
@@ -119,10 +119,11 @@ auto perform_hard_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TOD
 
         assign_points_hard<FT>(*mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
         auto newcost = compute_cost();
-        DBG_ONLY(std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);)
+        std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);
         if(newcost > cost) {
-            auto msg = std::string("New cost ") + std::to_string(newcost) + " > original cost " + std::to_string(cost) + '\n';
-            std::cerr << msg;
+            std::cerr << "Warning: New cost " << newcost << " > original cost " << cost << ". Using prior iteration.\n;";
+            centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
+            assign_points_hard<FT>(*mat, measure, prior, centers, asn, costs, weights, centersums, rowsums);
             //DBG_ONLY(std::abort();)
             break;
         }
@@ -197,7 +198,7 @@ template<typename FT, typename Mat, typename PriorT, typename CtrT, typename Cos
 void assign_points_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
-                        std::vector<CtrT> &centers,
+                        const std::vector<CtrT> &centers,
                         AsnT &asn,
                         CostsT &costs,
                         const WeightT *,
