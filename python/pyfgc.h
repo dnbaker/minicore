@@ -8,6 +8,7 @@
 
 
 void init_smw(py::module &);
+void init_cmp(py::module &);
 void init_merge(py::module &);
 void init_coreset(py::module &);
 void init_centroid(py::module &);
