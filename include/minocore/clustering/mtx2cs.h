@@ -91,13 +91,13 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
     std::vector<uint32_t> indices, asn;
     blz::DV<FT> costs(nr);
     if(kmc2_rounds == -1u) {
-        std::fprintf(stderr, "Performing streaming kmeanspp\n");
+        std::fprintf(stderr, "[%s] Performing streaming kmeanspp\n", __func__);
         std::vector<FT> fcosts;
         std::tie(indices, asn, fcosts) = coresets::reservoir_kmeanspp(matrix, rng, k, norm, weights);
         //indices = std::move(initcenters);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     } else if(kmc2_rounds > 0) {
-        std::fprintf(stderr, "Performing kmc\n");
+        std::fprintf(stderr, "[%s] Performing kmc\n", __func__);
         indices = coresets::kmc2(matrix, rng, k, kmc2_rounds, norm);
 #ifndef NDEBUG
         std::fprintf(stderr, "Got indices of size %zu\n", indices.size());
@@ -111,7 +111,7 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
         costs = std::move(ncosts);
         asn.assign(oasn.data(), oasn.data() + oasn.size());
     } else {
-        std::fprintf(stderr, "Performing kmeanspp\n");
+        std::fprintf(stderr, "[%s] Performing kmeans++\n", __func__);
         std::vector<FT> fcosts;
         std::tie(indices, asn, fcosts) = coresets::kmeanspp(matrix, rng, k, norm, weights);
         //indices = std::move(initcenters);
@@ -123,7 +123,7 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
 
 template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm, typename WeightT=const double>
 auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
-                                    unsigned k, unsigned kmc2_rounds, unsigned ntimes, const Norm &norm=Norm(),
+                                    unsigned k, unsigned kmc2_rounds, int ntimes, const Norm &norm=Norm(),
                                     WeightT *const weights=static_cast<WeightT *>(nullptr))
 {
     using FT = blaze::ElementType_t<MT>;
@@ -148,7 +148,7 @@ auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rn
 #else
     auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, norm, weights);
     auto tcost = blz::sum(costs);
-    for(;--ntimes;) {
+    for(;--ntimes > 0;) {
         auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, norm, weights);
         auto ncost = blz::sum(_costs);
         if(ncost < tcost) {

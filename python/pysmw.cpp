@@ -225,6 +225,7 @@ void init_smw(py::module &m) {
         const void *wptr = nullptr;
         int kind = -1;
         const auto mmsr = assure_dm(msr);
+        const size_t nr = smw.rows();
         std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
         if(py::isinstance<py::array>(weights)) {
             auto arr = py::cast<py::array>(weights);
@@ -244,12 +245,24 @@ void init_smw(py::module &m) {
             // Note that this has been transposed
             return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
         };
-        py::array_t<uint32_t> ret(ki), retasn(smw.rows());
-        auto reti = ret.request(), retai = retasn.request();
-        auto rptr = (uint32_t *)reti.ptr, raptr = (uint32_t *)retai.ptr;
+        py::array_t<uint32_t> ret(ki);
+        py::array retasn;
+        int retasnbits;
+        if(ki <= 256) {
+            retasn = py::array_t<uint8_t>(nr);
+            retasnbits = 8;
+        } else if(ki <= 63356) {
+            retasn = py::array_t<uint16_t>(nr);
+            retasnbits = 16;
+        } else {
+            retasn = py::array_t<uint32_t>(nr);
+            retasnbits = 32;
+        }
+        retasn(smw.rows());
+        auto retai = retasn.request();
+        auto rptr = (uint32_t *)ret.request().ptr;
         py::array_t<float> costs(smw.rows());
-        auto costsi = costs.request();
-        auto costp = (float *)costsi.ptr;
+        auto costp = (float *)costs.request().ptr;
         smw.perform([&](auto &x) {
             //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
             auto sol = 
@@ -260,11 +273,43 @@ void init_smw(py::module &m) {
                 : kind == 'u' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp, (const unsigned *)wptr)
                 : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp, (const int *)wptr);
             auto &[lidx, lasn, lcosts] = sol;
+            for(size_t i = 0; i < lidx.size(); ++i) {
+                std::fprintf(stderr, "selected point %u for center %zu\n", lidx[i], i);
+                if(lidx[i] > nr) std::fprintf(stderr, "Warning: 'center' id is > # centers\n");
+            }
+            for(size_t i = 0; i < lasn.size(); ++i) {
+                if(lasn[i] > nr) {
+                    std::fprintf(stderr, "asn %zu is %u (> nr)\n", i, unsigned(lasn[i]));
+                }
+            }
             assert(lidx.size() == ki);
             assert(lasn.size() == smw.rows());
-            std::copy(lasn.begin(), lasn.end(), raptr);
-            std::copy(lidx.begin(), lidx.end(), rptr);
-            std::copy(lcosts.begin(), lcosts.end(), costp);
+            switch(retasnbits) {
+                case 8: {
+                    auto raptr = (uint8_t *)retai.ptr;
+                    OMP_PFOR
+                    for(size_t i = 0; i < lasn.size(); ++i)
+                        raptr[i] = lasn[i];
+                } break;
+                case 16: {
+                    auto raptr = (uint16_t *)retai.ptr;
+                    OMP_PFOR
+                    for(size_t i = 0; i < lasn.size(); ++i)
+                        raptr[i] = lasn[i];
+                } break;
+                case 32: {
+                    auto raptr = (uint32_t *)retai.ptr;
+                    OMP_PFOR
+                    for(size_t i = 0; i < lasn.size(); ++i)
+                        raptr[i] = lasn[i];
+                } break;
+                default: __builtin_unreachable();
+            }
+            OMP_PFOR
+            for(size_t i = 0; i < lcosts.size(); ++i)
+                costp[i] = lcosts[i];
+            for(size_t i = 0; i < lidx.size(); ++i)
+                rptr[i] = lidx[i];
         });
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."

@@ -282,7 +282,7 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000, bool 
     };
 
     while(centers.size() < k) {
-        std::fprintf(stderr, "Got center %zu\n", centers.size());
+        std::fprintf(stderr, "Center %zu/%zu\r\n", centers.size(), k);
         auto x = div.mod(IT(rng()));
         double xdist = mindist(x);
         auto xdi = 1. / xdist;
