@@ -37,8 +37,12 @@ void init_cmp(py::module &m) {
                     CASE_F('I', unsigned)
                     CASE_F('h', int16_t)
                     CASE_F('H', uint16_t)
+                    CASE_F('b', int16_t)
+                    CASE_F('B', uint16_t)
+                    CASE_F('l', int64_t)
+                    CASE_F('L', uint64_t)
 #undef CASE_F
-                    default: throw std::invalid_argument("dtypes supported: d, f, i, I, h, H");
+                    default: throw std::invalid_argument("dtypes supported: d, f, i, I, h, H, b, B, l, L");
                 }
             });
             return ret;
@@ -49,12 +53,11 @@ void init_cmp(py::module &m) {
             py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), nc});
             blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)ret.request().ptr, nr, ndr, inf.strides[0]);
             lhs.perform([&](auto &matrix) {
-            cm = blaze::generate(nr, nc, [&](auto x, auto y) -> float {
 #define CASE_F(char, type) \
                         case char: {\
                             blaze::CustomMatrix<type, unaligned, unpadded> ocm(static_cast<type *>(inf.ptr), ndr, nc);\
-                            auto cmsums = blz::evaluate(blz::sum<blz::rowwise>(ocm));\
-                            cm = blz::generate(nr, ndr, [&](auto x, auto y) {\
+                            const auto cmsums = blz::evaluate(blz::sum<blz::rowwise>(ocm));\
+                            cm = blz::generate(nr, ndr, [&](auto x, auto y) -> float {\
                                 return cmp::msr_with_prior(ms, blz::row(matrix, x, unchecked), blz::row(ocm, y, unchecked), priorc, priorsum, rsums[x], cmsums[y]);\
                             });\
                         } break;
@@ -65,11 +68,14 @@ void init_cmp(py::module &m) {
                         CASE_F('I', unsigned)
                         CASE_F('h', int16_t)
                         CASE_F('H', uint16_t)
+                        CASE_F('b', int16_t)
+                        CASE_F('B', uint16_t)
+                        CASE_F('l', int64_t)
+                        CASE_F('L', uint64_t)
 #undef CASE_F
-                        default: throw std::invalid_argument("dtypes supported: d, f, i, I, h, H");
+                        default: throw std::invalid_argument("dtypes supported: d, f, i, I, h, H, b, B, l, L");
                     }
                     return 0.;
-                });
             });
             return ret;
         } else {

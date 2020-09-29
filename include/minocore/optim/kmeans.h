@@ -41,6 +41,30 @@ using blz::sqrL2Norm;
  * lspprounds: how many localsearch++ rounds to perform. By default, perform none.
  */
 
+struct Identity {
+    template<typename T>
+    INLINE auto operator()(T x) const {return x;}
+};
+
+template<typename T, typename Op>
+inline void simd_inclusive_scan(const T *src, T *dest, size_t n, const Op &op) {
+#ifdef _OPENMP
+    T scan_a = 0;
+    #pragma omp simd reduction(inscan, +:scan_a)
+    for(size_t i = 0; i < n; ++i) {
+        scan_a += op(src[i]);
+        #pragma omp scan inclusive(scan_a)
+        dest[i] = scan_a;
+    }
+#else
+    std::partial_sum(src, src + n, dest, [](auto x, auto y) {return x + op(y);});
+#endif
+}
+template<typename T>
+inline void simd_inclusive_scan(const T *src, T *dest, size_t n) {
+    simd_inclusive_scan(src, dest, n, Identity());
+}
+
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
@@ -49,7 +73,15 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
 #endif
     std::vector<IT> centers;
-    std::vector<FT> distances(np, 0.), cdf(np);
+    std::vector<FT> distances(np), cdf(np);
+    const auto db = distances.data(), cdd = cdf.data();
+    auto perform_scan = [&]() {
+        if(weights) {
+            simd_inclusive_scan(db, cdd, np, [db,weights](const auto &y) {return weights[&y - db] * y;});
+        } else {
+            simd_inclusive_scan(db, cdd, np);
+        }
+    };
     {
         auto fc = rng() % np;
         centers.push_back(fc);
@@ -59,18 +91,14 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         SK_UNROLL_8
 #endif
         for(size_t i = 0; i < np; ++i) {
-            if(unlikely(i == fc)) continue;
-#if 0
-            std::fprintf(stderr, "Oracle about to call fc%zu / i%zu.\n", fc, i);
-#endif
-            double dist = oracle(fc, i);
-            distances[i] = dist;
+            if(unlikely(i == fc)) {
+                distances[i] = 0.;
+            } else {
+                distances[i] = oracle(fc, i);
+            }
         }
         assert(distances[fc] == 0.);
-        if(weights) ::std::partial_sum(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
-            return x + y * weights[&y - ds];
-        });
-        else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
+        perform_scan();
 #ifndef NDEBUG
         std::fprintf(stderr, "Max cost: %g\n", cdf[np - 1]);
 #endif
@@ -78,14 +106,16 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     std::vector<IT> assignments(np);
     std::uniform_real_distribution<double> urd;
     while(centers.size() < k) {
+        std::fprintf(stderr, "Centers size: %zu. Newest center: %u\n", centers.size(), centers.back());
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
+        auto cd = centers.data();
+        auto ce = cd + centers.size();
         IT newc;
         do {
             newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
         } while(newc >= np && // Ensure that it is within bounds
-                std::find(centers.data(), centers.data() + centers.size(), newc)
-                        != centers.data() + centers.size() // And unused thus far
+                std::find(cd, ce, newc) != ce // And unused thus far
         );
         //std::fprintf(stderr, "newc: %u/%zu\n", newc, distances.size());
         const auto current_center_id = centers.size();
@@ -106,15 +136,14 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             for(IT i = 0; i < np; ++i)
                 lfunc(i);
         } else for(IT i = 0; i < np; lfunc(i++));
-        if(weights) ::std::partial_sum(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
-            return x + y * weights[&y - ds];
-        });
-        else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
+        perform_scan();
     }
 
-    std::fprintf(stderr, "Completed kmeans++. Optional ls++\n");
-    if(lspprounds > 0)
+    std::fprintf(stderr, "Completed kmeans++.\n");
+    if(lspprounds > 0) {
+        std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
         localsearchpp_rounds(oracle, rng, distances, cdf, centers, assignments, np, lspprounds, weights);
+    }
 #if 0
 #endif
     std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
@@ -153,10 +182,10 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
     util::Timer t("get oracle costs");
     OMP_PFOR
     for(size_t i = 0; i < np; ++i) {
-        auto it = sol.begin();
+        auto it = sol.begin(), e = sol.end();
         auto mincost = oracle(*it, i);
         IT minind = 0, cind = 0;
-        while(++it != sol.end()) {
+        while(++it != e) {
             if(auto newcost = oracle(*it, i); newcost < mincost)
                 mincost = newcost, minind = cind;
             ++cind;
@@ -220,7 +249,7 @@ reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *wei
                 {
                     if(ydist * xdi > urd_val)
                         x = j, xdist = ydist, xdi = 1. / xdist;
-                    DBG_ONLY(std::fprintf(stderr, "Now x is %d with cost %g\n", x, xdist);)
+                    DBG_ONLY(std::fprintf(stderr, "Now x is %d with cost %g\n", int(x), xdist);)
                 }
             }
         };

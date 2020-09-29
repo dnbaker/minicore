@@ -238,6 +238,7 @@ void init_smw(py::module &m) {
             wptr = info.ptr;
         }
         auto ki = k.cast<Py_ssize_t>();
+        std::fprintf(stderr, "ki: %zd\n", ki);
         wy::WyRand<uint64_t> rng(seed);
         const auto psum = gamma_beta * smw.columns();
         const blz::StaticVector<double, 1> prior({gamma_beta});
@@ -251,12 +252,15 @@ void init_smw(py::module &m) {
         if(ki <= 256) {
             retasn = py::array_t<uint8_t>(nr);
             retasnbits = 8;
+            std::fprintf(stderr, "uint8 labels\n");
         } else if(ki <= 63356) {
             retasn = py::array_t<uint16_t>(nr);
             retasnbits = 16;
+            std::fprintf(stderr, "uint16 labels\n");
         } else {
             retasn = py::array_t<uint32_t>(nr);
             retasnbits = 32;
+            std::fprintf(stderr, "uint32 labels\n");
         }
         auto retai = py::cast<py::array>(retasn).request();
         auto rptr = (uint32_t *)ret.request().ptr;
