@@ -813,9 +813,13 @@ static INLINE auto canberra_distance(const blz::DenseVector<VT, SO> &lhs, const 
     return blaze::sum(blaze::abs(lh - rh) / (blaze::abs(lh) + blaze::abs(rh)));
 }
 
-template<typename VT, typename VT2, bool SO>
-static INLINE auto hellinger(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO> &rhs) {
-    return l2Norm(sqrt(*lhs) - sqrt(*rhs));
+template<typename VT, typename VT2, bool SO, bool SO2>
+static INLINE auto hellinger(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO2> &rhs) {
+    if constexpr(SO == SO2) {
+        return l2Norm(sqrt(*lhs) - sqrt(*rhs));
+    } else {
+        return l2Norm(sqrt(*lhs) - trans(sqrt(*rhs)));
+    }
 }
 
 

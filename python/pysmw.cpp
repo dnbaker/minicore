@@ -246,7 +246,7 @@ void init_smw(py::module &m) {
             return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
         };
         py::array_t<uint32_t> ret(ki);
-        py::array retasn;
+        py::object retasn = py::none();
         int retasnbits;
         if(ki <= 256) {
             retasn = py::array_t<uint8_t>(nr);
@@ -258,8 +258,7 @@ void init_smw(py::module &m) {
             retasn = py::array_t<uint32_t>(nr);
             retasnbits = 32;
         }
-        retasn(smw.rows());
-        auto retai = retasn.request();
+        auto retai = py::cast<py::array>(retasn).request();
         auto rptr = (uint32_t *)ret.request().ptr;
         py::array_t<float> costs(smw.rows());
         auto costp = (float *)costs.request().ptr;
