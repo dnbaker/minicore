@@ -69,13 +69,14 @@ template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0) {
-#ifndef NDEBUG
+#if 1
     std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
 #endif
     std::vector<IT> centers;
+    centers.reserve(k);
     std::vector<FT> distances(np), cdf(np);
     const auto db = distances.data(), cdd = cdf.data();
-    auto perform_scan = [&]() {
+    auto perform_scan = [db,cdd,np,weights]() {
         if(weights) {
             simd_inclusive_scan(db, cdd, np, [db,weights](const auto &y) {return weights[&y - db] * y;});
         } else {
@@ -84,12 +85,9 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     };
     {
         auto fc = rng() % np;
+        std::fprintf(stderr, "First center: %u/%zu\n", int(fc), np);
         centers.push_back(fc);
-#ifdef _OPENMP
         OMP_PFOR
-#else
-        SK_UNROLL_8
-#endif
         for(size_t i = 0; i < np; ++i) {
             if(unlikely(i == fc)) {
                 distances[i] = 0.;
@@ -139,13 +137,11 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         perform_scan();
     }
 
-    std::fprintf(stderr, "Completed kmeans++.\n");
+    std::fprintf(stderr, "Completed kmeans++ with centers now of size %zu\n", centers.size());
     if(lspprounds > 0) {
         std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
         localsearchpp_rounds(oracle, rng, distances, cdf, centers, assignments, np, lspprounds, weights);
     }
-#if 0
-#endif
     std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
 }

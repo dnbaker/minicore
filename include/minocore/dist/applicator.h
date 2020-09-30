@@ -1324,7 +1324,7 @@ private:
             case GAMMA_BETA:
                 if(c == nullptr) throw std::invalid_argument("Can't do gamma_beta with null pointer");
                 if constexpr(IsSparseMatrix_v<MatrixType>) {
-                    prior_data_.reset(new VecT({(*c)[0]}));
+                    prior_data_.reset(new VecT({FT((*c)[0])}));
                 } else if constexpr(IsDenseMatrix_v<MatrixType>) {
                     data_ += (*c)[0];
                 }

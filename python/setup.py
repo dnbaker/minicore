@@ -18,7 +18,7 @@ def parallelCCompile(self, sources, output_dir=None, macros=None,
                     depends, extra_postargs)
     cc_args = self._get_cc_args(pp_opts, debug, extra_preargs)
     # parallel code
-    N_cores = multiprocessing.cpu_count()
+    N_cores = int(environ.get("OMP_NUM_THREADS", multiprocessing.cpu_count()))
     def _single_compile(obj):
         try: src, ext = build[obj]
         except KeyError: return
@@ -50,8 +50,9 @@ class get_pybind_include(object):
 
 
 extra_compile_args = ['-march=native',
-                      '-Wno-char-subscripts', '-Wno-unused-function',
+                      '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
+                      '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',
                       '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
                       '-Wno-deprecated-declarations']
 
