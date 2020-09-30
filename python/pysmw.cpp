@@ -46,13 +46,13 @@ py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, int k, dou
     };
     py::array_t<uint32_t> ret(k);
     int retasnbits;
-    if(ki <= 256) {
+    if(k <= 256) {
         retasnbits = 8;
         std::fprintf(stderr, "uint8 labels\n");
-    } else if(ki <= 63356) {
+    } else if(k <= 63356) {
         retasnbits = 16;
         std::fprintf(stderr, "uint16 labels\n");
-    } else if(ki <= 0xFFFFFFFF) {
+    } else if(k <= 0xFFFFFFFF) {
         retasnbits = 32;
         std::fprintf(stderr, "uint32 labels\n");
     } else {
