@@ -87,7 +87,8 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         auto fc = rng() % np;
         std::fprintf(stderr, "First center: %u/%zu\n", int(fc), np);
         centers.push_back(fc);
-        OMP_PFOR
+
+        OMP_PFOR_DYN
         for(size_t i = 0; i < np; ++i) {
             if(unlikely(i == fc)) {
                 distances[i] = 0.;
@@ -130,7 +131,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             }
         };
         if(multithread) {
-            OMP_PFOR
+            OMP_PFOR_DYN
             for(IT i = 0; i < np; ++i)
                 lfunc(i);
         } else for(IT i = 0; i < np; lfunc(i++));
@@ -176,7 +177,7 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
     blaze::DynamicVector<IT> assignments(np);
     blaze::DynamicVector<FT> costs(np, std::numeric_limits<FT>::max());
     util::Timer t("get oracle costs");
-    OMP_PFOR
+    OMP_PFOR_DYN
     for(size_t i = 0; i < np; ++i) {
         auto it = sol.begin(), e = sol.end();
         auto mincost = oracle(*it, i);

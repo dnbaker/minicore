@@ -49,7 +49,7 @@ class get_pybind_include(object):
         return pybind11.get_include(self.user)
 
 
-extra_compile_args = ['-march=native',
+extra_compile_args = ['-march=native', '-DNDEBUG',
                       '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                       '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',

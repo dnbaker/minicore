@@ -17,7 +17,7 @@ dist::DissimilarityMeasure assure_dm(py::object obj) {
     if(!dist::is_valid_measure(ret)) throw std::invalid_argument(std::to_string(ret) + " is not a valid measure");
     return ret;
 }
-py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, int k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, Py_ssize_t k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
                  int lspp,
                  py::object weights)
 {
@@ -57,7 +57,7 @@ py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, int k, dou
         std::fprintf(stderr, "uint32 labels\n");
     } else {
         retasnbits = 64;
-        std::fprintf(stderr, "uint64 labels. Are you crazy?\n");
+        std::fprintf(stderr, "uint64 labels. >4 billion centers, are you crazy?\n");
     }
     const char *kindstr = retasnbits == 8 ? "B": retasnbits == 16 ? "H": retasnbits == 32 ? "U": "L";
     py::array retasn(py::dtype(kindstr), std::vector<Py_ssize_t>{{Py_ssize_t(nr)}});
