@@ -6,7 +6,7 @@
 #include <atomic>
 #include <mutex>
 #include <thread>
-#include "cpp-btree/btree/set.h"
+#include "include/thirdparty/btree/set.h"
 
 namespace minocore {
 

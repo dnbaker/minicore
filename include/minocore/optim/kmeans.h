@@ -48,7 +48,7 @@ struct Identity {
 
 template<typename T, typename Op>
 inline void simd_inclusive_scan(const T *src, T *dest, size_t n, const Op &op) {
-#ifdef _OPENMP
+#if 0
     T scan_a = 0;
     #pragma omp simd reduction(inscan, +:scan_a)
     for(size_t i = 0; i < n; ++i) {
@@ -57,7 +57,7 @@ inline void simd_inclusive_scan(const T *src, T *dest, size_t n, const Op &op) {
         dest[i] = scan_a;
     }
 #else
-    std::partial_sum(src, src + n, dest, [](auto x, auto y) {return x + op(y);});
+    std::partial_sum(src, src + n, dest, [&op](auto x, auto y) {return x + op(y);});
 #endif
 }
 template<typename T>
