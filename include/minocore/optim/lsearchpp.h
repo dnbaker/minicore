@@ -15,12 +15,12 @@ namespace minocore {
 namespace coresets {
 
 
-template<typename Oracle, typename RNG, typename DistC, typename CtrsC, typename AsnT, typename WFT=double>
-auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, DistC &cdf, CtrsC &ctrs, AsnT &asn, size_t np, size_t nrounds, const WFT *weights=nullptr) {
+template<typename Oracle, typename RNG, typename DistC, typename CdfC, typename CtrsC, typename AsnT, typename WFT=double>
+auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, CdfC &cdf, CtrsC &ctrs, AsnT &asn, size_t np, size_t nrounds, const WFT *weights=nullptr) {
     using value_type = std::decay_t<decltype(*std::begin(distances))>;
     //blz::DV<value_type> newdists = blaze::CustomVector<value_type, blaze::unaligned, blaze::unpadded>(distances.data(), distances.size());
     std::uniform_real_distribution<value_type> dist;
-    auto make_sel = [&]() -> std::ptrdiff_t {return std::lower_bound(cdf.begin(), cdf.end(), dist(rng) * cdf.back()) - cdf.begin();};
+    auto make_sel = [&]() -> std::ptrdiff_t {return std::lower_bound(cdf.begin(), cdf.end(), dist(rng) * cdf[cdf.size() - 1]) - cdf.begin();};
     const unsigned k = ctrs.size();
     blz::DM<value_type> ctrcostmat = blaze::generate(np, k, [&](auto x, auto y) {
         return oracle(x, ctrs[y]);

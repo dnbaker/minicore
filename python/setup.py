@@ -3,8 +3,35 @@ from os import environ
 from setuptools.command.build_ext import build_ext
 from glob import glob
 from subprocess import check_output
+import multiprocessing
+import multiprocessing.pool
 
-__version__ = check_output(["git", "describe", "--abbrev=4"]).decode().strip().split('-')[0]
+
+# from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
+# parallelizes extension compilation
+def parallelCCompile(self, sources, output_dir=None, macros=None,
+        include_dirs=None, debug=0, extra_preargs=None, extra_postargs=None,
+        depends=None):
+    # those lines are copied from distutils.ccompiler.CCompiler directly
+    macros, objects, extra_postargs, pp_opts, build = \
+            self._setup_compile(output_dir, macros, include_dirs, sources,
+                    depends, extra_postargs)
+    cc_args = self._get_cc_args(pp_opts, debug, extra_preargs)
+    # parallel code
+    N_cores = int(environ.get("OMP_NUM_THREADS", multiprocessing.cpu_count()))
+    def _single_compile(obj):
+        try: src, ext = build[obj]
+        except KeyError: return
+        self._compile(obj, src, ext, cc_args, extra_postargs, pp_opts)
+    # convert to list, imap is evaluated on-demand
+    list(multiprocessing.pool.ThreadPool(N_cores).imap(_single_compile,objects))
+    return objects
+
+
+import distutils.ccompiler
+distutils.ccompiler.CCompiler.compile=parallelCCompile
+
+__version__ = check_output(["git", "describe", "--abbrev=4"]).decode().strip().split("-")[0]
 
 
 
@@ -22,9 +49,10 @@ class get_pybind_include(object):
         return pybind11.get_include(self.user)
 
 
-extra_compile_args = ['-march=native',
-                      '-Wno-char-subscripts', '-Wno-unused-function',
+extra_compile_args = ['-march=native', '-DNDEBUG',
+                      '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
+                      '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',
                       '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
                       '-Wno-deprecated-declarations']
 
@@ -129,10 +157,10 @@ setup(
     author='Daniel Baker',
     author_email='dnb@cs.jhu.edu',
     url='https://github.com/dnbaker/minocore',
-    description='A python module for coresets',
+    description='A python module for coresets and clustering',
     long_description='',
     ext_modules=ext_modules,
-    install_requires=['pybind11>=2.4'],
+    install_requires=['pybind11>=2.4', 'numpy>=0.19'],
     setup_requires=['pybind11>=2.4'],
     cmdclass={'build_ext': BuildExt},
     zip_safe=False,

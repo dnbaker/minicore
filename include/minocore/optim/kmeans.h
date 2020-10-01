@@ -10,6 +10,9 @@
 #include "minocore/util/div.h"
 #include "minocore/optim/lsearchpp.h"
 #include "minocore/util/blaze_adaptor.h"
+#include "reservoir/include/DOGS/reservoir.h"
+#if USE_TBB
+#endif
 
 namespace minocore {
 
@@ -41,51 +44,60 @@ using blz::sqrL2Norm;
  * lspprounds: how many localsearch++ rounds to perform. By default, perform none.
  */
 
+
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0) {
-#ifndef NDEBUG
+#if 1
     std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
 #endif
     std::vector<IT> centers;
-    std::vector<FT> distances(np, 0.), cdf(np);
+    centers.reserve(k);
+    std::vector<FT> distances(np);
+    const auto db = distances.data(), de = db + np;
     {
         auto fc = rng() % np;
+        std::fprintf(stderr, "First center: %u/%zu\n", int(fc), np);
         centers.push_back(fc);
-#ifdef _OPENMP
-        OMP_PFOR
-#else
-        SK_UNROLL_8
-#endif
+
+        OMP_PFOR_DYN
         for(size_t i = 0; i < np; ++i) {
-            if(unlikely(i == fc)) continue;
-#if 0
-            std::fprintf(stderr, "Oracle about to call fc%zu / i%zu.\n", fc, i);
-#endif
-            double dist = oracle(fc, i);
-            distances[i] = dist;
+            if(unlikely(i == fc)) {
+                distances[i] = 0.;
+            } else {
+                distances[i] = oracle(fc, i);
+            }
         }
         assert(distances[fc] == 0.);
-        if(weights) ::std::partial_sum(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
-            return x + y * weights[&y - ds];
-        });
-        else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
-#ifndef NDEBUG
-        std::fprintf(stderr, "Max cost: %g\n", cdf[np - 1]);
-#endif
     }
     std::vector<IT> assignments(np);
     std::uniform_real_distribution<double> urd;
+    int nt = 8;
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        nt = omp_get_num_threads();
+    }
+#endif
     while(centers.size() < k) {
+        std::fprintf(stderr, "Centers size: %zu. Newest center: %u\n", centers.size(), centers.back());
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
+        auto cd = centers.data();
+        auto ce = cd + centers.size();
         IT newc;
         do {
-            newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
+            if(weights) {
+                auto wv = blz::make_cv(weights, np);
+                auto dv = blz::make_cv(db, np);
+                auto mv = evaluate(wv * dv);
+                newc = DOGS::CalaverasReservoirSampler<IT>::parallel_sample1(mv.data(), mv.data() + np, nt, rng());
+            } else {
+                newc = DOGS::CalaverasReservoirSampler<IT>::parallel_sample1(db, de, nt, rng());
+            }
         } while(newc >= np && // Ensure that it is within bounds
-                std::find(centers.data(), centers.data() + centers.size(), newc)
-                        != centers.data() + centers.size() // And unused thus far
+                std::find(cd, ce, newc) != ce // And unused thus far
         );
         //std::fprintf(stderr, "newc: %u/%zu\n", newc, distances.size());
         const auto current_center_id = centers.size();
@@ -102,21 +114,18 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             }
         };
         if(multithread) {
-            OMP_PFOR
+            OMP_PFOR_DYN
             for(IT i = 0; i < np; ++i)
                 lfunc(i);
         } else for(IT i = 0; i < np; lfunc(i++));
-        if(weights) ::std::partial_sum(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
-            return x + y * weights[&y - ds];
-        });
-        else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
     }
 
-    std::fprintf(stderr, "Completed kmeans++. Optional ls++\n");
-    if(lspprounds > 0)
+    std::fprintf(stderr, "Completed kmeans++ with centers of size %zu\n", centers.size());
+    if(lspprounds > 0) {
+        std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
+        std::vector<FT> cdf(distances);
         localsearchpp_rounds(oracle, rng, distances, cdf, centers, assignments, np, lspprounds, weights);
-#if 0
-#endif
+    }
     std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
     return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
 }
@@ -151,12 +160,12 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
     blaze::DynamicVector<IT> assignments(np);
     blaze::DynamicVector<FT> costs(np, std::numeric_limits<FT>::max());
     util::Timer t("get oracle costs");
-    OMP_PFOR
+    OMP_PFOR_DYN
     for(size_t i = 0; i < np; ++i) {
-        auto it = sol.begin();
+        auto it = sol.begin(), e = sol.end();
         auto mincost = oracle(*it, i);
         IT minind = 0, cind = 0;
-        while(++it != sol.end()) {
+        while(++it != e) {
             if(auto newcost = oracle(*it, i); newcost < mincost)
                 mincost = newcost, minind = cind;
             ++cind;
@@ -220,7 +229,7 @@ reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *wei
                 {
                     if(ydist * xdi > urd_val)
                         x = j, xdist = ydist, xdi = 1. / xdist;
-                    DBG_ONLY(std::fprintf(stderr, "Now x is %d with cost %g\n", x, xdist);)
+                    DBG_ONLY(std::fprintf(stderr, "Now x is %d with cost %g\n", int(x), xdist);)
                 }
             }
         };
@@ -282,7 +291,7 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000, bool 
     };
 
     while(centers.size() < k) {
-        std::fprintf(stderr, "Got center %zu\n", centers.size());
+        std::fprintf(stderr, "Center %zu/%zu\r\n", centers.size(), k);
         auto x = div.mod(IT(rng()));
         double xdist = mindist(x);
         auto xdi = 1. / xdist;

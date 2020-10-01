@@ -7,6 +7,8 @@
 struct SparseMatrixWrapper {
     SparseMatrixWrapper(std::string path, bool use_float=true) {
         blaze::Archive<std::ifstream> arch(path);
+        if(use_float) arch >> this->getfloat();
+                else  arch >> this->getdouble();
         perform([&arch](auto &x) {arch >> x;});
     }
     void tofile(std::string path) {
@@ -81,18 +83,18 @@ public:
 #define __DISPATCH(T1, T2, T3) do { \
         if(use_float) {\
             if(databuf.readonly || indbuf.readonly) {\
-                std::fprintf(stderr, "Read only floats\n"); \
+                DBG_ONLY(std::fprintf(stderr, "Read only floats\n");) \
                 matrix_ = csc2sparse<float>(CSCMatrixView<T1, const T2, const T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<const T2 *>(const_cast<const void *>(indicesptr)), reinterpret_cast<const T3 *>(const_cast<const void *>(datptr)), nnz, ydim, xdim), skip_empty); \
             } else { \
-                std::fprintf(stderr, "Const reading of floats\n"); \
+                DBG_ONLY(std::fprintf(stderr, "Const reading of floats\n");) \
                 matrix_ = csc2sparse<float>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<T2 *>(indicesptr), reinterpret_cast<T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
             }\
         } else { \
             if(databuf.readonly || indbuf.readonly) {\
-                std::fprintf(stderr, "Read only reading of doubles\n"); \
+                DBG_ONLY(std::fprintf(stderr, "Read only reading of doubles\n");) \
                 matrix_ = csc2sparse<double>(CSCMatrixView<T1, const T2, const T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<const T2 *>(const_cast<const void *>(indicesptr)), reinterpret_cast<const T3 *>(const_cast<const void *>(datptr)), nnz, ydim, xdim), skip_empty); \
             } else { \
-                std::fprintf(stderr, "Const reading of doubles\n"); \
+                DBG_ONLY(std::fprintf(stderr, "Const reading of doubles\n");) \
                 matrix_ = csc2sparse<double>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<T2 *>(indicesptr), reinterpret_cast<T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
             }\
         }\
@@ -100,7 +102,6 @@ public:
     } while(0)
 #define __DISPATCH_IF(T1, T2, T3) do { \
                 if(py::format_descriptor<T3>::format() == databuf.format) { \
-                    std::fprintf(stderr, "T1 %s, T2 %s, with T3 = %s\n", sizeof(T1) == 4 ? "uint": "uint64", sizeof(T2) == 4 ? "uint": "uint64", databuf.format.data());\
                     __DISPATCH(T1, T2, T3); \
                 } } while(0)
 

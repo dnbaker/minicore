@@ -144,6 +144,7 @@ int main(int argc, char *argv[]) {
     if(npoints > kmppmcs.mat_.rows()) npoints = kmppmcs.mat_.rows();
     auto [wcenteridx, wasn, wcosts] = kmeanspp(kmppmcs.mat_, gen, npoints, blz::sqrL2Norm(), true, kmppmcs.weights_.data());
     blaze::DynamicMatrix<FLOAT_TYPE> weight_kmppcenters = blz::rows(kmppmcs.mat_, wcenteridx.data(), wcenteridx.size());
+    std::fprintf(stderr, "About to perform weighted kmeans\n");
     lloyd_loop(wasn, counts, weight_kmppcenters, kmppmcs.mat_, 0., 1000, blz::sqrL2Norm(), kmppmcs.weights_.data());
     double cost = 0.;
     for(size_t i = 0; i < mat.rows(); ++i) {
