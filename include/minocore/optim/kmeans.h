@@ -10,6 +10,7 @@
 #include "minocore/util/div.h"
 #include "minocore/optim/lsearchpp.h"
 #include "minocore/util/blaze_adaptor.h"
+#include "reservoir/include/DOGS/reservoir.h"
 #if USE_TBB
 #endif
 
@@ -43,23 +44,6 @@ using blz::sqrL2Norm;
  * lspprounds: how many localsearch++ rounds to perform. By default, perform none.
  */
 
-#if _OPENMP >= 201511
-template<typename T, typename T2, typename Op>
-inline void simd_inclusive_scan(const T *src, T2 *dest, size_t n, const Op &op) {
-    T scan_a = 0;
-    #pragma omp simd reduction(inscan, +:scan_a)
-    for(size_t i = 0; i < n; ++i) {
-        scan_a += op(src[i]);
-        #pragma omp scan inclusive(scan_a)
-        dest[i] = scan_a;
-    }
-}
-template<typename T, typename T2>
-inline void simd_inclusive_scan(const T *src, T2 *dest, size_t n) {
-    ::std::partial_sum(src, src + n, dest);
-}
-#endif
-
 
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
@@ -70,26 +54,8 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
 #endif
     std::vector<IT> centers;
     centers.reserve(k);
-    std::vector<FT> distances(np), cdf(np);
+    std::vector<FT> distances(np);
     const auto db = distances.data(), de = db + np;
-    const auto cdd = cdf.data();
-    auto perform_scan = [&]() {
-#if _OPENMP >= 201511
-        if(weights) {
-            auto wcv = blz::make_cv(weights, np);
-            auto dcv = blz::make_cv(db, np);
-            auto costs = evaluate(wcv * dcv);
-            simd_inclusive_scan(costs.data(), cdd, np);
-        } else {
-            simd_inclusive_scan(db, cdd, np);
-        }
-#else
-        if(weights) ::std::partial_sum(db, de, cdd, [weights,ds=&distances[0]](auto x, const auto &y) {
-            return x + y * weights[&y - ds];
-        });
-        else ::std::partial_sum(db, de, cdf.begin());
-#endif
-    };
     {
         auto fc = rng() % np;
         std::fprintf(stderr, "First center: %u/%zu\n", int(fc), np);
@@ -104,13 +70,16 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             }
         }
         assert(distances[fc] == 0.);
-        perform_scan();
-#ifndef NDEBUG
-        std::fprintf(stderr, "Max cost: %g\n", cdf[np - 1]);
-#endif
     }
     std::vector<IT> assignments(np);
     std::uniform_real_distribution<double> urd;
+    int nt = 8;
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        nt = omp_get_num_threads();
+    }
+#endif
     while(centers.size() < k) {
         std::fprintf(stderr, "Centers size: %zu. Newest center: %u\n", centers.size(), centers.back());
         // At this point, the cdf has been prepared, and we are ready to sample.
@@ -119,7 +88,14 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         auto ce = cd + centers.size();
         IT newc;
         do {
-            newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
+            if(weights) {
+                auto wv = blz::make_cv(weights, np);
+                auto dv = blz::make_cv(db, np);
+                auto mv = evaluate(wv * dv);
+                newc = DOGS::CalaverasReservoirSampler<IT>::parallel_sample1(mv.data(), mv.data() + np, nt, rng());
+            } else {
+                newc = DOGS::CalaverasReservoirSampler<IT>::parallel_sample1(db, de, nt, rng());
+            }
         } while(newc >= np && // Ensure that it is within bounds
                 std::find(cd, ce, newc) != ce // And unused thus far
         );
@@ -142,12 +118,12 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             for(IT i = 0; i < np; ++i)
                 lfunc(i);
         } else for(IT i = 0; i < np; lfunc(i++));
-        perform_scan();
     }
 
     std::fprintf(stderr, "Completed kmeans++ with centers of size %zu\n", centers.size());
     if(lspprounds > 0) {
         std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
+        std::vector<FT> cdf(distances);
         localsearchpp_rounds(oracle, rng, distances, cdf, centers, assignments, np, lspprounds, weights);
     }
     std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());

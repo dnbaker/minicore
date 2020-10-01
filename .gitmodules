@@ -34,3 +34,6 @@
 [submodule "diskmat"]
 	path = diskmat
 	url = https://github.com/dnbaker/diskmat
+[submodule "reservoir"]
+	path = reservoir
+	url = https://github.com/dnbaker/reservoir
