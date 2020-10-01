@@ -10,6 +10,8 @@
 #include "minocore/util/div.h"
 #include "minocore/optim/lsearchpp.h"
 #include "minocore/util/blaze_adaptor.h"
+#if USE_TBB
+#endif
 
 namespace minocore {
 
@@ -41,14 +43,9 @@ using blz::sqrL2Norm;
  * lspprounds: how many localsearch++ rounds to perform. By default, perform none.
  */
 
-struct Identity {
-    template<typename T>
-    INLINE auto operator()(T x) const {return x;}
-};
-
-template<typename T, typename Op>
-inline void simd_inclusive_scan(const T *src, T *dest, size_t n, const Op &op) {
-#if 0
+#if _OPENMP >= 201511
+template<typename T, typename T2, typename Op>
+inline void simd_inclusive_scan(const T *src, T2 *dest, size_t n, const Op &op) {
     T scan_a = 0;
     #pragma omp simd reduction(inscan, +:scan_a)
     for(size_t i = 0; i < n; ++i) {
@@ -56,14 +53,13 @@ inline void simd_inclusive_scan(const T *src, T *dest, size_t n, const Op &op) {
         #pragma omp scan inclusive(scan_a)
         dest[i] = scan_a;
     }
-#else
-    std::partial_sum(src, src + n, dest, [&op](auto x, auto y) {return x + op(y);});
+}
+template<typename T, typename T2>
+inline void simd_inclusive_scan(const T *src, T2 *dest, size_t n) {
+    ::std::partial_sum(src, src + n, dest);
+}
 #endif
-}
-template<typename T>
-inline void simd_inclusive_scan(const T *src, T *dest, size_t n) {
-    simd_inclusive_scan(src, dest, n, Identity());
-}
+
 
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
@@ -75,13 +71,24 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     std::vector<IT> centers;
     centers.reserve(k);
     std::vector<FT> distances(np), cdf(np);
-    const auto db = distances.data(), cdd = cdf.data();
-    auto perform_scan = [db,cdd,np,weights]() {
+    const auto db = distances.data(), de = db + np;
+    const auto cdd = cdf.data();
+    auto perform_scan = [&]() {
+#if _OPENMP >= 201511
         if(weights) {
-            simd_inclusive_scan(db, cdd, np, [db,weights](const auto &y) {return weights[&y - db] * y;});
+            auto wcv = blz::make_cv(weights, np);
+            auto dcv = blz::make_cv(db, np);
+            auto costs = evaluate(wcv * dcv);
+            simd_inclusive_scan(costs.data(), cdd, np);
         } else {
             simd_inclusive_scan(db, cdd, np);
         }
+#else
+        if(weights) ::std::partial_sum(db, de, cdd, [weights,ds=&distances[0]](auto x, const auto &y) {
+            return x + y * weights[&y - ds];
+        });
+        else ::std::partial_sum(db, de, cdf.begin());
+#endif
     };
     {
         auto fc = rng() % np;
