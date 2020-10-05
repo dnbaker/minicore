@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "Time for kmeans++: %0.12gs\n", double((stop - start).count()) / 1e9);
     std::fprintf(stderr, "cost for kmeans++: %0.12g\n", std::accumulate(std::get<2>(centers).begin(), std::get<2>(centers).end(), 0.));
     start = t();
-    auto centers3 = reservoir_kmeanspp(ptr, ptr + n, gen, npoints, blz::sqrL2Norm(), (double *)nullptr, true, 0, 1);
+    auto centers3 = reservoir_kmeanspp(ptr, ptr + n, gen, npoints, blz::sqrL2Norm(), (double *)nullptr, 0, 1);
 
     // WFT *weights=static_cast<WFT *>(nullptr), bool multithread=true, int lspprounds=0, int ntimes=1
     stop = t();
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
     stop = t();
     std::fprintf(stderr, "Time for kcenter_greedy_2approx: %0.12gs\n", double((stop - start).count()) / 1e9);
     start = t();
-    auto centers2 = kmeanspp(mat, gen, npoints, blz::L1Norm(), true, (FLOAT_TYPE *)nullptr, true, std::ceil(std::log(npoints)));
+    auto centers2 = kmeanspp(mat, gen, npoints, blz::L1Norm(), true, (FLOAT_TYPE *)nullptr, std::ceil(std::log(npoints)));
     stop = t();
     std::fprintf(stderr, "Time for kmeans++ on L1 norm on matrix: %0.12gs\n", double((stop - start).count()) / 1e9);
     test_kccs(mat, gen, npoints, eps);
@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "Cost for fulldata (normal lloyd) %0.12g vs moving average %0.12g for a difference of %0.12g (and with vanilla on top of ma %0.12g/%0.12g less than the minima of the others)\n",
                  fulldata_cost, fulldata_cost_ma, fulldata_cost - fulldata_cost_ma, fulldata_cost_vanilla, std::min(fulldata_cost_ma, fulldata_cost) - fulldata_cost_vanilla);
     if(npoints > kmppmcs.mat_.rows()) npoints = kmppmcs.mat_.rows();
-    auto [wcenteridx, wasn, wcosts] = kmeanspp(kmppmcs.mat_, gen, npoints, blz::sqrL2Norm(), true, kmppmcs.weights_.data());
+    auto [wcenteridx, wasn, wcosts] = kmeanspp(kmppmcs.mat_, gen, npoints, blz::sqrL2Norm(), kmppmcs.weights_.data());
     blaze::DynamicMatrix<FLOAT_TYPE> weight_kmppcenters = blz::rows(kmppmcs.mat_, wcenteridx.data(), wcenteridx.size());
     std::fprintf(stderr, "About to perform weighted kmeans\n");
     lloyd_loop(wasn, counts, weight_kmppcenters, kmppmcs.mat_, 0., 1000, blz::sqrL2Norm(), kmppmcs.weights_.data());

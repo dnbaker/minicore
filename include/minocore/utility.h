@@ -19,4 +19,6 @@
 #include "minocore/util/timer.h"
 #include "minocore/util/fpq.h"
 
+#include "minocore/util/tsg.h"
+
 #endif /* FGC_UTILITY_H__ */
