@@ -2,6 +2,7 @@
 #ifndef FGC_KMEANS_H__
 #define FGC_KMEANS_H__
 #include <cassert>
+#include <iostream>
 #include <mutex>
 #include <numeric>
 #include "minocore/coreset/matrix_coreset.h"
@@ -97,7 +98,10 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         } else {
             newc = simd_sampling(distances.data(), np, rng());
         }
-        if(unlikely(distances[newc] == 0.)) throw std::runtime_error("Unexpected: distance of 0 selected");
+        if(unlikely(distances[newc] == 0.)) {
+            std::cerr << trans(distances) << ", with max " << distances[newc] << '\n';
+            throw std::runtime_error("Unexpected: distance of 0 selected");
+        }
         if(std::find(cd, ce, newc) != ce) {
             std::fprintf(stderr, "Re-selected existing center %u. Continuing...\n", int(newc));
             continue;
