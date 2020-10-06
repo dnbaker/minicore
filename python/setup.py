@@ -64,7 +64,7 @@ extra_compile_args = ['-march=native', '-DNDEBUG',
                       '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',
                       '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
                       "-DBLAZE_USE_SLEEF=1",
-                      '-Wno-deprecated-declarations', SLEEFLIB]
+                      '-Wno-deprecated-declarations']
 
 if 'BOOST_DIR' in environ:
     extra_compile_args.append("-I%s" % environ['BOOST_DIR'])
@@ -90,7 +90,8 @@ ext_modules = [
          ],
         include_dirs=include_dirs,
         language='c++',
-        extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"]
+        extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"],
+        extra_objects=[SLEEFLIB]
     ),
 ]
 
