@@ -70,9 +70,9 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     {
         auto fc = rng() % np;
         centers[0] = fc;
-        distances = blaze::generate(np,[&](auto i) -> FT __attribute__((always_inline)) {
-            if(unlikely(i == fc)) return 0.;
-            return oracle(fc, i);
+        distances = blaze::generate(np,[&](auto i) __attribute__((always_inline)) {
+            if(unlikely(i == fc)) return FT(0.);
+            return FT(oracle(fc, i));
         });
         assert(distances[fc] == 0.);
     }
