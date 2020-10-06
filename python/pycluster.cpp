@@ -44,6 +44,9 @@ py::dict cpp_pycluster_from_centers(const blz::SM<FT> &mat, unsigned int k, doub
                size_t kmeansmaxiter)
 {
     std::fprintf(stderr, "[%s]\n", __PRETTY_FUNCTION__);
+    if(k != ctrs.size()) {
+        throw std::invalid_argument(std::string("k ") + std::to_string(k) + "!=" + std::to_string(ctrs.size()) + ", ctrs.size()");
+    }
     blz::DV<FT> prior{FT(beta)};
     auto [initcost, finalcost, numiter] = perform_hard_clustering(mat, measure, prior, ctrs, asn, costs, weights, eps, kmeansmaxiter);
     auto pyctrs = centers2pylist(ctrs);
@@ -93,7 +96,7 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
     }
     wy::WyRand<uint32_t> rng(seed);
     std::fprintf(stderr, "About to try to get initial centers\n");
-    auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, kmcrounds, ntimes, cmp);
+    auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, kmcrounds, ntimes, lspprounds, cmp);
     std::fprintf(stderr, "Got initial centers\n");
     auto &[idx, asn, costs] = initial_sol;
     std::vector<blz::CompressedVector<FT, blz::rowVector>> centers(k);
@@ -104,6 +107,7 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
 
 template<typename VecT>
 void set_centers(VecT *vec, const py::buffer_info &bi) {
+    std::fprintf(stderr, "Centers start at size %zu before buffer info\n", vec->size());
     auto &v = *vec;
     switch(bi.format.front()) {
         case 'f':
@@ -118,12 +122,14 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
             v.emplace_back(trans(cv));
         }
         }
+        break;
         case 'u': {
         for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
             auto cv = blz::make_cv((unsigned *)bi.ptr + i * bi.shape[1], bi.shape[1]);
             v.emplace_back(trans(cv));
         }
         }
+        break;
         case 'd':
         for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
             auto cv = blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
@@ -132,6 +138,7 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
         break;
         default: throw std::invalid_argument(std::string("Invalid format string: ") + bi.format);
     }
+    std::fprintf(stderr, "Set centers of size %zu from buffer info\n", vec->size());
 }
 py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
                  py::object msr, py::object weights, double eps,

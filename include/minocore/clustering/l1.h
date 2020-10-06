@@ -46,7 +46,7 @@ l1_sum_core(blz::SM<FT> &mat, std::string out, SumOpts &opts) {
     if(opts.discrete_metric_search) { // Use EM to solve instead of JV
         std::tie(indices, asn, costs) = get_ms_centers_l1(mat, opts.k, opts.lloyd_max_rounds, opts.eps, opts.seed);
     } else {
-        std::tie(indices, asn, costs) = repeatedly_get_initial_centers(mat, rng, opts.k, opts.kmc2_rounds, opts.extra_sample_tries, blz::L1Norm());
+        std::tie(indices, asn, costs) = repeatedly_get_initial_centers(mat, rng, opts.k, opts.kmc2_rounds, opts.extra_sample_tries, opts.lspp, blz::L1Norm());
     }
     std::vector<blz::DV<FT, blz::rowVector>> centers(opts.k);
     { // write selected initial points to file

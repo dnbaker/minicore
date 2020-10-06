@@ -34,6 +34,6 @@
 [submodule "diskmat"]
 	path = diskmat
 	url = https://github.com/dnbaker/diskmat
-[submodule "cpp-btree"]
-	path = cpp-btree
-	url = https://github.com/Kronuz/cpp-btree
+[submodule "reservoir"]
+	path = reservoir
+	url = https://github.com/dnbaker/reservoir

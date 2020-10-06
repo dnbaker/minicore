@@ -7,6 +7,8 @@
 struct SparseMatrixWrapper {
     SparseMatrixWrapper(std::string path, bool use_float=true) {
         blaze::Archive<std::ifstream> arch(path);
+        if(use_float) arch >> this->getfloat();
+                else  arch >> this->getdouble();
         perform([&arch](auto &x) {arch >> x;});
     }
     void tofile(std::string path) {

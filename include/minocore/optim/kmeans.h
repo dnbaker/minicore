@@ -10,6 +10,11 @@
 #include "minocore/util/div.h"
 #include "minocore/optim/lsearchpp.h"
 #include "minocore/util/blaze_adaptor.h"
+#include "minocore/util/tsg.h"
+#include "minocore/util/simdsampling.h"
+#include "reservoir/include/DOGS/reservoir.h"
+#if USE_TBB
+#endif
 
 namespace minocore {
 
@@ -21,7 +26,6 @@ namespace coresets {
 
 using std::partial_sum;
 using blz::sqrL2Norm;
-
 
 
 /*
@@ -41,107 +45,110 @@ using blz::sqrL2Norm;
  * lspprounds: how many localsearch++ rounds to perform. By default, perform none.
  */
 
+
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
-std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0) {
-#ifndef NDEBUG
+auto
+kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0) {
+#if 1
     std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
 #endif
-    std::vector<IT> centers;
-    std::vector<FT> distances(np, 0.), cdf(np);
+    std::vector<IT> centers(k, IT(0));
+    blz::DV<FT> distances(np, std::numeric_limits<FT>::max());
+    int nt = 1;
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        nt = omp_get_num_threads();
+    }
+#endif
+    auto p = std::make_unique<RNG[]>(nt);
+    for(auto p2 = p.get(); p2 < p.get() + nt; ++p2) {
+        p2->seed(rng());
+    }
     {
         auto fc = rng() % np;
-        centers.push_back(fc);
-#ifdef _OPENMP
-        OMP_PFOR
-#else
-        SK_UNROLL_8
-#endif
-        for(size_t i = 0; i < np; ++i) {
-            if(unlikely(i == fc)) continue;
-#if 0
-            std::fprintf(stderr, "Oracle about to call fc%zu / i%zu.\n", fc, i);
-#endif
-            double dist = oracle(fc, i);
-            distances[i] = dist;
-        }
-        assert(distances[fc] == 0.);
-        if(weights) ::std::partial_sum(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
-            return x + y * weights[&y - ds];
+        centers[0] = fc;
+        distances = blaze::generate(np,[&](auto i) -> FT __attribute__((always_inline)) {
+            if(unlikely(i == fc)) return 0.;
+            return oracle(fc, i);
         });
-        else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
-#ifndef NDEBUG
-        std::fprintf(stderr, "Max cost: %g\n", cdf[np - 1]);
-#endif
+        assert(distances[fc] == 0.);
     }
-    std::vector<IT> assignments(np);
+    std::vector<IT> assignments(np, IT(0));
     std::uniform_real_distribution<double> urd;
-    while(centers.size() < k) {
+    blz::DV<FT> rvals;
+    // Short of re-writing the loop fully with SIMD-optimized argmin
+    // and performing one single pass through all the data
+    // (which is less important if dimensionaliy is high)
+    // this is as optimized as it can be.
+    // At least it's all embarassingly parallelizable
+    for(size_t center_idx = 1;center_idx < k;) {
+        std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\n", center_idx, size_t(k), centers[center_idx - 1]);
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
+        auto cd = centers.data();
+        auto ce = cd + center_idx;
         IT newc;
-        do {
-            newc = std::lower_bound(cdf.begin(), cdf.end(), cdf.back() * urd(rng)) - cdf.begin();
-        } while(newc >= np && // Ensure that it is within bounds
-                std::find(centers.data(), centers.data() + centers.size(), newc)
-                        != centers.data() + centers.size() // And unused thus far
-        );
-        //std::fprintf(stderr, "newc: %u/%zu\n", newc, distances.size());
-        const auto current_center_id = centers.size();
-        assignments[newc] = centers.size();
-        centers.push_back(newc);
+        if(weights) {
+            auto w = blz::make_cv(weights, np);
+            rvals = w * distances;
+            newc = simd_sampling(rvals.data(), np, rng());
+        } else {
+            newc = simd_sampling(distances.data(), np, rng());
+        }
+        if(unlikely(distances[newc] == 0.)) throw std::runtime_error("Unexpected: distance of 0 selected");
+        if(std::find(cd, ce, newc) != ce) {
+            std::fprintf(stderr, "Re-selected existing center %u. Continuing...\n", int(newc));
+            continue;
+        }
+        assignments[newc] = center_idx;
+        centers[center_idx] = newc;
         distances[newc] = 0.;
-        auto lfunc = [&](IT i) ALWAYS_INLINE {
+        OMP_PFOR_DYN
+        for(size_t i = 0; i < np; ++i) {
             auto &ldist = distances[i];
-            if(ldist == 0.) return;
+            if(ldist == 0.) continue;
             auto dist = oracle(newc, i);
             if(dist < ldist) { // Only write if it changed
-                assignments[i] = current_center_id;
+                assignments[i] = center_idx;
                 ldist = dist;
             }
-        };
-        if(multithread) {
-            OMP_PFOR
-            for(IT i = 0; i < np; ++i)
-                lfunc(i);
-        } else for(IT i = 0; i < np; lfunc(i++));
-        if(weights) ::std::partial_sum(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
-            return x + y * weights[&y - ds];
-        });
-        else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
+        }
+        ++center_idx;
     }
 
-    std::fprintf(stderr, "Completed kmeans++. Optional ls++\n");
-    if(lspprounds > 0)
+    std::fprintf(stderr, "Completed kmeans++ with centers of size %zu\n", centers.size());
+    if(lspprounds > 0) {
+        std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
+        std::vector<FT> cdf(distances.size());
         localsearchpp_rounds(oracle, rng, distances, cdf, centers, assignments, np, lspprounds, weights);
-#if 0
-#endif
+    }
     std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
-    return std::make_tuple(std::move(centers), std::move(assignments), std::move(distances));
+    return std::make_tuple(std::move(centers), std::move(assignments), std::vector<FT>(distances.begin(), distances.end()));
 }
 
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
-std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0) {
+auto
+kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0) {
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, multithread, lspprounds);
+    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, lspprounds);
 }
 
 template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights=static_cast<WFT *>(nullptr), bool multithread=true, int lspprounds=0, int ntimes=1);
+reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights=static_cast<WFT *>(nullptr), int lspprounds=0, int ntimes=1);
 
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-reservoir_kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0, int ntimes=1) {
+reservoir_kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, int ntimes=1) {
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    return reservoir_kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, multithread, lspprounds, ntimes);
+    return reservoir_kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, lspprounds, ntimes);
 }
 
 
@@ -151,12 +158,12 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
     blaze::DynamicVector<IT> assignments(np);
     blaze::DynamicVector<FT> costs(np, std::numeric_limits<FT>::max());
     util::Timer t("get oracle costs");
-    OMP_PFOR
+    OMP_PFOR_DYN
     for(size_t i = 0; i < np; ++i) {
-        auto it = sol.begin();
+        auto it = sol.begin(), e = sol.end();
         auto mincost = oracle(*it, i);
         IT minind = 0, cind = 0;
-        while(++it != sol.end()) {
+        while(++it != e) {
             if(auto newcost = oracle(*it, i); newcost < mincost)
                 mincost = newcost, minind = cind;
             ++cind;
@@ -173,7 +180,7 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
 template<typename Oracle, typename FT,
          typename IT, typename RNG, typename WFT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights, bool multithread, int lspprounds, int ntimes)
+reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights, int lspprounds, int ntimes)
 {
     schism::Schismatic<IT> div(np);
     std::vector<IT> centers({div.mod(IT(rng()))});
@@ -220,19 +227,14 @@ reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *wei
                 {
                     if(ydist * xdi > urd_val)
                         x = j, xdist = ydist, xdi = 1. / xdist;
-                    DBG_ONLY(std::fprintf(stderr, "Now x is %d with cost %g\n", x, xdist);)
+                    DBG_ONLY(std::fprintf(stderr, "Now x is %d with cost %g\n", int(x), xdist);)
                 }
             }
         };
         for(int i = ntimes; i--;) {
-            if(multithread) {
-                OMP_PFOR
-                for(unsigned j = 1; j < np; ++j) {
-                    lfunc(div.mod(j + x));
-                }
-            } else {
-                for(unsigned j = x + 1; j != x; j = div.mod(j + 1))
-                    lfunc(j);
+            OMP_PFOR
+            for(unsigned j = 1; j < np; ++j) {
+                lfunc(div.mod(j + x));
             }
         }
         centers.emplace_back(x);
@@ -259,7 +261,7 @@ reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *wei
 template<typename Oracle,
          typename IT=std::uint32_t, typename RNG>
 std::vector<IT>
-kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000, bool multithread=true)
+kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
 {
     if(m == 0)  {
         std::fprintf(stderr, "m must be nonzero\n");
@@ -305,13 +307,9 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000, bool 
                 }
             }
         };
-        if(multithread) {
-            OMP_PFOR
-            for(unsigned j = 1; j < m; ++j) {
-                lfunc(j);
-            }
-        } else {
-            for(unsigned j = 1; j < m; lfunc(j++));
+        OMP_PFOR
+        for(unsigned j = 1; j < m; ++j) {
+            lfunc(j);
         }
         centers.insert(x);
     }
@@ -322,27 +320,27 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000, bool 
 template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 std::vector<IT>
-kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm=Norm(), bool multithread=true) {
+kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm=Norm()) {
     if(m == 0) throw std::invalid_argument("m must be nonzero");
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
     size_t np = end - first;
-    return kmc2(dm, rng, np, k, m, multithread);
+    return kmc2(dm, rng, np, k, m);
 }
 
 
 template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
 auto
-kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0) {
+kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, size_t lspprounds=0) {
     using FT = typename MT::ElementType;
     std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(*mat);
-        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, multithread, lspprounds);
+        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, lspprounds);
     } else { // columnwise
         auto columnit = blz::columniterator(*mat);
-        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, multithread, lspprounds);
+        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, lspprounds);
     }
     return ret;
 }
@@ -350,15 +348,15 @@ kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=
 template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
 auto
-reservoir_kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, bool multithread=true, size_t lspprounds=0, int ntimes=1) {
+reservoir_kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, size_t lspprounds=0, int ntimes=1) {
     using FT = typename MT::ElementType;
     std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(*mat);
-        ret = reservoir_kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, multithread, lspprounds, ntimes);
+        ret = reservoir_kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, lspprounds, ntimes);
     } else { // columnwise
         auto columnit = blz::columniterator(*mat);
-        ret = reservoir_kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, multithread, lspprounds, ntimes);
+        ret = reservoir_kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, lspprounds, ntimes);
     }
     return ret;
 }
@@ -369,16 +367,15 @@ auto
 kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
      size_t m=2000,
      const Norm &norm=Norm(),
-     bool rowwise=true,
-     bool multithread=true)
+     bool rowwise=true)
 {
     std::vector<IT> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(*mat);
-        ret = kmc2(rowit.begin(), rowit.end(), rng, k, m, norm, multithread);
+        ret = kmc2(rowit.begin(), rowit.end(), rng, k, m, norm);
     } else { // columnwise
         auto columnit = blz::columniterator(*mat);
-        ret = kmc2(columnit.begin(), columnit.end(), rng, k, m, norm, multithread);
+        ret = kmc2(columnit.begin(), columnit.end(), rng, k, m, norm);
     }
     return ret;
 }
