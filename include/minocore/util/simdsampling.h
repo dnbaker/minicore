@@ -18,7 +18,7 @@ INLINE float horizontal_max(__m128 x) {
     return _mm_cvtss_f32(max4);
 }
 
-uint64_t simd_sampling(const double *__restrict__ weights, size_t n, uint64_t seed=0)
+static inline uint64_t simd_sampling(const double *__restrict__ weights, size_t n, uint64_t seed=0)
 {
     uint64_t bestind;
     wy::WyRand<uint64_t> rng(seed * seed + 13);
@@ -156,7 +156,7 @@ uint64_t simd_sampling(const double *__restrict__ weights, size_t n, uint64_t se
 }
 
 
-uint64_t simd_sampling(const float *__restrict__ weights, size_t n, uint64_t seed=0)
+static inline uint64_t simd_sampling(const float *__restrict__ weights, size_t n, uint64_t seed=0)
 {
     uint64_t bestind;
     wy::WyRand<uint64_t> rng(seed * seed + 13);
@@ -286,7 +286,7 @@ uint64_t simd_sampling(const float *__restrict__ weights, size_t n, uint64_t see
 }
 
 template<typename WeightT>
-uint64_t simd_sampling(const WeightT &weights, uint64_t seed=0) {
+INLINE uint64_t simd_sampling(const WeightT &weights, uint64_t seed=0) {
     return simd_sampling(weights.data(), weights.size(), seed);
 }
 
