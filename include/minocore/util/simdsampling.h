@@ -161,7 +161,7 @@ static inline uint64_t simd_sampling(const float *__restrict__ weights, size_t n
     OMP_PFOR
     for(o = 0; o < e; ++o) {
         thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
-        __m512i v = _mm256_set_epi64(rng(), rng(), rng(), rng(), rng(), rng(), rng(), rng());
+        __m512i v = _mm512_set_epi64(rng(), rng(), rng(), rng(), rng(), rng(), rng(), rng());
         auto v4 = _mm512_mul_ps(_mm512_cvtepi32_ps(v), _mm512_set1_ps(psmul));
         auto v5 = Sleef_logf16_u35(v4);
         auto ov6 = _mm512_load_ps((const float *)&weights[o * nperel]);
