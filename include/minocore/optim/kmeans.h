@@ -11,6 +11,7 @@
 #include "minocore/optim/lsearchpp.h"
 #include "minocore/util/blaze_adaptor.h"
 #include "minocore/util/tsg.h"
+#include "minocore/util/simdsampling.h"
 #include "reservoir/include/DOGS/reservoir.h"
 #if USE_TBB
 #endif
@@ -25,7 +26,6 @@ namespace coresets {
 
 using std::partial_sum;
 using blz::sqrL2Norm;
-
 
 
 /*
@@ -89,34 +89,15 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         // add new element
         auto cd = centers.data();
         auto ce = cd + center_idx;
-        std::uniform_real_distribution<FT> urd;
         IT newc;
-        auto rngfunc = [](auto) {
-            thread_local tsg::ThreadSeededGen<RNG> rng;
-            std::uniform_real_distribution<FT> urd;
-            return urd(rng);
-        };
-        rvals = blz::generate(np, rngfunc);
         if(weights) {
             auto w = blz::make_cv(weights, np);
-            rvals = log(rvals) / (distances * w);
+            rvals = w * distances;
+            newc = simd_sampling(rvals.data(), np, rng());
         } else {
-            rvals = log(rvals) / distances;
+            newc = simd_sampling(distances.data(), np, rng());
         }
-        std::pair<FT, IT> bestind(-std::numeric_limits<FT>::max(), IT(0));
-        OMP_PFOR
-        for(size_t i = 0; i < np; ++i) {
-            if(rvals[i] > bestind.first) {
-                OMP_CRITICAL
-                {
-                    if(rvals[i] > bestind.first) {
-                        bestind.second = i;
-                        bestind.first = rvals[i];
-                    }
-                }
-            }
-        }
-        newc = bestind.second;
+        if(unlikely(distances[newc] == 0.)) throw std::runtime_error("Unexpected: distance of 0 selected");
         if(std::find(cd, ce, newc) != ce) {
             std::fprintf(stderr, "Re-selected existing center %u. Continuing...\n", int(newc));
             continue;
