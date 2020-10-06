@@ -36,7 +36,7 @@ py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, Py_ssize_t
         }
         wptr = info.ptr;
     }
-    std::fprintf(stderr, "ki: %d\n", k);
+    std::fprintf(stderr, "ki: %d\n", int(k));
     wy::WyRand<uint64_t> rng(seed);
     const auto psum = gamma_beta * smw.columns();
     const blz::StaticVector<double, 1> prior({gamma_beta});
@@ -337,7 +337,9 @@ void init_smw(py::module &m) {
         }
     });
     m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                          py::object weights) -> py::object {
+                          Py_ssize_t lspp,
+                          py::object weights) -> py::object
+    {
         const void *wptr = nullptr;
         int kind = -1;
         const auto mmsr = assure_dm(msr);
@@ -382,11 +384,11 @@ void init_smw(py::module &m) {
             //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
             auto sol = 
                 kind == -1 ?
-                repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp)
-                : kind == 'f' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp, (const float *)wptr)
-                : kind == 'd' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp, (const double *)wptr)
-                : kind == 'u' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp, (const unsigned *)wptr)
-                : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp, (const int *)wptr);
+                repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp)
+                : kind == 'f' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const float *)wptr)
+                : kind == 'd' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const double *)wptr)
+                : kind == 'u' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const unsigned *)wptr)
+                : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const int *)wptr);
             auto &[lidx, lasn, lcosts] = sol;
             for(size_t i = 0; i < lidx.size(); ++i) {
                 std::fprintf(stderr, "selected point %u for center %zu\n", lidx[i], i);
