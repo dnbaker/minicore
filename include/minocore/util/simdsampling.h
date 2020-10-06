@@ -32,10 +32,7 @@ uint64_t simd_sampling(const double *__restrict__ weights, size_t n, uint64_t se
     OMP_PFOR
     for(o = 0; o < e; ++o) {
         thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
-        __m512i v;
-        for(size_t j = 0; j < nperel; ++j) {
-            ((uint64_t *)&v)[j] = rng();
-        }
+        __m512i v = _mm512_set_epi64(rng(), rng(), rng(), rng(), rng(), rng(), rng(), rng());
         auto v2 = _mm512_or_si512(_mm512_srli_epi64(v, 12), _mm512_castpd_si512(_mm512_set1_pd(0x0010000000000000)));
         auto v3 = _mm512_sub_pd(_mm512_castsi512_pd(v2), _mm512_set1_pd(0x0010000000000000));
         auto v4 = _mm512_mul_pd(v3, _mm512_set1_pd(pdmul));
@@ -71,10 +68,7 @@ uint64_t simd_sampling(const double *__restrict__ weights, size_t n, uint64_t se
     OMP_PFOR
     for(o = 0; o < e; ++o) {
         thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
-        __m256i v;
-        for(size_t j = 0; j < nperel; ++j) {
-            ((uint64_t *)&v)[j] = rng();
-        }
+        __m256i v = _mm256_set_epi64x(rng(), rng(), rng(), rng());
         auto v2 = _mm256_or_si256(_mm256_srli_epi64(v, 12), _mm256_castpd_si256(_mm256_set1_pd(0x0010000000000000)));
         auto v3 = _mm256_sub_pd(_mm256_castsi256_pd(v2), _mm256_set1_pd(0x0010000000000000));
         auto v4 = _mm256_mul_pd(v3, _mm256_set1_pd(pdmul));
@@ -117,10 +111,7 @@ uint64_t simd_sampling(const double *__restrict__ weights, size_t n, uint64_t se
     OMP_PFOR
     for(o = 0; o < e; ++o) {
         thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
-        __m128i v;
-        for(size_t j = 0; j < nperel; ++j) {
-            ((uint64_t *)&v)[j] = rng();
-        }
+        __m128i v = _mm_set_epi64x(rng(), rng());
         auto v2 = _mm_or_si128(_mm_srli_epi64(v, 12), _mm_castpd_si128(_mm_set1_pd(0x0010000000000000)));
         auto v3 = _mm_sub_pd(_mm_castsi128_pd(v2), _mm_set1_pd(0x0010000000000000));
         auto v4 = _mm_mul_pd(v3, _mm_set1_pd(pdmul));
@@ -170,10 +161,7 @@ uint64_t simd_sampling(const float *__restrict__ weights, size_t n, uint64_t see
     OMP_PFOR
     for(o = 0; o < e; ++o) {
         thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
-        __m512i v;
-        for(size_t j = 0; j < sizeof(__m512d) / sizeof(uint64_t); ++j) {
-            ((uint64_t *)&v)[j] = rng();
-        }
+        __m512i v = _mm256_set_epi64(rng(), rng(), rng(), rng(), rng(), rng(), rng(), rng());
         auto v4 = _mm512_mul_ps(_mm512_cvtepi32_ps(v), _mm512_set1_ps(psmul));
         auto v5 = Sleef_logf16_u35(v4);
         auto ov6 = _mm512_load_ps((const float *)&weights[o * nperel]);
@@ -207,10 +195,7 @@ uint64_t simd_sampling(const float *__restrict__ weights, size_t n, uint64_t see
     OMP_PFOR
     for(o = 0; o < e; ++o) {
         thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
-        __m256i v;
-        for(size_t j = 0; j < sizeof(__m256) / sizeof(uint64_t); ++j) {
-            ((uint64_t *)&v)[j] = rng();
-        }
+        __m256i v = _mm256_set_epi64x(rng(), rng(), rng(), rng());
         auto v2 = _mm256_mul_ps(_mm256_cvtepi32_ps(v), _mm256_set1_ps(psmul));
         auto v3 = Sleef_logf8_u35(v2);
         auto ov6 = _mm256_load_ps((const float *) &weights[o * nperel]);
@@ -250,7 +235,7 @@ uint64_t simd_sampling(const float *__restrict__ weights, size_t n, uint64_t see
     OMP_PFOR
     for(o = 0; o < e; ++o) {
         thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
-        __m128i v;
+        __m128i v = _mm_set_epi64(rng(), rng());
         for(size_t j = 0; j < nperel; ++j) {
             ((uint64_t *)&v)[j] = rng();
         }
