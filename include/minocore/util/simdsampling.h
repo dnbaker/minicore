@@ -6,6 +6,7 @@
 #include "minocore/util/tsg.h"
 #include "minocore/util/macros.h"
 #include "aesctr/wy.h"
+#include "sleef.h"
 
 namespace minocore {
 

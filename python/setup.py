@@ -1,11 +1,20 @@
 from setuptools import setup, Extension, find_packages, distutils
-from os import environ
+import sys
+from os import environ, path
 from setuptools.command.build_ext import build_ext
 from glob import glob
 from subprocess import check_output
 import multiprocessing
 import multiprocessing.pool
 
+
+sleefdir = environ.get("SLEEF_DIR", "../sleef/build")
+SLEEFLIB = sleefdir + "/lib/libsleef.a"
+
+if not path.isfile(SLEEFLIB):
+    subprocess.check_call(f"cd {sleefdir} && cmake .. -DBUILD_SHARED_LIBS=0 && make", shell=True)
+else:
+    print("SLEEFLIB " + SLEEFLIB + " found as expected", file=sys.stderr)
 
 # from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
 # parallelizes extension compilation
@@ -54,7 +63,8 @@ extra_compile_args = ['-march=native', '-DNDEBUG',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                       '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',
                       '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
-                      '-Wno-deprecated-declarations']
+                      "-DBLAZE_USE_SLEEF=1",
+                      '-Wno-deprecated-declarations', SLEEFLIB]
 
 if 'BOOST_DIR' in environ:
     extra_compile_args.append("-I%s" % environ['BOOST_DIR'])
@@ -66,6 +76,7 @@ include_dirs=[
     get_pybind_include(user=True),
    "../",
    "../include",
+   sleefdir + "/include",
    "../include/minocore",
    "../blaze",
    "../pybind11/include"
