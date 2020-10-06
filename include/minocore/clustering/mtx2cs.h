@@ -22,6 +22,7 @@ struct SumOpts {
     unsigned extra_sample_tries = 1;
     unsigned lloyd_max_rounds = 1000;
     unsigned sampled_number_coresets = 100;
+    int lspp = 0;
     unsigned fl_b = -1;
     coresets::SensitivityMethod sm = coresets::BFL;
     bool soft = false;
@@ -85,19 +86,19 @@ struct SumOpts {
  */
 template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm, typename WeightT=const double>
 auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
-                         unsigned k, unsigned kmc2_rounds, const Norm &norm, WeightT *const weights=static_cast<WeightT *>(nullptr)) {
+                         unsigned k, unsigned kmc2_rounds, int lspp, const Norm &norm, WeightT *const weights=static_cast<WeightT *>(nullptr)) {
     using FT = blaze::ElementType_t<MT>;
     const size_t nr = (*matrix).rows();
     std::vector<uint32_t> indices, asn;
     blz::DV<FT> costs(nr);
     if(kmc2_rounds == -1u) {
-        std::fprintf(stderr, "Performing streaming kmeanspp\n");
+        std::fprintf(stderr, "[%s] Performing streaming kmeanspp\n", __func__);
         std::vector<FT> fcosts;
         std::tie(indices, asn, fcosts) = coresets::reservoir_kmeanspp(matrix, rng, k, norm, weights);
         //indices = std::move(initcenters);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     } else if(kmc2_rounds > 0) {
-        std::fprintf(stderr, "Performing kmc\n");
+        std::fprintf(stderr, "[%s] Performing kmc\n", __func__);
         indices = coresets::kmc2(matrix, rng, k, kmc2_rounds, norm);
 #ifndef NDEBUG
         std::fprintf(stderr, "Got indices of size %zu\n", indices.size());
@@ -111,9 +112,9 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
         costs = std::move(ncosts);
         asn.assign(oasn.data(), oasn.data() + oasn.size());
     } else {
-        std::fprintf(stderr, "Performing kmeanspp\n");
+        std::fprintf(stderr, "[%s] Performing kmeans++\n", __func__);
         std::vector<FT> fcosts;
-        std::tie(indices, asn, fcosts) = coresets::kmeanspp(matrix, rng, k, norm, weights);
+        std::tie(indices, asn, fcosts) = coresets::kmeanspp(matrix, rng, k, norm, true, weights, true, lspp);
         //indices = std::move(initcenters);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     }
@@ -123,7 +124,7 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
 
 template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm, typename WeightT=const double>
 auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
-                                    unsigned k, unsigned kmc2_rounds, unsigned ntimes, const Norm &norm=Norm(),
+                                    unsigned k, unsigned kmc2_rounds, int ntimes, int lspp=0, const Norm &norm=Norm(),
                                     WeightT *const weights=static_cast<WeightT *>(nullptr))
 {
     using FT = blaze::ElementType_t<MT>;
@@ -146,10 +147,10 @@ auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rn
     }
     auto [idx, asn, costs] = std::move(best);
 #else
-    auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, norm, weights);
+    auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, lspp, norm, weights);
     auto tcost = blz::sum(costs);
-    for(;--ntimes;) {
-        auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, norm, weights);
+    for(;--ntimes > 0;) {
+        auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, lspp, norm, weights);
         auto ncost = blz::sum(_costs);
         if(ncost < tcost) {
             std::fprintf(stderr, "%g->%g: %g\n", tcost, ncost, tcost - ncost);
@@ -163,10 +164,9 @@ auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rn
 }
 
 
-template<typename MT, bool SO>
-auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts)
+template<typename MT, bool SO, typename FT=blaze::ElementType_t<MT>>
+auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts, FT *weights=nullptr)
 {
-    using FT = blaze::ElementType_t<MT>;
     blz::DV<FT, blz::rowVector> pc(1), *pcp = &pc;
     if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
@@ -174,13 +174,18 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts)
         pcp = nullptr;
     auto app = jsd::make_probdiv_applicator(*sm, opts.dis, opts.prior, pcp);
     wy::WyRand<uint64_t, 2> rng(opts.seed);
-    auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), true);
+    auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed, weights, true);
     auto csum = blz::sum(costs);
     for(unsigned i = 0; i < opts.extra_sample_tries; ++i) {
-        auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed, static_cast<FT *>(nullptr), /*multithread=*/false);
+        auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed, weights, /*multithread=*/false);
         if(auto csum2 = blz::sum(costs2); csum2 < csum) {
             std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
         }
+    }
+    if(opts.lspp) {
+        blz::DV<FT, blz::rowVector> cdf(costs.size());
+        std::partial_sum(costs.data(), costs.data() + costs.size(), cdf.data());
+        localsearchpp_rounds(app, rng, costs, cdf, centers, asn, costs.size(), opts.lspp, weights);
     }
     CType<FT> modcosts(costs.size());
     std::copy(costs.begin(), costs.end(), modcosts.begin());

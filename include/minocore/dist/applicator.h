@@ -1324,7 +1324,7 @@ private:
             case GAMMA_BETA:
                 if(c == nullptr) throw std::invalid_argument("Can't do gamma_beta with null pointer");
                 if constexpr(IsSparseMatrix_v<MatrixType>) {
-                    prior_data_.reset(new VecT({(*c)[0]}));
+                    prior_data_.reset(new VecT({FT((*c)[0])}));
                 } else if constexpr(IsDenseMatrix_v<MatrixType>) {
                     data_ += (*c)[0];
                 }
@@ -1697,8 +1697,8 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
 }
 
 
-template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT>
-FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, SumT mrsum)
+template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
+FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
 {
     if constexpr(!blaze::IsSparseVector_v<CtrT> && !blaze::IsSparseVector_v<MatrixRowT>) {
         std::fprintf(stderr, "Using non-specialized form\n");
@@ -1938,6 +1938,22 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             default: throw TODOError("unexpected msr; not yet supported");
         }
         return ret;
+    } else if constexpr(!blz::IsSparseVector_v<MatrixRowT>) {
+        static int mixed_warning_emitted = 0;
+        if(!mixed_warning_emitted) {
+            mixed_warning_emitted = 1;
+            std::fprintf(stderr, "Using mixed dense/sparse comparisons; this will be correct but may be slower");
+        }
+        blaze::CompressedVector<ElementType_t<MatrixRowT>, blaze::TransposeFlag_v<MatrixRowT>> cv = mr;
+        return msr_with_prior(msr, ctr, cv, prior, prior_sum, ctrsum, mrsum);
+    } else {
+        static int mixed_warning_emitted = 0;
+        if(!mixed_warning_emitted) {
+            mixed_warning_emitted = 1;
+            std::fprintf(stderr, "Using mixed dense/sparse comparisons; this will be correct but may be slower");
+        }
+        blaze::CompressedVector<ElementType_t<CtrT>, blaze::TransposeFlag_v<CtrT>> cv = ctr;
+        return msr_with_prior(msr, cv, mr, prior, prior_sum, ctrsum, mrsum);
     }
 }
 

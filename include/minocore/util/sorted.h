@@ -31,7 +31,11 @@ public:
         return lower_bound(x);
     }
     auto &con() {return data_;}
-    auto &con() const {return data_;}
+    const auto &con() const {return data_;}
+    template<typename It>
+    void insert(It beg, It end) {
+        while(beg != end) emplace(*beg), ++beg;
+    }
     template<typename...EArgs>
     auto emplace(EArgs &&...args) {
         T x(std::forward<EArgs>(args)...);
