@@ -340,6 +340,10 @@ void init_smw(py::module &m) {
                           Py_ssize_t lspp,
                           py::object weights) -> py::object
     {
+        if(gamma_beta <= 0.) {
+            gamma_beta = 1. / smw.columns();
+            std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
+        }
         const void *wptr = nullptr;
         int kind = -1;
         const auto mmsr = assure_dm(msr);
