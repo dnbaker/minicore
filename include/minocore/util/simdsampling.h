@@ -18,10 +18,13 @@ INLINE float horizontal_max(__m128 x) {
     return _mm_cvtss_f32(max4);
 }
 
+static constexpr double DINC = 1e-100;
+static constexpr double FINC = 1e-50;
+
 static inline uint64_t simd_sampling(const double *__restrict__ weights, size_t n, uint64_t seed=0)
 {
     uint64_t bestind;
-    wy::WyRand<uint64_t> rng(seed * seed + 13);
+    wy::WyRand<uint64_t> baserng(seed * seed + 13);
 #ifdef __AVX512F__
     constexpr size_t nperel = sizeof(__m512d) / sizeof(double);
     const size_t e = n / nperel;
@@ -31,13 +34,13 @@ static inline uint64_t simd_sampling(const double *__restrict__ weights, size_t 
     size_t o;
     OMP_PFOR
     for(o = 0; o < e; ++o) {
-        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
+        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng(seed + baserng());
         __m512i v = _mm512_set_epi64(rng(), rng(), rng(), rng(), rng(), rng(), rng(), rng());
         auto v2 = _mm512_or_si512(_mm512_srli_epi64(v, 12), _mm512_castpd_si512(_mm512_set1_pd(0x0010000000000000)));
         auto v3 = _mm512_sub_pd(_mm512_castsi512_pd(v2), _mm512_set1_pd(0x0010000000000000));
         auto v4 = _mm512_mul_pd(v3, _mm512_set1_pd(pdmul));
         auto v5 = Sleef_logd8_u35(v4);
-        auto ov6 = _mm512_load_pd((const double *)&weights[o * nperel]);
+        auto ov6 = _mm512_max_pd(_mm512_load_pd((const double *)&weights[o * nperel]), _m512_set1_pd(DINC));
         auto divv = _mm512_div_pd(v5, ov6);
         auto cmpmask = _mm512_cmp_pd_mask(divv, vmaxv, _CMP_GT_OQ);
         if(cmpmask) {
@@ -54,7 +57,7 @@ static inline uint64_t simd_sampling(const double *__restrict__ weights, size_t 
     double maxv = _mm512_cvtsd_f64(vmaxv);
     for(size_t p = o * nperel; p != n; ++p) {
         std::uniform_real_distribution<double> urd;
-        auto v = std::log(urd(rng)) / weights[p];
+        auto v = std::log(urd(baserng)) / weights[p];
         if(v > maxv)
             bestind = p, maxv = v;
     }
@@ -67,13 +70,13 @@ static inline uint64_t simd_sampling(const double *__restrict__ weights, size_t 
     size_t o = 0;
     OMP_PFOR
     for(o = 0; o < e; ++o) {
-        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
+        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng(baserng() + seed);
         __m256i v = _mm256_set_epi64x(rng(), rng(), rng(), rng());
         auto v2 = _mm256_or_si256(_mm256_srli_epi64(v, 12), _mm256_castpd_si256(_mm256_set1_pd(0x0010000000000000)));
         auto v3 = _mm256_sub_pd(_mm256_castsi256_pd(v2), _mm256_set1_pd(0x0010000000000000));
         auto v4 = _mm256_mul_pd(v3, _mm256_set1_pd(pdmul));
         auto v5 = Sleef_logd4_u35(v4);
-        auto ov6 = _mm256_load_pd((const double *) &weights[o * nperel]);
+        auto ov6 = _mm256_max_pd(_mm256_load_pd((const double *) &weights[o * nperel]), _mm256_set1_pd(DINC));
         auto divv = _mm256_div_pd(v5, ov6);
         auto cmp = _mm256_cmp_pd(divv, vmaxv, _CMP_GT_OQ);
         auto cmpmask = _mm256_movemask_pd(cmp);
@@ -96,7 +99,7 @@ static inline uint64_t simd_sampling(const double *__restrict__ weights, size_t 
     for(size_t p = o * nperel; p != n; ++p) {
         if(!weights[p]) continue;
         std::uniform_real_distribution<double> urd;
-        auto v = std::log(urd(rng)) / weights[p];
+        auto v = std::log(urd(baserng)) / weights[p];
         if(v > maxv)
             bestind = p, maxv = v;
     }
@@ -110,13 +113,13 @@ static inline uint64_t simd_sampling(const double *__restrict__ weights, size_t 
     size_t o;
     OMP_PFOR
     for(o = 0; o < e; ++o) {
-        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
+        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng(baserng() + seed);
         __m128i v = _mm_set_epi64x(rng(), rng());
         auto v2 = _mm_or_si128(_mm_srli_epi64(v, 12), _mm_castpd_si128(_mm_set1_pd(0x0010000000000000)));
         auto v3 = _mm_sub_pd(_mm_castsi128_pd(v2), _mm_set1_pd(0x0010000000000000));
         auto v4 = _mm_mul_pd(v3, _mm_set1_pd(pdmul));
         auto v5 = Sleef_logd2_u35(v4);
-        auto ov6 = _mm_load_pd((const double *) &weights[o * nperel]);
+        auto ov6 = _mm_max_pd(_mm_load_pd((const double *) &weights[o * nperel]), _mm_set1_pd(DINC));
         auto divv = _mm_div_pd(v5, ov6);
         auto cmp = _mm_cmp_pd(divv, vmaxv, _CMP_GT_OQ);
         auto cmpmask = _mm_movemask_pd(cmp);
@@ -131,7 +134,7 @@ static inline uint64_t simd_sampling(const double *__restrict__ weights, size_t 
     }
     for(size_t p = o * nperel; p != n; ++p) {
         std::uniform_real_distribution<double> urd;
-        auto v = std::log(urd(rng)) / weights[p];
+        auto v = std::log(urd(baserng)) / weights[p];
         if(v > maxv)
             bestind = p, maxv = v;
     }
@@ -150,7 +153,7 @@ static inline uint64_t simd_sampling(const double *__restrict__ weights, size_t 
 static inline uint64_t simd_sampling(const float *__restrict__ weights, size_t n, uint64_t seed=0)
 {
     uint64_t bestind;
-    wy::WyRand<uint64_t> rng(seed * seed + 13);
+    wy::WyRand<uint64_t> baserng(seed * seed + 13);
 #ifdef __AVX512F__
     constexpr size_t nperel = sizeof(__m512d) / sizeof(float);
     const size_t e = n / nperel;
@@ -160,11 +163,11 @@ static inline uint64_t simd_sampling(const float *__restrict__ weights, size_t n
     size_t o;
     OMP_PFOR
     for(o = 0; o < e; ++o) {
-        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
+        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng(seed + baserng());
         __m512i v = _mm512_set_epi64(rng(), rng(), rng(), rng(), rng(), rng(), rng(), rng());
         auto v4 = _mm512_mul_ps(_mm512_cvtepi32_ps(v), _mm512_set1_ps(psmul));
         auto v5 = Sleef_logf16_u35(v4);
-        auto ov6 = _mm512_load_ps((const float *)&weights[o * nperel]);
+        auto ov6 = _mm512_max_ps(_mm512_load_ps((const float *)&weights[o * nperel]), _mm512_set1_ps(FINC));
         auto divv = _mm512_div_ps(v5, ov6);
         auto cmpmask = _mm512_cmp_ps_mask(divv, vmaxv, _CMP_GT_OQ);
         if(cmpmask) {
@@ -181,7 +184,7 @@ static inline uint64_t simd_sampling(const float *__restrict__ weights, size_t n
     float maxv = _mm512_cvtss_f32(vmaxv);
     for(size_t p = o * nperel; p != n; ++p) {
         std::uniform_real_distribution<float> urd;
-        auto v = std::log(urd(rng)) / weights[p];
+        auto v = std::log(urd(baserng)) / weights[p];
         if(v > maxv)
             bestind = p, maxv = v;
     }
@@ -194,11 +197,11 @@ static inline uint64_t simd_sampling(const float *__restrict__ weights, size_t n
     size_t o = 0;
     OMP_PFOR
     for(o = 0; o < e; ++o) {
-        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
+        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng(baserng() + seed);
         __m256i v = _mm256_set_epi64x(rng(), rng(), rng(), rng());
         auto v2 = _mm256_mul_ps(_mm256_cvtepi32_ps(v), _mm256_set1_ps(psmul));
         auto v3 = Sleef_logf8_u35(v2);
-        auto ov6 = _mm256_load_ps((const float *) &weights[o * nperel]);
+        auto ov6 = _mm256_max_ps(_mm256_load_ps((const float *) &weights[o * nperel]), _mm256_set1_ps(FINC));
         auto divv = _mm256_div_ps(v3, ov6);
         auto cmp = _mm256_cmp_ps(divv, vmaxv, _CMP_GT_OQ);
         auto cmpmask = _mm256_movemask_ps(cmp);
@@ -220,7 +223,7 @@ static inline uint64_t simd_sampling(const float *__restrict__ weights, size_t n
     float maxv = _mm256_cvtss_f32(vmaxv);
     for(size_t p = o * nperel; p != n; ++p) {
         std::uniform_real_distribution<float> urd;
-        auto v = std::log(urd(rng)) / weights[p];
+        auto v = std::log(urd(baserng)) / weights[p];
         if(v > maxv)
             bestind = p, maxv = v;
     }
@@ -234,14 +237,11 @@ static inline uint64_t simd_sampling(const float *__restrict__ weights, size_t n
     size_t o;
     OMP_PFOR
     for(o = 0; o < e; ++o) {
-        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng;
+        thread_local tsg::ThreadSeededGen<wy::WyRand<uint64_t>> rng(baserng() + seed);
         __m128i v = _mm_set_epi64(rng(), rng());
-        for(size_t j = 0; j < nperel; ++j) {
-            ((uint64_t *)&v)[j] = rng();
-        }
         auto v3 = _mm_mul_ps(_mm_cvtepi32_ps(v), _mm_set1_ps(psmul));
         auto v5 = Sleef_logf4_u35(v3);
-        auto ov6 = _mm_load_ps((const float *) &weights[o * nperel]);
+        auto ov6 = _mm_max_ps(_mm_load_ps((const float *) &weights[o * nperel]), _mm_set1_ps(FINC));
         auto divv = _mm_div_ps(v5, ov6);
         auto cmp = _mm_cmp_ps(divv, vmaxv, _CMP_GT_OQ);
         auto cmpmask = _mm_movemask_ps(cmp);
@@ -255,15 +255,15 @@ static inline uint64_t simd_sampling(const float *__restrict__ weights, size_t n
     }
     for(size_t p = o * nperel; p != n; ++p) {
         std::uniform_real_distribution<float> urd;
-        auto v = std::log(urd(rng)) / weights[p];
+        auto v = std::log(urd(baserng)) / weights[p];
         if(v > maxv)
             bestind = p, maxv = v;
     }
 #else
     bestind = 0;
-    double bestv = std::log(std::uniform_real_distribution<double>()(rng)) / weights[0];
+    double bestv = std::log(std::uniform_real_distribution<double>()(baserng)) / weights[0];
     for(size_t i = 1; i < n; ++i) {
-        auto v = std::log(std::uniform_real_distribution<double>()(rng)) / weights[i];
+        auto v = std::log(std::uniform_real_distribution<double>()(baserng)) / weights[i];
         if(v > bestv) bestv = v, bestind = i;
     }
 #endif

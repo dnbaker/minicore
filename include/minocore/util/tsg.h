@@ -2,6 +2,7 @@
 #define THREAD_SEEDED_GEN_H__
 #include <thread>
 #include <utility>
+#include <cstdio>
 
 namespace tsg {
 template<typename RNG>

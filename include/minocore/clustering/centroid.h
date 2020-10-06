@@ -361,7 +361,6 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         const auto &asnv = assigned[i];
         const auto nasn = asnv.size();
         MINOCORE_VALIDATE(nasn != 0);
-        std::fprintf(stderr, "Processing L1 centroid %u for %zu points\n", i, nasn);
         switch(nasn) {
             case 1: ctrs[i] = row(mat, asnv[0]); break;
             case 2: {
@@ -378,7 +377,6 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             }
             default: {
                 auto asp = asnv.data();
-                std::fprintf(stderr, "Selecting %zu rows\n", nasn);
                 auto rowsel = rows(mat, asp, nasn);
                 if(weights)
                     coresets::l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
@@ -500,7 +498,7 @@ void set_centroids_full_mean(const Mat &mat,
     std::unique_ptr<blz::DV<FT>> probup;
     set_asn:
     for(size_t i = 0; i < np; ++i) {
-        blz::push_back(assigned[asn[i]], i);
+        assigned[asn[i]].push_back(i);
     }
 #ifndef NDEBUG
     for(unsigned i = 0; i < assigned.size(); ++i) std::fprintf(stderr, "Center %u has %zu assigned points\n", i, assigned[i].size());
@@ -515,7 +513,7 @@ void set_centroids_full_mean(const Mat &mat,
         std::sprintf(buf, "Restarting centers with no support for set_centroids_full_mean: %s as measure with prior of size %zu (%g)\n",
                      msr2str(measure), prior.size(), pv);
         std::cerr << buf;
-        const constexpr RestartMethodPol restartpol = RESTART_GREEDY;
+        const constexpr RestartMethodPol restartpol = RESTART_D2;
         const FT psum = prior.size() == 1 ? FT(prior[0]) * prior.size(): blz::sum(prior);
         for(const auto id: sa) {
             // Instead, use a temporary buffer to store partial sums and randomly select newly-started centers
@@ -527,14 +525,20 @@ void set_centroids_full_mean(const Mat &mat,
                 r = rng() % costs.size();
             else {
                 assert(restartpol == RESTART_D2);
-                if(pdf.size() != costs.size()) pdf.resize(costs.size());
-                std::partial_sum(costs.begin(), costs.end(), pdf.begin());
-                std::uniform_real_distribution<FT> urd;
-                r = std::lower_bound(pdf.begin(), pdf.end(), urd(rng) * costs[costs.size() - 1]) - pdf.begin();
+                int i = 0;
+                do {
+                    r = simd_sampling(costs.data(), costs.size(), rng());
+                    std::fprintf(stderr, "Restarting with point %ld\n", r);
+                    if(++i == 5) {
+                        r = std::max_element(costs.begin(), costs.end()) - costs.begin();
+                        std::fprintf(stderr, "Center restarting took too many tries\n");
+                    }
+                } while(!costs[r]);
             }
             auto &ctr = ctrs[id];
             ctr = row(mat, r);
             ctrsums[id] = blz::sum(ctr);
+            costs = std::numeric_limits<FT>::max();
             OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
                 unsigned bestid = asn[i], obi = bestid;

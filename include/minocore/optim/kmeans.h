@@ -84,6 +84,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     // (which is less important if dimensionaliy is high)
     // this is as optimized as it can be.
     // At least it's all embarassingly parallelizable
+    int d0s = 0;
     for(size_t center_idx = 1;center_idx < k;) {
         std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\n", center_idx, size_t(k), centers[center_idx - 1]);
         // At this point, the cdf has been prepared, and we are ready to sample.
@@ -91,6 +92,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         auto cd = centers.data();
         auto ce = cd + center_idx;
         IT newc;
+        setnewc:
         if(weights) {
             auto w = blz::make_cv(weights, np);
             rvals = w * distances;
@@ -99,8 +101,12 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             newc = simd_sampling(distances.data(), np, rng());
         }
         if(unlikely(distances[newc] == 0.)) {
-            std::cerr << trans(distances) << ", with max " << distances[newc] << '\n';
-            throw std::runtime_error("Unexpected: distance of 0 selected");
+            if(++d0s == 5) {
+                std::stringstream ss;
+                ss << trans(distances) << ", with max " << distances[newc] << '\n';
+                throw std::runtime_error(std::string("Unexpected: distance of 0 selected") + ss.str());;
+            }
+            goto setnewc;
         }
         if(std::find(cd, ce, newc) != ce) {
             std::fprintf(stderr, "Re-selected existing center %u. Continuing...\n", int(newc));
