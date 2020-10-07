@@ -26,6 +26,8 @@ ifdef CBLASFILE
 DEFINES+= -DCBLASFILE='${CBLASFILE}'
 endif
 
+CMAKE?=cmake
+
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 LIBS=$(patsubst %,-L%,$(LIBPATHS))
 CXX?=g++
@@ -176,7 +178,7 @@ osm2dimacspg: src/utils/osm2dimacs.cpp
 
 
 libsleef.a:
-	+cd sleef && mkdir -p build && cd build && cmake .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..
+	+cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..
 
 
 soft: solvetestdbg solvetest solvesoft solvesoftdbg
