@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     long long unsigned t3 = (stop - start).count();
     double ratio3 = double(t1) / t3;
     std::fprintf(stderr, "argmax from log/generate in a single pass: %llu [no vectorization enabled] ratio: %g\n", t3, ratio3);
-    
+
     start = gett();
     for(size_t i = 0; i < v.rows(); ++i) {
 #ifdef __AVX2__

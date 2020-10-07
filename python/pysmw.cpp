@@ -68,7 +68,7 @@ py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, Py_ssize_t
     try {
     smw.perform([&](auto &x) {
         //using RT = decltype(repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, cmp));
-        auto sol = 
+        auto sol =
             kind == -1 ?
             repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp)
             : kind == 'f' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp, (const float *)wptr)
@@ -386,7 +386,7 @@ void init_smw(py::module &m) {
         auto costp = (float *)costs.request().ptr;
         smw.perform([&](auto &x) {
             //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
-            auto sol = 
+            auto sol =
                 kind == -1 ?
                 repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp)
                 : kind == 'f' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const float *)wptr)
@@ -462,17 +462,17 @@ void init_smw(py::module &m) {
         if(wptr) {
             if(smw.is_float())
                 std::tie(centers, asn, fc) = minocore::m2d2(smw.getfloat(), so, wptr);
-            else 
+            else
                 std::tie(centers, asn, dc) = minocore::m2d2(smw.getdouble(), so, wptr);
         } else if(fwptr) {
             if(smw.is_float())
                 std::tie(centers, asn, fc) = minocore::m2d2(smw.getfloat(), so, fwptr);
-            else 
+            else
                 std::tie(centers, asn, dc) = minocore::m2d2(smw.getdouble(), so, fwptr);
         } else {
             if(smw.is_float())
                 std::tie(centers, asn, fc) = minocore::m2d2(smw.getfloat(), so);
-            else 
+            else
                 std::tie(centers, asn, dc) = minocore::m2d2(smw.getdouble(), so);
         }
         py::array_t<uint32_t> ret(centers.size()), retasn(smw.rows());
