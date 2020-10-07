@@ -32,7 +32,7 @@ CXX?=g++
 STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function -Wdeprecated -Wno-deprecated-declarations \
     -Wno-deprecated-copy # Because of Boost.Fusion
-OPT?=O3
+OPT?=O3 -flto
 LDFLAGS+=$(LIBS) -lz $(LINKS)
 EXTRA?=
 DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'

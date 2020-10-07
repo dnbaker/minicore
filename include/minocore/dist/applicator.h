@@ -828,10 +828,10 @@ public:
             auto lhn = row_sums_[i] + prior_sum_, rhn = row_sums_[j] + prior_sum_;
             auto lhi = 1. / lhn, rhi = 1. / rhn;
             auto lhr(row(i)), rhr(row(j));
+            ret = -static_cast<FT>(dim); // To account for -1 in IS distance.
             if(prior_data_->size() == 1) {
                 const auto mul = prior_data_->operator[](0);
                 const auto lhrsi = mul / lhn, rhrsi = mul / rhn;
-                ret = -static_cast<FT>(dim); // To account for -1 in IS distance.
                 const auto shared_zero = merge::for_each_by_case(dim, lhr.begin(), lhr.end(), rhr.begin(), rhr.end(),
                     [&](auto, auto x, auto y) ALWAYS_INLINE {do_inc((x + lhrsi) / (y + rhrsi));},
                     [&](auto, auto x) ALWAYS_INLINE {do_inc((x + lhrsi) * rhn);},
