@@ -176,7 +176,7 @@ osm2dimacspg: src/utils/osm2dimacs.cpp
 
 
 libsleef.a:
-	+cd sleef && mkdir -p __build && cd __build && cmake .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd .. && rm -r __build
+	+cd sleef && mkdir -p build && cd build && cmake .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..
 
 
 soft: solvetestdbg solvetest solvesoft solvesoftdbg
