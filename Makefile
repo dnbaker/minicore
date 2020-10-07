@@ -12,18 +12,14 @@ LINKS+=-lhdf5  -lhdf5_hl  -lhdf5_hl_cpp -lhdf5_cpp
 endif
 
 
-ifdef HOSLEEF_DIR
-INCLUDE_PATHS+= $(HOSLEEF_DIR)/include
-CXXFLAGS+=-DBLAZE_USE_SLEEF=1 -DINLINE_SLEEF=1 $(HOSLEEF_DIR)/lib/libsleefinline.a
-endif
+# Handle SLEEF
+
+CXXFLAGS+=-DBLAZE_USE_SLEEF=1
 
 ifdef SLEEF_DIR
-ifndef HOSLEEF_DIR
 INCLUDE_PATHS+= $(SLEEF_DIR)/include
-LIBPATHS+= $(SLEEF_DIR)/lib
-LINKS+= -lsleef
-CXXFLAGS+=-DBLAZE_USE_SLEEF=1
-endif
+else
+INCLUDE_PATHS+=sleef/build/include
 endif
 
 ifdef CBLASFILE
@@ -89,19 +85,19 @@ CXXFLAGS += $(EXTRA)
 CXXFLAGS += $(LDFLAGS)
 
 HEADERS=$(shell find include -name '*.h') libsimdsampling/libsimdsampling.a
-SIMDSAMPLE=libsimdsampling/libsimdsampling.a
+STATIC_LIBS=libsimdsampling/libsimdsampling.a libsleef.a
 
 libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h
 	cd libsimdsampling && $(MAKE) libsimdsampling.a && cd ..
 
-%dbg: src/%.cpp $(HEADERS) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(SIMDSAMPLE)
+%dbg: src/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(STATIC_LIBS)
 
-%dbg: src/tests/%.cpp $(HEADERS) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR) $(SIMDSAMPLE)
+%dbg: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
 
-%: src/tests/%.cpp $(HEADERS) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(SIMDSAMPLE)
+%: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
 
 printlibs:
 	echo $(LIBPATHS)
@@ -110,35 +106,35 @@ printlibs:
 #graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
 #	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
-%: src/%.cpp $(HEADERS) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(SIMDSAMPLE)
+%: src/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-%: src/utils/%.cpp $(HEADERS) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(SIMDSAMPLE)
+%: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-mtx%: src/mtx%.cpp $(HEADERS) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG $(SIMDSAMPLE) # -fsanitize=undefined -fsanitize=address
+mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
-mtx%: src/utils/mtx%.cpp $(HEADERS) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG $(SIMDSAMPLE) # -fsanitize=undefined -fsanitize=address
+mtx%: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
-mtx%dbg: src/mtx%.cpp $(HEADERS) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(SIMDSAMPLE)  # -fsanitize=undefined -fsanitize=address
+mtx%dbg: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(STATIC_LIBS)  # -fsanitize=undefined -fsanitize=address
 
-mtx%dbg: src/utils/mtx%.cpp $(HEADERS) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(SIMDSAMPLE)
+mtx%dbg: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(STATIC_LIBS)
 
-alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(SIMDSAMPLE)
+alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB $(SIMDSAMPLE)
+dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB $(STATIC_LIBS)
 
-jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS) $(SIMDSAMPLE)
+jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
-jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(SIMDSAMPLE)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS) $(SIMDSAMPLE)
+jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
