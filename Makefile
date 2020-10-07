@@ -1,9 +1,9 @@
 INCLUDE_PATHS=. include include/minocore blaze libosmium/include protozero/include pdqsort include/thirdparty
-LIBPATHS+=
 
 ifdef BOOST_DIR
 INCLUDE_PATHS += $(BOOST_DIR)
 endif
+
 
 ifdef HDFPATH
 INCLUDE_PATHS+= $(HDFPATH)/include
@@ -12,23 +12,21 @@ LINKS+=-lhdf5  -lhdf5_hl  -lhdf5_hl_cpp -lhdf5_cpp
 endif
 
 
-ifdef HOSLEEF_DIR
-INCLUDE_PATHS+= $(HOSLEEF_DIR)/include
-CXXFLAGS+=-DBLAZE_USE_SLEEF=1 -DINLINE_SLEEF=1 $(HOSLEEF_DIR)/lib/libsleefinline.a
-endif
+# Handle SLEEF
+
+CXXFLAGS+=-DBLAZE_USE_SLEEF=1
 
 ifdef SLEEF_DIR
-ifndef HOSLEEF_DIR
 INCLUDE_PATHS+= $(SLEEF_DIR)/include
-LIBPATHS+= $(SLEEF_DIR)/lib
-LINKS+= -lsleef
-CXXFLAGS+=-DBLAZE_USE_SLEEF=1
-endif
+else
+INCLUDE_PATHS+=sleef/build/include
 endif
 
 ifdef CBLASFILE
 DEFINES+= -DCBLASFILE='${CBLASFILE}'
 endif
+
+CMAKE?=cmake
 
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 LIBS=$(patsubst %,-L%,$(LIBPATHS))
@@ -36,7 +34,7 @@ CXX?=g++
 STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function -Wdeprecated -Wno-deprecated-declarations \
     -Wno-deprecated-copy # Because of Boost.Fusion
-OPT?=O3
+OPT?=O3 -flto
 LDFLAGS+=$(LIBS) -lz $(LINKS)
 EXTRA?=
 DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
@@ -88,16 +86,20 @@ CXXFLAGS += $(EXTRA)
 
 CXXFLAGS += $(LDFLAGS)
 
-HEADERS=$(shell find include -name '*.h')
+HEADERS=$(shell find include -name '*.h') libsimdsampling/libsimdsampling.a
+STATIC_LIBS=libsimdsampling/libsimdsampling.a libsleef.a
 
-%dbg: src/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS)
+libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.a
+	ls libsimdsampling/libsimdsampling.a || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
 
-%dbg: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR)
+%dbg: src/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(STATIC_LIBS)
 
-%: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR)
+%dbg: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
+
+%: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
 
 printlibs:
 	echo $(LIBPATHS)
@@ -106,35 +108,35 @@ printlibs:
 #graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
 #	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
-%: src/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+%: src/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-%: src/utils/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+%: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-mtx%: src/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG # -fsanitize=undefined -fsanitize=address
+mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
-mtx%: src/utils/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG # -fsanitize=undefined -fsanitize=address
+mtx%: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
-mtx%dbg: src/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  # -fsanitize=undefined -fsanitize=address
+mtx%dbg: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(STATIC_LIBS)  # -fsanitize=undefined -fsanitize=address
 
-mtx%dbg: src/utils/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  # -fsanitize=undefined -fsanitize=address
+mtx%dbg: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(STATIC_LIBS)
 
-alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB
+dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB $(STATIC_LIBS)
 
-jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS)
+jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
-jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS)
+jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
@@ -176,7 +178,7 @@ osm2dimacspg: src/utils/osm2dimacs.cpp
 
 
 libsleef.a:
-	+cd sleef && mkdir -p __build && cd __build && cmake .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd .. && rm -r __build
+	+cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..
 
 
 soft: solvetestdbg solvetest solvesoft solvesoftdbg

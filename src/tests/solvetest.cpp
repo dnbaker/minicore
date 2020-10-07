@@ -31,6 +31,10 @@ int main(int argc, char *argv[]) {
         k = std::atoi(argv[4]);
         if(k <= 0) std::abort();
     }
+    if(argc > 5) {
+        blaze::Archive<std::ifstream> arch(argv[5]);
+        arch << x;
+    }
     std::fprintf(stderr, "prior: %g\n", prior[0]);
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
     std::vector<blaze::CompressedVector<double, blaze::rowVector>> centers;

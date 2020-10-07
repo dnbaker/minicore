@@ -1,11 +1,25 @@
 from setuptools import setup, Extension, find_packages, distutils
-from os import environ
+import sys
+from os import environ, path
 from setuptools.command.build_ext import build_ext
 from glob import glob
-from subprocess import check_output
+from subprocess import check_output, check_call
 import multiprocessing
 import multiprocessing.pool
 
+
+sleefdir = environ.get("SLEEF_DIR", "../sleef/build")
+SLEEFLIB = sleefdir + "/lib/libsleef.a"
+LIBSIMDSAMPLINGDIR = "../libsimdsampling/"
+LIBSIMDSAMPLINGLIB = "../libsimdsampling/libsimdsampling.a"
+
+if not path.isfile(SLEEFLIB):
+    check_call(f"cd {sleefdir} && cmake .. -DBUILD_SHARED_LIBS=0 && make", shell=True)
+else:
+    print("SLEEFLIB " + SLEEFLIB + " found as expected", file=sys.stderr)
+if not path.isfile(LIBSIMDSAMPLINGLIB):
+    check_call(f"cd {LIBSIMDSAMPLINGDIR} && make libsimdsampling.a INCLUDE_PATHS=../sleef/build/include LINK_PATHS=../sleef/build/lib",
+               shell=True)
 
 # from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
 # parallelizes extension compilation
@@ -54,6 +68,7 @@ extra_compile_args = ['-march=native', '-DNDEBUG',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                       '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',
                       '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
+                      "-DBLAZE_USE_SLEEF=1",
                       '-Wno-deprecated-declarations']
 
 if 'BOOST_DIR' in environ:
@@ -66,6 +81,7 @@ include_dirs=[
     get_pybind_include(user=True),
    "../",
    "../include",
+   sleefdir + "/include",
    "../include/minocore",
    "../blaze",
    "../pybind11/include"
@@ -79,7 +95,8 @@ ext_modules = [
          ],
         include_dirs=include_dirs,
         language='c++',
-        extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"]
+        extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"],
+        extra_objects=[SLEEFLIB, LIBSIMDSAMPLINGLIB]
     ),
 ]
 
@@ -114,7 +131,7 @@ def cpp_flag(compiler):
                        'is needed!')
 
 
-extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1"]
+extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1", SLEEFLIB]
 
 class BuildExt(build_ext):
     """A custom build extension for adding compiler-specific options."""

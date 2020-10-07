@@ -30,7 +30,7 @@ assert len(data) == len(indices)
 mcmat = mc.SparseMatrixWrapper(mc.csr_tuple(data=data, indices=indices, indptr=indptr, shape=shape, nnz=len(data)))
 
 k = 50
-beta = 0.01  # Pseudocount prior for Bregman divergences
+beta = 0.5   # Pseudocount prior for Bregman divergences
              # smoothes some functions, and quantifies the "surprise" of having
              # unique features. The smaller, the more surprising.
              # See Witten, 2011
@@ -42,7 +42,7 @@ seed = 0     # if seed is not set, defaults to 0. Results will be identical with
 
 measure = "MKL" # See https://github.com/dnbaker/minocore/blob/main/docs/msr.md for examples/integer codes
                 # value can be integral or be the short string description
-                # MKL = categorical KL divergence 
+                # MKL = categorical KL divergence
 
 weights = None  # Set weights to be a 1d numpy array containing weights of type (float32, float64, int, unsigned)
                 # If none, unused (uniform)
@@ -83,3 +83,23 @@ to outliers and can also be used to generate a coreset, if the measure is a doub
 ## LSH
 
 We also support a range of LSH functions.
+
+JSD, S2JSDLSH, and the Hellinger LSH are hash functions for the JSD and its square root, and the Hellinger distance. This assumes that the rows have been normalized.
+L1, L2, and PStable hashers should work regardless.
+
+
+
+## Multithreading
+
+By default, minocore uses the environmental variable `OMP\_NUM\_THREADS` number of threads.
+This can be checked or changed within Python by accessing/modifying the `minocore.n_threads` object,
+or via `get_num_threads` and `set_num_threads`.
+
+Example:
+
+```
+import minocore as mc
+mc.set_num_threads(40)  # Sets the number of threads to be 40
+howmany = mc.get_num_threads()
+assert howmany == 40
+```
