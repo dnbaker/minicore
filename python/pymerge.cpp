@@ -28,7 +28,8 @@ Py_ssize_t filtered_nonzeros(py::handle matrix, const std::vector<Py_ssize_t> &i
 }
 
 template<typename IT1, typename IT2, typename FT>
-auto getpointers(py::handle matrix) {
+auto getpointers(py::handle) {
+#if 0
     if(!hasattr(matrix, "row") || !hasattr(matrix, "col") || !hasattr(matrix, "data")) {
         throw std::logic_error("Cannot get COO pointers from a non-COO matrix");
     }
@@ -44,6 +45,7 @@ auto getpointers(py::handle matrix) {
     if(!colp) throw std::runtime_error("datap is null!");
     VERBOSE_ONLY(std::fprintf(stderr, "[%s] Succeeded in getting pointers, %p, %p, %p", __PRETTY_FUNCTION__, (void *)rowp, (void *)colp, (void *)datap);)
     return std::make_tuple(rowp, colp, datap, datab.size);
+#endif
 }
 
 
@@ -66,26 +68,26 @@ Py_ssize_t count_nonzeros(const IT1 *srcrow, const IT2 *srccol, const FT1 *srcda
     return ret;
 }
 
-Py_ssize_t count_nonzeros(py::object mat, Py_ssize_t ncoo, const std::vector<Py_ssize_t> &indices) {
+Py_ssize_t count_nonzeros(py::object , Py_ssize_t, const std::vector<Py_ssize_t> &) {
 #define DOUPDATE(T1, T2, T3) \
     try { \
         auto [srcrow, srccol, srcdata, ncoo] = getpointers<T1, T2, T3>(mat); \
         return count_nonzeros(srcrow, srccol, srcdata, ncoo, indices); \
     } catch(...) {}
-    DOUPDATE(uint32_t, uint32_t, double);
-    DOUPDATE(int32_t, int32_t, double);
+    //DOUPDATE(uint32_t, uint32_t, double);
+    //DOUPDATE(int32_t, int32_t, double);
     //DOUPDATE(uint32_t, int32_t, double);
     //DOUPDATE(int32_t, uint32_t, double);
-    DOUPDATE(uint64_t, uint64_t, double);
-    DOUPDATE(int64_t, int64_t, double);
+    //DOUPDATE(uint64_t, uint64_t, double);
+    //DOUPDATE(int64_t, int64_t, double);
     //DOUPDATE(uint64_t, int64_t, double);
     //DOUPDATE(int64_t, uint64_t, double);
-    DOUPDATE(uint32_t, uint32_t, double);
-    DOUPDATE(int32_t, int32_t, double);
+    //DOUPDATE(uint32_t, uint32_t, double);
+    //DOUPDATE(int32_t, int32_t, double);
     //DOUPDATE(uint32_t, int32_t, double);
     //DOUPDATE(int32_t, uint32_t, double);
-    DOUPDATE(uint64_t, uint64_t, double);
-    DOUPDATE(int64_t, int64_t, double);
+    //DOUPDATE(uint64_t, uint64_t, double);
+    //DOUPDATE(int64_t, int64_t, double);
     //DOUPDATE(uint64_t, int64_t, double);
     //DOUPDATE(int64_t, uint64_t, double);
     throw std::runtime_error("Failed to find a matching type");
@@ -132,13 +134,13 @@ Py_ssize_t update_all(const IT1 *srcrow, const IT2 *srccol, const FT1 *srcdat, I
 
 
 template<typename IT, typename T>
-Py_ssize_t update_all(py::handle mat, IT *row, IT *col, T *data, size_t offset, size_t nzi, const std::vector<Py_ssize_t> &indices) {
+Py_ssize_t update_all(py::handle, IT *, IT *, T *, size_t, size_t, const std::vector<Py_ssize_t> &) {
 #define DOUPDATE(T1, T2, T3) \
     try { \
         auto [srcrow, srccol, srcdata, ncoo] = getpointers<T1, T2, T3>(mat); \
         return update_all(srcrow, srccol, srcdata, row, col, data, nzi, ncoo, indices); \
     } catch(...) {}
-    DOUPDATE(Py_ssize_t, Py_ssize_t, double);
+    //DOUPDATE(Py_ssize_t, Py_ssize_t, double);
     //DOUPDATE(int32_t, int32_t, double);
     //DOUPDATE(uint32_t, int32_t, double);
     //DOUPDATE(int32_t, uint32_t, double);
@@ -158,13 +160,13 @@ Py_ssize_t update_all(py::handle mat, IT *row, IT *col, T *data, size_t offset, 
 #undef DOUPDATE
 }
 
-Py_ssize_t filtered_nonzeros(py::handle matrix, const std::vector<Py_ssize_t> &indices) {
+Py_ssize_t filtered_nonzeros(py::handle, const std::vector<Py_ssize_t> &) {
 #define DOFNZ(T1, T2, T3) do {\
     try { \
         return filtered_nonzeros<T1, T2, T3>(matrix, indices); \
     } catch(...) {} \
     } while(0)
-    DOFNZ(uint32_t, uint32_t, double);
+    //DOFNZ(uint32_t, uint32_t, double);
     //DOFNZ(uint32_t, uint32_t, float);
     //DOFNZ(int32_t, int32_t, double);
     //DOFNZ(int32_t, int32_t, float);
@@ -176,7 +178,7 @@ Py_ssize_t filtered_nonzeros(py::handle matrix, const std::vector<Py_ssize_t> &i
     throw std::runtime_error("Failed to find a matching type");
 }
 
-void init_merge(py::module &m) {
+void init_merge(py::module &) {
 #if 0
     m.def("merge", [](py::list matrices, py::list featmaps, py::list features) {
         std::fprintf(stderr, "[%s] Warning: this is in very shaky condition. Expect it to not work.\n", __PRETTY_FUNCTION__);

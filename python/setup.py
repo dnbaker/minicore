@@ -3,18 +3,22 @@ import sys
 from os import environ, path
 from setuptools.command.build_ext import build_ext
 from glob import glob
-from subprocess import check_output
+from subprocess import check_output, check_call
 import multiprocessing
 import multiprocessing.pool
 
 
 sleefdir = environ.get("SLEEF_DIR", "../sleef/build")
 SLEEFLIB = sleefdir + "/lib/libsleef.a"
+LIBSIMDSAMPLINGDIR = "../libsimdsampling/"
+LIBSIMDSAMPLINGLIB = "../libsimdsampling/libsimdsampling.a"
 
 if not path.isfile(SLEEFLIB):
-    subprocess.check_call(f"cd {sleefdir} && cmake .. -DBUILD_SHARED_LIBS=0 && make", shell=True)
+    check_call(f"cd {sleefdir} && cmake .. -DBUILD_SHARED_LIBS=0 && make", shell=True)
 else:
     print("SLEEFLIB " + SLEEFLIB + " found as expected", file=sys.stderr)
+if not path.isfile(LIBSIMDSAMPLINGLIB):
+    check_call(f"cd {LIBSIMDSAMPLINGDIR} && make libsimdsampling.a", shell=True)
 
 # from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
 # parallelizes extension compilation
@@ -91,7 +95,7 @@ ext_modules = [
         include_dirs=include_dirs,
         language='c++',
         extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"],
-        extra_objects=[SLEEFLIB]
+        extra_objects=[SLEEFLIB, LIBSIMDSAMPLINGLIB]
     ),
 ]
 
