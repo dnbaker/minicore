@@ -18,7 +18,8 @@ if not path.isfile(SLEEFLIB):
 else:
     print("SLEEFLIB " + SLEEFLIB + " found as expected", file=sys.stderr)
 if not path.isfile(LIBSIMDSAMPLINGLIB):
-    check_call(f"cd {LIBSIMDSAMPLINGDIR} && make libsimdsampling.a", shell=True)
+    check_call(f"cd {LIBSIMDSAMPLINGDIR} && make libsimdsampling.a INCLUDE_PATHS=../sleef/build/include LINK_PATHS=../sleef/build/lib",
+               shell=True)
 
 # from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
 # parallelizes extension compilation
