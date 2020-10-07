@@ -6,13 +6,42 @@
 #include <chrono>
 #include <x86intrin.h>
 #include <cstdint>
+#include <getopt.h>
+#include <thread>
 using std::uint64_t;
 
 auto gett() {return std::chrono::high_resolution_clock::now();}
 
+int usage() {
+    std::fprintf(stderr, "Usage: parvecsample <flags>\nFlags:\n"
+                         "-r: Number of rows. Default: 100000\n"
+                         "-d: Number of dimensions of generated data. Default: 100\n"
+                         "-p: Number of threads to use. Default: OMP_NUM_THREADS if set, 1 otherwise; If set to 0, use all hardware threads.\n"
+                         "-h: Emit usage and exit.\n");
+    return EXIT_FAILURE;
+}
+
 int main(int argc, char **argv) {
-    size_t nr = argc == 1 ? 1000: std::atoi(argv[1]);
-    size_t nd = argc <= 2 ? 100: std::atoi(argv[2]);
+    size_t nr = 100000;
+    size_t nd = 100;
+    int numthreads = -1;
+    for(int c;(c = getopt(argc, argv, "r:d:p:h?")) >= 0;) {
+    switch(c) {
+        case 'r': nr = std::strtoull(optarg, nullptr, 10); break;
+        case 'd': nd = std::strtoull(optarg, nullptr, 10); break;
+        case 'p': numthreads = std::atoi(optarg); break;
+        case 'h': case '?': default: return usage();
+    }
+    }
+    if(numthreads < 0) {
+        if(const char *env_p = std::getenv("OMP_NUM_THREADS"))
+            numthreads = std::atoi(env_p);
+        else
+            numthreads = 1;
+    } else if(numthreads == 0) {
+        numthreads = std::thread::hardware_concurrency();
+    }
+    OMP_ONLY(omp_set_num_threads(numthreads));
     double rmi = 1. / RAND_MAX;
     blaze::DynamicMatrix<double> mat = blaze::generate(nr, nd, [rmi](auto, auto) {return std::rand() * rmi;});
     auto start = gett();
@@ -23,6 +52,11 @@ int main(int argc, char **argv) {
     //blaze::DynamicVector<double> weights = blaze::generate(nr, [&](auto x) {return std::abs(dist(rng));});
     blaze::DynamicVector<double> vals(nr);
     blaze::DynamicMatrix<double> v = blaze::generate(nd, nr, [&](auto x, auto y) {return blaze::l1Norm(row(mat, y) - row(mat, x, blaze::unchecked));});
+
+    // Pass through the data once to ensure we aren't counting cache coherence
+    blaze::DynamicVector<double> rsums = blaze::sum<blaze::rowwise>(v);
+
+    // Now time partial sum usage
     for(size_t i = 0; i < v.rows(); ++i) {
         std::partial_sum(v.begin(i), v.end(i), cdf.begin());
         auto ind = std::lower_bound(cdf.begin(), cdf.end(), cdf[nd - 1] * std::uniform_real_distribution<double>()(rng)) - cdf.begin();
@@ -31,7 +65,7 @@ int main(int argc, char **argv) {
     auto stop = gett();
     long long unsigned t1 = (stop - start).count();
     std::fprintf(stderr, "Compute + cdf time: %llu\n", t1);
-    long long dgt = 0, dgt0 = 0, dgt1 = 0;
+    //long long dgt = 0, dgt0 = 0, dgt1 = 0;
     start = gett();
     for(size_t i = 0; i < v.rows(); ++i) {
         vals = blaze::generate(nr, [](auto x) {wy::WyRand<uint64_t> rng(x); return std::uniform_real_distribution<double>()(rng);});
@@ -55,9 +89,8 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "Times of %lld, %lld, %lld (%g, %g, %g of max)\n", dgt, dgt0, dgt1, double(dgt) / mx, double(dgt0) / mx, double(dgt1) / mx);
 #endif
     long long unsigned t2 = (stop - start).count();
-    std::fprintf(stderr, "Generate + log + div + max: %llu\n", t2);
     double ratio = double(t1) / t2;
-    std::fprintf(stderr, "ratio: %g\n", ratio);
+    std::fprintf(stderr, "Generate + log + div + max: %llu; Some blaze used, some manual parallelization. ratio: %g\n", t2, ratio);
     start = gett();
     auto func = [](auto x) {wy::WyRand<uint64_t> rng(x); return std::uniform_real_distribution<double>()(rng);};
     for(size_t i = 0; i < v.rows(); ++i) {
@@ -70,9 +103,8 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "Times of %lld, %lld, %lld (%g, %g, %g of max)\n", dgt, dgt0, dgt1, double(dgt) / mx, double(dgt0) / mx, double(dgt1) / mx);
 #endif
     long long unsigned t3 = (stop - start).count();
-    std::fprintf(stderr, "argmax from flow: %llu\n", t3);
     double ratio3 = double(t1) / t3;
-    std::fprintf(stderr, "ratio: %g\n", ratio3);
+    std::fprintf(stderr, "argmax from log/generate in a single pass: %llu [no vectorization enabled] ratio: %g\n", t3, ratio3);
     
     start = gett();
     for(size_t i = 0; i < v.rows(); ++i) {
@@ -80,7 +112,6 @@ int main(int argc, char **argv) {
         constexpr size_t nperel = sizeof(__m256d) / sizeof(double);
         const size_t e = ((nd + nperel - 1) / nperel);
         constexpr double pdmul = 1. / (1ull<<52);
-        double maxv = -std::numeric_limits<double>::max();
         size_t o;
         auto myrow = row(v, i, blaze::unchecked);
         for(o = 0; o < e; ++o) {
@@ -119,7 +150,6 @@ int main(int argc, char **argv) {
     }
     stop = gett();
     long long unsigned t4 = (stop - start).count();
-    std::fprintf(stderr, "argmax from manual avx2: %llu\n", t4);
     double ratio4 = double(t1) / t4;
-    std::fprintf(stderr, "ratio: %g\n", ratio4);
+    std::fprintf(stderr, "argmax from manual avx2, plus serial scan for best value: %llu. ratio: %g\n", t4, ratio4);
 }

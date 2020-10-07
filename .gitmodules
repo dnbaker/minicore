@@ -37,3 +37,6 @@
 [submodule "reservoir"]
 	path = reservoir
 	url = https://github.com/dnbaker/reservoir
+[submodule "libsimdsampling"]
+	path = libsimdsampling
+	url = https://github.com/dnbaker/libsimdsampling

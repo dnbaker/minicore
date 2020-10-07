@@ -1,9 +1,9 @@
 INCLUDE_PATHS=. include include/minocore blaze libosmium/include protozero/include pdqsort include/thirdparty
-LIBPATHS+=
 
 ifdef BOOST_DIR
 INCLUDE_PATHS += $(BOOST_DIR)
 endif
+
 
 ifdef HDFPATH
 INCLUDE_PATHS+= $(HDFPATH)/include
@@ -88,16 +88,20 @@ CXXFLAGS += $(EXTRA)
 
 CXXFLAGS += $(LDFLAGS)
 
-HEADERS=$(shell find include -name '*.h')
+HEADERS=$(shell find include -name '*.h') libsimdsampling/libsimdsampling.a
+SIMDSAMPLE=libsimdsampling/libsimdsampling.a
 
-%dbg: src/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS)
+libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h
+	cd libsimdsampling && $(MAKE) libsimdsampling.a && cd ..
 
-%dbg: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR)
+%dbg: src/%.cpp $(HEADERS) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(SIMDSAMPLE)
 
-%: src/tests/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR)
+%dbg: src/tests/%.cpp $(HEADERS) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR) $(SIMDSAMPLE)
+
+%: src/tests/%.cpp $(HEADERS) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(SIMDSAMPLE)
 
 printlibs:
 	echo $(LIBPATHS)
@@ -106,35 +110,35 @@ printlibs:
 #graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
 #	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
-%: src/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+%: src/%.cpp $(HEADERS) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(SIMDSAMPLE)
 
-%: src/utils/%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+%: src/utils/%.cpp $(HEADERS) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(SIMDSAMPLE)
 
-mtx%: src/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG # -fsanitize=undefined -fsanitize=address
+mtx%: src/mtx%.cpp $(HEADERS) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG $(SIMDSAMPLE) # -fsanitize=undefined -fsanitize=address
 
-mtx%: src/utils/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG # -fsanitize=undefined -fsanitize=address
+mtx%: src/utils/mtx%.cpp $(HEADERS) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG $(SIMDSAMPLE) # -fsanitize=undefined -fsanitize=address
 
-mtx%dbg: src/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  # -fsanitize=undefined -fsanitize=address
+mtx%dbg: src/mtx%.cpp $(HEADERS) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(SIMDSAMPLE)  # -fsanitize=undefined -fsanitize=address
 
-mtx%dbg: src/utils/mtx%.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  # -fsanitize=undefined -fsanitize=address
+mtx%dbg: src/utils/mtx%.cpp $(HEADERS) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(SIMDSAMPLE)
 
-alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3
+alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(SIMDSAMPLE)
 
-dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB
+dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB $(SIMDSAMPLE)
 
-jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS)
+jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS) $(SIMDSAMPLE)
 
-jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS)
+jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(SIMDSAMPLE)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS) $(SIMDSAMPLE)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp

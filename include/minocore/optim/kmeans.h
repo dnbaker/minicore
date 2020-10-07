@@ -12,7 +12,7 @@
 #include "minocore/optim/lsearchpp.h"
 #include "minocore/util/blaze_adaptor.h"
 #include "minocore/util/tsg.h"
-#include "minocore/util/simdsampling.h"
+#include "libsimdsampling/simdsampling.h"
 #include "reservoir/include/DOGS/reservoir.h"
 #if USE_TBB
 #endif
