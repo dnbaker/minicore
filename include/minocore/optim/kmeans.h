@@ -96,9 +96,9 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         if(weights) {
             auto w = blz::make_cv(weights, np);
             rvals = w * distances;
-            newc = simd_sampling(rvals.data(), np, rng());
+            newc = reservoir_simd::sample(rvals.data(), np, rng());
         } else {
-            newc = simd_sampling(distances.data(), np, rng());
+            newc = reservoir_simd::sample(distances.data(), np, rng());
         }
         if(unlikely(distances[newc] == 0.)) {
             if(++d0s == 5) {

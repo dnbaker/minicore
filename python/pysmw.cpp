@@ -3,6 +3,8 @@
 #include <sstream>
 #include <map>
 
+using blz::unchecked;
+
 using smw_t = SparseMatrixWrapper;
 dist::DissimilarityMeasure assure_dm(py::object obj) {
     dist::DissimilarityMeasure ret;
@@ -201,6 +203,80 @@ void init_smw(py::module &m) {
     .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
         lhs.tofile(path);
     }, py::arg("path"))
+    .def("submatrix", [](const SparseMatrixWrapper &wrap, py::object rowsel, py::object columnsel) -> SparseMatrixWrapper {
+        if(columnsel.is_none()) {
+            if(rowsel.is_none()) {
+                // Copy over
+                if(wrap.is_float()) {return SparseMatrixWrapper(blz::SM<float>(wrap.getfloat()));}
+                return SparseMatrixWrapper(blz::SM<double>(wrap.getdouble()));
+            }
+            auto inf = py::cast<py::array>(rowsel).request();
+            if(inf.format.size() != 1) throw std::invalid_argument("Wrong dtype");
+            switch(inf.format[0]) {
+#define DTCASE(chr, type) case chr: {if(wrap.is_float()) return blz::SM<float>(blaze::rows(wrap.getfloat(), (type *)inf.ptr, inf.size));\
+                                     else               return blz::SM<double>(blaze::rows(wrap.getdouble(), (type *)inf.ptr, inf.size));}
+            DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+ #undef DTCASE
+            default: throw std::invalid_argument("Wrong dtype");
+            }
+        } else if(rowsel.is_none()) {
+            auto inf = py::cast<py::array>(columnsel).request();
+            if(inf.format.size() != 1) throw std::invalid_argument("Wrong dtype");
+            switch(inf.format[0]) {
+#define DTCASE(chr, type) case chr: {if(wrap.is_float()) return blz::SM<float>(blaze::columns(wrap.getfloat(), (type *)inf.ptr, inf.size));\
+                                     else               return blz::SM<double>(blaze::columns(wrap.getdouble(), (type *)inf.ptr, inf.size));}
+                DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+ #undef DTCASE
+                default: throw std::invalid_argument("Wrong dtype");
+            }
+        } else {
+            auto rowarr = py::cast<py::array>(rowsel), columnarr = py::cast<py::array>(columnsel);
+            auto rinf  = rowarr.request(), cinf = columnarr.request();
+            if(rinf.format != cinf.format) throw std::invalid_argument("row and column selection should be the same integral types");
+            if(rinf.format.size() != 1) throw std::invalid_argument("rinf format size must be 1");
+            switch(rinf.format[0]) {
+#define DTCASE(chr, type) case chr: if(wrap.is_float()) return blz::SM<float>(columns(rows(wrap.getfloat(), (type *)rinf.ptr, rinf.size), (type *)cinf.ptr, cinf.size));\
+                                    else                return blz::SM<double>(columns(rows(wrap.getdouble(), (type *)rinf.ptr, rinf.size), (type *)cinf.ptr, cinf.size));
+                DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+#undef DTCASE
+                default: throw std::invalid_argument("Wrong dtype");
+            }
+        }
+    }, py::arg("rowsel") = py::none(), py::arg("columnsel") = py::none())
+    .def("variance", [](SparseMatrixWrapper &wrap, int byrow, bool usefloat) -> py::object
+    {
+        switch(byrow) {case -1: case 0: case 1: break; default: throw std::invalid_argument("byrow must be -1 (total sum), 0 (by column) or by row (1)");}
+        if(byrow == -1) {
+            double ret;
+            wrap.perform([&ret](const auto &x) {ret = blaze::var(x);});
+            return py::float_(ret);
+        }
+        py::array ret;
+        Py_ssize_t nelem = byrow ? wrap.rows(): wrap.columns();
+        if(usefloat) ret = py::array_t<float>(nelem);
+                else ret = py::array_t<double>(nelem);
+        auto bi = ret.request();
+        auto ptr = bi.ptr;
+        if(bi.size != nelem) {
+            char buf[256];
+            auto n = std::sprintf(buf, "bi size: %u. nelem: %u\n", int(bi.size), int(nelem));
+            throw std::invalid_argument(std::string(buf, buf + n));
+        }
+        if(usefloat) {
+            blaze::CustomVector<float, blz::unaligned, blz::unpadded> cv((float *)ptr, nelem);
+            wrap.perform([&](const auto &x) {
+                if(byrow) cv = blz::var<blz::rowwise>(x);
+                else      cv = trans(blz::var<blz::columnwise>(x));
+            });
+        } else {
+            blaze::CustomVector<double, blz::unaligned, blz::unpadded> cv((double *)ptr, nelem);
+            wrap.perform([&](const auto &x) {
+                if(byrow) cv = blz::var<blz::rowwise>(x);
+                else      cv = trans(blz::var<blz::columnwise>(x));
+            });
+        }
+        return ret;
+    }, py::arg("kind")=-1, py::arg("usefloat")=true)
     .def("sum", [](SparseMatrixWrapper &wrap, int byrow, bool usefloat) -> py::object
     {
         switch(byrow) {case -1: case 0: case 1: break; default: throw std::invalid_argument("byrow must be -1 (total sum), 0 (by column) or by row (1)");}
@@ -234,7 +310,32 @@ void init_smw(py::module &m) {
             });
         }
         return ret;
-    }, py::arg("kind")=-1, py::arg("usefloat")=true);
+    }, py::arg("kind")=-1, py::arg("usefloat")=true)
+    .def("count_nnz", [](SparseMatrixWrapper &wrap, int byrow) -> py::object
+    {
+        if(byrow <= 0)
+            return py::int_(wrap.nnz());
+        const char *dt;
+        if(wrap.columns() <= 0xFFu) {
+            dt = "B";
+        } else if(wrap.columns() <= 0xFFFFu) {
+            dt = "H";
+        } else if(wrap.columns() <= 0xFFFFFFFFu) {
+            dt = "I";
+        } else {
+            dt = "L";
+        }
+        Py_ssize_t nr = wrap.rows();
+        py::array ret(py::dtype(dt), std::vector<Py_ssize_t>({nr}));
+        auto ptr = ret.request().ptr;
+        switch(dt[0]) {
+#define DTCASE(chr, type) case chr: {auto view = blz::make_cv((type *)ptr, nr); view = blaze::generate(nr, [&wrap](auto rowid) {return type(wrap.is_float() ? nonZeros(row(wrap.getfloat(), rowid, unchecked)): nonZeros(row(wrap.getdouble(), rowid, unchecked)));});} break
+            DTCASE('L', uint64_t); DTCASE('I', uint32_t); DTCASE('H', uint16_t); DTCASE('B', uint8_t);
+#undef DTCASE
+            default: throw std::runtime_error("Unexpected dtype");
+        }
+        return ret;
+    }, py::arg("byrow")=0);
 
 
     // Utilities

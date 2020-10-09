@@ -3,7 +3,7 @@
 |--------|-----------------|---------|----------|----|
 | L1 distance | geometric metric | L1 | 0 | sum(\|x - \|y) |
 | L2 distance | geometric metric | L2 | 1 | sqrt(sum((x - y)^2))|
-| Total variation distance | geometric metric | TVD | 10 | Useful information theoretic measure; 1/2 L1 distance in probability space| 
+| Total variation distance | geometric metric | TVD | 10 | Useful information theoretic measure; 1/2 L1 distance in probability space|
 | squared L2 distance | geometric rho-metric | SQRL2 | 2 | sum((x - y)^2)|
 | Jensen-Shannon Metric | metric | JSM | 3 | Metric, but no closed-form solution for centroids. Perhaps best-suited for linkage/density-based clustering; sqrt(JSM)|
 | Jensen-Shannon Divergence | pseudo-metric | JSD | 4 | Symmetric but no data-indepedent triangle inequality; convex combination of Bregman divergences|
@@ -13,7 +13,7 @@
 | Symmetric Itakura-Saito Divergence | Bregman divergence | SIS | 30 | Corresponds to the multinomial distribution with fixed n, or the categorical distribution|
 | Hellinger Distance | metric | HELLINGER | 7 | Information-theoretic measure with useful upper/lower bounds for TVD and JSD; sqrt(sum((sqrt(x) - sqrt(y))^2))|
 | Bhattacharyya Metric | metric | `BHATTACHARYYA_METRIC` | 8 | Non-metric, but useful measure of dissimilarity. Related to the metric.; sqrt(1 - sum(sqrt(x) * sqrt(y))) |
-| Bhattacharyya Distance | dissimilarity measure | `BHATTACHARYYA_DISTANCE` | 9 | Non-metric, but useful measure of dissimilarity. Related to the metric;  -log(sum(sqrt(x) * sqrt(y)))| 
+| Bhattacharyya Distance | dissimilarity measure | `BHATTACHARYYA_DISTANCE` | 9 | Non-metric, but useful measure of dissimilarity. Related to the metric;  -log(sum(sqrt(x) * sqrt(y)))|
 | LLR | dissimilarity measure | `LLR` | 11 | non-metric, but can be processed as a data-dependent rho-metric. As the prior rises, the $\rho$-violation of the triangle inequality shrinks; see below|
 | UWLLR | dissimilarity measure | `UWLLR` | 14 | non-metric, but can be processed as a data-dependent rho-metric. As the prior rises, the $\rho$-violation of the triangle inequality shrinks. JSD and S2JSD LS hash functions will likely work for this and LLR; see below for formulation|
 

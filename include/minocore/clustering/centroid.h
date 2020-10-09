@@ -527,7 +527,7 @@ void set_centroids_full_mean(const Mat &mat,
                 assert(restartpol == RESTART_D2);
                 int i = 0;
                 do {
-                    r = simd_sampling(costs.data(), costs.size(), rng());
+                    r = reservoir_simd::sample(costs.data(), costs.size(), rng());
                     std::fprintf(stderr, "Restarting with point %ld\n", r);
                     if(++i == 5) {
                         r = std::max_element(costs.begin(), costs.end()) - costs.begin();
