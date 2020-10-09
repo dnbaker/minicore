@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
             for(size_t j = 0; j < nperel; ++j) {
                 ((uint64_t *)&v)[j] = rng();
             }
-            auto v2 = _mm256_or_si256(_mm256_slli_epi64(v, 12), _mm256_castpd_si256(_mm256_set1_pd(0x0010000000000000)));
+            auto v2 = _mm256_or_si256(_mm256_srli_epi64(v, 12), _mm256_castpd_si256(_mm256_set1_pd(0x0010000000000000)));
             auto v3 = _mm256_sub_pd(_mm256_castsi256_pd(v2), _mm256_set1_pd(0x0010000000000000));
             auto v4 = _mm256_mul_pd(v3, _mm256_set1_pd(pdmul));
             auto v5 = Sleef_logd4_u35(v4);
