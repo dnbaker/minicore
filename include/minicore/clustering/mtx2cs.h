@@ -183,9 +183,7 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts, FT *weights=nullptr)
         }
     }
     if(opts.lspp) {
-        blz::DV<FT, blz::rowVector> cdf(costs.size());
-        std::partial_sum(costs.data(), costs.data() + costs.size(), cdf.data());
-        localsearchpp_rounds(app, rng, costs, cdf, centers, asn, costs.size(), opts.lspp, weights);
+        localsearchpp_rounds(app, rng, costs, centers, asn, costs.size(), opts.lspp, weights);
     }
     CType<FT> modcosts(costs.size());
     std::copy(costs.begin(), costs.end(), modcosts.begin());

@@ -131,8 +131,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     std::fprintf(stderr, "Completed kmeans++ with centers of size %zu\n", centers.size());
     if(lspprounds > 0) {
         std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
-        std::vector<FT> cdf(distances.size());
-        localsearchpp_rounds(oracle, rng, distances, cdf, centers, assignments, np, lspprounds, weights);
+        localsearchpp_rounds(oracle, rng, distances, centers, assignments, np, lspprounds, weights);
     }
     std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
     return std::make_tuple(std::move(centers), std::move(assignments), std::vector<FT>(distances.begin(), distances.end()));
@@ -251,12 +250,7 @@ reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *wei
         hashset.insert(x);
     }
     if(lspprounds > 0) {
-        std::vector<FT> cdf(distances.size());
-        if(weights) ::std::partial_sum(distances.begin(), distances.end(), cdf.begin(), [weights,ds=&distances[0]](auto x, const auto &y) {
-            return x + y * weights[&y - ds];
-        });
-        else ::std::partial_sum(distances.begin(), distances.end(), cdf.begin());
-        localsearchpp_rounds(oracle, rng, distances, cdf, centers, asn, np, lspprounds, weights);
+        localsearchpp_rounds(oracle, rng, distances, centers, asn, np, lspprounds, weights);
     }
     return std::make_tuple(std::move(centers), std::move(asn), std::move(distances));
 }
