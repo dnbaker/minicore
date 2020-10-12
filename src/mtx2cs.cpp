@@ -1,12 +1,12 @@
-#include "minocore/minocore.h"
+#include "minicore/minicore.h"
 #include "blaze/util/Serialization.h"
-#include "minocore/clustering/sqrl2.h"
-#include "minocore/clustering/l2.h"
-#include "minocore/clustering/l1.h"
+#include "minicore/clustering/sqrl2.h"
+#include "minicore/clustering/l2.h"
+#include "minicore/clustering/l1.h"
 
-using namespace minocore;
+using namespace minicore;
 
-using minocore::util::timediff2ms;
+using minicore::util::timediff2ms;
 
 SumOpts opts;
 
@@ -315,7 +315,7 @@ int m2ccore(std::string in, std::string out, SumOpts &opts)
             break;
         }
         default: {
-            std::fprintf(stderr, "%d/%s not supported\n", (int)opts.dis, minocore::distance::prob2desc(opts.dis));
+            std::fprintf(stderr, "%d/%s not supported\n", (int)opts.dis, minicore::distance::prob2desc(opts.dis));
             throw NotImplementedError("Not yet");
         }
     }

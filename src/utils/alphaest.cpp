@@ -1,5 +1,5 @@
-#include "minocore/utility.h"
-#include "minocore/dist.h"
+#include "minicore/utility.h"
+#include "minicore/dist.h"
 
 #ifndef DENSESUB
 #define SUBMAT CompressedMatrix
@@ -9,7 +9,7 @@
 
 #define FLOAT_TYPE double
 int main(int ac, char **av) {
-    auto sm = minocore::csc2sparse<FLOAT_TYPE>("");
+    auto sm = minicore::csc2sparse<FLOAT_TYPE>("");
     unsigned nr = ac > 1 ? std::atoi(av[1]): 100;
     unsigned mc = ac > 2 ? std::atoi(av[2]): 50;
     const dist::DissimilarityMeasure msr = ac > 3 ? (dist::DissimilarityMeasure)std::atoi(av[3]): dist::LLR;
@@ -28,7 +28,7 @@ int main(int ac, char **av) {
     subm += inc;
     //subm = (subm % subm % subm) + inc;
 #endif
-    auto app = minocore::jsd::make_probdiv_applicator(subm, msr);
+    auto app = minicore::jsd::make_probdiv_applicator(subm, msr);
     blaze::DynamicMatrix<FLOAT_TYPE> distmat(subm.rows(), subm.rows());
     auto t = std::chrono::high_resolution_clock::now();
     app.set_distance_matrix(distmat);

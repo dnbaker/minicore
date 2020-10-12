@@ -1,4 +1,4 @@
-INCLUDE_PATHS=. include include/minocore blaze libosmium/include protozero/include pdqsort include/thirdparty
+INCLUDE_PATHS=. include include/minicore blaze libosmium/include protozero/include pdqsort include/thirdparty
 
 ifdef BOOST_DIR
 INCLUDE_PATHS += $(BOOST_DIR)
@@ -105,7 +105,7 @@ printlibs:
 	echo $(LIBPATHS)
 
 
-#graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
+#graphrun: src/graphtest.cpp $(wildcard include/minicore/*.h)
 #	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
 %: src/%.cpp $(HEADERS) $(STATIC_LIBS)
@@ -126,33 +126,33 @@ mtx%dbg: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
 mtx%dbg: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(STATIC_LIBS)
 
-alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+alphaest: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+dae: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB $(STATIC_LIBS)
 
-jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
-jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
-hdf2dm: src/utils/hdf2dm.cpp $(wildcard include/minocore/*.h)
+hdf2dm: src/utils/hdf2dm.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(HDFLAGS)
 
-mpi%: src/%.cpp $(wildcard include/minocore/*.h)
+mpi%: src/%.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -Ofast -DUSE_BOOST_PARALLEL=1
 
-%pg: src/%.cpp $(wildcard include/minocore/*.h)
+%pg: src/%.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg -o $@
 
-%pgf: src/%.cpp $(wildcard include/minocore/*.h)
+%pgf: src/%.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg $(OMP_STR) -o $@
 
-%f: src/%.cpp $(wildcard include/minocore/*.h)
+%f: src/%.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< $(OMP_STR) -o $@
 
 

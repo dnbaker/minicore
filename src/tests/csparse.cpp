@@ -1,4 +1,4 @@
-#include "minocore/util/csc.h"
+#include "minicore/util/csc.h"
 #include <iostream>
 #undef NDEBUG
 #include <cassert>
@@ -10,7 +10,7 @@ int main() {
     std::cerr << trans(f1);
     std::cerr << trans(i1);
     assert(max(i1) < int(ndim));
-    auto cv = minocore::util::make_csparse_view(f1.data(), i1.data(), np, ndim);
+    auto cv = minicore::util::make_csparse_view(f1.data(), i1.data(), np, ndim);
     std::cerr << "cv made of size " << cv.size() << " with " << cv.nnz() << '\n';
     auto eit = cv.end();
     auto it = cv.begin();

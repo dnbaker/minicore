@@ -1,4 +1,4 @@
-import minocore
+import minicore
 import scipy.sparse as sp
 import numpy  as np
 
@@ -12,7 +12,7 @@ print(mat.shape)
 print(mat.nnz)
 assert hasattr(mat, "asformat")
 
-smw = minocore.SparseMatrixWrapper(mat)
+smw = minicore.SparseMatrixWrapper(mat)
 smw.emit()
 smw.transpose_()
 smw.emit()

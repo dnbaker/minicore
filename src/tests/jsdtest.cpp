@@ -1,6 +1,6 @@
-#include "minocore/dist/applicator.h"
-#include "minocore/utility.h"
-using namespace minocore;
+#include "minicore/dist/applicator.h"
+#include "minicore/utility.h"
+using namespace minicore;
 using namespace blz;
 
 #ifndef FLOAT_TYPE
@@ -29,8 +29,8 @@ int main(int argc, char *argv[]) {
     if(argc > 2)
         input = argv[3];
     std::ofstream ofs("output.txt");
-    auto sparsemat = input.size() ? minocore::mtx2sparse<FLOAT_TYPE>(input)
-                                  : minocore::csc2sparse<FLOAT_TYPE, INDPTRTYPE, INDICESTYPE, DATATYPE>("", true);
+    auto sparsemat = input.size() ? minicore::mtx2sparse<FLOAT_TYPE>(input)
+                                  : minicore::csc2sparse<FLOAT_TYPE, INDPTRTYPE, INDICESTYPE, DATATYPE>("", true);
     std::vector<unsigned> nonemptyrows;
     size_t i = 0;
     while(nonemptyrows.size() < 25) {
@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
         ++i;
     }
     blz::SM<FLOAT_TYPE> first25 = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
-    auto jsd = minocore::cmp::make_probdiv_applicator(first25, distance::JSM, distance::Prior::DIRICHLET);
+    auto jsd = minicore::cmp::make_probdiv_applicator(first25, distance::JSM, distance::Prior::DIRICHLET);
     //auto jsddistmat = jsd.make_distance_matrix();
     dm::DistanceMatrix<FLOAT_TYPE> utdm(first25.rows());
     jsd.set_distance_matrix(utdm);
@@ -70,11 +70,11 @@ int main(int argc, char *argv[]) {
     jsd_bnj.resize(nonemptyrows.size(), nonemptyrows.size(), false);
     jsd_bnj = 0.;
     std::fprintf(stderr, "Assigned return matrix to 0.\n");
-    auto jsd2 = minocore::cmp::make_probdiv_applicator(first25, distance::JSD, distance::Prior::DIRICHLET);
+    auto jsd2 = minicore::cmp::make_probdiv_applicator(first25, distance::JSD, distance::Prior::DIRICHLET);
     std::fprintf(stderr, "made probdiv\n");
-    auto jsd3 = minocore::cmp::make_probdiv_applicator(first25, distance::L1);
+    auto jsd3 = minicore::cmp::make_probdiv_applicator(first25, distance::L1);
     std::fprintf(stderr, "made l1\n");
-    minocore::util::Timer timer("1ksparsejsd");
+    minicore::util::Timer timer("1ksparsejsd");
     std::fprintf(stderr, "calling set_distance_matrix\n");
     jsd2.set_distance_matrix(jsd_bnj, distance::JSD);
     std::fprintf(stderr, "called set_distance_matrix\n");
@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
 #if 0
     timer.restart("1ldensejsd");
     blz::DM<FLOAT_TYPE> densefirst25 = first25;
-    minocore::make_probdiv_applicator(densefirst25).set_distance_matrix(jsd_bnj);
+    minicore::make_probdiv_applicator(densefirst25).set_distance_matrix(jsd_bnj);
     timer.report();
 #endif
     //ofs << "JS Divergence: \n";

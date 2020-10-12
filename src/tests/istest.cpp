@@ -1,7 +1,7 @@
-#include "minocore/dist/applicator.h"
-#include "minocore/util/div.h"
+#include "minicore/dist/applicator.h"
+#include "minicore/util/div.h"
 
-using namespace minocore;
+using namespace minicore;
 
 int main() {
     unsigned nsamp = 500;
@@ -16,7 +16,7 @@ int main() {
             cm.set(i, div.mod(rng()), rng() % 128u);
         }
     }
-    auto app = make_probdiv_applicator(cm, distance::ITAKURA_SAITO, minocore::distance::DIRICHLET);
+    auto app = make_probdiv_applicator(cm, distance::ITAKURA_SAITO, minicore::distance::DIRICHLET);
     OMP_PFOR
     for(size_t i = 0; i < nsamp; ++i) {
         std::fprintf(stderr, "Processing row %zu\n", i + 1);

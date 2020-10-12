@@ -1,4 +1,4 @@
-#include "minocore/util/csc.h"
+#include "minicore/util/csc.h"
 #include <iostream>
 #include "blaze/util/Serialization.h"
 #include <getopt.h>
@@ -9,9 +9,9 @@ void usage() {
 
 template<typename FT>
 void write(std::string in, std::string path, bool empty, bool humanreadable) {
-    auto mat = minocore::util::mtx2sparse<FT>(in.data());
+    auto mat = minicore::util::mtx2sparse<FT>(in.data());
     if(empty)
-        minocore::util::erase_empty(mat);
+        minicore::util::erase_empty(mat);
     if(humanreadable) {
         std::ofstream ofs(path);
         ofs << mat;

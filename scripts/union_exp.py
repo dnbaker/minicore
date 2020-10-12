@@ -4,7 +4,7 @@ from scipy.io import mmread, mmwrite
 import scipy.sparse as sp
 import sys
 import itertools
-import minocore
+import minicore
 
 
 def xopen(x):
@@ -86,7 +86,7 @@ def remap_mat(mat, fm, fl):
 if __name__ == "__main__":
     import argparse
     import multiprocessing as mp
-    import minocore
+    import minicore
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-count", '-m', type=int, default=2)
     ap.add_argument("paths", nargs='*')
@@ -102,7 +102,7 @@ if __name__ == "__main__":
         mat.row = mat.row.astype(np.uint32)
         mat.col = mat.col.astype(np.uint32)
         mat.data = mat.data.astype(double)
-    r, c, dat, shape = minocore.merge(matrices, fms, features)
+    r, c, dat, shape = minicore.merge(matrices, fms, features)
     megamat = sp.coo_matrix((r, c, dat), shape=shape)
     megamat.row.tofile(prefix + ".row")
     megamat.col.tofile(prefix + ".col")

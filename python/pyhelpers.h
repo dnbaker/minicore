@@ -2,9 +2,9 @@
 #include "pybind11/pybind11.h"
 #include "pybind11/numpy.h"
 #include "aesctr/wy.h"
-#include "minocore/minocore.h"
+#include "minicore/minicore.h"
 
-using namespace minocore;
+using namespace minicore;
 using namespace pybind11::literals;
 namespace py = pybind11;
 

@@ -370,9 +370,9 @@ void init_smw(py::module &m) {
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and a string key for the coreest construction format.")
     .def(py::init<int, Py_ssize_t, double, std::string, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and a string key for the coreest construction format.")
-    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
+    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = static_cast<int>(minicore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and an integer key for the coreest construction format.")
-    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
+    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = static_cast<int>(minicore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and an integer key for the coreest construction format.")
     .def("__str__", &SumOpts::to_string)
     .def("__repr__", [](const SumOpts &x) {
@@ -396,11 +396,11 @@ void init_smw(py::module &m) {
             [](SumOpts &obj, py::object item) {
                 Py_ssize_t val;
                 if(py::isinstance<py::str>(item)) {
-                    val = minocore::coresets::str2sm(py::cast<std::string>(item));
+                    val = minicore::coresets::str2sm(py::cast<std::string>(item));
                 } else if(py::isinstance<py::int_>(item)) {
                     val = py::cast<Py_ssize_t>(item);
                 } else throw std::invalid_argument("value must be str or int");
-                obj.sm = (minocore::coresets::SensitivityMethod)val;
+                obj.sm = (minicore::coresets::SensitivityMethod)val;
             }
         )
     .def_property("prior", [](SumOpts &obj) -> py::str {
@@ -562,19 +562,19 @@ void init_smw(py::module &m) {
         }
         if(wptr) {
             if(smw.is_float())
-                std::tie(centers, asn, fc) = minocore::m2d2(smw.getfloat(), so, wptr);
+                std::tie(centers, asn, fc) = minicore::m2d2(smw.getfloat(), so, wptr);
             else
-                std::tie(centers, asn, dc) = minocore::m2d2(smw.getdouble(), so, wptr);
+                std::tie(centers, asn, dc) = minicore::m2d2(smw.getdouble(), so, wptr);
         } else if(fwptr) {
             if(smw.is_float())
-                std::tie(centers, asn, fc) = minocore::m2d2(smw.getfloat(), so, fwptr);
+                std::tie(centers, asn, fc) = minicore::m2d2(smw.getfloat(), so, fwptr);
             else
-                std::tie(centers, asn, dc) = minocore::m2d2(smw.getdouble(), so, fwptr);
+                std::tie(centers, asn, dc) = minicore::m2d2(smw.getdouble(), so, fwptr);
         } else {
             if(smw.is_float())
-                std::tie(centers, asn, fc) = minocore::m2d2(smw.getfloat(), so);
+                std::tie(centers, asn, fc) = minicore::m2d2(smw.getfloat(), so);
             else
-                std::tie(centers, asn, dc) = minocore::m2d2(smw.getdouble(), so);
+                std::tie(centers, asn, dc) = minicore::m2d2(smw.getdouble(), so);
         }
         py::array_t<uint32_t> ret(centers.size()), retasn(smw.rows());
         py::array_t<double> costs(smw.rows());
@@ -597,11 +597,11 @@ void init_smw(py::module &m) {
         switch(bi.format.front()) {
             case 'f': {
                 blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> cm((float *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
-                std::tie(centers, asn, fc) = minocore::m2d2(cm, so);
+                std::tie(centers, asn, fc) = minicore::m2d2(cm, so);
             } break;
             case 'd': {
                 blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded> cm((double *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
-                std::tie(centers, asn, dc) = minocore::m2d2(cm, so);
+                std::tie(centers, asn, dc) = minicore::m2d2(cm, so);
             } break;
             default: throw std::invalid_argument("Not supported: non-double/float type");
         }
@@ -620,9 +620,9 @@ void init_smw(py::module &m) {
         std::vector<double> dret;
         std::vector<float> fret;
         if(smw.is_float()) {
-            std::tie(centers, fret) = minocore::m2greedysel(smw.getfloat(), so);
+            std::tie(centers, fret) = minicore::m2greedysel(smw.getfloat(), so);
         } else {
-            std::tie(centers, dret) = minocore::m2greedysel(smw.getdouble(), so);
+            std::tie(centers, dret) = minicore::m2greedysel(smw.getdouble(), so);
         }
         py::array_t<uint32_t> ret(centers.size());
         py::array_t<double> costs(smw.rows());
@@ -647,11 +647,11 @@ void init_smw(py::module &m) {
         switch(bi.format.front()) {
             case 'f': {
                 blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> cm((float *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
-                std::tie(centers, fret) = minocore::m2greedysel(cm, so);
+                std::tie(centers, fret) = minicore::m2greedysel(cm, so);
             } break;
             case 'd': {
                 blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded> cm((double *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
-                std::tie(centers, dret) = minocore::m2greedysel(cm, so);
+                std::tie(centers, dret) = minicore::m2greedysel(cm, so);
             } break;
             default: throw std::invalid_argument("Not supported: non-double/float type");
         }

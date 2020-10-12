@@ -1,11 +1,11 @@
-#include "include/minocore/util/merge.h"
+#include "include/minicore/util/merge.h"
 #include "blaze/Math.h"
 #include "blaze/util/SmallArray.h"
 #include <random>
 #include <set>
 #include <cassert>
 
-using namespace minocore;
+using namespace minicore;
 
 int main(int argc, char **argv) {
 

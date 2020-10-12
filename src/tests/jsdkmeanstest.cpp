@@ -1,6 +1,6 @@
-#include "minocore/dist/applicator.h"
-#include "minocore/util/csc.h"
-#include "minocore/util/timer.h"
+#include "minicore/dist/applicator.h"
+#include "minicore/util/csc.h"
+#include "minicore/util/timer.h"
 #include <getopt.h>
 #include "blaze/util/Serialization.h"
 
@@ -53,12 +53,12 @@ int main(int argc, char *argv[]) {
     std::ofstream ofs(output);
     blz::DM<FT> sparsemat;
     if(fmt == 0) {
-        sparsemat = minocore::csc2sparse<FLOAT_TYPE, INDPTRTYPE, INDICESTYPE, DATATYPE>(input, true);
+        sparsemat = minicore::csc2sparse<FLOAT_TYPE, INDPTRTYPE, INDICESTYPE, DATATYPE>(input, true);
     } else if(fmt == 1) {
         blaze::Archive<std::ifstream> arch(input);
         arch >> sparsemat;
     } else if(fmt == 2) {
-        sparsemat = minocore::mtx2sparse<FT>(input);
+        sparsemat = minicore::mtx2sparse<FT>(input);
     }
     std::fprintf(stderr, "gathering rows: %u\n", maxnrows);
     std::vector<unsigned> nonemptyrows;
@@ -77,37 +77,37 @@ int main(int argc, char *argv[]) {
 #else
     decltype(sparsemat) filtered_sparsemat = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
 #endif
-    auto full_jsm = minocore::jsd::make_probdiv_applicator(filtered_sparsemat, /*dis=*/minocore::distance::JSD, /*prior=*/minocore::distance::DIRICHLET);
-    minocore::util::Timer timer("k-means");
-    auto kmppdat = minocore::jsd::make_kmeanspp(full_jsm, k);
+    auto full_jsm = minicore::jsd::make_probdiv_applicator(filtered_sparsemat, /*dis=*/minicore::distance::JSD, /*prior=*/minicore::distance::DIRICHLET);
+    minicore::util::Timer timer("k-means");
+    auto kmppdat = minicore::jsd::make_kmeanspp(full_jsm, k);
     timer.report();
     std::fprintf(stderr, "finished kmpp. Now getting cost\n");
     const auto &dat = std::get<2>(kmppdat);
     std::fprintf(stderr, "kmpp solution cost: %g. min/max/mean: %g/%g/%g\n", blz::sum(dat), blz::min(dat), blz::max(dat), blz::mean(dat));
     timer.restart("kmc");
-    auto kmcdat = minocore::jsd::make_kmc2(full_jsm, k, m);
+    auto kmcdat = minicore::jsd::make_kmc2(full_jsm, k, m);
     timer.report();
     std::fprintf(stderr, "finished kmc2\n");
     timer.reset();
-    auto kmc2cost = minocore::coresets::get_oracle_costs(full_jsm, full_jsm.size(), kmcdat);
+    auto kmc2cost = minicore::coresets::get_oracle_costs(full_jsm, full_jsm.size(), kmcdat);
     std::fprintf(stderr, "kmc2 solution cost: %g\n", blz::sum(kmc2cost.second));
     std::fprintf(stderr, "\n\nNumber of cells: %zu\n", nonemptyrows.size());
     auto &[centeridx, asn, costs] = kmppdat;
     std::vector<float> counts(centeridx.size());
     blaze::DynamicMatrix<typename decltype(filtered_sparsemat)::ElementType> centers(rows(filtered_sparsemat, centeridx.data(), centeridx.size()));
     auto oracle = [](const auto &x, const auto &y) {
-        return minocore::jsd::multinomial_jsd(x, y);
+        return minicore::jsd::multinomial_jsd(x, y);
     };
     std::fprintf(stderr, "About to start ll\n");
 #if 0
-    minocore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 0., 50, oracle);
+    minicore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 0., 50, oracle);
     std::fprintf(stderr, "About to make probdiv appl\n");
     filtered_sparsemat = rows(sparsemat, nonemptyrows.data(), nonemptyrows.size());
-    auto full_jsd = minocore::jsd::make_probdiv_applicator(filtered_sparsemat, minocore::jsd::MKL, blz::distance::NONE);
-    std::tie(centeridx, asn, costs) = minocore::jsd::make_kmeanspp(full_jsd, k);
+    auto full_jsd = minicore::jsd::make_probdiv_applicator(filtered_sparsemat, minicore::jsd::MKL, blz::distance::NONE);
+    std::tie(centeridx, asn, costs) = minicore::jsd::make_kmeanspp(full_jsd, k);
     centers = rows(filtered_sparsemat, centeridx.data(), centeridx.size());
-    minocore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 250, [](const auto &x, const auto &y) {return minocore::jsd::multinomial_jsd(x, y);});
-    auto coreset_sampler = minocore::jsd::make_d2_coreset_sampler(full_jsm, k, 13);
+    minicore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 250, [](const auto &x, const auto &y) {return minicore::jsd::multinomial_jsd(x, y);});
+    auto coreset_sampler = minicore::jsd::make_d2_coreset_sampler(full_jsm, k, 13);
 double mb_lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
                      CMatrixType &centers, MatrixType &data,
                      unsigned batch_size,
@@ -118,20 +118,20 @@ double mb_lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
 {
 #else
 #if 1
-    minocore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 50, oracle);
+    minicore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 50, oracle);
 #else
-    minocore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 50, app);
+    minicore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 50, app);
 #endif
     auto cpyasn = asn;
     auto cpycounts = counts;
     auto cpycenters = centers;
     std::mt19937_64 mt(1337);
-    minocore::coresets::mb_lloyd_loop(cpyasn, cpycounts, cpycenters, filtered_sparsemat, 500, 50, oracle, mt());
+    minicore::coresets::mb_lloyd_loop(cpyasn, cpycounts, cpycenters, filtered_sparsemat, 500, 50, oracle, mt());
     std::fprintf(stderr, "About to make probdiv appl\n");
-    auto full_jsd = minocore::jsd::make_probdiv_applicator(filtered_sparsemat, minocore::jsd::MKL);
-    std::tie(centeridx, asn, costs) = minocore::jsd::make_kmeanspp(full_jsd, k);
+    auto full_jsd = minicore::jsd::make_probdiv_applicator(filtered_sparsemat, minicore::jsd::MKL);
+    std::tie(centeridx, asn, costs) = minicore::jsd::make_kmeanspp(full_jsd, k);
     centers = rows(filtered_sparsemat, centeridx.data(), centeridx.size());
-    minocore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 250, [](const auto &x, const auto &y) {return minocore::jsd::multinomial_jsd(x, y);});
-    //auto coreset_sampler = minocore::jsd::make_d2_coreset_sampler(full_jsm, k, 13);
+    minicore::coresets::lloyd_loop(asn, counts, centers, filtered_sparsemat, 1e-6, 250, [](const auto &x, const auto &y) {return minicore::jsd::multinomial_jsd(x, y);});
+    //auto coreset_sampler = minicore::jsd::make_d2_coreset_sampler(full_jsm, k, 13);
 #endif
 }

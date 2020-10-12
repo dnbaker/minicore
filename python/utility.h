@@ -1,5 +1,5 @@
 #pragma once
 #include "pyfgc.h"
 
-minocore::distance::DissimilarityMeasure obj2m(py::object o);
-minocore::coresets::SensitivityMethod obj2sm(py::object o);
+minicore::distance::DissimilarityMeasure obj2m(py::object o);
+minicore::coresets::SensitivityMethod obj2sm(py::object o);

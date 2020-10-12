@@ -1,5 +1,5 @@
 #define BLAZE_USE_SLEEF 1
-#include "minocore/util/macros.h"
+#include "minicore/util/macros.h"
 #include "sleef.h"
 #include "blaze/Math.h"
 #include "aesctr/wy.h"

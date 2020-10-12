@@ -1,4 +1,4 @@
-#include "minocore/clustering/streaming.h"
+#include "minicore/clustering/streaming.h"
 
 struct exfunc {
     template<typename...A>
@@ -8,6 +8,6 @@ struct exfunc {
 };
 
 int main() {
-    auto clusterer = minocore::streaming::make_kservice_clusterer<uint64_t, exfunc>(exfunc{}, 50, 1e9, 2.);
+    auto clusterer = minicore::streaming::make_kservice_clusterer<uint64_t, exfunc>(exfunc{}, 50, 1e9, 2.);
     clusterer.add(uint64_t(3));
 }

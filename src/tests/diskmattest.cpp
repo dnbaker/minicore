@@ -1,7 +1,7 @@
-#include "minocore/dist.h"
+#include "minicore/dist.h"
 #include "diskmat/diskmat.h"
 
-using namespace minocore;
+using namespace minicore;
 using namespace blz;
 using diskmat::DiskMat;
 

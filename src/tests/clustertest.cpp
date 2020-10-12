@@ -1,8 +1,8 @@
 #include "blaze/math/DynamicMatrix.h"
 #include "aesctr/wy.h"
-#include "minocore/clustering.h"
+#include "minicore/clustering.h"
 
-using namespace minocore;
+using namespace minicore;
 
 template<typename FT>
 blaze::DynamicMatrix<FT> parse_file(std::string path, unsigned *num_clusters) {
