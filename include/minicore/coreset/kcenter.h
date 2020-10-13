@@ -16,14 +16,22 @@ namespace outliers {
 template<typename IT, typename FT>
 struct bicriteria_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<FT, IT>>, FT> {
     using super = std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<FT, IT>>, FT>;
-    template<typename...Args>
-    bicriteria_result_t(Args &&...args): super(std::forward<Args>(args)...) {}
+    bicriteria_result_t(std::tuple<IVec<IT>, IVec<IT>, std::vector<std::pair<FT, IT>>, FT> &o):
+        bicriteria_result_t(std::get<0>(o), std::get<1>(o), std::get<2>(o), std::get<3>(o)) {}
+    bicriteria_result_t() = default;
+    bicriteria_result_t(IVec<IT> &ctrs, IVec<IT> &asn, std::vector<std::pair<FT, IT>> &outliers, FT out) {
+        this->centers() = std::move(ctrs);
+        this->assignments() = std::move(asn);
+        this->outliers() = std::move(outliers);
+        this->outlier_threshold() = out;
+    }
     auto &centers() {return std::get<0>(*this);}
     auto &assignments() {return std::get<1>(*this);}
     // alias
     auto &labels() {return assignments();}
     auto &outliers() {return std::get<2>(*this);}
     FT outlier_threshold() const {return std::get<3>(*this);}
+    FT &outlier_threshold() {return std::get<3>(*this);}
     size_t num_centers() const {return centers().size();}
 };
 
@@ -38,7 +46,7 @@ struct bicriteria_result_t: public std::tuple<IVec<IT>, IVec<IT>, std::vector<st
 */
 
 
-template<typename Oracle, typename FT=double,
+template<typename Oracle, typename FT=std::decay_t<decltype(Oracle()(0,0))>,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm>
 bicriteria_result_t<IT, FT>
 kcenter_bicriteria(const Oracle &oracle, size_t np, RNG &rng, size_t, double eps,
@@ -163,7 +171,7 @@ kcenter_bicriteria(Iter first, Iter end, RNG &rng, size_t, double eps,
                    const Norm &norm=Norm())
 {
     auto dm = make_index_dm(first, norm);
-    return kcenter_bicriteria(dm, end - first, rng, size_t(), eps, gamma, t, eta);
+    return kcenter_bicriteria<decltype(dm), FT>(dm, end - first, rng, size_t(), eps, gamma, t, FT(eta));
 }
 
 

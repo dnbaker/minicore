@@ -23,6 +23,7 @@ script:
   - ./coreset_testdbg
   - ./btestdbg
   - ./kmpptestdbg
+  - ./fkmpptestdbg
   - ./jvtestdbg
   - ./tbmdbg
   - ./tbasdbg

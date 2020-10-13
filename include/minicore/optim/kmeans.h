@@ -101,10 +101,13 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             newc = reservoir_simd::sample(distances.data(), np, rng());
         }
         if(unlikely(distances[newc] == 0.)) {
+            std::fprintf(stderr, "Selected point of weight 0 (this should not happen unless there are negative or infinite weights): %zu\n", size_t(newc));
             if(++d0s == 5) {
                 std::stringstream ss;
                 ss << trans(distances) << ", with max " << distances[newc] << '\n';
-                throw std::runtime_error(std::string("Unexpected: distance of 0 selected") + ss.str());;
+                const std::string msg = std::move(ss.str());
+                bool success = std::fwrite(msg.data(), msg.size(), 1, stderr) == 1u;
+                throw std::runtime_error(std::string("Unexpected: distance of 0 selected") + msg + (success ? "": "writing to stderr failed"));
             }
             goto setnewc;
         }
