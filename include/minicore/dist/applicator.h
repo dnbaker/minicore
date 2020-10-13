@@ -1910,7 +1910,28 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 break;
             }
             case HELLINGER: {
-                ret = hellinger(mr / (lhsum - prior_sum),  ctr / (rhsum - prior_sum));
+                if(prior_sum == 0.) ret = hellinger(mr / lhsum,  ctr / rhsum);
+                else {
+                    FT empty = std::sqrt(lhinc) - std::sqrt(rhinc);
+                    empty *= empty;
+                    const auto sqr = std::sqrt(rhinc);
+                    const auto sql = std::sqrt(lhinc);
+                    const FT tmp = perform_core(wr, wc, 0.,
+                        [&](auto xval, auto yval) ALWAYS_INLINE {
+                            auto ret = std::sqrt(xval + lhinc) - std::sqrt(yval + rhinc);
+                            return ret * ret;
+                        },
+                        [&](auto xval) ALWAYS_INLINE {
+                            auto ret = std::sqrt(xval + lhinc) - sqr;
+                            return ret * ret;
+                        },
+                        [&](auto yval) ALWAYS_INLINE {
+                            auto ret = sql - std::sqrt(yval + rhinc);
+                            return ret * ret;
+                        },
+                        empty);
+                    ret = std::sqrt(tmp) * M_SQRT1_2;
+                }
                 break;
             }
             case SIS:
