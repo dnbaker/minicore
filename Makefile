@@ -184,4 +184,4 @@ hsoft: solvetest solvetestdbg
 
 
 clean:
-	echo rm -f $(EX) graphrun dmlrun
+	rm -f $(EX) graphrun dmlrun
