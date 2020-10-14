@@ -459,6 +459,99 @@ void set_centroids_soft(const Mat &mat,
     costs = blaze::generate(mat.rows(), centers.size(), compute_cost);
 }
 
+template<typename MT, // MatrixType
+         typename FT=blz::ElementType_t<MT>, // Type of result.
+                                             // Defaults to that of MT, but can be parametrized. (e.g., when MT is integral)
+         typename CtrT=blz::DynamicVector<FT, rowVector>, // Vector Type
+         typename CostsT,
+         typename PriorT=blz::DynamicVector<FT, rowVector>,
+         typename AsnT=blz::DynamicVector<uint32_t>,
+         typename WeightT=CtrT, // Vector Type
+         typename=std::enable_if_t<std::is_floating_point_v<FT>>
+        >
+auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TODO: consider replacing blaze::Matrix with template Mat for CSR matrices
+                                       const dist::DissimilarityMeasure measure,
+                                       const PriorT &prior,
+                                       std::vector<CtrT> &centers,
+                                       AsnT &asn,
+                                       CostsT &costs,
+                                       const WeightT *weights=static_cast<WeightT *>(nullptr),
+                                       double eps=1e-10,
+                                       size_t maxiter=size_t(-1))
+{
+    auto centers_cpy = centers;
+    auto compute_cost = [&costs,w=weights]() -> FT {
+        if(w) return blz::dot(costs, *w);
+        else  return blz::sum(costs);
+    };
+    switch(measure) {
+        default:
+        case L1: case TVD: throw std::invalid_argument("measure cannot be used in minibatch mode");
+
+        case SQRL2: case POISSON: case MKL: case REVERSE_ITAKURA_SAITO: case ITAKURA_SAITO:
+        case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO:
+        case REVERSE_MKL: case REVERSE_POISSON:
+        case LLR: case UWLLR: case SRLRT: case SRULRT:
+        case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
+        case HELLINGER:
+            return true;
+    }
+#if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
+    const blz::DV<FT> rowsums = sum<blz::rowwise>(*mat);
+    blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
+#else
+    blz::DV<FT> rowsums((*mat).rows());
+    blz::DV<FT> centersums(centers.size());
+    OMP_PFOR
+    for(size_t i = 0; i < rowsums.size(); ++i)
+        rowsums[i] = blz::sum(row(*mat, i, blz::unchecked));
+    OMP_PFOR
+    for(size_t i = 0; i < centers.size(); ++i)
+        centersums[i] = blz::sum(centers[i]);
+#endif
+    assign_points_hard<FT>(*mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
+    const auto initcost = compute_cost();
+    FT cost = initcost;
+    std::fprintf(stderr, "initial cost: %0.12g\n", cost);
+    size_t iternum = 0;
+    for(;;) {
+        DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
+        set_centroids_hard<FT>(*mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
+        DBG_ONLY(std::fprintf(stderr, "Set centroids %zu\n", iternum);)
+
+        assign_points_hard<FT>(*mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
+        auto newcost = compute_cost();
+        std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);
+        if(newcost > cost) {
+            std::cerr << "Warning: New cost " << newcost << " > original cost " << cost << ". Using prior iteration.\n;";
+            centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
+            assign_points_hard<FT>(*mat, measure, prior, centers, asn, costs, weights, centersums, rowsums);
+            //DBG_ONLY(std::abort();)
+            break;
+        }
+        std::swap_ranges(centers.begin(), centers.end(), centers_cpy.begin());
+        if(cost - newcost < eps * initcost) {
+#ifndef NDEBUG
+            std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g init cost\n",
+                         cost - newcost, eps * initcost, eps, initcost);
+#endif
+            break;
+        }
+        if(++iternum == maxiter) {
+#ifndef NDEBUG
+            std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
+#endif
+            break;
+        }
+        cost = newcost;
+    }
+#ifndef NDEBUG
+    std::fprintf(stderr, "Completing clustering after %zu rounds. Initial cost %0.12g. Final cost %0.12g.\n", iternum, initcost, cost);
+#endif
+    return std::make_tuple(initcost, cost, iternum);
+}
+
+
 
 } // namespace clustering
 using clustering::perform_hard_clustering;

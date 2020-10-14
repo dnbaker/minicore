@@ -5,6 +5,7 @@
 #include "minicore/util/oracle.h"
 #include "minicore/optim/kcenter.h"
 #include "discreture/include/discreture.hpp"
+#include "libsimdsampling/argminmax.h"
 #include <atomic>
 
 /*
@@ -123,30 +124,9 @@ struct LocalKMedSearcher {
         using PT = std::pair<FT, IT>;
         auto fill_set = [&](auto &set) -> value_type {
             while(set.size() < std::min(size_t(k_), mat_.rows())) {
-                PT argmaxcost{std::numeric_limits<value_type>::min(), IType(-1)};
-
-
-#ifdef _OPENMP
-    #pragma omp declare reduction (merge : PT : std::max(omp_in, omp_out) )
-#if 0
-    #pragma omp parallel for reduction(merge: argmaxcost)
-#else
-    #pragma omp parallel for
-#endif
-#endif
-                for(size_t i = 0; i < costs.size(); ++i) {
-#if 0
-                    argmaxcost = std::max(argmaxcost, {costs[i], i});
-#else
-                    if(costs[i] > argmaxcost.first) {
-                        OMP_CRITICAL
-                        {
-                            OMP_ONLY(if(costs[i] > argmaxcost.first))
-                            argmaxcost = {costs[i], i};
-                        }
-                    }
-#endif
-                }
+                PT argmaxcost;
+                argmaxcost.second = reservoir_simd::argmax(costs);
+                argmaxcost.first = costs[argmaxcost.second];
                 assert(set.find(argmaxcost.second) == set.end());
                 set.insert(argmaxcost.second);
                 costs = blz::min(row(mat_, argmaxcost.second), costs);

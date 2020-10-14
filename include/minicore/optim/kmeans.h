@@ -566,8 +566,12 @@ void minibatch_lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &c
     std::unique_ptr<IT[]> asn(new IT[np]());
     OMP_PRAGMA("omp parallel")
     {
+#ifdef _OPENMP
+        int nt = omp_get_num_threads();
+        std::unique_ptr<std::mutex[]> mutexes(new std::mutex[nt]);
+#endif
         std::unique_ptr<IT[]> labels(new IT[batchsize]);
-        OMP_PRAGMA("omp for")
+        OMP_PFOR_DYN
         for(size_t i = 0; i < batchsize; ++i) {
             const auto ind = selection[i];
             const auto dr = row(data, ind);
@@ -575,19 +579,20 @@ void minibatch_lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &c
             double dist = blz::serial(func(dr, lhr)), newdist;
             IT label = 0;
             for(unsigned j = 1; j < centers.rows(); ++j)
-                if((newdist = blz::serial(func(dr, row(centers, j BLAZE_CHECK_DEBUG)))) < dist)
+                if((newdist = func(dr, row(centers, j BLAZE_CHECK_DEBUG))) < dist)
                     dist = newdist, label = j;
             labels[i] = label;
             OMP_ATOMIC
             counts[label] += weights ? weights[ind]: WFT(1);
         }
-        OMP_PRAGMA("omp for")
+        OMP_PFOR_DYN
         for(size_t i = 0; i < batchsize; ++i) {
             const auto label = labels[i];
             const auto ind = selection[i];
             const auto dr = row(data, ind);
             const double eta = (weights ? weights[ind]: WFT(1)) / counts[label];
             auto crow = row(centers, label BLAZE_CHECK_DEBUG);
+            OMP_ONLY(std::lock_guard<std::mutex> lock(mutexes[omp_get_thread_num()]);)
             crow = blz::serial((1. - eta) * crow + eta * dr);
         }
     }

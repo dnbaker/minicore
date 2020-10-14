@@ -10,6 +10,7 @@
 #include "minicore/util/blaze_adaptor.h"
 #include "minicore/util/exception.h"
 #include "libsimdsampling/simdsampling.h"
+#include "libsimdsampling/argminmax.h"
 
 namespace minicore {
 
@@ -88,7 +89,7 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
             std::fprintf(stderr, "Center %u has %u for id and %g for costs\n", i, ctrs[i], ctrcosts[i]);
         }
 #endif
-        const auto argmin = blaze::argmin(ctrcosts);
+        const auto argmin = reservoir_simd::argmin(ctrcosts);
         const auto delta = ctrcosts[argmin] - gain;
         if(delta < 0.) {
             std::fprintf(stderr, "Swapping out %d for %lld for a gain of %g. (ctrcosts: %g. gain: %g)\n", int(ctrs[argmin]), sel, delta, ctrcosts[argmin], gain);
@@ -106,7 +107,7 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
     }
     OMP_PFOR
     for(size_t i = 0; i < np; ++i) {
-        asn[i] = blaze::argmin(row(ctrcostmat, i, blaze::unchecked));
+        asn[i] = reservoir_simd::argmin(row(ctrcostmat, i, blaze::unchecked));
     }
 #ifndef NDEBUG
     std::fprintf(stderr, "Cost before %zu rounds of lsearch++: %g. After: %g\n", nrounds, ocost, ccost);
