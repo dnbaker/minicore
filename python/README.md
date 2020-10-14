@@ -40,9 +40,9 @@ ntimes = 5   # Perform kmeans++ sampling %i times, use the best-scoring set of c
 
 seed = 0     # if seed is not set, defaults to 0. Results will be identical with the same seed.
 
-measure = "MKL" # See https://github.com/dnbaker/minicore/blob/main/docs/msr.md for examples/integer codes
-                # value can be integral or be the short string description
-                # MKL = categorical KL divergence
+measure = "REVERSE_MKL" # See https://github.com/dnbaker/minicore/blob/main/docs/msr.md for examples/integer codes
+                        # value can be integral or be the short string description
+                        # MKL = reverse categorical KL divergence
 
 weights = None  # Set weights to be a 1d numpy array containing weights of type (float32, float64, int, unsigned)
                 # If none, unused (uniform)
