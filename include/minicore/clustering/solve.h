@@ -509,34 +509,15 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
     for(size_t i = 0; i < centers.size(); ++i)
         centersums[i] = blz::sum(centers[i]);
 #endif
-    assign_points_hard<FT>(*mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
-    const auto initcost = compute_cost();
-    FT cost = initcost;
-    std::fprintf(stderr, "initial cost: %0.12g\n", cost);
     size_t iternum = 0;
     for(;;) {
+        // 1. Sample the points
+        // 2. Compute nearest center
+        // 3. Calculate new center
+        throw TODOError("This should be replaced with the code for adjusting the centers");
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
-        set_centroids_hard<FT>(*mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
-        DBG_ONLY(std::fprintf(stderr, "Set centroids %zu\n", iternum);)
-
-        assign_points_hard<FT>(*mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
-        auto newcost = compute_cost();
-        std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);
-        if(newcost > cost) {
-            std::cerr << "Warning: New cost " << newcost << " > original cost " << cost << ". Using prior iteration.\n;";
-            centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
-            assign_points_hard<FT>(*mat, measure, prior, centers, asn, costs, weights, centersums, rowsums);
-            //DBG_ONLY(std::abort();)
-            break;
-        }
+        // Set the new centers
         std::swap_ranges(centers.begin(), centers.end(), centers_cpy.begin());
-        if(cost - newcost < eps * initcost) {
-#ifndef NDEBUG
-            std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g init cost\n",
-                         cost - newcost, eps * initcost, eps, initcost);
-#endif
-            break;
-        }
         if(++iternum == maxiter) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
@@ -555,6 +536,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
 
 } // namespace clustering
 using clustering::perform_hard_clustering;
+using clustering::perform_hard_minibatch_clustering;
 using clustering::perform_soft_clustering;
 
 } // namespace minicore
