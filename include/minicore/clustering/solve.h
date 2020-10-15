@@ -510,6 +510,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         centersums[i] = blz::sum(centers[i]);
 #endif
     size_t iternum = 0;
+    double initcost, cost;
     for(;;) {
         // 1. Sample the points
         // 2. Compute nearest center
@@ -524,7 +525,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
 #endif
             break;
         }
-        cost = newcost;
+        //cost = newcost;
     }
 #ifndef NDEBUG
     std::fprintf(stderr, "Completing clustering after %zu rounds. Initial cost %0.12g. Final cost %0.12g.\n", iternum, initcost, cost);

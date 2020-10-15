@@ -33,7 +33,6 @@ kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Nor
     if(maxdest == 0) maxdest = np;
     std::vector<IT> centers(k);
     std::vector<FT> distances(np, 0.);
-    FT maxdist = 0;
     IT bestind = 0;
     VERBOSE_ONLY(std::fprintf(stderr, "[%s] Starting kcenter_greedy_2approx\n", __PRETTY_FUNCTION__);)
     auto newc = rng() % maxdest;
@@ -49,7 +48,6 @@ kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Nor
         distances[i] = dm(newc, i);
     }
     bestind = reservoir_simd::argmax(distances);
-    maxdist = distances[bestind];
     assert(distances[newc] == 0.);
     if(k == 1) return std::make_pair(centers, distances);
     centers[1] = newc = bestind;
@@ -70,7 +68,6 @@ kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Nor
                 ldist = dist;
         }
         bestind = reservoir_simd::argmax(distances);
-        maxdist = distances[bestind];
         centers[ci] = newc = bestind;
         distances[newc] = 0.;
     }
