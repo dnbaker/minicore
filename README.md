@@ -1,4 +1,4 @@
-## Minicore: Fast Generic Coresets [![Build Status](https://travis-ci.com/dnbaker/minicore.svg?token=nzWL3kpck4ymqu9SdesD&branch=main)](https://travis-ci.com/dnbaker/minicore)
+## Minicore: Fast Generic Coresets [![Build Status](https://travis-ci.com/dnbaker/minocore.svg?token=nzWL3kpck4ymqu9SdesD&branch=main)](https://travis-ci.com/dnbaker/minocore)
 
 Minicore is a fast, generic library for constructing and clustering coresets on graphs, in metric spaces and under non-metric dissimilarity measures.
 It includes methods for constant-factor and bicriteria approximation solutions, as well as coreset sampling algorithms.
