@@ -30,8 +30,6 @@ int main(int argc, char **argv) {
     };
     const auto sal = makear(), sar = makear();
     for(size_t i = 0; i < nnz; ++i) {
-        std::fprintf(stderr, "lh %u %g\n", sal[i], lhs[i]);
-        std::fprintf(stderr, "rh %u %g\n", sar[i], rhs[i]);
         clhs.append(sal[i], lhs[i]);
         crhs.append(sar[i], rhs[i]);
     }

@@ -79,7 +79,6 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
                 update_both(app(i, j), i, j);
             }
             perform_sort(ptr);
-            std::fprintf(stderr, "[Symmetric:%s] Completed %zu/%zu\n", dist::prob2str(measure), i + 1, np);
         }
     } else {
         OMP_PFOR
@@ -88,7 +87,6 @@ std::vector<packed::pair<blaze::ElementType_t<MatrixType>, IT>> make_knns(const 
                 update_fwd(app(i, j), i, j);
             }
             perform_sort(ptr);
-            std::fprintf(stderr, "[Asymmetric:%s] Completed %zu/%zu\n", dist::prob2str(measure), i + 1, np);
         }
     }
     std::fprintf(stderr, "Created knn graph for k = %u and %zu points\n", k, np);
