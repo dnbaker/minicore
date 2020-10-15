@@ -1,5 +1,5 @@
-#include "minocore/coreset.h"
-using namespace minocore;
+#include "minicore/coreset.h"
+using namespace minicore;
 
 int main() {
     coresets::IndexCoreset<uint32_t, float> cs(100);

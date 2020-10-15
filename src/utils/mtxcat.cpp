@@ -1,4 +1,4 @@
-#include "minocore/util/csc.h"
+#include "minicore/util/csc.h"
 #include "blaze/util/Serialization.h"
 #include <getopt.h>
 
@@ -13,7 +13,7 @@ enum EmitFmt {
 };
 
 int main(int argc, char **argv) {
-    minocore::util::TimeStamper ts("argparse");
+    minicore::util::TimeStamper ts("argparse");
     bool transpose = false, posttranspose = false, empty = false;
     const char *outfile = "/dev/stdout";
     EmitFmt fmt = BINARY;
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     ts.add_event("parse matrices");
     OMP_PFOR
     for(unsigned i = 0; i < paths.size(); ++i) {
-        submats[i] = minocore::util::mtx2sparse<double>(paths[i], transpose);
+        submats[i] = minicore::util::mtx2sparse<double>(paths[i], transpose);
         auto nr = submats[i].rows();
         OMP_ATOMIC
         s += nr;
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     std::cerr.flush();
     if(empty) {
         ts.add_event("Remove empty features");
-        auto [rows, cols] = minocore::util::erase_empty(finalmat);
+        auto [rows, cols] = minicore::util::erase_empty(finalmat);
         if(rows.size() || cols.size()) {
             std::fprintf(stderr, "concatenated and emptied mat has %zu rows, %zu columns and %zu nonzeros\n", finalmat.rows(), finalmat.columns(), blaze::nonZeros(finalmat));
             if(std::strcmp(outfile, "/dev/stdout")) {

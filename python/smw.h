@@ -31,9 +31,9 @@ private:
             std::cerr << m;
         }
     }
+public:
     template<typename FT>
     SparseMatrixWrapper(blz::SM<FT> &&mat): matrix_(std::move(mat)) {}
-public:
     blz::SM<float> &getfloat() { return std::get<SMF>(matrix_);}
     const blz::SM<float> &getfloat() const { return std::get<SMF>(matrix_);}
     blz::SM<double> &getdouble() { return std::get<SMD>(matrix_);}

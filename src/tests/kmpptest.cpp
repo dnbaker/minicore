@@ -1,7 +1,7 @@
-#include "minocore/optim/kmeans.h"
-#include "minocore/optim/kcenter.h"
-#include "minocore/coreset/kcenter.h"
-#include "minocore/dist/applicator.h"
+#include "minicore/optim/kmeans.h"
+#include "minicore/optim/kcenter.h"
+#include "minicore/coreset/kcenter.h"
+#include "minicore/dist/applicator.h"
 #include <new>
 #include <chrono>
 #include <thread>
@@ -16,8 +16,8 @@ auto t() {return std::chrono::high_resolution_clock::now();}
 #endif
 
 
-using namespace minocore;
-using namespace minocore::coresets;
+using namespace minicore;
+using namespace minicore::coresets;
 
 template<typename Mat, typename RNG>
 void test_kccs(Mat &mat, RNG &rng, size_t npoints, double eps) {

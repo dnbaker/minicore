@@ -1,4 +1,4 @@
-#include "minocore/optim/kmedian.h"
+#include "minicore/optim/kmedian.h"
 #include <chrono>
 
 auto t() {return std::chrono::high_resolution_clock::now();}
@@ -48,7 +48,7 @@ int main(int c, char **a) {
     std::fprintf(stderr, "diff between weighted and unweighted: %.12g. norms: %.12g, %.12g\n", diff, blz::l2Norm(v4), blz::l2Norm(v));
     assert(diff < 1e-6 * std::max(blz::l2Norm(v4), blz::l2Norm(v)));
     auto l1_start = t();
-    minocore::coresets::l1_median(m, v2);
+    minicore::coresets::l1_median(m, v2);
     auto l1_stop = t();
     //std::cout << subvector(v2, 0, nr / 2) << '\n';
     //std::cout << subvector(blaze::mean<blaze::columnwise>(m), 0, 50) << '\n';
@@ -68,7 +68,7 @@ int main(int c, char **a) {
     manstop = t();
     std::fprintf(stderr, "Manual l1 distances time: %zu/%g. reduction-based: %zu/%g\n", size_t((stop - start).count() / 1000), cwmed, size_t((manstop - manstart).count() / 1000), cwmed2);
     auto l1_approx_start = t();
-    minocore::coresets::l1_median(m, v3, static_cast<const float *>(nullptr));
+    minicore::coresets::l1_median(m, v3, static_cast<const float *>(nullptr));
     auto l1_approx_stop = t();
     std::fprintf(stderr, "Time to compute exact l1 median: %gms. Approx: %gms.\n", (l1_stop - l1_start).count() * 1.e-6, (l1_approx_stop - l1_approx_start).count() * 1.e-6);
     std::cout << "L1 dist under geomedian: " << l1dist(m, v) << '\n';

@@ -1,3 +1,3 @@
-#include "minocore/minocore.h"
+#include "minicore/minicore.h"
 
 int main() {}

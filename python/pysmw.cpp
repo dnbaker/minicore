@@ -3,6 +3,8 @@
 #include <sstream>
 #include <map>
 
+using blz::unchecked;
+
 using smw_t = SparseMatrixWrapper;
 dist::DissimilarityMeasure assure_dm(py::object obj) {
     dist::DissimilarityMeasure ret;
@@ -201,6 +203,80 @@ void init_smw(py::module &m) {
     .def("tofile", [](SparseMatrixWrapper &lhs, std::string path) {
         lhs.tofile(path);
     }, py::arg("path"))
+    .def("submatrix", [](const SparseMatrixWrapper &wrap, py::object rowsel, py::object columnsel) -> SparseMatrixWrapper {
+        if(columnsel.is_none()) {
+            if(rowsel.is_none()) {
+                // Copy over
+                if(wrap.is_float()) {return SparseMatrixWrapper(blz::SM<float>(wrap.getfloat()));}
+                return SparseMatrixWrapper(blz::SM<double>(wrap.getdouble()));
+            }
+            auto inf = py::cast<py::array>(rowsel).request();
+            if(inf.format.size() != 1) throw std::invalid_argument("Wrong dtype");
+            switch(inf.format[0]) {
+#define DTCASE(chr, type) case chr: {if(wrap.is_float()) return blz::SM<float>(blaze::rows(wrap.getfloat(), (type *)inf.ptr, inf.size));\
+                                     else               return blz::SM<double>(blaze::rows(wrap.getdouble(), (type *)inf.ptr, inf.size));}
+            DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+ #undef DTCASE
+            default: throw std::invalid_argument("Wrong dtype");
+            }
+        } else if(rowsel.is_none()) {
+            auto inf = py::cast<py::array>(columnsel).request();
+            if(inf.format.size() != 1) throw std::invalid_argument("Wrong dtype");
+            switch(inf.format[0]) {
+#define DTCASE(chr, type) case chr: {if(wrap.is_float()) return blz::SM<float>(blaze::columns(wrap.getfloat(), (type *)inf.ptr, inf.size));\
+                                     else               return blz::SM<double>(blaze::columns(wrap.getdouble(), (type *)inf.ptr, inf.size));}
+                DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+ #undef DTCASE
+                default: throw std::invalid_argument("Wrong dtype");
+            }
+        } else {
+            auto rowarr = py::cast<py::array>(rowsel), columnarr = py::cast<py::array>(columnsel);
+            auto rinf  = rowarr.request(), cinf = columnarr.request();
+            if(rinf.format != cinf.format) throw std::invalid_argument("row and column selection should be the same integral types");
+            if(rinf.format.size() != 1) throw std::invalid_argument("rinf format size must be 1");
+            switch(rinf.format[0]) {
+#define DTCASE(chr, type) case chr: if(wrap.is_float()) return blz::SM<float>(columns(rows(wrap.getfloat(), (type *)rinf.ptr, rinf.size), (type *)cinf.ptr, cinf.size));\
+                                    else                return blz::SM<double>(columns(rows(wrap.getdouble(), (type *)rinf.ptr, rinf.size), (type *)cinf.ptr, cinf.size));
+                DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+#undef DTCASE
+                default: throw std::invalid_argument("Wrong dtype");
+            }
+        }
+    }, py::arg("rowsel") = py::none(), py::arg("columnsel") = py::none())
+    .def("variance", [](SparseMatrixWrapper &wrap, int byrow, bool usefloat) -> py::object
+    {
+        switch(byrow) {case -1: case 0: case 1: break; default: throw std::invalid_argument("byrow must be -1 (total sum), 0 (by column) or by row (1)");}
+        if(byrow == -1) {
+            double ret;
+            wrap.perform([&ret](const auto &x) {ret = blaze::var(x);});
+            return py::float_(ret);
+        }
+        py::array ret;
+        Py_ssize_t nelem = byrow ? wrap.rows(): wrap.columns();
+        if(usefloat) ret = py::array_t<float>(nelem);
+                else ret = py::array_t<double>(nelem);
+        auto bi = ret.request();
+        auto ptr = bi.ptr;
+        if(bi.size != nelem) {
+            char buf[256];
+            auto n = std::sprintf(buf, "bi size: %u. nelem: %u\n", int(bi.size), int(nelem));
+            throw std::invalid_argument(std::string(buf, buf + n));
+        }
+        if(usefloat) {
+            blaze::CustomVector<float, blz::unaligned, blz::unpadded> cv((float *)ptr, nelem);
+            wrap.perform([&](const auto &x) {
+                if(byrow) cv = blz::var<blz::rowwise>(x);
+                else      cv = trans(blz::var<blz::columnwise>(x));
+            });
+        } else {
+            blaze::CustomVector<double, blz::unaligned, blz::unpadded> cv((double *)ptr, nelem);
+            wrap.perform([&](const auto &x) {
+                if(byrow) cv = blz::var<blz::rowwise>(x);
+                else      cv = trans(blz::var<blz::columnwise>(x));
+            });
+        }
+        return ret;
+    }, py::arg("kind")=-1, py::arg("usefloat")=true)
     .def("sum", [](SparseMatrixWrapper &wrap, int byrow, bool usefloat) -> py::object
     {
         switch(byrow) {case -1: case 0: case 1: break; default: throw std::invalid_argument("byrow must be -1 (total sum), 0 (by column) or by row (1)");}
@@ -234,7 +310,32 @@ void init_smw(py::module &m) {
             });
         }
         return ret;
-    }, py::arg("kind")=-1, py::arg("usefloat")=true);
+    }, py::arg("kind")=-1, py::arg("usefloat")=true)
+    .def("count_nnz", [](SparseMatrixWrapper &wrap, int byrow) -> py::object
+    {
+        if(byrow <= 0)
+            return py::int_(wrap.nnz());
+        const char *dt;
+        if(wrap.columns() <= 0xFFu) {
+            dt = "B";
+        } else if(wrap.columns() <= 0xFFFFu) {
+            dt = "H";
+        } else if(wrap.columns() <= 0xFFFFFFFFu) {
+            dt = "I";
+        } else {
+            dt = "L";
+        }
+        Py_ssize_t nr = wrap.rows();
+        py::array ret(py::dtype(dt), std::vector<Py_ssize_t>({nr}));
+        auto ptr = ret.request().ptr;
+        switch(dt[0]) {
+#define DTCASE(chr, type) case chr: {auto view = blz::make_cv((type *)ptr, nr); view = blaze::generate(nr, [&wrap](auto rowid) {return type(wrap.is_float() ? nonZeros(row(wrap.getfloat(), rowid, unchecked)): nonZeros(row(wrap.getdouble(), rowid, unchecked)));});} break
+            DTCASE('L', uint64_t); DTCASE('I', uint32_t); DTCASE('H', uint16_t); DTCASE('B', uint8_t);
+#undef DTCASE
+            default: throw std::runtime_error("Unexpected dtype");
+        }
+        return ret;
+    }, py::arg("byrow")=0);
 
 
     // Utilities
@@ -269,9 +370,9 @@ void init_smw(py::module &m) {
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and a string key for the coreest construction format.")
     .def(py::init<int, Py_ssize_t, double, std::string, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = "BFL", py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and a string key for the coreest construction format.")
-    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
+    .def(py::init<std::string, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = "L1", py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = static_cast<int>(minicore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a string key for the measure name and an integer key for the coreest construction format.")
-    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = static_cast<int>(minocore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
+    .def(py::init<int, Py_ssize_t, double, int, double, Py_ssize_t, bool, size_t>(), py::arg("measure") = 0, py::arg("k") = 10, py::arg("betaprior") = 0., py::arg("sm") = static_cast<int>(minicore::coresets::BFL), py::arg("outlier_fraction")=0., py::arg("max_rounds") = 100, py::arg("kmc2n") = 0,
         py::arg("soft") = false, "Construct a SumOpts object using a integer key for the measure name and an integer key for the coreest construction format.")
     .def("__str__", &SumOpts::to_string)
     .def("__repr__", [](const SumOpts &x) {
@@ -295,11 +396,11 @@ void init_smw(py::module &m) {
             [](SumOpts &obj, py::object item) {
                 Py_ssize_t val;
                 if(py::isinstance<py::str>(item)) {
-                    val = minocore::coresets::str2sm(py::cast<std::string>(item));
+                    val = minicore::coresets::str2sm(py::cast<std::string>(item));
                 } else if(py::isinstance<py::int_>(item)) {
                     val = py::cast<Py_ssize_t>(item);
                 } else throw std::invalid_argument("value must be str or int");
-                obj.sm = (minocore::coresets::SensitivityMethod)val;
+                obj.sm = (minicore::coresets::SensitivityMethod)val;
             }
         )
     .def_property("prior", [](SumOpts &obj) -> py::str {
@@ -461,19 +562,19 @@ void init_smw(py::module &m) {
         }
         if(wptr) {
             if(smw.is_float())
-                std::tie(centers, asn, fc) = minocore::m2d2(smw.getfloat(), so, wptr);
+                std::tie(centers, asn, fc) = minicore::m2d2(smw.getfloat(), so, wptr);
             else
-                std::tie(centers, asn, dc) = minocore::m2d2(smw.getdouble(), so, wptr);
+                std::tie(centers, asn, dc) = minicore::m2d2(smw.getdouble(), so, wptr);
         } else if(fwptr) {
             if(smw.is_float())
-                std::tie(centers, asn, fc) = minocore::m2d2(smw.getfloat(), so, fwptr);
+                std::tie(centers, asn, fc) = minicore::m2d2(smw.getfloat(), so, fwptr);
             else
-                std::tie(centers, asn, dc) = minocore::m2d2(smw.getdouble(), so, fwptr);
+                std::tie(centers, asn, dc) = minicore::m2d2(smw.getdouble(), so, fwptr);
         } else {
             if(smw.is_float())
-                std::tie(centers, asn, fc) = minocore::m2d2(smw.getfloat(), so);
+                std::tie(centers, asn, fc) = minicore::m2d2(smw.getfloat(), so);
             else
-                std::tie(centers, asn, dc) = minocore::m2d2(smw.getdouble(), so);
+                std::tie(centers, asn, dc) = minicore::m2d2(smw.getdouble(), so);
         }
         py::array_t<uint32_t> ret(centers.size()), retasn(smw.rows());
         py::array_t<double> costs(smw.rows());
@@ -496,11 +597,11 @@ void init_smw(py::module &m) {
         switch(bi.format.front()) {
             case 'f': {
                 blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> cm((float *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
-                std::tie(centers, asn, fc) = minocore::m2d2(cm, so);
+                std::tie(centers, asn, fc) = minicore::m2d2(cm, so);
             } break;
             case 'd': {
                 blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded> cm((double *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
-                std::tie(centers, asn, dc) = minocore::m2d2(cm, so);
+                std::tie(centers, asn, dc) = minicore::m2d2(cm, so);
             } break;
             default: throw std::invalid_argument("Not supported: non-double/float type");
         }
@@ -519,9 +620,9 @@ void init_smw(py::module &m) {
         std::vector<double> dret;
         std::vector<float> fret;
         if(smw.is_float()) {
-            std::tie(centers, fret) = minocore::m2greedysel(smw.getfloat(), so);
+            std::tie(centers, fret) = minicore::m2greedysel(smw.getfloat(), so);
         } else {
-            std::tie(centers, dret) = minocore::m2greedysel(smw.getdouble(), so);
+            std::tie(centers, dret) = minicore::m2greedysel(smw.getdouble(), so);
         }
         py::array_t<uint32_t> ret(centers.size());
         py::array_t<double> costs(smw.rows());
@@ -546,11 +647,11 @@ void init_smw(py::module &m) {
         switch(bi.format.front()) {
             case 'f': {
                 blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> cm((float *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
-                std::tie(centers, fret) = minocore::m2greedysel(cm, so);
+                std::tie(centers, fret) = minicore::m2greedysel(cm, so);
             } break;
             case 'd': {
                 blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded> cm((double *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
-                std::tie(centers, dret) = minocore::m2greedysel(cm, so);
+                std::tie(centers, dret) = minicore::m2greedysel(cm, so);
             } break;
             default: throw std::invalid_argument("Not supported: non-double/float type");
         }

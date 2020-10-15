@@ -2,7 +2,7 @@
 #include "pybind11/pybind11.h"
 #include "pybind11/numpy.h"
 #include "aesctr/wy.h"
-#include "minocore/minocore.h"
+#include "minicore/minicore.h"
 
 #include "./pyhelpers.h"
 
@@ -22,4 +22,4 @@ using DNA =  py::array_t<double, py::array::c_style | py::array::forcecast>;
 using INA =  py::array_t<uint32_t, py::array::c_style | py::array::forcecast>;
 using SMF = blz::SM<float>;
 using SMD = blz::SM<double>;
-namespace dist = minocore::distance;
+namespace dist = minicore::distance;

@@ -1,8 +1,8 @@
-#include "minocore/util/csc.h"
+#include "minicore/util/csc.h"
 
 template<typename IndPtrT, typename IndicesT, typename VT>
 void dothing(std::string path) {
-    auto read = minocore::csc2sparse<float, IndPtrT, IndicesT, VT>(path);
+    auto read = minicore::csc2sparse<float, IndPtrT, IndicesT, VT>(path);
     std::fprintf(stderr, "nr: %zu. nc: %zu. nnz: %zu\n", read.rows(), read.columns(), read.nonZeros());
     std::fprintf(stderr, "size of indptr: %zu siz of indices: %zu. size of vt: %zu. is floating? %d\n",
                  sizeof(IndPtrT), sizeof(IndicesT), sizeof(VT), std::is_floating_point_v<VT>);
@@ -11,7 +11,7 @@ void dothing(std::string path) {
     std::string datan    = path + "data.file";
     std::string shape    = path + "shape.file";
     mio::mmap_sink indptr(indptrn), indices(indicesn), data(datan);
-    minocore::CSCMatrixView<IndPtrT, IndicesT, VT> matview(
+    minicore::CSCMatrixView<IndPtrT, IndicesT, VT> matview(
         (const IndPtrT *)indptr.data(), (const IndicesT *)indices.data(),
         (const VT *)data.data(), indices.size() / sizeof(IndicesT),
         read.columns(), read.rows());
@@ -52,7 +52,7 @@ VT c2v(std::string key) {
     return F64;
 }
 
-using namespace minocore;
+using namespace minicore;
 int main(int argc, char *argv[]) {
     std::string inpath;
     VT ip = U64;

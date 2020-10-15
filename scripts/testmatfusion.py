@@ -1,7 +1,7 @@
 from union_exp import *
-import minocore
+import minicore
 from glob import glob
-from minocore import merge
+from minicore import merge
 import scipy.sparse as sp
 from scipy.io import mmread, mmwrite
 
@@ -32,7 +32,7 @@ def main():
     fmaps, feat, fidmap = select_features(paths, min_occ_count=2)
     fids = list(range(len(feat)))
     #indices_to_keep = [get_indices_to_keep(mat, path, feat, fidmap) for mat, path in zip(mats, paths)]
-    rows, cols, dat, shape = minocore.merge(mats, fmaps, feat)
+    rows, cols, dat, shape = minicore.merge(mats, fmaps, feat)
     print("cols", np.max(cols), cols.dtype, np.argmax(cols))
     print("rows", np.max(rows))
 

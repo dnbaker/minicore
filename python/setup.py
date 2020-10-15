@@ -82,7 +82,7 @@ include_dirs=[
    "../",
    "../include",
    sleefdir + "/include",
-   "../include/minocore",
+   "../include/minicore",
    "../blaze",
    "../pybind11/include"
 ]
@@ -91,7 +91,7 @@ ext_modules = [
     Extension(
         'pyfgc',
         glob('*.cpp') + [
-         "../include/minocore/util/boost/zlib.cpp", "../include/minocore/util/boost/gzip.cpp"
+         "../include/minicore/util/boost/zlib.cpp", "../include/minicore/util/boost/gzip.cpp"
          ],
         include_dirs=include_dirs,
         language='c++',
@@ -169,11 +169,11 @@ class BuildExt(build_ext):
         build_ext.build_extensions(self)
 
 setup(
-    name='minocore',
+    name='minicore',
     version=__version__,
     author='Daniel Baker',
     author_email='dnb@cs.jhu.edu',
-    url='https://github.com/dnbaker/minocore',
+    url='https://github.com/dnbaker/minicore',
     description='A python module for coresets and clustering',
     long_description='',
     ext_modules=ext_modules,

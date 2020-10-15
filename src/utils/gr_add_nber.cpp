@@ -12,7 +12,7 @@
 #include <string>
 #include <stdexcept>
 #include <fstream>
-#include "minocore/util/io.h"
+#include "minicore/util/io.h"
 
 #ifndef likely
 #  if defined(__GNUC__)
@@ -30,7 +30,7 @@ void usage(char **argv) {
     std::exit(1);
 }
 
-using minocore::util::io::xopen;
+using minicore::util::io::xopen;
 
 int main(int argc, char *argv[]) {
     std::ios_base::sync_with_stdio(false);

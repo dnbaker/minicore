@@ -1,8 +1,9 @@
-#include "include/minocore/clustering/solve.h"
+#include "include/minicore/clustering/solve.h"
+#include "blaze/util/Serialization.h"
 #include "src/tests/solvetestdata.cpp"
 
-namespace clust = minocore::clustering;
-using namespace minocore;
+namespace clust = minicore::clustering;
+using namespace minicore;
 
 // #define double float
 
@@ -33,7 +34,7 @@ int main(int argc, char *argv[]) {
     }
     if(argc > 5) {
         blaze::Archive<std::ifstream> arch(argv[5]);
-        arch << x;
+        arch >> x;
     }
     std::fprintf(stderr, "prior: %g\n", prior[0]);
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));

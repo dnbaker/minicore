@@ -1,11 +1,11 @@
-#include "include/minocore/util/merge.h"
+#include "include/minicore/util/merge.h"
 #include "blaze/Math.h"
 #include "blaze/util/SmallArray.h"
 #include <random>
 #include <set>
 #include <cassert>
 
-using namespace minocore;
+using namespace minicore;
 
 int main(int argc, char **argv) {
 
@@ -30,8 +30,6 @@ int main(int argc, char **argv) {
     };
     const auto sal = makear(), sar = makear();
     for(size_t i = 0; i < nnz; ++i) {
-        std::fprintf(stderr, "lh %u %g\n", sal[i], lhs[i]);
-        std::fprintf(stderr, "rh %u %g\n", sar[i], rhs[i]);
         clhs.append(sal[i], lhs[i]);
         crhs.append(sar[i], rhs[i]);
     }

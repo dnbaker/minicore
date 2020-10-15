@@ -1,4 +1,6 @@
-INCLUDE_PATHS=. include include/minocore blaze libosmium/include protozero/include pdqsort include/thirdparty
+.PHONY: all clean fall pgall pgfall
+
+INCLUDE_PATHS=. include include/minicore blaze libosmium/include protozero/include pdqsort include/thirdparty
 
 ifdef BOOST_DIR
 INCLUDE_PATHS += $(BOOST_DIR)
@@ -41,19 +43,8 @@ DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(BLAS_LINKING_FLAGS) \
     -DBOOST_NO_AUTO_PTR -lz # -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
 
+EX=$(patsubst src/utils/%.cpp,%,$(wildcard src/utils/*.cpp)) $(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
 
-DEX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
-EX=$(patsubst src/utils/%.cpp,%,$(wildcard src/utils/*.cpp))
-FEX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
-PGEX=$(patsubst %,%pg,$(EX))
-PGFEX=$(patsubst %,%pgf,$(EX))
-all: $(EX)
-fall: $(FEX)
-pgall: $(PGEX)
-pgfall: $(PGFEX)
-that:
-ALL: pgall pgfall \
-    all that fall
 
 ifneq (,$(findstring clang++,$(CXX)))
     OMP_STR:=-lomp
@@ -73,7 +64,11 @@ LINKS += -ltbb
 endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
-      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg
+      jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg \
+        fkmpptestdbg
+
+all: $(EX)
+
 
 tests: $(TESTS)
 print_tests:
@@ -86,11 +81,11 @@ CXXFLAGS += $(EXTRA)
 
 CXXFLAGS += $(LDFLAGS)
 
-HEADERS=$(shell find include -name '*.h') libsimdsampling/libsimdsampling.a
+HEADERS=$(shell find include -name '*.h')
 STATIC_LIBS=libsimdsampling/libsimdsampling.a libsleef.a
 
 libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.a
-	ls libsimdsampling/libsimdsampling.a || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
+	ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
 
 %dbg: src/%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(STATIC_LIBS)
@@ -105,7 +100,7 @@ printlibs:
 	echo $(LIBPATHS)
 
 
-#graphrun: src/graphtest.cpp $(wildcard include/minocore/*.h)
+#graphrun: src/graphtest.cpp $(wildcard include/minicore/*.h)
 #	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
 %: src/%.cpp $(HEADERS) $(STATIC_LIBS)
@@ -126,33 +121,33 @@ mtx%dbg: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
 mtx%dbg: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(STATIC_LIBS)
 
-alphaest: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+alphaest: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-dae: src/utils/alphaest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+dae: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB $(STATIC_LIBS)
 
-jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
-jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minocore/*.h) $(STATIC_LIBS)
+jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
-hdf2dm: src/utils/hdf2dm.cpp $(wildcard include/minocore/*.h)
+hdf2dm: src/utils/hdf2dm.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(HDFLAGS)
 
-mpi%: src/%.cpp $(wildcard include/minocore/*.h)
+mpi%: src/%.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -Ofast -DUSE_BOOST_PARALLEL=1
 
-%pg: src/%.cpp $(wildcard include/minocore/*.h)
+%pg: src/%.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg -o $@
 
-%pgf: src/%.cpp $(wildcard include/minocore/*.h)
+%pgf: src/%.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< -pg $(OMP_STR) -o $@
 
-%f: src/%.cpp $(wildcard include/minocore/*.h)
+%f: src/%.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< $(OMP_STR) -o $@
 
 
@@ -178,7 +173,7 @@ osm2dimacspg: src/utils/osm2dimacs.cpp
 
 
 libsleef.a:
-	+cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..
+	+ls libsleef.a 2>/dev/null || (cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..)
 
 
 soft: solvetestdbg solvetest solvesoft solvesoftdbg
@@ -189,4 +184,4 @@ hsoft: solvetest solvetestdbg
 
 
 clean:
-	rm -f $(EX) graphrun dmlrun $(FEX) $(PGEX) $(PGFEX) $(EX)
+	rm -f $(EX) graphrun dmlrun

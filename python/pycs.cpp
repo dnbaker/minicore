@@ -6,7 +6,7 @@ void init_coreset(py::module &m) {
     .def("make_sampler", [](
         CSType &cs, size_t ncenters, py::array costs, INA assignments, py::object weights, uint64_t seed, int sens_)
     {
-        const auto sens(static_cast<minocore::coresets::SensitivityMethod>(sens_));
+        const auto sens(static_cast<minicore::coresets::SensitivityMethod>(sens_));
         py::buffer_info buf1 = costs.request();
         const uint32_t *asnp = (const uint32_t *)assignments.request().ptr;
         if(buf1.ndim != 1) throw std::runtime_error("buffer must have one dimension (reshape if necessary)");

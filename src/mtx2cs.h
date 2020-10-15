@@ -1,1 +1,1 @@
-#include "minocore/clustering/mtx2cs.h"
+#include "minicore/clustering/mtx2cs.h"

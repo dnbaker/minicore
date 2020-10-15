@@ -1,13 +1,13 @@
-## Minocore: Fast Generic Coresets [![Build Status](https://travis-ci.com/dnbaker/minocore.svg?token=nzWL3kpck4ymqu9SdesD&branch=master)](https://travis-ci.com/dnbaker/minocore)
+## Minicore: Fast Generic Coresets [![Build Status](https://travis-ci.com/dnbaker/minicore.svg?token=nzWL3kpck4ymqu9SdesD&branch=main)](https://travis-ci.com/dnbaker/minicore)
 
-Minocore is a fast, generic library for constructing and clustering coresets on graphs, in metric spaces and under non-metric dissimilarity measures.
+Minicore is a fast, generic library for constructing and clustering coresets on graphs, in metric spaces and under non-metric dissimilarity measures.
 It includes methods for constant-factor and bicriteria approximation solutions, as well as coreset sampling algorithms.
 
 These methods allow for fast and accurate summarization of and clustering of datasets with strong theoretical guarantees.
 
-Minocore both stands for "mini" and "core", as it builds *concise representations* via *core*-sets, and as a portmanteau of Manticore and Minotaur.
+Minicore both stands for "mini" and "core", as it builds *concise representations* via *core*-sets, and as a portmanteau of Manticore and Minotaur.
 
-![Minocore](https://raw.githubusercontent.com/dnbaker/minocore/ff4a0720758007c04400e0e7a87f585553670c6b/media/Tondo_Minotaur_London.processed.jpg "The Minocore")
+![Minicore](https://raw.githubusercontent.com/dnbaker/minicore/ff4a0720758007c04400e0e7a87f585553670c6b/media/Tondo_Minotaur_London.processed.jpg "The Minicore")
 
 ### Dependencies
 
@@ -44,7 +44,7 @@ Minocore both stands for "mini" and "core", as it builds *concise representation
 6. [disk-based matrix](#diskmath)
     1. Falls back to disk-backed data if above a specified size, uses RAM otherwise.
 7. Streaming metric and `\alpha-`approximate metric clusterer
-    1. `minocore/streaming.h`
+    1. `minicore/streaming.h`
 8. Locality Sensitive Hashing
     1. LSH functions for:
         1. JSD
@@ -161,4 +161,4 @@ while its application to graph metrics is from [Baker, Braverman, Huang, Jiang, 
 We also support Varadarajan-Xiao, Feldman Langberg, and Bachem et al., methods for coreset sampling for differing dissimilarity measures.
 
 We use a modified iterative version of the sampling from [Thorup](https://epubs.siam.org/doi/pdf/10.1137/S0097539701388884) paper from 2005
-for an initial graph bicriteria approximation, which is described in the above Baker, et al. This can be found for shortest-paths graph metrics and oracle metrics in minocore/bicriteria.h.
+for an initial graph bicriteria approximation, which is described in the above Baker, et al. This can be found for shortest-paths graph metrics and oracle metrics in minicore/bicriteria.h.

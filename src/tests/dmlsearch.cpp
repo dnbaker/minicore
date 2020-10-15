@@ -1,10 +1,10 @@
 //#define VERBOSE_AF 1
-#include "minocore/graph/graphdist.h"
-#include "minocore/optim/lsearch.h"
+#include "minicore/graph/graphdist.h"
+#include "minicore/optim/lsearch.h"
 #include "diskmat/diskmat.h"
 #include <iostream>
 
-using namespace minocore;
+using namespace minicore;
 
 int main(int argc, char *argv[]) {
     unsigned n = argc == 1 ? 100: std::atoi(argv[1]);

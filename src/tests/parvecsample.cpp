@@ -1,5 +1,5 @@
 #define BLAZE_USE_SLEEF 1
-#include "minocore/util/macros.h"
+#include "minicore/util/macros.h"
 #include "sleef.h"
 #include "blaze/Math.h"
 #include "aesctr/wy.h"
@@ -105,7 +105,6 @@ int main(int argc, char **argv) {
     long long unsigned t3 = (stop - start).count();
     double ratio3 = double(t1) / t3;
     std::fprintf(stderr, "argmax from log/generate in a single pass: %llu [no vectorization enabled] ratio: %g\n", t3, ratio3);
-
     start = gett();
     for(size_t i = 0; i < v.rows(); ++i) {
 #ifdef __AVX2__
@@ -119,7 +118,7 @@ int main(int argc, char **argv) {
             for(size_t j = 0; j < nperel; ++j) {
                 ((uint64_t *)&v)[j] = rng();
             }
-            auto v2 = _mm256_or_si256(_mm256_slli_epi64(v, 12), _mm256_castpd_si256(_mm256_set1_pd(0x0010000000000000)));
+            auto v2 = _mm256_or_si256(_mm256_srli_epi64(v, 12), _mm256_castpd_si256(_mm256_set1_pd(0x0010000000000000)));
             auto v3 = _mm256_sub_pd(_mm256_castsi256_pd(v2), _mm256_set1_pd(0x0010000000000000));
             auto v4 = _mm256_mul_pd(v3, _mm256_set1_pd(pdmul));
             auto v5 = Sleef_logd4_u35(v4);

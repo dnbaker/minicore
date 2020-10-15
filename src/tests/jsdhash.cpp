@@ -1,6 +1,6 @@
-#include "minocore/hash.h"
+#include "minicore/hash.h"
 #include <iostream>
-using namespace minocore;
+using namespace minicore;
 
 int main() {
     unsigned dim = 200, k = 4, l = 5, nsamp = 10, nhashes = k * l;

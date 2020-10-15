@@ -1,7 +1,7 @@
-#include "minocore/utility.h"
-#include "minocore/graph.h"
-#include "minocore/coreset.h"
-#include "minocore/optim.h"
+#include "minicore/utility.h"
+#include "minicore/graph.h"
+#include "minicore/coreset.h"
+#include "minicore/optim.h"
 #include <ctime>
 #include <getopt.h>
 #include "blaze/util/Serialization.h"
@@ -9,14 +9,14 @@
 template<typename T> class TD;
 
 
-using namespace minocore;
+using namespace minicore;
 using namespace boost;
 
 
 
 #if 0
-minocore::Graph<undirectedS> &
-max_component(minocore::Graph<undirectedS> &g) {
+minicore::Graph<undirectedS> &
+max_component(minicore::Graph<undirectedS> &g) {
 #endif
 template<typename GraphT>
 GraphT &
@@ -38,7 +38,7 @@ max_component(GraphT &g) {
             }
         }
         GraphT newg(counts[maxcomp]);
-        typename boost::property_map <minocore::Graph<undirectedS>,
+        typename boost::property_map <minicore::Graph<undirectedS>,
                              boost::edge_weight_t >::type EdgeWeightMap = get(boost::edge_weight, g);
         for(auto edge: g.edges()) {
             auto lhs = source(edge, g);
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
 
     std::srand(std::hash<std::string>{}(input));
 
-    minocore::Graph<undirectedS, float> g = parse_by_fn(input);
+    minicore::Graph<undirectedS, float> g = parse_by_fn(input);
     max_component(g);
     // Assert that it's connected, or else the problem has infinite cost.
     uint64_t seed = 1337;

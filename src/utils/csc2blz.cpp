@@ -1,5 +1,5 @@
 #include "blaze/Util.h"
-#include "minocore/util/csc.h"
+#include "minicore/util/csc.h"
 #include <getopt.h>
 
 void usage() {
@@ -38,8 +38,8 @@ int main(int argc, char **argv) {
     blaze::Archive<std::ofstream> arch(outpath);
 #define MAIN(type, ip, id) do {\
     std::cerr << xstr(type) << ", " << xstr(ip) << ", " << xstr(id) << '\n';\
-    auto mat = minocore::csc2sparse<type, ip, id, type>(prefix);\
-    if(empty) minocore::util::erase_empty(mat);\
+    auto mat = minicore::csc2sparse<type, ip, id, type>(prefix);\
+    if(empty) minicore::util::erase_empty(mat);\
     if(tx) transpose(mat); \
     std::fprintf(stderr, "parsed matrix of shape %zu, %zu\n", mat.rows(), mat.columns()); arch << mat;\
     } while(0)

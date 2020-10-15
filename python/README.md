@@ -16,7 +16,7 @@ Since we're using the blaze linear algebra library, we need to create a sparse m
 
 Example:
 ```python
-import minocore mc
+import minicore mc
 import numpy as np
 import scipy.sparse as sp
 
@@ -40,9 +40,9 @@ ntimes = 5   # Perform kmeans++ sampling %i times, use the best-scoring set of c
 
 seed = 0     # if seed is not set, defaults to 0. Results will be identical with the same seed.
 
-measure = "MKL" # See https://github.com/dnbaker/minocore/blob/main/docs/msr.md for examples/integer codes
-                # value can be integral or be the short string description
-                # MKL = categorical KL divergence
+measure = "REVERSE_MKL" # See https://github.com/dnbaker/minicore/blob/main/docs/msr.md for examples/integer codes
+                        # value can be integral or be the short string description
+                        # MKL = reverse categorical KL divergence
 
 weights = None  # Set weights to be a 1d numpy array containing weights of type (float32, float64, int, unsigned)
                 # If none, unused (uniform)
@@ -73,9 +73,9 @@ res = mc.cluster_from_centers(mcmat, ctr_rows, betaprior=beta, msr=measure,
 For measures that are not Bregman divergences (for which kmeans++ sampling may not work as well),
 we can also use some discrete metric solvers for initial sets of points, but these are significantly slower.
 
-We can also try greedy farthest-point sampling for initial centers. This is supported in the `minocore.greedy_select`, which uses a k-center approximation algorithm.
+We can also try greedy farthest-point sampling for initial centers. This is supported in the `minicore.greedy_select`, which uses a k-center approximation algorithm.
 
-The options for this are governed by the minocore.SumOpts object, which holds basic metadata about a clustering problem.
+The options for this are governed by the minicore.SumOpts object, which holds basic metadata about a clustering problem.
 If you set its `outlier_fraction` field to be nonzero, then this will use a randomized selection technique that is robust
 to outliers and can also be used to generate a coreset, if the measure is a doubling metric.
 
@@ -91,14 +91,14 @@ L1, L2, and PStable hashers should work regardless.
 
 ## Multithreading
 
-By default, minocore uses the environmental variable `OMP\_NUM\_THREADS` number of threads.
-This can be checked or changed within Python by accessing/modifying the `minocore.n_threads` object,
+By default, minicore uses the environmental variable `OMP\_NUM\_THREADS` number of threads.
+This can be checked or changed within Python by accessing/modifying the `minicore.n_threads` object,
 or via `get_num_threads` and `set_num_threads`.
 
 Example:
 
 ```
-import minocore as mc
+import minicore as mc
 mc.set_num_threads(40)  # Sets the number of threads to be 40
 howmany = mc.get_num_threads()
 assert howmany == 40
