@@ -4,6 +4,7 @@
 #include "minicore/util/div.h"
 #include "minicore/util/blaze_adaptor.h"
 #include "minicore/util/fpq.h"
+#include "libsimdsampling/argminmax.h"
 
 namespace minicore {
 namespace coresets {
@@ -45,17 +46,16 @@ kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Nor
 #endif
     for(IT i = 0; i < maxdest; ++i) {
         if(unlikely(i == newc)) continue;
-        auto v = dm(newc, i);
-        distances[i] = v;
-        if(v > maxdist) { OMP_CRITICAL { if(v > maxdist) maxdist = v, bestind = i;} }
+        distances[i] = dm(newc, i);
     }
+    bestind = reservoir_simd::argmax(distances);
+    maxdist = distances[bestind];
     assert(distances[newc] == 0.);
     if(k == 1) return std::make_pair(centers, distances);
     centers[1] = newc = bestind;
     distances[newc] = 0.;
 
     for(size_t ci = 2; ci < std::min(k, np); ++ci) {
-        maxdist = -1, bestind = 0;
 #ifdef _OPENMP
         OMP_PFOR
 #else
@@ -68,8 +68,9 @@ kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Nor
             auto dist = dm(newc, i);
             if(dist < ldist)
                 ldist = dist;
-            if(ldist > maxdist) { OMP_CRITICAL { if(ldist > maxdist) maxdist = ldist, bestind = i;} }
         }
+        bestind = reservoir_simd::argmax(distances);
+        maxdist = distances[bestind];
         centers[ci] = newc = bestind;
         distances[newc] = 0.;
     }
@@ -100,7 +101,7 @@ kcenter_greedy_2approx_costs(Oracle &oracle, const size_t np, size_t k, RNG &rng
         }
     }
     if(k == 1) return std::make_pair(centers, distances);
-    newc = std::max_element(distances.begin(), distances.end()) - distances.begin();
+    newc = reservoir_simd::argmax(distances);
     distances[newc] = 0.;
     centers.push_back(newc);
 
@@ -109,28 +110,14 @@ kcenter_greedy_2approx_costs(Oracle &oracle, const size_t np, size_t k, RNG &rng
         for(IT i = 0; i < np; ++i) {
             if(!distances[i]) continue;
             auto v = oracle(i, newc);
-            distances[i] = std::min(v, distances[i]);
+            if(v < distances[i]) distances[i] = v;
         }
-        FT bestcost = -std::numeric_limits<FT>::max();
-        IT bestind = -1;
-        OMP_PFOR
-        for(IT i = 0; i < np; ++i) {
-            if(auto v = distances[i];v > bestcost) {
-                OMP_ONLY(if(v > bestcost))
-                {
-                    OMP_CRITICAL
-                    {
-                        bestcost = v;
-                        bestind = i;
-                    }
-                }
-            }
-        }
+        IT bestind = reservoir_simd::argmax(distances);
         newc = bestind;
 #ifndef NDEBUG
+        FT bestcost = distances[bestind];
         auto ind = std::max_element(distances.begin(), distances.end()) - distances.begin();
-        std::fprintf(stderr, "Current max: %g/%zu, compared to what should be best, %g/%zu\n", double(distances[ind]), size_t(ind), double(distances[bestind]), size_t(bestind));
-        assert(bestind == ind || distances[ind] == distances[bestind]);
+        assert(bestind == ind || distances[ind] == bestcost);
 #endif
         centers.push_back(newc);
         distances[newc] = 0.;
@@ -209,6 +196,8 @@ kcenter_greedy_2approx_outliers_costs(Oracle &oracle, size_t np, RNG &rng, size_
     std::vector<IT> ret;
     std::vector<FT> distances(np, std::numeric_limits<FT>::max());
     ret.reserve(k);
+    // TODO: extend argminmax to sample top/bottom k
+    // and replace its use here.
     auto newc = rng() % np;
     ret.push_back(newc);
     do {

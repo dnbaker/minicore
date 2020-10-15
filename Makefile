@@ -1,3 +1,5 @@
+.PHONY: all clean fall pgall pgfall
+
 INCLUDE_PATHS=. include include/minicore blaze libosmium/include protozero/include pdqsort include/thirdparty
 
 ifdef BOOST_DIR
@@ -41,19 +43,8 @@ DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(BLAS_LINKING_FLAGS) \
     -DBOOST_NO_AUTO_PTR -lz # -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=0
 
+EX=$(patsubst src/utils/%.cpp,%,$(wildcard src/utils/*.cpp)) $(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
 
-DEX=$(patsubst src/%.cpp,%dbg,$(wildcard src/*.cpp))
-EX=$(patsubst src/utils/%.cpp,%,$(wildcard src/utils/*.cpp))
-FEX=$(patsubst src/%.cpp,%,$(wildcard src/*.cpp))
-PGEX=$(patsubst %,%pg,$(EX))
-PGFEX=$(patsubst %,%pgf,$(EX))
-all: $(EX)
-fall: $(FEX)
-pgall: $(PGEX)
-pgfall: $(PGFEX)
-that:
-ALL: pgall pgfall \
-    all that fall
 
 ifneq (,$(findstring clang++,$(CXX)))
     OMP_STR:=-lomp
@@ -76,6 +67,9 @@ TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskm
       jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg \
         fkmpptestdbg
 
+all: $(EX)
+
+
 tests: $(TESTS)
 print_tests:
 	@echo "Tests: " $(TESTS)
@@ -87,11 +81,11 @@ CXXFLAGS += $(EXTRA)
 
 CXXFLAGS += $(LDFLAGS)
 
-HEADERS=$(shell find include -name '*.h') libsimdsampling/libsimdsampling.a
+HEADERS=$(shell find include -name '*.h')
 STATIC_LIBS=libsimdsampling/libsimdsampling.a libsleef.a
 
 libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.a
-	ls libsimdsampling/libsimdsampling.a || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
+	ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
 
 %dbg: src/%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(STATIC_LIBS)
@@ -179,7 +173,7 @@ osm2dimacspg: src/utils/osm2dimacs.cpp
 
 
 libsleef.a:
-	+cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..
+	+ls libsleef.a 2>/dev/null || (cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..)
 
 
 soft: solvetestdbg solvetest solvesoft solvesoftdbg
@@ -190,4 +184,4 @@ hsoft: solvetest solvetestdbg
 
 
 clean:
-	rm -f $(EX) graphrun dmlrun $(FEX) $(PGEX) $(PGFEX) $(EX)
+	rm -f $(EX) graphrun dmlrun
