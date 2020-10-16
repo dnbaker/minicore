@@ -76,6 +76,7 @@ int main(int argc, char *argv[]) {
     auto t2 = std::chrono::high_resolution_clock::now();
     std::fprintf(stderr, "Wall time for clustering: %gms\n", std::chrono::duration<double, std::milli>(t2 - t1).count());
     for(size_t i = 0; i < ids.size(); ++i) {
+        // reset centers
         centers[i] = row(x, i);
     }
     std::fprintf(stderr, "Now performing minibatch clustering\n");
@@ -84,10 +85,10 @@ int main(int argc, char *argv[]) {
         mbsize = std::strtoull(s, nullptr, 10);
     }
     std::fprintf(stderr, "mbsize: %zu\n", mbsize);
-    clust::perform_hard_minibatch_clustering(x, msr, prior, centers, asn, hardcosts, (double *)nullptr, mbsize, 1000, 50);
+    clust::perform_hard_minibatch_clustering(x, msr, prior, centers, asn, hardcosts, (double *)nullptr, mbsize, 100, 10);
     std::vector<double> weights(x.rows(), .5);
     std::fprintf(stderr, "minibatch clustering with uniform weights\n");
-    clust::perform_hard_minibatch_clustering(x, msr, prior, centers, asn, hardcosts,  weights.data(), mbsize, 1000, 50);
+    clust::perform_hard_minibatch_clustering(x, msr, prior, centers, asn, hardcosts,  weights.data(), mbsize, 100, 10);
 #if 0
     // generate a coreset
     coresets::CoresetSampler<double, uint32_t> cs;
