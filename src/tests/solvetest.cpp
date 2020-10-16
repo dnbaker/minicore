@@ -75,6 +75,7 @@ int main(int argc, char *argv[]) {
     clust::perform_hard_clustering(x, msr, prior, centers, asn, hardcosts);
     auto t2 = std::chrono::high_resolution_clock::now();
     std::fprintf(stderr, "Wall time for clustering: %gms\n", std::chrono::duration<double, std::milli>(t2 - t1).count());
+    clust::perform_hard_minibatch_clustering(x, msr, prior, centers, asn, hardcosts, (double *)nullptr, 1000, 5000, 100);
 #if 0
     // generate a coreset
     coresets::CoresetSampler<double, uint32_t> cs;

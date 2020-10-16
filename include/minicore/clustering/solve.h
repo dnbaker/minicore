@@ -476,12 +476,13 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
                                        AsnT &asn,
                                        CostsT &costs,
                                        const WeightT *weights=static_cast<WeightT *>(nullptr),
-                                       double eps=1e-10,
-                                       size_t maxiter=size_t(-1))
+                                       size_t mbsize=1000,
+                                       size_t maxiter=10000,
+                                       size_t calc_cost_freq=100,
+                                       uint64_t seed=0)
 {
-    auto centers_cpy = centers;
     auto compute_cost = [&costs,w=weights]() -> FT {
-        if(w) return blz::dot(costs, *w);
+        if(w) return blz::dot(costs, blz::make_cv(w, costs.size()));
         else  return blz::sum(costs);
     };
     switch(measure) {
@@ -493,8 +494,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         case REVERSE_MKL: case REVERSE_POISSON:
         case LLR: case UWLLR: case SRLRT: case SRULRT:
         case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
-        case HELLINGER:
-            return true;
+        case HELLINGER:  ; // Do nothing; this should work
     }
 #if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
     const blz::DV<FT> rowsums = sum<blz::rowwise>(*mat);
@@ -509,20 +509,132 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
     for(size_t i = 0; i < centers.size(); ++i)
         centersums[i] = blz::sum(centers[i]);
 #endif
+    FT prior_sum = prior.size() == 1 ? prior.size() * prior[0]: blz::sum(prior);
     size_t iternum = 0;
     double initcost, cost;
+    static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
+    using IT = uint64_t;
+    auto compute_point_cost = [&](auto id, auto cid) {
+        assert(size_t(id) < (*mat).rows());
+        auto mr = row(mat, id, blaze::unchecked);
+        const auto &ctr = centers[cid];
+        const auto rowsum = rowsums[id];
+        const auto centersum = centersums[cid];
+        assert(ctr.size() == mr.size());
+        auto mrmult = mr / rowsum;
+        auto wctr = ctr * (1. / centersum);
+        //assert(measure == dist::JSD); // Temporary: this is only for sanity checking while debugging JSD calculation
+        FT ret;
+        switch(measure) {
+
+            case SQRL2: ret = blz::sqrDist(ctr, mr); break;
+
+            // Discrete Probability Distribution Measures
+            case TVD:       ret = .5 * blz::sum(blz::abs(wctr - mrmult)); break;
+            case HELLINGER: ret = blz::l2Norm(blz::sqrt(wctr) - blz::sqrt(mrmult)); break;
+
+            // Bregman divergences + convex combinations thereof, and Bhattacharyya
+            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
+            case POISSON: case JSD: case JSM:
+            case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
+            case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:
+            case REVERSE_POISSON: case REVERSE_MKL:
+                ret = cmp::msr_with_prior(measure, mr, ctr, prior, prior_sum, rowsum, centersum); break;
+            case COSINE_DISTANCE:
+                ret = std::acos(blz::dot(mr, ctr) * (1. / (blz::l2Norm(mr) * blz::l2Norm(ctr)))) * PI_INV;
+                break;
+            default: {
+                const auto msg = std::string("Unsupported measure ") + msr2str(measure) + ", " + std::to_string((int)measure);
+                std::cerr << msg;
+                throw std::invalid_argument(msg);
+            }
+        }
+        if(ret < 0) {
+            if(unlikely(ret < -1e-10)) {
+                std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s for ids %u/%u. Check details!\n", ret, (int)measure, msr2str(measure),
+                             (unsigned)id, (unsigned)cid);
+                std::cerr << ctr << '\n';
+                std::cerr << mr << '\n';
+                std::abort();
+            }
+            ret = 0.;
+        } else if(std::isnan(ret)) ret = 0.;
+        return ret;
+    };
+    auto perform_assign = [&]() {
+        OMP_PFOR
+        for(size_t i = 0; i < costs.size(); ++i) {
+            FT mincost = compute_point_cost(i, 0);
+            IT minind = 0;
+            for(size_t j = 1; j < centers.size(); ++j) {
+                if(FT newcost = compute_point_cost(i, j); newcost < mincost)
+                    mincost = newcost, minind = j;
+            }
+            asn[i] = minind;
+            costs[i] = mincost;
+        }
+    };
+    wy::WyRand<std::make_unsigned_t<IT>> rng;
+    schism::Schismatic<std::make_unsigned_t<IT>> div((*mat).rows());
+    blz::DV<IT> sampled_indices(mbsize);
+    blz::DV<IT> sampled_asn(mbsize);
+    blz::DV<FT> sampled_costs(mbsize);
+    blz::DV<FT> center_wsums(centers.size());
+    std::vector<std::vector<IT>> assigned(centers.size());
     for(;;) {
+        if(iternum % calc_cost_freq == 0) {
+            perform_assign();
+            cost = blz::sum(costs);
+            std::fprintf(stderr, "Cost at iter %zu: %g\n", iternum, cost);
+            if(iternum == 0) initcost = cost;
+        }
+
         // 1. Sample the points
-        // 2. Compute nearest center
+        SK_UNROLL_8
+        for(size_t i = 0; i < mbsize; ++i) {
+            sampled_indices[i] = div.mod(rng());
+        }
+        center_wsums = 0.;
+        for(auto &i: assigned) i.clear();
+        // 2. Compute nearest centers + step sizes
+        OMP_PFOR
+        for(size_t i = 0; i < mbsize; ++i) {
+            const auto ind = sampled_indices[i];
+            IT bestind = 0;
+            auto bv = compute_point_cost(ind, 0);
+            for(size_t j = 1; j < centers.size(); ++j) {
+                if(auto nv = compute_point_cost(ind, j); nv < bv)
+                    bv = nv, bestind = j;
+            }
+            sampled_costs[i] = bv;
+            sampled_indices[i] = bestind;
+            OMP_ATOMIC
+            center_wsums[bestind] += weights ? weights[bestind]: static_cast<WeightT>(1);
+            OMP_CRITICAL
+            {
+                assigned[bestind].push_back(sampled_indices[i]);
+            }
+        }
+        center_wsums = 1. / center_wsums; // center-wsums now contains the eta (step size) for SGD
         // 3. Calculate new center
-        throw TODOError("This should be replaced with the code for adjusting the centers");
+        OMP_PFOR
+        for(size_t i = 0; i < centers.size(); ++i) {
+            const FT eta = center_wsums[i];
+            auto asnptr = assigned[i].data();
+            const auto asnsz = assigned[i].size();
+            if(weights) {
+                auto wcv = blz::make_cv(weights, (*mat).rows());
+                auto welements = blaze::elements(wcv, asnptr, asnsz);
+                centers[i] = blaze::sum<blaze::columnwise>(rows(*mat, asnptr, asnsz) % blaze::expand(welements, (*mat).columns())) / eta;
+            } else {
+                centers[i] = blaze::mean<blaze::columnwise>(rows(*mat, asnptr, asnsz));
+            }
+        }
+        
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
         // Set the new centers
-        std::swap_ranges(centers.begin(), centers.end(), centers_cpy.begin());
         if(++iternum == maxiter) {
-#ifndef NDEBUG
             std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
-#endif
             break;
         }
         //cost = newcost;
