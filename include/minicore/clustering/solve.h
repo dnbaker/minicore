@@ -567,20 +567,22 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
             FT mincost = compute_point_cost(i, 0);
             IT minind = 0;
             for(size_t j = 1; j < centers.size(); ++j) {
-                if(FT newcost = compute_point_cost(i, j); newcost < mincost)
-                    mincost = newcost, minind = j;
+                if(const FT nc = compute_point_cost(i, j);nc < mincost)
+                    mincost = nc, minind = j;
             }
             asn[i] = minind;
             costs[i] = mincost;
         }
     };
+    const size_t np = costs.size();
     wy::WyRand<std::make_unsigned_t<IT>> rng;
     schism::Schismatic<std::make_unsigned_t<IT>> div((*mat).rows());
     blz::DV<IT> sampled_indices(mbsize);
-    blz::DV<IT> sampled_asn(mbsize);
-    blz::DV<FT> sampled_costs(mbsize);
+    //blz::DV<FT> sampled_costs(mbsize);
     blz::DV<FT> center_wsums(centers.size());
     std::vector<std::vector<IT>> assigned(centers.size());
+    blaze::SmallArray<IT, 8> sa;
+    std::unique_ptr<blz::DV<FT>> wc;
     for(;;) {
         if(iternum % calc_cost_freq == 0) {
             perform_assign();
@@ -589,6 +591,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
             if(iternum == 0) initcost = cost;
         }
 
+        startasn:
         // 1. Sample the points
         SK_UNROLL_8
         for(size_t i = 0; i < mbsize; ++i) {
@@ -606,14 +609,36 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
                 if(auto nv = compute_point_cost(ind, j); nv < bv)
                     bv = nv, bestind = j;
             }
-            sampled_costs[i] = bv;
-            sampled_indices[i] = bestind;
+            //sampled_costs[i] = bv;
+            const FT w = weights ? weights[bestind]: static_cast<WeightT>(1);
             OMP_ATOMIC
-            center_wsums[bestind] += weights ? weights[bestind]: static_cast<WeightT>(1);
+            center_wsums[bestind] += w;
             OMP_CRITICAL
             {
-                assigned[bestind].push_back(sampled_indices[i]);
+                assigned[bestind].push_back(ind);
             }
+        }
+        for(size_t i= 0; i < assigned.size(); ++i) {
+            std::sort(assigned[i].begin(), assigned[i].end());
+            if(assigned[i].empty()) sa.pushBack(i);
+        }
+        if(sa.size()) {
+            std::fprintf(stderr, "Empty centers: %zu\n", sa.size());
+            perform_assign();
+            if(weights && !wc) wc.reset(new blz::DV<FT>(np));
+            for(const auto v: sa) {
+                // Set the center using importance sampling
+                if(weights) {
+                    *wc = costs * blz::make_cv(weights, np);
+                    centers[v] = row(*mat, reservoir_simd::sample(wc->data(), np, rng()));
+                } else {
+                    centers[v] = row(*mat, reservoir_simd::sample(costs.data(), np, rng()));
+                }
+                centersums[v] = blz::sum(centers[v]);
+                costs = blaze::min(costs, blaze::generate(np, [&](auto x) {return compute_point_cost(x, v);}));
+            }
+            sa.clear();
+            goto startasn;
         }
         center_wsums = 1. / center_wsums; // center-wsums now contains the eta (step size) for SGD
         // 3. Calculate new center
@@ -629,6 +654,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
             } else {
                 centers[i] = blaze::mean<blaze::columnwise>(rows(*mat, asnptr, asnsz));
             }
+            centersums[i] = blz::sum(centers[i]);
         }
         
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
