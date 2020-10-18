@@ -479,7 +479,8 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
                                        size_t mbsize=1000,
                                        size_t maxiter=10000,
                                        size_t calc_cost_freq=100,
-                                       int maxinrow=5,
+                                       int reseed_after=5,
+                                       bool with_replacement=true,
                                        uint64_t seed=0)
 {
     if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
@@ -634,13 +635,13 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
             if(assigned[i].empty()) ++sa[i];
             else if(auto it = sa.find(i); it != sa.end()) sa.erase(it);
         }
-        auto maxv = std::accumulate(sa.begin(), sa.end(), 0u, [](auto mx, auto item) {if(mx > item.first) return mx; return item.second;});
-        if(maxv >= maxinrow) {
+        auto maxv = std::accumulate(sa.begin(), sa.end(), 0u, [](auto mx, auto item) -> IT {if(mx > item.first) return mx; return item.second;});
+        if(maxv >= reseed_after) {
             std::fprintf(stderr, "Restarting empty centers: %zu after failing %d in a row\n", sa.size(), maxv);
             perform_assign();
             if(weights && !wc) wc.reset(new blz::DV<FT>(np));
             for(const auto pair: sa) {
-                if(pair.second < maxinrow) continue;
+                if(pair.second < reseed_after) continue;
                 const auto v = pair.first;
                 // Set the center using importance sampling
                 if(weights) {
@@ -653,7 +654,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
                 costs = blaze::min(costs, blaze::generate(np, [&](auto x) {return compute_point_cost(x, v);}));
             }
             for(auto it = sa.begin(); it != sa.end(); ++it) {
-                if(it->second >= maxinrow) sa.erase(it);
+                if(it->second >= reseed_after) sa.erase(it);
             }
         }
         center_wsums = 1. / center_wsums; // center-wsums now contains the eta (step size) for SGD
@@ -668,7 +669,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
             if(weights) {
                 auto wcv = blz::make_cv(weights, np);
                 auto welements = blaze::elements(wcv, asnptr, asnsz);
-                centers[i] = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(welements, nc)) * eta;
+                centers[i] = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(welements, (*mat).columns())) * eta;
             } else {
                 centers[i] = blaze::mean<blaze::columnwise>(rowsel);
             }
