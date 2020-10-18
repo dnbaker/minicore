@@ -492,6 +492,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         default:
         case L1: case TVD: throw std::invalid_argument("measure cannot be used in minibatch mode");
 
+        case JSD: case JSM:
         case SQRL2: case POISSON: case MKL: case REVERSE_ITAKURA_SAITO: case ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO:
         case REVERSE_MKL: case REVERSE_POISSON:
@@ -565,12 +566,15 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         return ret;
     };
     const size_t np = costs.size(), k = centers.size();
+    shared::flat_hash_map<IT, IT> sa;
     auto perform_assign = [&]() {
         OMP_PFOR
         for(size_t i = 0; i < costs.size(); ++i) {
             FT mincost = compute_point_cost(i, 0);
             IT minind = 0;
+            SK_UNROLL_4
             for(size_t j = 1; j < k; ++j) {
+                if(auto it = sa.find(j); it != sa.end() && it->second > reseed_after) continue;
                 if(const FT nc = compute_point_cost(i, j);nc < mincost)
                     mincost = nc, minind = j;
             }
@@ -584,7 +588,6 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
     //blz::DV<FT> sampled_costs(mbsize);
     blz::DV<FT> center_wsums(k);
     std::vector<std::vector<IT>> assigned(k);
-    shared::flat_hash_map<IT, IT> sa;
     std::unique_ptr<blz::DV<FT>> wc;
     for(;;) {
         if(iternum % calc_cost_freq == 0) {
@@ -631,11 +634,13 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
             }
         }
         for(size_t i= 0; i < assigned.size(); ++i) {
-            std::sort(assigned[i].begin(), assigned[i].end());
             if(assigned[i].empty()) ++sa[i];
-            else if(auto it = sa.find(i); it != sa.end()) sa.erase(it);
+            else {
+                std::sort(assigned[i].begin(), assigned[i].end());
+                if(auto it = sa.find(i); it != sa.end()) sa.erase(it);
+            }
         }
-        auto maxv = std::accumulate(sa.begin(), sa.end(), 0u, [](auto mx, auto item) -> IT {if(mx > item.first) return mx; return item.second;});
+        auto maxv = std::accumulate(sa.begin(), sa.end(), 0u, [](auto mx, auto item) -> IT {if(mx > item.second) return mx; return item.second;});
         if(maxv >= reseed_after) {
             std::fprintf(stderr, "Restarting empty centers: %zu after failing %d in a row\n", sa.size(), maxv);
             perform_assign();
@@ -653,9 +658,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
                 centersums[v] = blz::sum(centers[v]);
                 costs = blaze::min(costs, blaze::generate(np, [&](auto x) {return compute_point_cost(x, v);}));
             }
-            for(auto it = sa.begin(); it != sa.end(); ++it) {
-                if(it->second >= reseed_after) sa.erase(it);
-            }
+            sa.clear();
         }
         center_wsums = 1. / center_wsums; // center-wsums now contains the eta (step size) for SGD
         // 3. Calculate new center
