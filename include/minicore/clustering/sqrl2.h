@@ -11,7 +11,7 @@ kmeans_sum_core(blz::SM<FT> &mat, std::string DBG_ONLY(out), SumOpts &opts) {
     std::vector<uint32_t> indices, asn;
     blz::DV<FT, blz::rowVector> costs;
     if(opts.stamper_) opts.stamper_->add_event("Get initial centers");
-    std::tie(indices, asn, costs) = repeatedly_get_initial_centers(mat, rng, opts.k, opts.kmc2_rounds, opts.extra_sample_tries);
+    std::tie(indices, asn, costs) = repeatedly_get_initial_centers(mat, rng, opts.k, opts.kmc2_rounds, opts.extra_sample_tries, opts.lspp, opts.use_exponential_skips);
     std::vector<blz::DV<FT, blz::rowVector>> centers(opts.k);
 #ifndef NDEBUG
     { // write selected initial points to file

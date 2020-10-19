@@ -48,6 +48,7 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
                int ntimes,
                uint64_t seed ,
                unsigned lspprounds,
+               bool use_exponential_skips,
                size_t kmcrounds,
                size_t kmeansmaxiter)
 {
@@ -63,7 +64,7 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
     }
     wy::WyRand<uint32_t> rng(seed);
     std::fprintf(stderr, "About to try to get initial centers\n");
-    auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, kmcrounds, ntimes, lspprounds, cmp);
+    auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, kmcrounds, ntimes, lspprounds, use_exponential_skips, cmp);
     std::fprintf(stderr, "Got initial centers\n");
     auto &[idx, asn, costs] = initial_sol;
     std::vector<blz::CompressedVector<FT, blz::rowVector>> centers(k);

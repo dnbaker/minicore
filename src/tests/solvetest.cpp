@@ -2,6 +2,7 @@
 #include "blaze/util/Serialization.h"
 #include "src/tests/solvetestdata.cpp"
 
+        
 namespace clust = minicore::clustering;
 using namespace minicore;
 
@@ -31,13 +32,19 @@ int main(int argc, char *argv[]) {
         case 'k': k = std::atoi(optarg); break;
         case 'z': {
             blaze::Archive<std::ifstream> arch(optarg);
-            x = blaze::DynamicMatrix<double>();
+            x = blaze::CompressedMatrix<double>();
             try {
                 arch >> x;
                 std::fprintf(stderr, "Shape of loaded blaze matrix: %zu/%zu\n", x.rows(), x.columns());
             } catch(const std::runtime_error &ex) {                                                     
-                std::fprintf(stderr, "Could not get x from arch using >>. Error msg: %s\n", ex.what()); 
-                throw;
+                blaze::CompressedMatrix<float> cm;
+                try {
+                arch >> cm;
+                x = cm;
+                } catch(...) {
+                    std::fprintf(stderr, "Could not get x from arch using >>. Error msg: %s\n", ex.what()); 
+                    throw;
+                }
             } catch(const std::exception &ex) {
                 std::fprintf(stderr, "unknown failure. msg: %s\n", ex.what());
                 throw;
@@ -60,30 +67,63 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
     std::vector<blaze::CompressedVector<double, blaze::rowVector>> centers;
     std::vector<blaze::CompressedVector<double, blaze::rowVector>> ocenters;
-    std::vector<int> ids{1018, 2624, 5481, 6006, 8972};
-    if(loaded_blaze == true) ids = {};
-    while(ids.size() < k) {
-        auto rid = std::rand() % x.rows();
-        if(std::find(ids.begin(), ids.end(), rid) == ids.end())
-            ids.emplace_back(rid);
-    }
-    for(const auto id: ids) centers.emplace_back(row(x, id));
-    ocenters = centers;
     const double psum = prior[0] * nc;
-    blz::DV<uint32_t> asn(nr);
     blz::DV<double> rowsums = blaze::sum<blz::rowwise>(x);
-    blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
+    blz::DV<double> centersums(k);
+    blz::DV<double> hardcosts;
+    blz::DV<uint32_t> asn(nr);
+    std::vector<uint64_t> ids{1018, 2624, 5481, 6006, 8972};
+    blz::DM<double> complete_hardcost;
+    if(loaded_blaze == true) {
+        auto fp = x.rows() <= 0xFFFFFFFFu ? size_t(std::rand() % x.rows()): size_t(((uint64_t(std::rand()) << 32) | std::rand()) % x.rows());
+        ids = {fp};
+        centers.emplace_back(row(x, fp));
+        centersums[0] = blz::sum(centers[0]);
+        hardcosts = blaze::generate(nr, [&](auto id) {
+            return cmp::msr_with_prior(msr, row(x, id, blz::unchecked), centers[0], prior, psum, rowsums[id], centersums[0]);
+        });
+        while(centers.size() < k) {
+            size_t index = reservoir_simd::sample(hardcosts.data(), nr, rng());
+            std::fprintf(stderr, "Selected point %zu with cost %g\n", index, hardcosts[index]);
+            const auto cid = centers.size();
+            hardcosts[index] = 0;
+            centers.emplace_back(row(x, index));
+            centersums[index] = rowsums[index];
+            OMP_PFOR
+            for(size_t id = 0; id < nr; ++id) {
+                if(id == index) {
+                    asn[id] = cid; hardcosts[id] = 0.;
+                } else {
+                    auto v = cmp::msr_with_prior(msr, row(x, id, blz::unchecked), centers[cid], prior, psum, rowsums[id], centersums[cid]);
+                    if(v < hardcosts[id]) hardcosts[id] = v, asn[id] = cid;
+                }
+            }
+        }
+        complete_hardcost = blaze::generate(nr, k, [&](auto r, auto col) {
+            return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
+        });
+        //assert(blaze::min<blaze::rowwise>(complete_hardcost) == 
+    } else {
+        while(ids.size() < k) {
+            auto rid = std::rand() % x.rows();
+            if(std::find(ids.begin(), ids.end(), rid) == ids.end())
+                ids.emplace_back(rid);
+        }
+        for(const auto id: ids) centers.emplace_back(row(x, id));
+        centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
+        complete_hardcost = blaze::generate(nr, k, [&](auto r, auto col) {
+            return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
+        });
+        hardcosts = blaze::generate(nr, [&](auto id) {
+            auto r = row(complete_hardcost, id, blaze::unchecked);
+            auto it = std::min_element(r.begin(), r.end());
+            asn[id] = it - r.begin();
+            return *it;
+        });
+    }
+    ocenters = centers;
     assert(rowsums.size() == x.rows());
     assert(centersums.size() == centers.size());
-    blz::DM<double> complete_hardcosts = blaze::generate(nr, k, [&](auto r, auto col) {
-        return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
-    });
-    blz::DV<double> hardcosts = blaze::generate(nr, [&](auto id) {
-        auto r = row(complete_hardcosts, id, blaze::unchecked);
-        auto it = std::min_element(r.begin(), r.end());
-        asn[id] = it - r.begin();
-        return *it;
-    });
     auto mnc = blz::min(hardcosts);
     std::fprintf(stderr, "Total cost: %g. max cost: %g. min cost: %g. mean cost:%g\n", blz::sum(hardcosts), blz::max(hardcosts), mnc, blz::mean(hardcosts));
     std::vector<uint32_t> counts(k);

@@ -636,7 +636,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         for(size_t i= 0; i < assigned.size(); ++i) {
             if(assigned[i].empty()) ++sa[i];
             else {
-                std::sort(assigned[i].begin(), assigned[i].end());
+                shared::sort(assigned[i].begin(), assigned[i].end());
                 if(auto it = sa.find(i); it != sa.end()) sa.erase(it);
             }
         }

@@ -1676,15 +1676,14 @@ auto make_kmc2(const DissimilarityApplicator<MatrixType> &app, unsigned k, size_
 }
 
 template<typename MatrixType, typename WFT=blaze::ElementType_t<MatrixType>>
-auto make_kmeanspp(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, bool multithread=true) {
+auto make_kmeanspp(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, bool use_exponential_skips=false) {
     wy::WyRand<uint64_t> gen(seed);
-    return coresets::kmeanspp(app, gen, app.size(), k, weights, multithread);
+    return coresets::kmeanspp(app, gen, app.size(), k, weights, use_exponential_skips);
 }
 
 template<typename MatrixType, typename WFT=blaze::ElementType_t<MatrixType>>
 auto make_kcenter(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr) {
-    wy::WyRand<uint64_t> gen(seed);
-    return coresets::kmeanspp(app, gen, app.size(), k, weights);
+    throw TODOError("Not implemented");
 }
 
 template<typename MatrixType, typename WFT=typename MatrixType::ElementType, typename IT=uint32_t>

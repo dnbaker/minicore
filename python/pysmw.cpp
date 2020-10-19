@@ -21,6 +21,7 @@ dist::DissimilarityMeasure assure_dm(py::object obj) {
 }
 py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, Py_ssize_t k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
                  int lspp,
+                 int use_exponential_skips,
                  py::object weights)
 {
     const void *wptr = nullptr;
@@ -72,11 +73,11 @@ py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, Py_ssize_t
         //using RT = decltype(repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, cmp));
         auto sol =
             kind == -1 ?
-            repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp)
-            : kind == 'f' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp, (const float *)wptr)
-            : kind == 'd' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp, (const double *)wptr)
-            : kind == 'u' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp, (const unsigned *)wptr)
-            : repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp, (const int *)wptr);
+            repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp)
+            : kind == 'f' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr)
+            : kind == 'd' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const double *)wptr)
+            : kind == 'u' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const unsigned *)wptr)
+            : repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const int *)wptr);
         auto &[lidx, lasn, lcosts] = sol;
         for(size_t i = 0; i < lidx.size(); ++i) {
             std::fprintf(stderr, "selected point %u for center %zu\n", lidx[i], i);
@@ -132,7 +133,7 @@ py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, Py_ssize_t
 
 py::tuple py_kmeanspp_so(const SparseMatrixWrapper &smw, const SumOpts &sm, py::object weights) {
     return py_kmeanspp(smw, py::int_((int)sm.dis), sm.k, sm.gamma, sm.seed, sm.kmc2_rounds, std::max(sm.extra_sample_tries - 1, 0u),
-                       sm.lspp, weights);
+                       sm.lspp, sm.use_exponential_skips, weights);
 }
 
 void init_smw(py::module &m) {
@@ -389,6 +390,7 @@ void init_smw(py::module &m) {
     .def_readwrite("soft", &SumOpts::soft)
     .def_readwrite("outlier_fraction", &SumOpts::outlier_fraction)
     .def_readwrite("discrete_metric_search", &SumOpts::discrete_metric_search)
+    .def_readwrite("use_exponential_skips", &SumOpts::use_exponential_skips)
     .def_property("cs",
             [](SumOpts &obj) -> py::str {
                 return std::string(coresets::sm2str(obj.sm));
@@ -438,7 +440,7 @@ void init_smw(py::module &m) {
         }
     });
     m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                          Py_ssize_t lspp,
+                          Py_ssize_t lspp, bool use_exponential_skips,
                           py::object weights) -> py::object
     {
         if(gamma_beta <= 0.) {
@@ -489,11 +491,11 @@ void init_smw(py::module &m) {
             //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
             auto sol =
                 kind == -1 ?
-                repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp)
-                : kind == 'f' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const float *)wptr)
-                : kind == 'd' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const double *)wptr)
-                : kind == 'u' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const unsigned *)wptr)
-                : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const int *)wptr);
+                repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp)
+                : kind == 'f' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr)
+                : kind == 'd' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const double *)wptr)
+                : kind == 'u' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const unsigned *)wptr)
+                : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const int *)wptr);
             auto &[lidx, lasn, lcosts] = sol;
             for(size_t i = 0; i < lidx.size(); ++i) {
                 std::fprintf(stderr, "selected point %u for center %zu\n", lidx[i], i);
@@ -537,7 +539,7 @@ void init_smw(py::module &m) {
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
        "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
        py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("betaprior") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1,
-       py::arg("lspp") = 0,
+       py::arg("lspp") = 0, py::arg("use_exponential_skips") = false,
        py::arg("weights") = py::none()
     );
     m.def("kmeanspp", [](const SparseMatrixWrapper &smw, const SumOpts &so, py::object weights) {return py_kmeanspp_so(smw, so, weights);},
