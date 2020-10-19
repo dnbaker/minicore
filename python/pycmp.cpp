@@ -85,7 +85,6 @@ void init_cmp(py::module &m) {
         return py::array_t<float>();
     }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 5, py::arg("betaprior") = 1.);
     m.def("cmp", [](const SparseMatrixWrapper &lhs, const SparseMatrixWrapper &rhs, py::object msr, py::object betaprior) {
-        auto inf = arr.request();
         const double priorv = betaprior.cast<double>(), priorsum = priorv * lhs.columns();
         const auto ms = assure_dm(msr);
         blz::DV<float> lrsums(lhs.rows());
@@ -96,7 +95,6 @@ void init_cmp(py::module &m) {
         rhs.perform([&](const auto &x){rrsums = blz::sum<rowwise>(x);});
         py::array ret(py::dtype("f"), std::vector<Py_ssize_t>{lhs.rows(), rhs.rows()});
         const Py_ssize_t nr = lhs.rows(), nc = rhs.rows();
-        py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), nc});
         auto retinf = ret.request();
         blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)retinf.ptr, nr, nc, nc);
         if(lhs.is_float()) {
