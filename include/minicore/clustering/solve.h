@@ -566,15 +566,13 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         return ret;
     };
     const size_t np = costs.size(), k = centers.size();
-    shared::flat_hash_map<IT, IT> sa;
+    //shared::flat_hash_map<IT, IT> sa;
     auto perform_assign = [&]() {
         OMP_PFOR
         for(size_t i = 0; i < costs.size(); ++i) {
             FT mincost = compute_point_cost(i, 0);
             IT minind = 0;
-            SK_UNROLL_4
             for(size_t j = 1; j < k; ++j) {
-                if(auto it = sa.find(j); it != sa.end() && it->second > reseed_after) continue;
                 if(const FT nc = compute_point_cost(i, j);nc < mincost)
                     mincost = nc, minind = j;
             }
@@ -589,9 +587,51 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
     blz::DV<FT> center_wsums(k);
     std::vector<std::vector<IT>> assigned(k);
     std::unique_ptr<blz::DV<FT>> wc;
+    blz::DV<uint64_t> center_counts(k);
     for(;;) {
         if(iternum % calc_cost_freq == 0) {
+            // Every once in a while, perform exhaustive center-point-comparisons
+            // and restart any centers with no assigned points
             perform_assign();
+            center_counts = 0;
+
+            // OMP_PFOR
+            for(size_t i = 0; i < np; ++i) {
+                //OMP_ATOMIC
+                ++center_counts[asn[i]];
+            }
+            blaze::SmallArray<uint32_t, 8> foundindices;
+            for(size_t i = 0; i < center_counts.size(); ++i) {
+                std::fprintf(stderr, "Center %zu has %" PRIu64 " items\n", i, center_counts[i]);
+                if(center_counts[i] <= 1uLL) { // If there are 0 or 1 points assigned to a center, restart it
+                    foundindices.pushBack(i);
+                }
+            }
+            if(foundindices.size()) {
+                std::fprintf(stderr, "Found %zu centers with no assigned points; let's restart them.\n", foundindices.size());
+                for(const auto fidx: foundindices) {
+                    // set new centers
+                    auto &ctr = centers[fidx];
+                    FT *ptr;
+                    const auto rngv = rng();
+                    if(weights) {
+                        if(!wc) wc.reset(new blz::DV<FT>(np));
+                        *wc = costs * blz::make_cv(weights, np);
+                        ptr = wc->data();
+                        ctr = row(*mat, reservoir_simd::sample(wc->data(), np, rngv));
+                    } else {
+                        ctr = row(*mat, reservoir_simd::sample(costs.data(), np, rngv));
+                    }
+                }
+                OMP_PFOR
+                for(size_t i = 0; i < np; ++i) {
+                    auto &ccost = costs[i];
+                    for(const auto fidx: foundindices) {
+                        auto newcost = compute_point_cost(i, fidx);
+                        if(newcost < ccost) ccost = newcost, asn[i] = fidx;
+                    }
+                }
+            }
             if(weights) {
                 cost = blz::dot(costs, blz::make_cv(weights, np));
             } else {
@@ -634,35 +674,13 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
             }
         }
         for(size_t i= 0; i < assigned.size(); ++i) {
-            if(assigned[i].empty()) ++sa[i];
-            else {
+            if(!assigned[i].empty()) {
                 shared::sort(assigned[i].begin(), assigned[i].end());
-                if(auto it = sa.find(i); it != sa.end()) sa.erase(it);
             }
-        }
-        auto maxv = std::accumulate(sa.begin(), sa.end(), 0u, [](auto mx, auto item) -> IT {if(mx > item.second) return mx; return item.second;});
-        if(maxv >= reseed_after) {
-            std::fprintf(stderr, "Restarting empty centers: %zu after failing %d in a row\n", sa.size(), maxv);
-            perform_assign();
-            if(weights && !wc) wc.reset(new blz::DV<FT>(np));
-            for(const auto pair: sa) {
-                if(pair.second < reseed_after) continue;
-                const auto v = pair.first;
-                // Set the center using importance sampling
-                if(weights) {
-                    *wc = costs * blz::make_cv(weights, np);
-                    centers[v] = row(*mat, reservoir_simd::sample(wc->data(), np, rng()));
-                } else {
-                    centers[v] = row(*mat, reservoir_simd::sample(costs.data(), np, rng()));
-                }
-                centersums[v] = blz::sum(centers[v]);
-                costs = blaze::min(costs, blaze::generate(np, [&](auto x) {return compute_point_cost(x, v);}));
-            }
-            sa.clear();
         }
         center_wsums = 1. / center_wsums; // center-wsums now contains the eta (step size) for SGD
         // 3. Calculate new center
-        OMP_PFOR
+        //OMP_PFOR
         for(size_t i = 0; i < centers.size(); ++i) {
             const FT eta = center_wsums[i];
             auto asnptr = assigned[i].data();
