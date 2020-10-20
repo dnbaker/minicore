@@ -8,14 +8,28 @@ py::dict cpp_pycluster_from_centers(const blz::SM<FT> &mat, unsigned int k, doub
                AsnT &asn, CostsT &costs,
                WFT *weights,
                double eps,
-               size_t kmeansmaxiter)
+               size_t kmeansmaxiter,
+               Py_ssize_t mbsize,
+               Py_ssize_t ncheckins,
+               Py_ssize_t reseed_count,
+               bool with_rep,
+               Py_ssize_t seed)
 {
     std::fprintf(stderr, "[%s]\n", __PRETTY_FUNCTION__);
     if(k != ctrs.size()) {
         throw std::invalid_argument(std::string("k ") + std::to_string(k) + "!=" + std::to_string(ctrs.size()) + ", ctrs.size()");
     }
     blz::DV<FT> prior{FT(beta)};
-    auto [initcost, finalcost, numiter] = perform_hard_clustering(mat, measure, prior, ctrs, asn, costs, weights, eps, kmeansmaxiter);
+    std::tuple<double, double, size_t> clusterret;
+    if(mbsize < 0) {
+        clusterret = perform_hard_clustering(mat, measure, prior, ctrs, asn, costs, weights, eps, kmeansmaxiter);
+    } else {
+        if(ncheckins < 0) ncheckins = 10;
+        Py_ssize_t checkin_freq = (mbsize + ncheckins - 1) / ncheckins;
+        clusterret = perform_hard_minibatch_clustering(mat, measure, prior, ctrs, asn, costs, weights,
+                                                       mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
+    }
+    auto &[initcost, finalcost, numiter]  = clusterret;
     auto pyctrs = centers2pylist(ctrs);
     auto pycosts = vec2fnp<decltype(costs), float> (costs);
     auto pyasn = vec2fnp<decltype(asn), uint32_t>(asn);
@@ -30,13 +44,20 @@ py::dict cpp_pycluster_from_centers(const SparseMatrixWrapper &mat, unsigned int
                AsnT &asn, CostsT &costs,
                WFT *weights,
                double eps,
-               size_t kmeansmaxiter)
+               size_t kmeansmaxiter,
+               Py_ssize_t mbsize,
+               Py_ssize_t ncheckins,
+               Py_ssize_t reseed_count,
+               bool with_rep,
+               Py_ssize_t seed)
 {
     py::dict ret;
+    #define CLUSTER_CALL(x) cpp_pycluster_from_centers(x, k, beta, measure, ctrs, asn, costs, weights, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed)
     if(mat.is_float())
-        ret = cpp_pycluster_from_centers(mat.getfloat(), k, beta, measure, ctrs, asn, costs, weights, eps, kmeansmaxiter);
+        ret = CLUSTER_CALL(mat.getfloat());
     else
-        ret = cpp_pycluster_from_centers(mat.getdouble(), k, beta, measure, ctrs, asn, costs, weights, eps, kmeansmaxiter);
+        ret = CLUSTER_CALL(mat.getdouble());
+#undef CLUSTER_CALL
     return ret;
 }
 
@@ -50,7 +71,11 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
                unsigned lspprounds,
                bool use_exponential_skips,
                size_t kmcrounds,
-               size_t kmeansmaxiter)
+               size_t kmeansmaxiter,
+               Py_ssize_t mbsize,
+               Py_ssize_t ncheckins,
+               Py_ssize_t reseed_count,
+               bool with_rep)
 {
     std::fprintf(stderr, "[%s] beginning cpp_pycluster\n", __PRETTY_FUNCTION__);
     blz::DV<FT> prior{FT(beta)};
@@ -59,7 +84,7 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
         // Note that this has been transposed
         return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
     };
-    if(measure != dist::L1 && measure != dist::L2 && measure != dist::BHATTACHARYYA_METRIC) {
+    if(measure == dist::L1 || measure == dist::L2 || measure == dist::BHATTACHARYYA_METRIC) {
         std::fprintf(stderr, "D2 sampling may not provide a bicriteria approximation alone. TODO: use more expensive metric clustering for better objective functions.\n");
     }
     wy::WyRand<uint32_t> rng(seed);
@@ -70,7 +95,7 @@ py::dict cpp_pycluster(const blz::SM<FT> &mat, unsigned int k, double beta,
     std::vector<blz::CompressedVector<FT, blz::rowVector>> centers(k);
     for(unsigned i = 0; i < k; ++i)
         centers[i] = row(mat, idx[i]);
-    return cpp_pycluster_from_centers(mat, k, beta, measure, centers, asn, costs, weights, eps, kmeansmaxiter);
+    return cpp_pycluster_from_centers(mat, k, beta, measure, centers, asn, costs, weights, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
 }
 
 template<typename VecT>
@@ -161,7 +186,8 @@ void init_clustering(py::module &m) {
 
     m.def("cluster_from_centers", [](SparseMatrixWrapper &smw, py::object centers, double beta,
                         py::object msr, py::object weights, double eps,
-                        uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed)
+                        uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
+                        Py_ssize_t reseed_count, bool with_rep)
     -> py::object
     {
         if(py::isinstance<py::int_>(centers)) {
@@ -244,16 +270,16 @@ void init_clustering(py::module &m) {
             return bestcost;
         });
         if(weights.is_none()) {
-            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, (blz::DV<float> *)nullptr, eps, kmeansmaxiter);
-            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter);
+            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, (blz::DV<float> *)nullptr, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
+            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
         }
         auto weightinfo = py::cast<py::array>(weights).request();
         if(weightinfo.format.size() != 1) throw std::invalid_argument("Weights must be 0 or contain a fundamental type");
         switch(weightinfo.format[0]) {
 #define CASE_MCR(x, type) case x: {\
-    auto cv = blz::make_cv((type *)weightinfo.ptr, smw.rows()); \
-            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, &cv, eps, kmeansmaxiter); \
-            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, &cv, eps, kmeansmaxiter); \
+            auto cv = blz::make_cv((type *)weightinfo.ptr, costs.size());\
+            if(fptr) return cpp_pycluster_from_centers(smw, k, beta, measure, *fptr, asn, costs, &cv, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed); \
+            else     return cpp_pycluster_from_centers(smw, k, beta, measure, *dptr, asn, costs, &cv, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed); \
             } break
             CASE_MCR('u', unsigned);
             CASE_MCR('f', float);
@@ -275,6 +301,10 @@ void init_clustering(py::module &m) {
     py::arg("kmcrounds") = 10000,
     py::arg("ntimes") = 1,
     py::arg("lspprounds") = 1,
-    py::arg("seed") = 0
+    py::arg("seed") = 0,
+    py::arg("mbsize") = Py_ssize_t(-1),
+    py::arg("ncheckins") = Py_ssize_t(-1),
+    py::arg("reseed_count") = Py_ssize_t(5),
+    py::arg("with_rep") = true
     );
 } // init_clustering

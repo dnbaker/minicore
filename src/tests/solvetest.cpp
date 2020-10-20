@@ -163,11 +163,11 @@ int main(int argc, char *argv[]) {
     auto mbcenters = ocenters;
     std::vector<FLOAT_TYPE> weights(x.rows(), 1.);
     std::fprintf(stderr, "minibatch clustering with no weights, %s replacement, %s importance sampling\n",  with_replacement ? "with": "without", "without");
-    clust::perform_hard_minibatch_clustering(x, msr, prior, mbcenters, asn, hardcosts, (FLOAT_TYPE *)nullptr, mbsize, NUMITER, 10, /*reseed_after=*/10, /*with_replacement=*/with_replacement, /*seed=*/rng());
+    clust::perform_hard_minibatch_clustering(x, msr, prior, mbcenters, asn, hardcosts, (std::vector<FLOAT_TYPE> *)nullptr, mbsize, NUMITER, 10, /*reseed_after=*/10, /*with_replacement=*/with_replacement, /*seed=*/rng());
     auto mbuwcenters = ocenters;
     std::fprintf(stderr, "minibatch clustering with uniform weights, %s replacement, %s importance sampling\n",  with_replacement ? "with": "without", "without");
-    clust::perform_hard_minibatch_clustering(x, msr, prior, mbuwcenters, asn, hardcosts,  weights.data(), mbsize, NUMITER, 10, /*reseed_after=*/10, /*with_replacement=*/with_replacement, /*seed=*/rng());
+    clust::perform_hard_minibatch_clustering(x, msr, prior, mbuwcenters, asn, hardcosts,  &weights, mbsize, NUMITER, 10, /*reseed_after=*/10, /*with_replacement=*/with_replacement, /*seed=*/rng());
     auto is_mbcenters = ocenters;
     std::fprintf(stderr, "minibatch clustering with uniform weights, %sreplacement, %s importance sampling\n", with_replacement ? "with": "without", "without");
-    clust::perform_hard_minibatch_clustering(x, msr, prior, is_mbcenters, asn, hardcosts,  weights.data(), mbsize, NUMITER, 10, /*reseed_after=*/10, /*with_replacement=*/with_replacement, /*seed=*/rng());
+    clust::perform_hard_minibatch_clustering(x, msr, prior, is_mbcenters, asn, hardcosts, &weights, mbsize, NUMITER, 10, /*reseed_after=*/10, /*with_replacement=*/with_replacement, /*seed=*/rng());
 }

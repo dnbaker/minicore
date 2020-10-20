@@ -93,8 +93,8 @@ void init_cmp(py::module &m) {
         if(lhs.columns() != rhs.columns()) throw std::invalid_argument("mismatched # columns");
         lhs.perform([&](const auto &x){lrsums = blz::sum<rowwise>(x);});
         rhs.perform([&](const auto &x){rrsums = blz::sum<rowwise>(x);});
-        py::array ret(py::dtype("f"), std::vector<Py_ssize_t>{lhs.rows(), rhs.rows()});
         const Py_ssize_t nr = lhs.rows(), nc = rhs.rows();
+        py::array ret(py::dtype("f"), std::vector<Py_ssize_t>{nr, nc});
         auto retinf = ret.request();
         blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)retinf.ptr, nr, nc, nc);
         if(lhs.is_float()) {

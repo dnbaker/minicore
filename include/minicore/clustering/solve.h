@@ -479,15 +479,17 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
                                        size_t mbsize=1000,
                                        size_t maxiter=10000,
                                        size_t calc_cost_freq=100,
-                                       int reseed_after=5,
+                                       unsigned int reseed_after=1,
                                        bool with_replacement=true,
                                        uint64_t seed=0)
 {
     if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
+#if 0
     auto compute_cost = [&costs,w=weights]() -> FT {
-        if(w) return blz::dot(costs, blz::make_cv(w, costs.size()));
+        if(w) return blz::dot(costs, *w);
         else  return blz::sum(costs);
     };
+#endif
     switch(measure) {
         default:
         case L1: case TVD: throw std::invalid_argument("measure cannot be used in minibatch mode");
@@ -515,7 +517,8 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
 #endif
     FT prior_sum = prior.size() == 1 ? prior.size() * prior[0]: blz::sum(prior);
     size_t iternum = 0;
-    double initcost, cost;
+    double initcost = std::numeric_limits<double>::max(), cost = initcost, bestcost = cost;
+    std::vector<CtrT>  savectrs = centers;
     static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) {
@@ -568,13 +571,17 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
     const size_t np = costs.size(), k = centers.size();
     //shared::flat_hash_map<IT, IT> sa;
     auto perform_assign = [&]() {
-        OMP_PFOR
-        for(size_t i = 0; i < costs.size(); ++i) {
-            FT mincost = compute_point_cost(i, 0);
-            IT minind = 0;
-            for(size_t j = 1; j < k; ++j) {
-                if(const FT nc = compute_point_cost(i, j);nc < mincost)
-                    mincost = nc, minind = j;
+        OMP_PFOR_DYN
+        for(size_t i = 0; i < np; ++i) {
+            FT mincost = std::numeric_limits<FT>::max();
+            IT minind = -1;
+            for(size_t j = 0; j < k; ++j) {
+                const FT nc = compute_point_cost(i, j);
+                if(std::isnan(nc)) {
+                    std::cerr << i << ", " << j << '\n';
+                    throw std::invalid_argument("nan in distance calculation");
+                }
+                if(nc < mincost) mincost = nc, minind = j;
             }
             asn[i] = minind;
             costs[i] = mincost;
@@ -587,23 +594,25 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
     blz::DV<FT> center_wsums(k);
     std::vector<std::vector<IT>> assigned(k);
     std::unique_ptr<blz::DV<FT>> wc;
+    if(weights) wc.reset(new blz::DV<FT>(np));
     blz::DV<uint64_t> center_counts(k);
     for(;;) {
-        if(iternum % calc_cost_freq == 0) {
+        DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
+        if(iternum % calc_cost_freq == 0 || (iternum == maxiter - 1)) {
             // Every once in a while, perform exhaustive center-point-comparisons
             // and restart any centers with no assigned points
             perform_assign();
             center_counts = 0;
 
-            // OMP_PFOR
+            OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
-                //OMP_ATOMIC
+                OMP_ATOMIC
                 ++center_counts[asn[i]];
             }
             blaze::SmallArray<uint32_t, 8> foundindices;
             for(size_t i = 0; i < center_counts.size(); ++i) {
                 std::fprintf(stderr, "Center %zu has %" PRIu64 " items\n", i, center_counts[i]);
-                if(center_counts[i] <= 1uLL) { // If there are 0 or 1 points assigned to a center, restart it
+                if(center_counts[i] <= reseed_after) { // If there are 0 or 1 points assigned to a center, restart it
                     foundindices.pushBack(i);
                 }
             }
@@ -612,16 +621,20 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
                 for(const auto fidx: foundindices) {
                     // set new centers
                     auto &ctr = centers[fidx];
-                    FT *ptr;
                     const auto rngv = rng();
                     if(weights) {
-                        if(!wc) wc.reset(new blz::DV<FT>(np));
-                        *wc = costs * blz::make_cv(weights, np);
-                        ptr = wc->data();
+                        if constexpr(blaze::IsVector_v<WeightT>) {
+                            *wc = costs * *weights;
+                        } else if constexpr(std::is_floating_point_v<WeightT>) {
+                            *wc = costs * blz::make_cv(weights, np);
+                        } else {
+                            *wc = costs * blz::make_cv(weights->data(), np);
+                        }
                         ctr = row(*mat, reservoir_simd::sample(wc->data(), np, rngv));
                     } else {
                         ctr = row(*mat, reservoir_simd::sample(costs.data(), np, rngv));
                     }
+                    centersums[fidx] = blz::sum(ctr);
                 }
                 OMP_PFOR
                 for(size_t i = 0; i < np; ++i) {
@@ -633,12 +646,25 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
                 }
             }
             if(weights) {
-                cost = blz::dot(costs, blz::make_cv(weights, np));
+                if constexpr(blaze::IsVector_v<WeightT>) {
+                    cost = blz::dot(costs, *weights);
+                } else {
+                    cost = blz::dot(costs, blz::make_cv(weights->data(), np));
+                }
             } else {
                 cost = blz::sum(costs);
             }
             std::fprintf(stderr, "Cost at iter %zu: %g\n", iternum, cost);
-            if(iternum == 0) initcost = cost;
+            if(iternum == 0) initcost = cost, bestcost = initcost;
+            if(cost < bestcost) {
+                bestcost = cost;
+                savectrs = centers;
+            }
+        }
+
+        if(++iternum == maxiter) {
+            std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
+            break;
         }
 
         // 1. Sample the points
@@ -658,14 +684,16 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         OMP_PFOR
         for(size_t i = 0; i < mbsize; ++i) {
             const auto ind = sampled_indices[i];
-            IT bestind = 0;
-            auto bv = compute_point_cost(ind, 0);
-            for(size_t j = 1; j < k; ++j) {
-                if(auto nv = compute_point_cost(ind, j); nv < bv)
+            IT bestind = -1;
+            FT bv = std::numeric_limits<FT>::max();
+            for(size_t j = 0; j < k; ++j) {
+                auto nv = compute_point_cost(ind, j);
+                if(std::isnan(nv)) throw std::invalid_argument(std::string("nan between ") + std::to_string(ind) + " and " + std::to_string(j));
+                if(nv < bv)
                     bv = nv, bestind = j;
             }
             //sampled_costs[i] = bv;
-            const FT w = weights ? weights[ind]: static_cast<WeightT>(1);
+            const FT w = weights ? (*weights)[ind]: static_cast<FT>(1);
             OMP_ATOMIC
             center_wsums[bestind] += w;
             OMP_CRITICAL
@@ -680,7 +708,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         }
         center_wsums = 1. / center_wsums; // center-wsums now contains the eta (step size) for SGD
         // 3. Calculate new center
-        //OMP_PFOR
+        OMP_PFOR
         for(size_t i = 0; i < centers.size(); ++i) {
             const FT eta = center_wsums[i];
             auto asnptr = assigned[i].data();
@@ -688,23 +716,24 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
             if(!asnsz) continue;
             auto rowsel = rows(*mat, asnptr, asnsz);
             if(weights) {
-                auto wcv = blz::make_cv(weights, np);
-                auto welements = blaze::elements(wcv, asnptr, asnsz);
-                centers[i] = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(welements, (*mat).columns())) * eta;
+                if constexpr(blaze::IsVector_v<WeightT>) {
+                    auto welements = blaze::elements(*weights, asnptr, asnsz);
+                    centers[i] = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(welements, (*mat).columns())) * eta;
+                } else {
+                    auto wcv = blz::make_cv(weights->data(), np);
+                    auto welements = elements(wcv, asnptr, asnsz);
+                    centers[i] = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(welements, (*mat).columns())) * eta;
+                }
             } else {
                 centers[i] = blaze::mean<blaze::columnwise>(rowsel);
             }
             centersums[i] = blz::sum(centers[i]);
         }
         
-        DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
         // Set the new centers
-        if(++iternum == maxiter) {
-            std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
-            break;
-        }
         //cost = newcost;
     }
+    std::swap(centers, savectrs);
 #ifndef NDEBUG
     std::fprintf(stderr, "Completing clustering after %zu rounds. Initial cost %0.12g. Final cost %0.12g.\n", iternum, initcost, cost);
 #endif
