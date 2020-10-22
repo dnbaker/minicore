@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "temp for soft clustering is %g\n", temp);
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
     std::vector<blaze::CompressedVector<double, blaze::rowVector>> centers;
-    std::vector<int> ids{1018, 2624, 5481, 6006, 8972};
+    std::vector<int> ids;
     while(ids.size() < 10) {
         auto rid = std::rand() % x.rows();
         if(std::find(ids.begin(), ids.end(), rid) == ids.end())

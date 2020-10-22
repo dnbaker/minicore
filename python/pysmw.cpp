@@ -34,8 +34,8 @@ py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, Py_ssize_t
         auto info = arr.request();
         if(info.format.size() > 1) throw std::invalid_argument(std::string("Invalid array format: ") + info.format);
         switch(info.format.front()) {
-            case 'i': case 'u': case 'f': case 'd': kind = info.format.front(); break;
-            default:throw std::invalid_argument(std::string("Invalid array format: ") + info.format + ". Expected 'd', 'f', 'i', or 'u'.\n");
+            case 'l': case 'i': case 'I': case 'H': case 'L': case 'B': case 'f': case 'd': kind = info.format.front(); break;
+            default:throw std::invalid_argument(std::string("Invalid array format: ") + info.format + ". Expected 'd', 'f', 'i', 'I', 'l', 'L', 'B', 'h'.\n");
         }
         wptr = info.ptr;
     }
@@ -76,7 +76,12 @@ py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, Py_ssize_t
             repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp)
             : kind == 'f' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr)
             : kind == 'd' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const double *)wptr)
-            : kind == 'u' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const unsigned *)wptr)
+            : kind == 'I' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const unsigned *)wptr)
+            : kind == 'i' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const int *)wptr)
+            : kind == 'H' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const uint16_t *)wptr)
+            : kind == 'L' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const uint64_t *)wptr)
+            : kind == 'l' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const int64_t *)wptr)
+            : kind == 'B' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const uint8_t *)wptr)
             : repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const int *)wptr);
         auto &[lidx, lasn, lcosts] = sol;
         for(size_t i = 0; i < lidx.size(); ++i) {
@@ -217,6 +222,7 @@ void init_smw(py::module &m) {
 #define DTCASE(chr, type) case chr: {if(wrap.is_float()) return blz::SM<float>(blaze::rows(wrap.getfloat(), (type *)inf.ptr, inf.size));\
                                      else               return blz::SM<double>(blaze::rows(wrap.getdouble(), (type *)inf.ptr, inf.size));}
             DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+            DTCASE('l', int64_t) DTCASE('i', int32_t) DTCASE('h', int16_t) DTCASE('b', int8_t)
  #undef DTCASE
             default: throw std::invalid_argument("Wrong dtype");
             }
@@ -226,7 +232,8 @@ void init_smw(py::module &m) {
             switch(inf.format[0]) {
 #define DTCASE(chr, type) case chr: {if(wrap.is_float()) return blz::SM<float>(blaze::columns(wrap.getfloat(), (type *)inf.ptr, inf.size));\
                                      else               return blz::SM<double>(blaze::columns(wrap.getdouble(), (type *)inf.ptr, inf.size));}
-                DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+            DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+            DTCASE('l', int64_t) DTCASE('i', int32_t) DTCASE('h', int16_t) DTCASE('b', int8_t)
  #undef DTCASE
                 default: throw std::invalid_argument("Wrong dtype");
             }
@@ -239,6 +246,7 @@ void init_smw(py::module &m) {
 #define DTCASE(chr, type) case chr: if(wrap.is_float()) return blz::SM<float>(columns(rows(wrap.getfloat(), (type *)rinf.ptr, rinf.size), (type *)cinf.ptr, cinf.size));\
                                     else                return blz::SM<double>(columns(rows(wrap.getdouble(), (type *)rinf.ptr, rinf.size), (type *)cinf.ptr, cinf.size));
                 DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+                DTCASE('l', int64_t) DTCASE('i', int32_t) DTCASE('h', int16_t) DTCASE('b', int8_t)
 #undef DTCASE
                 default: throw std::invalid_argument("Wrong dtype");
             }

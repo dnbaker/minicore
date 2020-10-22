@@ -29,6 +29,19 @@ static constexpr const char *cp2str(CentroidPol pol) {
     }
 }
 
+template<typename CtrT, typename VT, bool TF>
+void set_center(CtrT &lhs, const blaze::Vector<VT, TF> &rhs) {
+    lhs = *rhs;
+}
+
+template<typename CtrT, typename VT, typename IT>
+void set_center(CtrT &lhs, const util::CSparseVector<VT, IT> &rhs) {
+    lhs.reserve(rhs.nnz());
+    if(lhs.size() != rhs.dim_) lhs.resize(rhs.dim_);
+    lhs.reset();
+    for(const auto &pair: rhs) lhs[pair.first] = pair.second;
+}
+
 using namespace ::minicore::distance;
 
 static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) {
@@ -464,9 +477,9 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         const auto nasn = assigned[i].size();
         const auto asp = assigned[i].data();
         MINOCORE_VALIDATE(nasn != 0);
-        if(nasn == 1)
-            ctrs[i] = row(mat, *asp);
-        else {
+        if(nasn == 1) {
+            set_center(ctrs[i], row(mat, *asp));
+        } else {
             auto rowsel = rows(mat, asp, nasn);
             VERBOSE_ONLY(std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << ctrs[i] << '\n';)
             if(weights)
@@ -477,6 +490,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         }
     }
 }
+
 template<typename FT=double, typename Mat, typename PriorT, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t, typename SumT>
 void set_centroids_full_mean(const Mat &mat,
     const dist::DissimilarityMeasure measure,
@@ -520,7 +534,7 @@ void set_centroids_full_mean(const Mat &mat,
             // for D2, and just ran
             std::ptrdiff_t r;
             if(restartpol == RESTART_GREEDY)
-                r = std::max_element(costs.begin(), costs.end()) - costs.begin();
+                r = reservoir_simd::argmax(costs, /*mt=*/true);
             else if(restartpol == RESTART_RANDOM)
                 r = rng() % costs.size();
             else {
@@ -530,13 +544,13 @@ void set_centroids_full_mean(const Mat &mat,
                     r = reservoir_simd::sample(costs.data(), costs.size(), rng());
                     std::fprintf(stderr, "Restarting with point %ld\n", r);
                     if(++i == 5) {
-                        r = std::max_element(costs.begin(), costs.end()) - costs.begin();
+                        r = reservoir_simd::argmax(costs, true);
                         std::fprintf(stderr, "Center restarting took too many tries\n");
                     }
                 } while(!costs[r]);
             }
             auto &ctr = ctrs[id];
-            ctr = row(mat, r);
+            set_center(ctr, row(mat, r));
             ctrsums[id] = blz::sum(ctr);
             costs = std::numeric_limits<FT>::max();
             OMP_PFOR
@@ -571,8 +585,9 @@ void set_centroids_full_mean(const Mat &mat,
         const auto nasn = assigned[i].size();
         const auto asp = assigned[i].data();
         auto &ctr = ctrs[i];
-        if(nasn == 1) ctr = row(mat, *asp);
-        else {
+        if(nasn == 1) {
+            set_center(ctr, row(mat, *asp));
+        } else {
             auto rowsel = rows(mat, asp, nasn);
             if(weights) {
                 auto elsel = elements(*weights, asp, nasn);
@@ -622,16 +637,18 @@ void set_centroids_full_mean(const Mat &mat,
 #if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
 #define WSUMINC(ind) do {OMP_ATOMIC wsums[ind] += w; } while(0)
 #define GETLOCK(ind) std::lock_guard<std::mutex> lock(locks[ind])
+#define __MT 0
 #else
 #define WSUMINC(ind) do {wsums[ind] += w;} while(0)
 #define GETLOCK(ind)
+#define __MT 1
 #endif
 
 #if VERBOSE_AF
         std::cerr << "assignments are " << asn << " from costs " << r << '\n';
 #endif
         if(isnan(asn)) {
-            auto bestind = std::min_element(r.begin(), r.end()) - r.begin();
+            auto bestind = reservoir_simd::argmin(r, __MT);
             asn.reset();
             asn[bestind] = 1.;
             WSUMINC(bestind);
@@ -649,6 +666,9 @@ void set_centroids_full_mean(const Mat &mat,
     }
 #undef GETLOCK
 #undef WSUMINC
+#undef __MT
+    DBG_ONLY(std::fprintf(stderr, "About to set centers in parallel.\n");)
+    OMP_PFOR
     for(unsigned j = 0; j < k; ++j) {
         ctrs[j] /= wsums[j];
         ctrsums[j] = blz::sum(ctrs[j]);

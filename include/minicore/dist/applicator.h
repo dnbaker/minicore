@@ -1699,7 +1699,7 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
 template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
 FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
 {
-    if constexpr(!blaze::IsSparseVector_v<CtrT> && !blaze::IsSparseVector_v<MatrixRowT>) {
+    if constexpr(!(blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && !(blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
         std::fprintf(stderr, "Using non-specialized form\n");
         const auto div = 1. / (mrsum + prior_sum);
         auto pv = prior[0];
@@ -1722,33 +1722,27 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case SQRL2: return blz::sqrDist(ctr, mr);
             case COSINE_DISTANCE: return cmp::cosine_distance(ctr, mr); // TODO: cache norms for each line
         }
-    } else if constexpr(blaze::IsSparseVector_v<CtrT> && blaze::IsSparseVector_v<MatrixRowT>) {
+    } else if constexpr((blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && (blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
         // If geometric,
         switch(msr) {
-            case L1: return blz::l1Dist(ctr, mr);
-            case L2: return blz::l2Dist(ctr, mr);
-            case SQRL2: return blz::sqrDist(ctr, mr);
+            case L1: return l1Dist(ctr, mr);
+            case L2: return l2Dist(ctr, mr);
+            case SQRL2: return sqrDist(ctr, mr);
             default: ; // do nothing
         }
         const size_t nd = mr.size();
         auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, auto nsharedmult)
             -> FT
         {
-            if constexpr(blaze::IsSparseVector_v<std::decay_t<decltype(src)>> && blaze::IsSparseVector_v<std::decay_t<decltype(ctr)>>) {
-                const size_t sharednz = merge::for_each_by_case(nd,
-                                        src.begin(), src.end(), ctr.begin(), ctr.end(),
-                                        [&](auto, auto x, auto y) ALWAYS_INLINE {
-#if VERBOSE_AF
-                                            std::fprintf(stderr, "contribution of %0.12g and %0.12g is %0.12g\n", x, y, sharedfunc(x, y));
-#endif
-                                            init += sharedfunc(x, y);
-                                        },
-                                        [&](auto, auto x) ALWAYS_INLINE {init += lhofunc(x);},
-                                        [&](auto, auto y) ALWAYS_INLINE {init += rhofunc(y);});
-                init += sharednz * nsharedmult;
-            } else {
-                throw TODOError("mixed densities;");
-            }
+           const size_t sharednz = merge::for_each_by_case(nd,
+                                   src.begin(), src.end(), ctr.begin(), ctr.end(),
+                                   [&](auto, auto x, auto y) ALWAYS_INLINE {
+                                       VERBOSE_ONLY(std::fprintf(stderr, "contribution of %0.12g and %0.12g is %0.12g\n", x, y, sharedfunc(x, y));)
+                                       init += sharedfunc(x, y);
+                                   },
+                                   [&](auto, auto x) ALWAYS_INLINE {init += lhofunc(x);},
+                                   [&](auto, auto y) ALWAYS_INLINE {init += rhofunc(y);});
+           init += sharednz * nsharedmult;
             return init;
         };
         /* Perform core now takes:
@@ -1909,7 +1903,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 break;
             }
             case HELLINGER: {
-                if(prior_sum == 0.) ret = hellinger(mr / lhsum,  ctr / rhsum);
+                if constexpr(blaze::IsSparseVector_v<MatrixRowT> && blaze::IsSparseVector_v<CtrT>) {
+                    if(prior_sum == 0.) ret = hellinger(mr * (FT(1) / lhsum),  ctr * (FT(1) /  rhsum));
+                }
                 else {
                     FT empty = std::sqrt(lhinc) - std::sqrt(rhinc);
                     empty *= empty;

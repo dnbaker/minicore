@@ -47,7 +47,7 @@ kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Nor
         if(unlikely(i == newc)) continue;
         distances[i] = dm(newc, i);
     }
-    bestind = reservoir_simd::argmax(distances);
+    bestind = reservoir_simd::argmax(distances, /*mutithread=*/true);
     assert(distances[newc] == 0.);
     if(k == 1) return std::make_pair(centers, distances);
     centers[1] = newc = bestind;
@@ -67,7 +67,7 @@ kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Nor
             if(dist < ldist)
                 ldist = dist;
         }
-        bestind = reservoir_simd::argmax(distances);
+        bestind = reservoir_simd::argmax(distances, true);
         centers[ci] = newc = bestind;
         distances[newc] = 0.;
     }
@@ -98,7 +98,7 @@ kcenter_greedy_2approx_costs(Oracle &oracle, const size_t np, size_t k, RNG &rng
         }
     }
     if(k == 1) return std::make_pair(centers, distances);
-    newc = reservoir_simd::argmax(distances);
+    newc = reservoir_simd::argmax(distances, true);
     distances[newc] = 0.;
     centers.push_back(newc);
 
@@ -109,7 +109,7 @@ kcenter_greedy_2approx_costs(Oracle &oracle, const size_t np, size_t k, RNG &rng
             auto v = oracle(i, newc);
             if(v < distances[i]) distances[i] = v;
         }
-        IT bestind = reservoir_simd::argmax(distances);
+        IT bestind = reservoir_simd::argmax(distances, true);
         newc = bestind;
 #ifndef NDEBUG
         FT bestcost = distances[bestind];
