@@ -39,8 +39,65 @@ void set_center(CtrT &lhs, const util::CSparseVector<VT, IT> &rhs) {
     lhs.reserve(rhs.nnz());
     if(lhs.size() != rhs.dim_) lhs.resize(rhs.dim_);
     lhs.reset();
-    for(const auto &pair: rhs) lhs[pair.first] = pair.second;
+    for(const auto &pair: rhs) lhs[pair.index()] = pair.value();
 }
+
+template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT=blz::DV<blz::ElementType_t<DataT>>>
+void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asn, size_t nasn, WeightT *w = static_cast<WeightT>(nullptr))
+{
+    using VT = std::conditional_t<std::is_floating_point_v<DataT>, DataT, std::conditional_t<(sizeof(DataT) < 8), float, double>>;
+    blz::DV<VT> mv(mat.columns(), VT(0));
+    double wsum = 0.;
+    OMP_PFOR_DYN
+    for(size_t i = 0; i < nasn; ++i) {
+        for(const auto &pair: row(mat, asn[i])) {
+            VT v = pair.value();
+            if(w) {
+                auto wv = (*w)[asn[i]];
+                OMP_ATOMIC
+                wsum += wv;
+                v *= wv;
+            }
+            OMP_ATOMIC
+            mv[pair.index()] += v;
+        }
+    }
+    wsum = 1. / (w ? wsum: double(nasn));
+    ctr.reset();
+    for(size_t i = 0; i < mv.size(); ++i) {
+        if(mv[i] > 0.) {
+            ctr[i] = mv[i];
+        }
+    }
+    ctr *= wsum;
+}
+template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT>
+void set_center_l2(CtrT &center, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asp, size_t nasn, WeightT *weights, double eps) {
+    util::geomedian(mat, center, asp, nasn, weights, eps);
+}
+
+template<typename CtrT, typename MT, typename IT, typename WeightT>
+void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, IT *asp, size_t nasn, WeightT *weights, double eps) {
+    auto rowsel = rows(mat, asp, nasn);
+    VERBOSE_ONLY(std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << center << '\n';)
+    if(weights)
+        blz::geomedian(rowsel, center, elements(*weights, asp, nasn), eps);
+    else
+        blz::geomedian(rowsel, center, eps);
+    VERBOSE_ONLY(std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';)
+}
+
+template<typename CtrT, typename MT, bool SO, typename IT, typename WeightT=blz::DV<blz::ElementType_t<MT>>>
+void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nasn, WeightT *w = static_cast<WeightT>(nullptr)) {
+    auto rowsel = rows(mat, asp, nasn);
+    if(w) {
+        auto elsel = elements(*w, asp, nasn);
+        auto weighted_rows = rowsel % blaze::expand(elsel, mat.columns());
+        // weighted sum over total weight -> weighted mean
+        ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
+    } else ctr = blaze::mean<blaze::columnwise>(rowsel);
+}
+
 
 using namespace ::minicore::distance;
 
@@ -182,7 +239,7 @@ struct CentroidPolicy {
                 if(pd) {
                     std::fprintf(stderr, "Sparse prior handling\n");
                     if(weight_cv) {
-                        c += pv * blz::sum(blz::elements(rs * **weight_cv, aip, ain));
+                        c += pv * sum(blz::elements(rs * **weight_cv, aip, ain));
                     } else {
                         c += pv * ain;
                     }
@@ -199,13 +256,13 @@ struct CentroidPolicy {
             double div;
             if(measure == dist::LLR || measure == dist::OLLR || measure == dist::UWLLR) {
                 if(weight_cv)
-                    div = blz::sum(blz::elements(rs * **weight_cv, aip, ain));
+                    div = sum(blz::elements(rs * **weight_cv, aip, ain));
                 else
-                    div = blz::sum(blz::elements(rs, aip, ain));
+                    div = sum(blz::elements(rs, aip, ain));
             } else {
                 if(weight_cv) {
                     std::fprintf(stderr, "weighted, nonLLR\n");
-                    div = blz::sum(**weight_cv);
+                    div = sum(**weight_cv);
                 } else {
                     std::fprintf(stderr, "unweighted, nonLLR\n");
                     div = ain;
@@ -338,10 +395,10 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             for(auto assigned_id: assigned[idx]) {
                 auto ilit = idxleft.begin();
                 auto myr = row(mat, assigned_id);
-                auto fcost = blz::l1Norm(ctrs[*ilit++] - myr);
+                auto fcost = l1Dist(ctrs[*ilit++], myr);
                 asn_t bestid = 0;
                 for(;ilit != idxleft.end();++ilit) {
-                    auto ncost = blz::l1Norm(ctrs[*ilit] - myr);
+                    auto ncost = l1Dist(ctrs[*ilit], myr);
                     if(ncost < fcost) bestid = *ilit, fcost = ncost;
                 }
                 costs[assigned_id] = fcost;
@@ -353,9 +410,9 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             std::uniform_real_distribution<double> dist;
             std::ptrdiff_t found = std::lower_bound(pd, pe, dist(rng) * pe[-1]) - pd;
             assert(found < (std::ptrdiff_t)(pe - pd));
-            ctrs[idx] = row(mat, found);
+            assign(ctrs[idx], row(mat, found));
             for(size_t i = 0; i < mat.rows(); ++i) {
-                const auto c = blz::l1Norm(ctrs[idx] - row(mat, i, unchecked));
+                const auto c = l1Dist(ctrs[idx], row(mat, i, unchecked));
                 if(c < costs[i]) {
                     asn[i] = idx;
                     costs[i] = c;
@@ -372,29 +429,19 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     }
     for(unsigned i = 0; i < k; ++i) {
         const auto &asnv = assigned[i];
+        const auto asp = asnv.data();
         const auto nasn = asnv.size();
         MINOCORE_VALIDATE(nasn != 0);
         switch(nasn) {
-            case 1: ctrs[i] = row(mat, asnv[0]); break;
-            case 2: {
-                if(weights) {
-                    auto &w = *weights;
-                    const auto a0 = asnv[0], a1 = asnv[1];
-                    auto w0 = w[a0], w1 = w[a1];
-                    auto tw = w0 + w1;
-                    ctrs[i] = (1. / tw) * (row(mat, asnv[0]) * w[w0] + row(mat, asnv[1]) * w[w1]);
-                } else {
-                    ctrs[i] = .5 * (row(mat, asnv[0], unchecked) + row(mat, asnv[1], unchecked));
-                }
-                break;
-            }
+            case 1: assign(ctrs[i], row(mat, asnv[0])); break;
             default: {
-                auto asp = asnv.data();
-                auto rowsel = rows(mat, asp, nasn);
-                if(weights)
-                    coresets::l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
-                else
-                    coresets::l1_median(rowsel, ctrs[i]);
+                if constexpr(blaze::IsMatrix_v<Mat>) {
+                    auto rowsel = rows(mat, asp, nasn);
+                    if(weights)
+                        coresets::l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
+                    else
+                        coresets::l1_median(rowsel, ctrs[i]);
+                } else coresets::l1_median(mat, ctrs[i], asp, nasn, weights);
             } break;
         }
     }
@@ -441,10 +488,10 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             for(auto assigned_id: assigned[idx]) {
                 auto ilit = idxleft.begin();
                 auto myr = row(mat, assigned_id);
-                auto fcost = blz::l2Norm(ctrs[*ilit++] - myr);
+                auto fcost = l2Dist(ctrs[*ilit++], myr);
                 asn_t bestid = 0;
                 for(;ilit != idxleft.end();++ilit) {
-                    auto ncost = blz::l2Norm(ctrs[*ilit] - myr);
+                    auto ncost = l2Dist(ctrs[*ilit], myr);
                     if(ncost < fcost) bestid = *ilit, fcost = ncost;
                 }
                 costs[assigned_id] = fcost;
@@ -456,9 +503,10 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             std::uniform_real_distribution<double> dist;
             std::ptrdiff_t found = std::lower_bound(pd, pe, dist(rng) * pe[-1]) - pd;
             assert(found < (std::ptrdiff_t)(pe - pd));
-            ctrs[idx] = row(mat, found);
+            assign(ctrs[idx], row(mat, found));
+            OMP_PFOR
             for(size_t i = 0; i < mat.rows(); ++i) {
-                const auto c = blz::l2Norm(ctrs[idx] - row(mat, i, unchecked));
+                const auto c = l2Dist(ctrs[idx], row(mat, i, unchecked));
                 if(c < costs[i]) {
                     asn[i] = idx;
                     costs[i] = c;
@@ -478,15 +526,18 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         const auto asp = assigned[i].data();
         MINOCORE_VALIDATE(nasn != 0);
         if(nasn == 1) {
-            set_center(ctrs[i], row(mat, *asp));
+            util::assign(ctrs[i], row(mat, *asp));
         } else {
+            set_center_l2(ctrs[i], mat, asp, nasn, weights, eps);
+#if 0
             auto rowsel = rows(mat, asp, nasn);
             VERBOSE_ONLY(std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << ctrs[i] << '\n';)
             if(weights)
-                blz::geomedian(rowsel, ctrs[i], elements(costs, asp, nasn), eps);
+                blz::geomedian(rowsel, ctrs[i], elements(*weights, asp, nasn), eps);
             else
                 blz::geomedian(rowsel, ctrs[i], eps);
             VERBOSE_ONLY(std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';)
+#endif
         }
     }
 }
@@ -528,7 +579,7 @@ void set_centroids_full_mean(const Mat &mat,
                      msr2str(measure), prior.size(), pv);
         std::cerr << buf;
         const constexpr RestartMethodPol restartpol = RESTART_D2;
-        const FT psum = prior.size() == 1 ? FT(prior[0]) * prior.size(): blz::sum(prior);
+        const FT psum = prior.size() == 1 ? FT(prior[0]) * prior.size(): sum(prior);
         for(const auto id: sa) {
             // Instead, use a temporary buffer to store partial sums and randomly select newly-started centers
             // for D2, and just ran
@@ -550,18 +601,18 @@ void set_centroids_full_mean(const Mat &mat,
                 } while(!costs[r]);
             }
             auto &ctr = ctrs[id];
-            set_center(ctr, row(mat, r));
-            ctrsums[id] = blz::sum(ctr);
+            util::assign(ctr, row(mat, r));
+            ctrsums[id] = sum(ctr);
             costs = std::numeric_limits<FT>::max();
             OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
                 unsigned bestid = asn[i], obi = bestid;
                 auto r = row(mat, i, unchecked);
                 const auto rsum = rowsums[i];
-                assert(std::abs(blz::sum(r) - rsum) < 1e-6 || !std::fprintf(stderr, "rsum %g and summed %g\n", rsum, blz::sum(r)));
+                assert(std::abs(sum(r) - rsum) < 1e-6 || !std::fprintf(stderr, "rsum %g and summed %g\n", rsum, sum(r)));
                 for(unsigned j = 0; j < k; ++j) {
                     const auto csum = ctrsums[j];
-                    DBG_ONLY(auto bsum = blz::sum(ctrs[j]);)
+                    DBG_ONLY(auto bsum = sum(ctrs[j]);)
                     assert(std::abs(csum - bsum) < 1e-10 || !std::fprintf(stderr, "csum %g but found bsum %g\n", csum, bsum));
                     const auto c = cmp::msr_with_prior(measure, r, ctrs[j], prior, psum,
                                                        rsum, csum);
@@ -578,7 +629,10 @@ void set_centroids_full_mean(const Mat &mat,
         goto set_asn;
     }
 #if defined(_OPENMP) && !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
+    #pragma message("Parallelizing loop, may cause things to break")
     #pragma omp parallel for
+#else
+#pragma message("Not parallelizing loop")
 #endif
     for(unsigned i = 0; i < k; ++i) {
         // Compute mean for centroid
@@ -586,17 +640,11 @@ void set_centroids_full_mean(const Mat &mat,
         const auto asp = assigned[i].data();
         auto &ctr = ctrs[i];
         if(nasn == 1) {
-            set_center(ctr, row(mat, *asp));
+            util::assign(ctr, row(mat, *asp));
         } else {
-            auto rowsel = rows(mat, asp, nasn);
-            if(weights) {
-                auto elsel = elements(*weights, asp, nasn);
-                auto weighted_rows = rowsel % blaze::expand(elsel, mat.columns());
-                // weighted sum over total weight -> weighted mean
-                ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
-            } else ctr = blaze::mean<blaze::columnwise>(rowsel);
+            set_center(ctr, mat, asp, nasn, weights);
         }
-        ctrsums[i] = blz::sum(ctr);
+        ctrsums[i] = sum(ctr);
     }
 }
 
@@ -610,7 +658,7 @@ void set_centroids_full_mean(const Mat &mat,
     std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
 #ifndef NDEBUG
     for(size_t i = 0; i < ctrs.size(); ++i) {
-        auto s = blz::sum(ctrs[i]);
+        auto s = sum(ctrs[i]);
         assert(std::abs(s - ctrsums[i]) <= 1e-4 || !std::fprintf(stderr, "sum expected %g, got %g\n", s, ctrsums[i]));
     }
 #endif
@@ -671,7 +719,7 @@ void set_centroids_full_mean(const Mat &mat,
     OMP_PFOR
     for(unsigned j = 0; j < k; ++j) {
         ctrs[j] /= wsums[j];
-        ctrsums[j] = blz::sum(ctrs[j]);
+        ctrsums[j] = sum(ctrs[j]);
     }
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
 }

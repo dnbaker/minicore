@@ -776,6 +776,42 @@ constexpr inline size_t size(const CSparseVector<VT, IT> &x) {
     return x.size();
 }
 
+template<typename VT, typename IT, typename IPtrT, typename RetT, typename IT2=uint64_t, typename WeightT=blz::DV<VT>>
+void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr = static_cast<IT2 *>(nullptr), size_t nasn=0, WeightT *weights=static_cast<WeightT *>(nullptr), double eps=0.) {
+    double prevcost = std::numeric_limits<double>::max();
+    //size_t iternum = 0;
+    assert(center.size() == mat.columns());
+    const size_t npoints = ptr ? nasn: mat.rows();
+    using index_t = std::common_type_t<IT2, size_t>;
+    blz::DV<double> costs(npoints);
+    for(;;) {
+        static constexpr double MINVAL = 1e-80; // For the case of exactly lying on a current center
+        auto gen = blaze::generate(npoints, [&](auto x) {return l2Dist(center, row(mat, ptr ? index_t(ptr[x]): index_t(x), blz::unchecked));});
+        if(weights) {
+            costs = blaze::max((*weights) * gen, MINVAL);
+        } else {
+            costs = blaze::max(gen, MINVAL);
+        }
+        double current_cost = sum(costs);
+        double dist = std::abs(prevcost - current_cost);
+        //++iternum;
+        if(dist <= eps) break;
+        if(std::isnan(dist)) throw std::range_error("distance is nan");
+        costs = current_cost / costs;
+        blz::DV<double, blaze::TransposeFlag_v<RetT>> newcenter(mat.columns(), 0);
+        OMP_PFOR
+        for(size_t i = 0; i < npoints; ++i) {
+            for(const auto &pair: row(mat, ptr ? index_t(ptr[i]): index_t(i))) {
+                const auto inc = pair.value() * costs[i];
+                OMP_ATOMIC
+                newcenter[pair.index()] += inc;
+            }
+        }
+        assign(center, newcenter);
+    }
+}
+
+
 template<typename FT=float, typename IndPtrType, typename IndicesType, typename DataType>
 blz::SM<FT, blaze::rowMajor> csc2sparse(const CSCMatrixView<IndPtrType, IndicesType, DataType> &mat, bool skip_empty=false) {
     blz::SM<FT, blaze::rowMajor> ret(mat.n_, mat.nf_);
