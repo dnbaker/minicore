@@ -3,6 +3,7 @@
 #include "./shared.h"
 #include "./timer.h"
 #include "./blaze_adaptor.h"
+#include "./merge.h"
 #include "./io.h"
 #include "./exception.h"
 #include "thirdparty/mio.hpp"
@@ -307,6 +308,7 @@ std::ostream& operator<< (std::ostream& out, const CSparseVector<VT, IT> & item)
         out << ' ';
     }
     out << '\n';
+    return out;
 }
 
 
