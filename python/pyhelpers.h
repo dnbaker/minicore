@@ -55,3 +55,9 @@ auto vec2fnp(const T &x) {
 }
 
 
+inline std::string size2dtype(Py_ssize_t n) {
+    if(n > 0xFFFFFFFFu) return "L";
+    if(n > 0xFFFFu) return "I";
+    if(n > 0xFFu) return "H";
+    return "B";
+}

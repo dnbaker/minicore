@@ -675,11 +675,11 @@ struct COOMatrix {
 
 template<typename VT, typename IT, typename IPtrT>
 struct CSparseMatrix {
-    VT *data_;
-    IT *indices_;
-    IPtrT *indptr_;
+    VT *__restrict__ data_;
+    IT *__restrict__ indices_;
+    IPtrT *__restrict__ indptr_;
     size_t nr_, nc_, nnz_;
-    constexpr CSparseMatrix(VT *data, IT *indices, IPtrT *indptr, size_t nr, size_t nc, size_t nnz):
+    constexpr CSparseMatrix(VT *__restrict__ data, IT *__restrict__ indices, IPtrT *__restrict__ indptr, size_t nr, size_t nc, size_t nnz):
         data_(data), indices_(indices), indptr_(indptr), nr_(nr), nc_(nc), nnz_(nnz)
     {
     }
@@ -701,6 +701,11 @@ struct CSparseMatrix {
     const auto &operator*() const {return *this;}
     using ElementType = VT;
 };
+
+template<typename VT, typename IT, typename IPtrT>
+inline CSparseMatrix<VT, IT, IPtrT> make_csparse_matrix(VT *__restrict__ data, IT *__restrict__ indices, IPtrT *__restrict__ indptr, size_t nr, size_t nc, size_t nnz) {
+    return CSparseMatrix<VT, IT, IPtrT>(data, indices, indptr, nr, nc, nnz);
+}
 
 template<typename VT, typename IT, typename IPtrT, bool checked>
 inline auto row(const CSparseMatrix<VT, IT, IPtrT> &mat, size_t i, blaze::Check<checked>) {

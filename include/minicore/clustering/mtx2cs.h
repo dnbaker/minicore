@@ -191,23 +191,47 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts, FT *weights=nullptr)
     return std::make_tuple(centers, asn, costs);
 }
 
- template<typename FT, bool SO>
- auto m2greedysel(blaze::Matrix<FT, SO> &sm, const SumOpts &opts)
- {
-     blz::DV<blaze::ElementType_t<FT>, blz::rowVector> pc(1), *pcp = &pc;
-     if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
-     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
-     else if(opts.prior == dist::NONE)
-         pcp = nullptr;
-     auto app = jsd::make_probdiv_applicator(*sm, opts.dis, opts.prior, pcp);
-     wy::WyRand<uint64_t, 2> rng(opts.seed);
-     if(opts.outlier_fraction) {
-         return coresets::kcenter_greedy_2approx_outliers_costs(
-             app, app.size(), rng, opts.k,
-             /*eps=*/1.5, opts.outlier_fraction
-         );
-     } else return coresets::kcenter_greedy_2approx_costs(app, app.size(), opts.k, rng);
- }
+template<typename FT, bool SO>
+auto m2greedysel(blaze::Matrix<FT, SO> &sm, const SumOpts &opts)
+{
+    blz::DV<blaze::ElementType_t<FT>, blz::rowVector> pc(1), *pcp = &pc;
+    if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
+    else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
+    else if(opts.prior == dist::NONE)
+        pcp = nullptr;
+    auto app = jsd::make_probdiv_applicator(*sm, opts.dis, opts.prior, pcp);
+    wy::WyRand<uint64_t, 2> rng(opts.seed);
+    if(opts.outlier_fraction) {
+        return coresets::kcenter_greedy_2approx_outliers_costs(
+            app, app.size(), rng, opts.k,
+            /*eps=*/1.5, opts.outlier_fraction
+        );
+    } else return coresets::kcenter_greedy_2approx_costs(app, app.size(), opts.k, rng);
+}
+
+template<typename VT, typename IndicesT, typename IndPtrT>
+
+
+std::pair<std::vector<uint64_t>, std::vector<double>>
+m2greedysel(util::CSparseMatrix<VT, IndicesT, IndPtrT> &sm, const SumOpts &opts)
+{
+    blz::DV<std::conditional_t<(sizeof(VT) <= 4), float, double>, blz::rowVector> pc(1, 0.), *pcp = &pc;
+    if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
+    else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
+    else if(opts.prior == dist::NONE)
+        pcp = nullptr;
+    const double prior_sum = pc[0] * sm.columns(), prior = pc[0];
+    auto oracle = [&](size_t x, size_t y) {                                                    
+        cmp::msr_with_prior(opts.dis, row(matrix, y), row(matrix, x), prior, prior_sum, rsums[y], rsums[x]);
+    }; 
+    wy::WyRand<uint64_t, 2> rng(opts.seed);
+    if(opts.outlier_fraction) {
+        return coresets::kcenter_greedy_2approx_outliers_costs<decltype(oracle), uint64_t, double>(
+            oracle, sm.rows(), rng, opts.k,
+            /*eps=*/1.5, opts.outlier_fraction
+        );
+    } else return coresets::kcenter_greedy_2approx_costs<decltype(oracle), uint64_t, double>(oracle, sm.rows(), opts.k, rng);
+}
 
 
 } // namespace minicore
