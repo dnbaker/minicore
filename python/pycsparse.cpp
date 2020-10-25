@@ -1,14 +1,13 @@
 #include "pycsparse.h"
 #include "smw.h"
-}
 
 void init_pycsparse(py::module &m) {
 
-    py::class_<PyCSparseMatrix>("CSparseMatrix").def(py::init<py::object>(), py::arg("sparray"))
+    py::class_<PyCSparseMatrix>(m, "CSparseMatrix").def(py::init<py::object>(), py::arg("sparray"))
     .def("__str__", [](const PyCSparseMatrix &x) {return std::string("CSparseMatrix, ") + std::to_string(x.rows()) + "x" + std::to_string(x.columns()) + ", " + std::to_string(x.nnz());})
     .def("columns", [](const PyCSparseMatrix &x) {return x.columns();})
     .def("rows", [](const PyCSparseMatrix &x) {return x.rows();})
-    .def("nnz", [](const PyCSparseMatrix &x) {return x.nnz();})
+    .def("nnz", [](const PyCSparseMatrix &x) {return x.nnz();});
 
      m.def("kmeanspp", [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {return py_kmeanspp_so(smw, so, weights);},
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
@@ -29,21 +28,21 @@ void init_pycsparse(py::module &m) {
     );
     m.def("greedy_select",  [](PyCSparseMatrix &smw, const SumOpts &so) {
         std::vector<uint64_t> centers;
-        const size_t nr = smw.rows();
+        const Py_ssize_t nr = smw.rows();
         blz::DV<double> rsums;
-        const double prior = so.gamma < 0. ? 0.: so.gamma;
-        const double prior_sum = prior * smw.columns();
+        //std::vector<double> prior({so.gamma < 0. ? 0.: so.gamma});
+        //const double prior_sum = prior[0] * smw.columns();
         std::vector<double> dret;
         smw.perform([&](auto &matrix) {
-            rsums = sum<blaze::rowwise>(matrix);
+            rsums = util::sum<blaze::rowwise>(matrix);
         });
         smw.perform([&](auto &matrix) {
             std::tie(centers, dret) = m2greedysel(matrix, so);
         });
-        auto ret = py::array(size2dtype(nr), std::vector<Py_ssize_t>{nr});
+        auto ret = py::array(py::dtype(size2dtype(nr)), std::vector<Py_ssize_t>{nr});
         py::array_t<double> costs(smw.rows());
         auto rpi = ret.request(), cpi = costs.request();
-        std::copy(dret.begin(), dret.end(), cpi);
+        std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
         switch(size2dtype(nr)[0]) {
             case 'L': std::copy(centers.begin(), centers.end(), (uint64_t *)rpi.ptr); break;
             case 'I': std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr); break;

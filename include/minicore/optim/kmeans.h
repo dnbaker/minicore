@@ -46,7 +46,7 @@ using blz::sqrL2Norm;
  */
 
 
-template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 auto
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false) {
@@ -129,7 +129,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     return std::make_tuple(std::move(centers), std::move(assignments), std::vector<FT>(distances.begin(), distances.end()));
 }
 
-template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 auto
 kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false) {
@@ -138,12 +138,12 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT 
     return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, lspprounds, use_exponential_skips);
 }
 
-template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights=static_cast<WFT *>(nullptr), int lspprounds=0, int ntimes=1);
 
-template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 reservoir_kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, int ntimes=1) {
@@ -153,7 +153,7 @@ reservoir_kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=No
 }
 
 
-template<typename Oracle, typename Sol, typename FT=float, typename IT=uint32_t>
+template<typename Oracle, typename Sol, typename FT=double, typename IT=uint32_t>
 std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(const Oracle &oracle, size_t np, const Sol &sol)
 {
     blaze::DynamicVector<IT> assignments(np);

@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
         std::FILE *fp = std::fopen(outcenters.data(), "wb");
         if(!fp) throw 1;
         std::sort(selected_points.begin(), selected_points.end());
-        for(const auto sp: selected_points) std::fprintf(fp, "%u\n", sp);
+        for(const auto sp: selected_points) std::fprintf(fp, "%u\n", int(sp));
         std::fclose(fp);
     }
     complete_hardcost = blaze::generate(nr, k, [&](auto r, auto col) {

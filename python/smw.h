@@ -5,6 +5,7 @@
 #include "minicore/util/csc.h"
 
 
+dist::DissimilarityMeasure assure_dm(py::object obj);
 
 struct SparseMatrixWrapper {
     SparseMatrixWrapper(std::string path, bool use_float=true) {
@@ -194,7 +195,7 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
     const blz::StaticVector<double, 1> prior({gamma_beta});
     auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
         // Note that this has been transposed
-        return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
+        return cmp::msr_with_prior(measure, y, x, prior, psum, sum(y), sum(x));
     };
     py::array_t<uint32_t> ret(k);
     int retasnbits;
@@ -291,13 +292,15 @@ inline py::tuple py_kmeanspp_so(const Mat &smw, const SumOpts &sm, py::object we
                        sm.lspp, sm.use_exponential_skips, weights);
 }
 template<typename Mat>
-py::object py_kmeanspp_noso(SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
                           Py_ssize_t lspp, bool use_exponential_skips,
                           py::object weights)
     {
-        if(gamma_beta <= 0.) {
+        if(gamma_beta < 0.) {
             gamma_beta = 1. / smw.columns();
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
+        } else if(gamma_beta == 0.) {
+            std::fprintf(stderr, "Note: beta prior set to 0; this may yield nans in some cases\n");
         }
         const void *wptr = nullptr;
         int kind = -1;
@@ -320,7 +323,7 @@ py::object py_kmeanspp_noso(SparseMatrixWrapper &smw, py::object msr, py::int_ k
         const blz::StaticVector<double, 1> prior({gamma_beta});
         auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
             // Note that this has been transposed
-            return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
+            return cmp::msr_with_prior(measure, y, x, prior, psum, sum(y), sum(x));
         };
         py::array_t<uint32_t> ret(ki);
         py::object retasn = py::none();

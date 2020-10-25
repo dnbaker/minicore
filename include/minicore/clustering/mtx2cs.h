@@ -85,37 +85,32 @@ struct SumOpts {
  *
  * TODO: perform 1 or 2 rounds of EM before saving costs, which might be a better heuristic
  */
-template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm, typename WeightT=const double>
-auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
-                         unsigned k, unsigned kmc2_rounds, int lspp, bool use_exponential_skips, const Norm &norm, WeightT *const weights=static_cast<WeightT *>(nullptr)) {
-    using FT = blaze::ElementType_t<MT>;
-    const size_t nr = (*matrix).rows();
+template<typename Matrix, typename RNG, typename Norm=blz::sqrL2Norm, typename WeightT=const double>
+auto get_initial_centers(const Matrix &matrix, RNG &rng,
+                         unsigned k, unsigned kmc2_rounds, int lspp, bool use_exponential_skips, const Norm &norm, WeightT *const weights=static_cast<WeightT *>(nullptr))
+{
+    using FT = double;
+    const size_t nr = matrix.rows();
     std::vector<uint32_t> indices, asn;
     blz::DV<FT> costs(nr);
-    if(kmc2_rounds == -1u) {
-        std::fprintf(stderr, "[%s] Performing streaming kmeanspp\n", __func__);
-        std::vector<FT> fcosts;
-        std::tie(indices, asn, fcosts) = coresets::reservoir_kmeanspp(matrix, rng, k, norm, weights);
-        //indices = std::move(initcenters);
-        std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
-    } else if(kmc2_rounds > 0) {
+    const auto oracle = [&](auto xind, auto yind) ALWAYS_INLINE {
+        return norm(row(matrix, xind, blz::unchecked), row(matrix, yind, blz::unchecked));
+    };
+    if(kmc2_rounds > 0) {
         std::fprintf(stderr, "[%s] Performing kmc\n", __func__);
-        indices = coresets::kmc2(matrix, rng, k, kmc2_rounds, norm);
+        indices = coresets::kmc2(oracle, rng, nr, k, kmc2_rounds);
 #ifndef NDEBUG
         std::fprintf(stderr, "Got indices of size %zu\n", indices.size());
         for(const auto idx: indices) if(idx > nr) std::fprintf(stderr, "idx %zu > max %zu\n", size_t(idx), nr);
 #endif
         // Return distance from item at reference i to item at j
-        auto oracle = [&](size_t i, size_t j) {
-            return norm(row(*matrix, i, blz::unchecked), row(*matrix, j, blz::unchecked));
-        };
         auto [oasn, ncosts] = coresets::get_oracle_costs(oracle, nr, indices);
         costs = std::move(ncosts);
         asn.assign(oasn.data(), oasn.data() + oasn.size());
     } else {
         std::fprintf(stderr, "[%s] Performing kmeans++\n", __func__);
         std::vector<FT> fcosts;
-        std::tie(indices, asn, fcosts) = coresets::kmeanspp(matrix, rng, k, norm, true, weights, lspp, use_exponential_skips);
+        std::tie(indices, asn, fcosts) = coresets::kmeanspp(oracle, rng, nr, k, weights, lspp, use_exponential_skips);
         //indices = std::move(initcenters);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     }
@@ -123,31 +118,12 @@ auto get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
     return std::make_tuple(indices, asn, costs);
 }
 
-template<typename MT, bool SO, typename RNG, typename Norm=blz::sqrL2Norm, typename WeightT=const double>
-auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rng,
+template<typename Matrix, typename RNG, typename Norm=blz::sqrL2Norm, typename WeightT=const double>
+auto repeatedly_get_initial_centers(const Matrix &matrix, RNG &rng,
                                     unsigned k, unsigned kmc2_rounds, int ntimes, int lspp=0, bool use_exponential_skips=false, const Norm &norm=Norm(),
                                     WeightT *const weights=static_cast<WeightT *>(nullptr))
 {
-    using FT = blaze::ElementType_t<MT>;
-#if 0
-    auto best = get_initial_centers(matrix, rng, k, kmc2_rounds, norm);
-    FT cost_value = blz::sum(std::get<2>(best));
-    for(size_t i = 1; i < ntimes; ++i) {
-        const int tid = omp_get_thread_num();
-        RNG rngc(rng() ^ tid);
-        auto res = get_initial_centers(matrix, rngc, k, kmc2_rounds, norm);
-        auto ncost = blz::sum(std::get<2>(res));
-        if(ncost < cost_value) {
-            OMP_CRITICAL {
-                if(ncost < cost_value) {
-                    best = std::move(res);
-                    cost_value = ncost;
-                }
-            }
-        }
-    }
-    auto [idx, asn, costs] = std::move(best);
-#else
+    using FT = double;
     auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, lspp, use_exponential_skips, norm, weights);
     auto tcost = blz::sum(costs);
     for(;--ntimes > 0;) {
@@ -158,14 +134,13 @@ auto repeatedly_get_initial_centers(const blaze::Matrix<MT, SO> &matrix, RNG &rn
             std::tie(idx, asn, costs, tcost) = std::move(std::tie(_idx, _asn, _costs, ncost));
         }
     }
-#endif
     CType<FT> modcosts(costs.size());
     std::copy(costs.begin(), costs.end(), modcosts.data());
     return std::make_tuple(idx, asn, modcosts); // Return a blaze vector
 }
 
 
-template<typename MT, bool SO, typename FT=blaze::ElementType_t<MT>>
+template<typename MT, bool SO, typename FT=double>
 auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts, FT *weights=nullptr)
 {
     blz::DV<FT, blz::rowVector> pc(1), *pcp = &pc;
@@ -202,35 +177,35 @@ auto m2greedysel(blaze::Matrix<FT, SO> &sm, const SumOpts &opts)
     auto app = jsd::make_probdiv_applicator(*sm, opts.dis, opts.prior, pcp);
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     if(opts.outlier_fraction) {
-        return coresets::kcenter_greedy_2approx_outliers_costs(
+        return coresets::kcenter_greedy_2approx_outliers_costs<decltype(app), double, uint64_t>(
             app, app.size(), rng, opts.k,
             /*eps=*/1.5, opts.outlier_fraction
         );
-    } else return coresets::kcenter_greedy_2approx_costs(app, app.size(), opts.k, rng);
+    } else return coresets::kcenter_greedy_2approx_costs<decltype(app), double, uint64_t>(app, app.size(), opts.k, rng);
 }
 
 template<typename VT, typename IndicesT, typename IndPtrT>
 
 
 std::pair<std::vector<uint64_t>, std::vector<double>>
-m2greedysel(util::CSparseMatrix<VT, IndicesT, IndPtrT> &sm, const SumOpts &opts)
+m2greedysel(util::CSparseMatrix<VT, IndicesT, IndPtrT> &matrix, const SumOpts &opts)
 {
-    blz::DV<std::conditional_t<(sizeof(VT) <= 4), float, double>, blz::rowVector> pc(1, 0.), *pcp = &pc;
+    using FT = std::conditional_t<(sizeof(VT) <= 4), float, double>;
+    blz::DV<FT ,blz::rowVector> pc(1, 0.);
     if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
-    else if(opts.prior == dist::NONE)
-        pcp = nullptr;
-    const double prior_sum = pc[0] * sm.columns(), prior = pc[0];
+    const FT prior_sum = pc[0] * matrix.columns();
+    blz::DV<FT> rsums = util::sum<blaze::rowwise>(matrix);
     auto oracle = [&](size_t x, size_t y) {                                                    
-        cmp::msr_with_prior(opts.dis, row(matrix, y), row(matrix, x), prior, prior_sum, rsums[y], rsums[x]);
+        return cmp::msr_with_prior(opts.dis, row(matrix, y, blz::unchecked), row(matrix, x, blz::unchecked), pc, prior_sum, rsums[y], rsums[x]);
     }; 
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     if(opts.outlier_fraction) {
-        return coresets::kcenter_greedy_2approx_outliers_costs<decltype(oracle), uint64_t, double>(
-            oracle, sm.rows(), rng, opts.k,
+        return coresets::kcenter_greedy_2approx_outliers_costs<decltype(oracle), double, uint64_t>(
+            oracle, matrix.rows(), rng, opts.k,
             /*eps=*/1.5, opts.outlier_fraction
         );
-    } else return coresets::kcenter_greedy_2approx_costs<decltype(oracle), uint64_t, double>(oracle, sm.rows(), opts.k, rng);
+    } else return coresets::kcenter_greedy_2approx_costs<decltype(oracle), double, uint64_t>(oracle, matrix.rows(), opts.k, rng);
 }
 
 

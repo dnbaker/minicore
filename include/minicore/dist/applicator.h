@@ -1951,7 +1951,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         )
                     , FT(0));
                 break;
-            default: throw TODOError("unexpected msr; not yet supported");
+            default: ret = 0.; throw TODOError("unexpected msr; not yet supported");
         }
         return ret;
     } else if constexpr(!blz::IsSparseVector_v<MatrixRowT>) {

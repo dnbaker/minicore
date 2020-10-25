@@ -144,6 +144,8 @@ kcenter_greedy_2approx_outliers_costs(Iter first, Iter end, RNG &rng, size_t k, 
                                       double gamma=0.001,
                                       const Norm &norm=Norm())
 {
+    static_assert(std::is_floating_point_v<FT>, "Sanity check: FT floating point");
+    static_assert(std::is_integral_v<IT>, "Sanity check: IT must be integral");
     auto dm = make_index_dm(first, norm);
     const size_t np = end - first;
     size_t farthestchunksize = std::ceil((1. + eps) * gamma * np);
@@ -181,7 +183,7 @@ kcenter_greedy_2approx_outliers_costs(Iter first, Iter end, RNG &rng, size_t k, 
 }// kcenter_greedy_2approx_outliers_costs
 
 
-template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 auto
 kcenter_greedy_2approx_outliers_costs(Oracle &oracle, size_t np, RNG &rng, size_t k, double eps,

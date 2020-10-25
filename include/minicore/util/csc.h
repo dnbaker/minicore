@@ -202,7 +202,8 @@ struct CSparseVector {
     }
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
-    auto sum() const {return blz::sum(blz::CustomVector<VT,blz::unaligned,blz::unpadded>(data_, n_));}
+    using NCVT = std::remove_const_t<VT>;
+    auto sum() const {return blz::sum(blz::CustomVector<NCVT,blz::unaligned,blz::unpadded>((NCVT *)data_, n_));}
     using CView = SView<VT>;
     using ConstCView = ConstSView<VT>;
     using DataType = VT;
@@ -504,15 +505,33 @@ auto sqrl2Dist(const T1 &lhs, const T2 &rhs) {
     return sqrDist(lhs, rhs);
 }
 
+template<typename T>
+INLINE auto abs_diff(T x, T y) {
+    if constexpr(std::is_unsigned_v<T>) {
+        return std::max(x, y) - std::min(x, y);
+    } else {
+        return std::abs(x - y);
+    }
+}
+
+template<typename T>
+INLINE auto abs(T x) {
+    if constexpr(std::is_unsigned_v<T>) {
+        return x;
+    } else {
+        return std::abs(x);
+    }
+}
+
 
 template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l1Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, TF> &rhs) {
     if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
     std::common_type_t<VT1, blaze::ElementType_t<VT2>> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), (*rhs).begin(), (*rhs).end(),
-                                 [&ret](auto, auto lhv, auto rhv) {ret += std::abs(lhv - rhv);},
-                                 [&ret](auto, auto rhv) {ret += std::abs(rhv);},
-                                 [&ret](auto, auto lhv) {ret += std::abs(lhv);});
+                                 [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
+                                 [&ret](auto, auto rhv) {ret += abs(rhv);},
+                                 [&ret](auto, auto lhv) {ret += abs(lhv);});
     return ret;
 }
 template<typename VT1, typename IT1, typename VT2, bool TF>
@@ -524,9 +543,9 @@ auto l1Dist(const ProdCSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT
     if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
     std::common_type_t<VT1, blz::ElementType_t<VT2>> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), (*rhs).begin(), (*rhs).end(),
-                                 [&ret](auto, auto lhv, auto rhv) {ret += std::abs(lhv - rhv);},
-                                 [&ret](auto, auto rhv) {ret += std::abs(rhv);},
-                                 [&ret](auto, auto lhv) {ret += std::abs(lhv);});
+                                 [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
+                                 [&ret](auto, auto rhv) {ret += abs(rhv);},
+                                 [&ret](auto, auto lhv) {ret += abs(lhv);});
     return ret;
 }
 template<typename VT1, typename IT1, typename VT2, typename IT2>
@@ -534,9 +553,9 @@ auto l1Dist(const CSparseVector<VT1, IT1> &lhs, const CSparseVector<VT2, IT2> &r
     if(lhs.size() != rhs.size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
     std::common_type_t<VT1, VT2> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
-                                 [&ret](auto, auto lhv, auto rhv) {ret += std::abs(lhv - rhv);},
-                                 [&ret](auto, auto rhv) {ret += std::abs(rhv);},
-                                 [&ret](auto, auto lhv) {ret += std::abs(lhv);});
+                                 [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
+                                 [&ret](auto, auto rhv) {ret += abs(rhv);},
+                                 [&ret](auto, auto lhv) {ret += abs(lhv);});
     return ret;
 }
 template<typename VT1, typename IT1, typename VT2, typename IT2>
@@ -544,9 +563,9 @@ auto l1Dist(const ProdCSparseVector<VT1, IT1> &lhs, const CSparseVector<VT2, IT2
     if(lhs.size() != rhs.size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
     std::common_type_t<VT1, VT2> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
-                                 [&ret](auto, auto lhv, auto rhv) {ret += std::abs(lhv - rhv);},
-                                 [&ret](auto, auto rhv) {ret += std::abs(rhv);},
-                                 [&ret](auto, auto lhv) {ret += std::abs(lhv);});
+                                 [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
+                                 [&ret](auto, auto rhv) {ret += abs(rhv);},
+                                 [&ret](auto, auto lhv) {ret += abs(lhv);});
     return ret;
 }
 template<typename VT1, typename IT1, typename VT2, typename IT2>
@@ -558,9 +577,9 @@ std::common_type_t<VT1, VT2> l1Dist(const ProdCSparseVector<VT1, IT1> &lhs, cons
     if(lhs.size() != rhs.size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
     std::common_type_t<VT1, VT2> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
-                                 [&ret](auto, auto lhv, auto rhv) {ret += std::abs(lhv - rhv);},
-                                 [&ret](auto, auto rhv) {ret += std::abs(rhv);},
-                                 [&ret](auto, auto lhv) {ret += std::abs(lhv);});
+                                 [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
+                                 [&ret](auto, auto rhv) {ret += abs(rhv);},
+                                 [&ret](auto, auto lhv) {ret += abs(lhv);});
     return ret;
 }
 template<typename VT1, typename IT1, typename VT2, bool TF>
@@ -736,20 +755,23 @@ INLINE auto sum(const CSparseMatrix<VT, IT, IPtrT> &sm) {
 }
 
 template<typename VT, typename IT>
+INLINE auto sum(const ProdCSparseVector<VT, IT> &sm) {
+    return sm.sum();
+}
+template<typename VT, typename IT>
 INLINE auto sum(const CSparseVector<VT, IT> &sm) {
     return sm.sum();
 }
 
 template<bool SO, typename VT, typename IT, typename IPtrT, typename RVT=VT>
-inline auto sum(const CSparseMatrix<VT, IT, IPtrT> &sm) {
+inline decltype(auto) sum(const CSparseMatrix<VT, IT, IPtrT> &sm) {
     if constexpr(SO == blz::rowwise) {
-        blaze::DynamicVector<RVT, blz::columnVector> ret = blaze::generate(
+        return blaze::generate(
             sm.rows(),[smd=sm.data_, ip=sm.indptr_](auto x) {
                 return blz::sum(blz::CustomVector<VT, blaze::unaligned, blaze::unpadded>(
                     smd + ip[x], ip[x + 1] - ip[x]));
             }
         );
-        return ret;
     } else {
         throw NotImplementedError("Not supported: columnwise sums\n");
     }
@@ -772,6 +794,10 @@ decltype(auto) assign(blaze::Vector<VT, SO> &lhs, const CSparseVector<SVT, SVI> 
 
 template<typename VT, typename IT, typename IPtrT>
 constexpr inline size_t nonZeros(const CSparseMatrix<VT, IT, IPtrT> &x) {
+    return x.nnz();
+}
+template<typename VT, typename IT>
+constexpr inline size_t nonZeros(const ProdCSparseVector<VT, IT> &x) {
     return x.nnz();
 }
 template<typename VT, typename IT>
