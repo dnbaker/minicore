@@ -206,23 +206,24 @@ py::object __py_cluster_from_centers(const Matrix &smw,
     blz::DV<double> centersums = blaze::generate(k, [&dvecs](auto x) {
         return blz::sum(dvecs[x]);
     });
-    blz::DV<double> costs = blaze::generate(smw.rows(), [&](size_t idx) {
-        double bestcost;
-        uint32_t bestind;
-        smw.perform([&](auto &mat) {
-            auto r = row(mat, idx);
-            const double rsum = sum(r);
-            bestind = 0;
-            auto c = cmp::msr_with_prior(measure, r, dvecs[0], prior, psum, rsum, centersums[0]);
-            for(unsigned j = 1; j < k; ++j) {
-                auto nextc = cmp::msr_with_prior(measure, r, dvecs[j], prior, psum, rsum, centersums[j]);
-                if(nextc < c)
-                    c = nextc, bestind = j;
-            }
-            bestcost = c;
+    blz::DV<double> costs;
+    smw.perform([&](auto &mat) {
+        costs = blaze::generate(mat.rows(), [&](size_t idx) {
+            double bestcost;
+            uint32_t bestind;
+                auto r = row(mat, idx);
+                const double rsum = sum(r);
+                bestind = 0;
+                auto c = cmp::msr_with_prior(measure, r, dvecs[0], prior, psum, rsum, centersums[0]);
+                for(unsigned j = 1; j < k; ++j) {
+                    auto nextc = cmp::msr_with_prior(measure, r, dvecs[j], prior, psum, rsum, centersums[j]);
+                    if(nextc < c)
+                        c = nextc, bestind = j;
+                }
+                bestcost = c;
+            asn[idx] = bestind;
+            return bestcost;
         });
-        asn[idx] = bestind;
-        return bestcost;
     });
     if(weights.is_none()) {
         return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);

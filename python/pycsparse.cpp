@@ -50,17 +50,17 @@ void init_pycsparse(py::module &m) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
         double *wptr = nullptr;
-        float *fwptr = nullptr;
+        blz::DV<double> tmpw;
         if(py::isinstance<py::array>(weights)) {
             auto inf = py::cast<py::array>(weights).request();
             switch(inf.format.front()) {
                 case 'd': wptr = (double *)inf.ptr; break;
-                case 'f': fwptr = (float *)inf.ptr; break;
+                case 'f': tmpw = blz::make_cv((float *)inf.ptr, smw.rows()); wptr = tmpw.data(); break;
                 default: throw std::invalid_argument("Wrong format weights");
             }
         }
         auto lhs = std::tie(centers, asn, dc);
-        smw.perform([&](auto &x) {if(wptr) lhs = minicore::m2d2(x, so, wptr); else lhs = minicore::m2d2(x, so, fwptr);});
+        smw.perform([&](auto &x) {lhs = minicore::m2d2(x, so, wptr);});
         py::array_t<uint64_t> ret(centers.size());
         py::array_t<uint32_t> retasn(smw.rows());
         py::array_t<double> costs(smw.rows());
