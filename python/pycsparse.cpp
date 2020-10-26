@@ -2,6 +2,7 @@
 #include "smw.h"
 
 void init_pycsparse(py::module &m) {
+#if 0
     py::class_<PyCSparseMatrix>(m, "CSparseMatrix").def(py::init<py::object>(), py::arg("sparray"))
     .def("__str__", [](const PyCSparseMatrix &x) {return std::string("CSparseMatrix, ") + std::to_string(x.rows()) + "x" + std::to_string(x.columns()) + ", " + std::to_string(x.nnz());})
     .def("columns", [](const PyCSparseMatrix &x) {return x.columns();})
@@ -83,4 +84,5 @@ void init_pycsparse(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("smw"), py::arg("sumopts"), py::arg("weights") = py::none());
+#endif
 }

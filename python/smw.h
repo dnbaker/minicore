@@ -77,7 +77,7 @@ public:
             matrix_ = csc2sparse<double>(CSCMatrixView<IpT, IdxT, DataT>(indptr, idx, data, nnz, ydim, xdim));
     }
     SparseMatrixWrapper(py::object spmat, py::object skip_empty_py, py::object use_float_py) {
-        if py::isinstance<py::str>(spmat) {
+        if(py::isinstance<py::str>(spmat)) {
             *this = SparseMatrixWrapper(spmat.cast<std::string>());
             return;
         }
