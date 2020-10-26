@@ -71,6 +71,7 @@ void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &
     }
     ctr *= wsum;
 }
+
 template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT>
 void set_center_l2(CtrT &center, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asp, size_t nasn, WeightT *weights, double eps) {
     util::geomedian(mat, center, asp, nasn, weights, eps);

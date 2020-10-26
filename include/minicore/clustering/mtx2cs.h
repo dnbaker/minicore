@@ -185,10 +185,7 @@ auto m2greedysel(blaze::Matrix<FT, SO> &sm, const SumOpts &opts)
 }
 
 template<typename VT, typename IndicesT, typename IndPtrT>
-
-
-std::pair<std::vector<uint64_t>, std::vector<double>>
-m2greedysel(util::CSparseMatrix<VT, IndicesT, IndPtrT> &matrix, const SumOpts &opts)
+std::pair<std::vector<uint64_t>, std::vector<double>> m2greedysel(util::CSparseMatrix<VT, IndicesT, IndPtrT> &matrix, const SumOpts &opts)
 {
     using FT = std::conditional_t<(sizeof(VT) <= 4), float, double>;
     blz::DV<FT ,blz::rowVector> pc(1, 0.);
@@ -208,5 +205,32 @@ m2greedysel(util::CSparseMatrix<VT, IndicesT, IndPtrT> &matrix, const SumOpts &o
     } else return coresets::kcenter_greedy_2approx_costs<decltype(oracle), double, uint64_t>(oracle, matrix.rows(), opts.k, rng);
 }
 
+template<typename VT, typename IndicesT, typename IndPtrT, typename FT=double>
+auto m2d2(const util::CSparseMatrix<VT, IndicesT, IndPtrT> &matrix, const SumOpts &opts, FT *weights=static_cast<FT *>(nullptr))
+{
+    blz::DV<FT, blz::rowVector> pc(1);
+    if(opts.prior == dist::DIRICHLET) pc[0] = 1.;
+    else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
+    const FT prior_sum = pc[0] * matrix.columns();
+    blz::DV<FT> rsums = util::sum<blaze::rowwise>(matrix);
+    auto oracle = [&](size_t x, size_t y) {                                                    
+        return cmp::msr_with_prior(opts.dis, row(matrix, y, blz::unchecked), row(matrix, x, blz::unchecked), pc, prior_sum, rsums[y], rsums[x]);
+    }; 
+    wy::WyRand<uint64_t, 2> rng(opts.seed);
+    auto [centers, asn, costs] = coresets::kmeanspp(oracle, rng, matrix.rows(), opts.k, weights, opts.use_exponential_skips);
+    auto csum = blz::sum(costs);
+    for(unsigned i = 0; i < opts.extra_sample_tries; ++i) {
+        auto [centers2, asn2, costs2] = coresets::kmeanspp(oracle, rng, matrix.rows(), opts.k, weights, opts.use_exponential_skips);
+        if(auto csum2 = blz::sum(costs2); csum2 < csum) {
+            std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
+        }
+    }
+    if(opts.lspp > 0) {
+        localsearchpp_rounds(oracle, rng, costs, centers, asn, costs.size(), opts.lspp, weights);
+    }
+    CType<FT> modcosts(costs.size());
+    std::copy(costs.begin(), costs.end(), modcosts.begin());
+    return std::make_tuple(centers, asn, costs);
+}
 
 } // namespace minicore

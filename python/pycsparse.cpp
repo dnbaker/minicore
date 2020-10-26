@@ -15,7 +15,7 @@ void init_pycsparse(py::module &m) {
        py::arg("opts"),
        py::arg("weights") = py::none()
     );
-    m.def("kmeanspp",  [](PyCSparseMatrix &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+    m.def("kmeanspp",  [](const PyCSparseMatrix &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
                           Py_ssize_t lspp, bool use_exponential_skips,
                           py::object weights) -> py::object
     {
@@ -39,11 +39,12 @@ void init_pycsparse(py::module &m) {
         smw.perform([&](auto &matrix) {
             std::tie(centers, dret) = m2greedysel(matrix, so);
         });
-        auto ret = py::array(py::dtype(size2dtype(nr)), std::vector<Py_ssize_t>{nr});
+        auto dtstr = size2dtype(nr);
+        auto ret = py::array(py::dtype(dtstr), std::vector<Py_ssize_t>{nr});
         py::array_t<double> costs(smw.rows());
         auto rpi = ret.request(), cpi = costs.request();
         std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
-        switch(size2dtype(nr)[0]) {
+        switch(dtstr[0]) {
             case 'L': std::copy(centers.begin(), centers.end(), (uint64_t *)rpi.ptr); break;
             case 'I': std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr); break;
             case 'H': std::copy(centers.begin(), centers.end(), (uint16_t *)rpi.ptr); break;
@@ -52,4 +53,35 @@ void init_pycsparse(py::module &m) {
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("smw"), py::arg("sumopts"));
+    m.def("d2_select",  [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {
+        std::vector<uint32_t> centers, asn;
+        std::vector<double> dc;
+        double *wptr = nullptr;
+        float *fwptr = nullptr;
+        if(py::isinstance<py::array>(weights)) {
+            auto inf = py::cast<py::array>(weights).request();
+            switch(inf.format.front()) {
+                case 'd': wptr = (double *)inf.ptr; break;
+                case 'f': fwptr = (float *)inf.ptr; break;
+                default: throw std::invalid_argument("Wrong format weights");
+            }
+        }
+        auto lhs = std::tie(centers, asn, dc);
+        if(wptr) {
+            smw.perform([&](auto &x) {lhs = minicore::m2d2(x, so, wptr);});
+        } else {
+            // if fwptr is unset, fwptr is still null and therefore unused,
+            // so this branch includes floating-point weights and non-existent weights
+            smw.perform([&](auto &x) {lhs = minicore::m2d2(x, so, fwptr);});
+        }
+        py::array_t<uint64_t> ret(centers.size());
+        py::array_t<uint32_t> retasn(smw.rows());
+        py::array_t<double> costs(smw.rows());
+        auto rpi = ret.request(), api = retasn.request(), cpi = costs.request();
+        std::copy(centers.begin(), centers.end(), (uint64_t *)rpi.ptr);
+        std::copy(dc.begin(), dc.end(), (double *)cpi.ptr);
+        std::copy(asn.begin(), asn.end(), (uint32_t *)api.ptr);
+        return py::make_tuple(ret, retasn, costs);
+    }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
+       py::arg("smw"), py::arg("sumopts"), py::arg("weights") = py::none());
 }

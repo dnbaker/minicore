@@ -292,7 +292,7 @@ inline py::tuple py_kmeanspp_so(const Mat &smw, const SumOpts &sm, py::object we
                        sm.lspp, sm.use_exponential_skips, weights);
 }
 template<typename Mat>
-py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
                           Py_ssize_t lspp, bool use_exponential_skips,
                           py::object weights)
     {

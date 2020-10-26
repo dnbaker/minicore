@@ -460,8 +460,8 @@ void set_centroids_soft(const Mat &mat,
     costs = blaze::generate(mat.rows(), centers.size(), compute_cost);
 }
 
-template<typename MT, // MatrixType
-         typename FT=DefaultFT<MT>,
+template<typename Matrix, // MatrixType
+         typename FT=DefaultFT<Matrix>,
          typename CtrT=blz::DynamicVector<FT, rowVector>, // Vector Type
          typename CostsT,
          typename PriorT=blz::DynamicVector<FT, rowVector>,
@@ -469,7 +469,7 @@ template<typename MT, // MatrixType
          typename WeightT=CtrT, // Vector Type
          typename=std::enable_if_t<std::is_floating_point_v<FT>>
         >
-auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &mat, // TODO: consider replacing blaze::Matrix with template Mat for CSR matrices
+auto perform_hard_minibatch_clustering(const Matrix &mat, // TODO: consider replacing blaze::Matrix with template Mat for CSR matrices
                                        const dist::DissimilarityMeasure measure,
                                        const PriorT &prior,
                                        std::vector<CtrT> &centers,
@@ -503,14 +503,14 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         case HELLINGER:  ; // Do nothing; this should work
     }
 #if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
-    const blz::DV<FT> rowsums = sum<blz::rowwise>(*mat);
+    const blz::DV<FT> rowsums = sum<blz::rowwise>(mat);
     blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
 #else
-    blz::DV<FT> rowsums((*mat).rows());
+    blz::DV<FT> rowsums((mat).rows());
     blz::DV<FT> centersums(centers.size());
     OMP_PFOR
     for(size_t i = 0; i < rowsums.size(); ++i)
-        rowsums[i] = blz::sum(row(*mat, i, blz::unchecked));
+        rowsums[i] = sum(row(mat, i, blz::unchecked));
     OMP_PFOR
     for(size_t i = 0; i < centers.size(); ++i)
         centersums[i] = blz::sum(centers[i]);
@@ -522,7 +522,6 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
     static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) {
-        assert(size_t(id) < (*mat).rows());
         auto mr = row(mat, id, blaze::unchecked);
         const auto &ctr = centers[cid];
         const auto rowsum = rowsums[id];
@@ -534,21 +533,18 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         FT ret;
         switch(measure) {
 
-            case SQRL2: ret = blz::sqrDist(ctr, mr); break;
-
-            // Discrete Probability Distribution Measures
-            case TVD:       ret = .5 * blz::sum(blz::abs(wctr - mrmult)); break;
+            case SQRL2: ret = sqrDist(ctr, mr); break;
 
             // Bregman divergences + convex combinations thereof, and Bhattacharyya
+            case TVD:
             case HELLINGER:
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
             case POISSON: case JSD: case JSM:
             case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
             case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:
             case REVERSE_POISSON: case REVERSE_MKL:
-                ret = cmp::msr_with_prior(measure, mr, ctr, prior, prior_sum, rowsum, centersum); break;
             case COSINE_DISTANCE:
-                ret = std::acos(dot(mr, ctr) * (1. / (l2Norm(mr) * l2Norm(ctr)))) * PI_INV;
+                ret = cmp::msr_with_prior(measure, mr, ctr, prior, prior_sum, rowsum, centersum); break;
                 break;
             default: {
                 const auto msg = std::string("Unsupported measure ") + msr2str(measure) + ", " + std::to_string((int)measure);
@@ -588,7 +584,7 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
         }
     };
     wy::WyRand<std::make_unsigned_t<IT>> rng(seed);
-    schism::Schismatic<std::make_unsigned_t<IT>> div((*mat).rows());
+    schism::Schismatic<std::make_unsigned_t<IT>> div((mat).rows());
     blz::DV<IT> sampled_indices(mbsize);
     //blz::DV<FT> sampled_costs(mbsize);
     blz::DV<FT> center_wsums(k);
@@ -630,9 +626,9 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
                         } else {
                             *wc = costs * blz::make_cv(weights->data(), np);
                         }
-                        ctr = row(*mat, reservoir_simd::sample(wc->data(), np, rngv));
+                        clustering::set_center(ctr, row(mat, reservoir_simd::sample(wc->data(), np, rngv)));
                     } else {
-                        ctr = row(*mat, reservoir_simd::sample(costs.data(), np, rngv));
+                        clustering::set_center(ctr, row(mat, reservoir_simd::sample(costs.data(), np, rngv)));
                     }
                     centersums[fidx] = blz::sum(ctr);
                 }
@@ -714,20 +710,8 @@ auto perform_hard_minibatch_clustering(const blaze::Matrix<MT, blz::rowMajor> &m
             auto asnptr = assigned[i].data();
             const auto asnsz = assigned[i].size();
             if(!asnsz) continue;
-            auto rowsel = rows(*mat, asnptr, asnsz);
-            if(weights) {
-                if constexpr(blaze::IsVector_v<WeightT>) {
-                    auto welements = blaze::elements(*weights, asnptr, asnsz);
-                    centers[i] = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(welements, (*mat).columns())) * eta;
-                } else {
-                    auto wcv = blz::make_cv(weights->data(), np);
-                    auto welements = elements(wcv, asnptr, asnsz);
-                    centers[i] = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(welements, (*mat).columns())) * eta;
-                }
-            } else {
-                centers[i] = blaze::mean<blaze::columnwise>(rowsel);
-            }
-            centersums[i] = blz::sum(centers[i]);
+            clustering::set_center(centers[i], mat, asnptr, asnsz, weights);
+            centersums[i] = sum(centers[i]);
         }
         
         // Set the new centers

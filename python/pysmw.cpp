@@ -361,25 +361,17 @@ void init_smw(py::module &m) {
         }
         auto lhs = std::tie(centers, asn, dc);
         if(wptr) {
-            if(smw.is_float())
-                lhs = minicore::m2d2(smw.getfloat(), so, wptr);
-            else
-                lhs = minicore::m2d2(smw.getdouble(), so, wptr);
-        } else if(fwptr) {
-            if(smw.is_float())
-                lhs = minicore::m2d2(smw.getfloat(), so, fwptr);
-            else
-                lhs = minicore::m2d2(smw.getdouble(), so, fwptr);
+            smw.perform([&](auto &x) {lhs = minicore::m2d2(x, so, wptr);});
         } else {
-            if(smw.is_float())
-                lhs = minicore::m2d2(smw.getfloat(), so);
-            else
-                lhs = minicore::m2d2(smw.getdouble(), so);
+            // if fwptr is unset, fwptr is unused because is null,
+            // so this branch includes floating-point weights and non-existent weights
+            smw.perform([&](auto &x) {lhs = minicore::m2d2(x, so, fwptr);});
         }
-        py::array_t<uint32_t> ret(centers.size()), retasn(smw.rows());
+        py::array_t<uint64_t> ret(centers.size());
+        py::array_t<uint32_t> retasn(smw.rows());
         py::array_t<double> costs(smw.rows());
         auto rpi = ret.request(), api = retasn.request(), cpi = costs.request();
-        std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
+        std::copy(centers.begin(), centers.end(), (uint64_t *)rpi.ptr);
         std::copy(dc.begin(), dc.end(), (double *)cpi.ptr);
         std::copy(asn.begin(), asn.end(), (uint32_t *)api.ptr);
         return py::make_tuple(ret, retasn, costs);
