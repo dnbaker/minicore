@@ -83,7 +83,7 @@ struct PyCSparseMatrix {
     }
     template<typename DataT, typename IndicesT, typename Func> INLINE void __perform(const Func &func) const {
 #define PERF3(c, IPtr) \
-            case c: {auto smat = util::make_csparse_matrix((DataT *)datap_, (IndicesT *)indicesp_, (IndPtrT *)indptrp_, nr_, nc_, nnz_); func(smat);} break
+            case c: {auto smat = util::make_csparse_matrix((DataT *)datap_, (IndicesT *)indicesp_, (IPtr *)indptrp_, nr_, nc_, nnz_); func(smat);} break
         switch(indptr_t_.front()) {
             PERF3('L', uint64_t);
             PERF3('I', uint32_t);
