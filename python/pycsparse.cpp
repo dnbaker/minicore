@@ -2,7 +2,6 @@
 #include "smw.h"
 
 void init_pycsparse(py::module &m) {
-
     py::class_<PyCSparseMatrix>(m, "CSparseMatrix").def(py::init<py::object>(), py::arg("sparray"))
     .def("__str__", [](const PyCSparseMatrix &x) {return std::string("CSparseMatrix, ") + std::to_string(x.rows()) + "x" + std::to_string(x.columns()) + ", " + std::to_string(x.nnz());})
     .def("columns", [](const PyCSparseMatrix &x) {return x.columns();})
