@@ -8,11 +8,6 @@
 dist::DissimilarityMeasure assure_dm(py::object obj);
 
 struct SparseMatrixWrapper {
-    SparseMatrixWrapper(std::string path, bool use_float=true) {
-        blaze::Archive<std::ifstream> arch(path);
-        if(use_float) arch >> this->getfloat();
-                else  arch >> this->getdouble();
-    }
     void tofile(std::string path) {
         blaze::Archive<std::ofstream> arch(path);
         perform([&arch](auto &x) {arch << x;});
@@ -34,6 +29,14 @@ private:
         }
     }
 public:
+    SparseMatrixWrapper(std::string path, bool use_float=true) {
+        blaze::Archive<std::ifstream> arch(path);
+        try {
+            arch >> this->getfloat();
+        } catch(...) {
+            arch >> this->getdouble();
+        }
+    }
     template<typename FT>
     SparseMatrixWrapper(blz::SM<FT> &&mat): matrix_(std::move(mat)) {}
     blz::SM<float> &getfloat() { return std::get<SMF>(matrix_);}
@@ -74,6 +77,10 @@ public:
             matrix_ = csc2sparse<double>(CSCMatrixView<IpT, IdxT, DataT>(indptr, idx, data, nnz, ydim, xdim));
     }
     SparseMatrixWrapper(py::object spmat, py::object skip_empty_py, py::object use_float_py) {
+        if py::isinstance<py::str>(spmat) {
+            *this = SparseMatrixWrapper(spmat.cast<std::string>());
+            return;
+        }
         py::array indices = spmat.attr("indices"), indptr = spmat.attr("indptr"), data = spmat.attr("data");
         py::tuple shape = py::cast<py::tuple>(spmat.attr("shape"));
         const bool use_float = py::cast<bool>(use_float_py), skip_empty = py::cast<bool>(skip_empty_py);

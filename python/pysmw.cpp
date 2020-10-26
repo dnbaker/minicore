@@ -23,7 +23,7 @@ dist::DissimilarityMeasure assure_dm(py::object obj) {
 void init_smw(py::module &m) {
     py::class_<SparseMatrixWrapper>(m, "SparseMatrixWrapper")
     .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=true)
-    .def(py::init<std::string, bool>(), py::arg("path"), py::arg("use_float") = true)
+    .def(py::init<std::string>(), py::arg("path"))
     .def("is_float", [](SparseMatrixWrapper &wrap) {
         return wrap.is_float();
     })
