@@ -48,8 +48,16 @@ py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
     throw std::invalid_argument("Weights were not float, double, or None.");
 }
 
+py::object cluster1_smw(const SparseMatrixWrapper &smw, py::int_ k, double beta,
+                 py::object msr, py::object weights, double eps,
+                 int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
+{
+    return func1(smw, k, beta, msr, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
+}
+
+
 void init_clustering(py::module &m) {
-    m.def("cluster", func1,
+    m.def("cluster", cluster1_smw,
     py::arg("smw"), py::arg("k")=py::int_(10), py::arg("betaprior") = -1., py::arg("msr") = 5, py::arg("weights") = py::none(),
     py::arg("ntimes") = 2,
     py::arg("eps") = 1e-10, py::arg("seed") = 13,

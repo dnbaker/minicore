@@ -124,16 +124,12 @@ py::dict cpp_pycluster(const Matrix &mat, unsigned int k, double beta,
     std::fprintf(stderr, "[%s] beginning cpp_pycluster\n", __PRETTY_FUNCTION__);
     blz::DV<FT> prior{FT(beta)};
     const FT psum = beta * mat.columns();
-    auto cmp = [measure, psum,&prior](const auto &x, const auto &y) {
-        // Note that this has been transposed
-        return cmp::msr_with_prior(measure, y, x, prior, psum, sum(y), sum(x));
-    };
     if(measure == dist::L1 || measure == dist::L2 || measure == dist::BHATTACHARYYA_METRIC) {
         std::fprintf(stderr, "D2 sampling may not provide a bicriteria approximation alone. TODO: use more expensive metric clustering for better objective functions.\n");
     }
     wy::WyRand<uint32_t> rng(seed);
     auto functor = [&](const auto &x, const auto &y) {
-        return cmp::msr_with_prior(measure, row(mat, y, blz::unchecked), row(mat, x, blz::unchecked), prior, psum, sum(y), sum(x));
+        return cmp::msr_with_prior(measure, y, x, prior, psum, sum(y), sum(x));
     };
     std::fprintf(stderr, "About to try to get initial centers\n");
     auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, kmcrounds, ntimes, lspprounds, use_exponential_skips, functor);

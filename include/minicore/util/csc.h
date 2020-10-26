@@ -197,13 +197,17 @@ struct CSparseVector {
     IT *indices_;
     size_t n_, dim_;
 
+    std::unique_ptr<VT> sum_;
+
     CSparseVector(VT *data, IT *indices, size_t n, size_t dim=-1): data_(data), indices_(indices), n_(n), dim_(dim)
     {
     }
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
     using NCVT = std::remove_const_t<VT>;
-    auto sum() const {return blz::sum(blz::CustomVector<NCVT,blz::unaligned,blz::unpadded>((NCVT *)data_, n_));}
+    VT sum() const {
+        return blz::sum(blz::CustomVector<NCVT,blz::unaligned,blz::unpadded>((NCVT *)data_, n_));
+    }
     using CView = SView<VT>;
     using ConstCView = ConstSView<VT>;
     using DataType = VT;
@@ -319,13 +323,15 @@ struct ProdCSparseVector {
     IT *indices_;
     const size_t n_;
     const size_t dim_;
-    const VT prod_;
+    const double prod_;
 
     ProdCSparseVector(const CSparseVector<VT, IT> &ovec, VT prod): data_(ovec.data_), indices_(ovec.indices_), n_(ovec.n_), dim_(ovec.dim_), prod_(prod) {
     }
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
-    auto sum() const {return blz::sum(blz::CustomVector<VT,blz::unaligned,blz::unpadded>(data_, n_)) * prod_;}
+    double sum() const {
+        return blz::sum(blz::CustomVector<VT,blz::unaligned,blz::unpadded>(data_, n_)) * prod_;
+    }
     using ConstCView = ConstSViewMul<VT>;
     using DataType = VT;
     struct ProdCSparseVectorIteratorBase {
@@ -512,6 +518,12 @@ INLINE auto abs_diff(T x, T y) {
     } else {
         return std::abs(x - y);
     }
+}
+
+template<typename T, typename T2>
+INLINE auto abs_diff(T x, T2 y) {
+    using CT = std::common_type_t<T, T2>;
+    return abs_diff(CT(x), CT(y));
 }
 
 template<typename T>
