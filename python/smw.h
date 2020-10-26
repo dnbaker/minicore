@@ -29,7 +29,7 @@ private:
         }
     }
 public:
-    SparseMatrixWrapper(std::string path, bool use_float=true) {
+    SparseMatrixWrapper(std::string path) {
         blaze::Archive<std::ifstream> arch(path);
         try {
             arch >> this->getfloat();
