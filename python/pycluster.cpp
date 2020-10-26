@@ -67,7 +67,7 @@ void init_clustering(py::module &m) {
                     py::object msr, py::object weights, double eps,
                     uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
                     Py_ssize_t reseed_count, bool with_rep) {
-                        return __py_cluster_from_centers(smw, centers, beta, msr, weights, eps, eps, kmeansmaxiter, kmcrounds, ntimes, lspprounds, seed, mbsize, ncheckins, reseed_count, with_rep);
+                        return __py_cluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter, kmcrounds, ntimes, lspprounds, seed, mbsize, ncheckins, reseed_count, with_rep);
                     },
     py::arg("smw"),
     py::arg("centers"),

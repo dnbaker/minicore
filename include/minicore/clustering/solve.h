@@ -519,7 +519,6 @@ auto perform_hard_minibatch_clustering(const Matrix &mat, // TODO: consider repl
     size_t iternum = 0;
     double initcost = std::numeric_limits<double>::max(), cost = initcost, bestcost = cost;
     std::vector<CtrT>  savectrs = centers;
-    static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) {
         auto mr = row(mat, id, blaze::unchecked);

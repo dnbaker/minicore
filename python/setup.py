@@ -68,7 +68,7 @@ extra_compile_args = ['-march=native', '-DNDEBUG',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                       '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',
                       '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
-                      "-DBLAZE_USE_SLEEF=1",
+                      "-DBLAZE_USE_SLEEF=1", "-pipe",
                       '-Wno-deprecated-declarations']
 
 if 'BOOST_DIR' in environ:

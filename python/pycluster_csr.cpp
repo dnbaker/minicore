@@ -1,6 +1,5 @@
 #include "pycluster.h"
 
-
 py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
                  py::object msr, py::object weights, double eps,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
@@ -69,4 +68,4 @@ void init_clustering_csr(py::module &m) {
     py::arg("reseed_count") = Py_ssize_t(5),
     py::arg("with_rep") = true
     );
-} // init_clustering
+} // init_clustering_csr
