@@ -320,7 +320,7 @@ void l1_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret, const 
 }
 
 template<typename MT, bool SO, typename VT, bool TF, typename IT=uint64_t, typename WeightT=blz::DV<double>>
-void l1_median(const blaze::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret, IT *asp=(IT *)nullptr, size_t nasn=0, const WeightT *weights=static_cast<WeightT *>(nullptr)) {
+void l1_median(const blaze::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret, IT *asp, size_t nasn=0, const WeightT *weights=static_cast<WeightT *>(nullptr)) {
     if(!asp) {
         if(weights) {
             weighted_median(data, ret, *weights);

@@ -90,10 +90,10 @@ void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, 
 
 template<typename CtrT, typename MT, bool SO, typename IT, typename WeightT=blz::DV<blz::ElementType_t<MT>>>
 void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nasn, WeightT *w = static_cast<WeightT>(nullptr)) {
-    auto rowsel = rows(mat, asp, nasn);
+    auto rowsel = rows(*mat, asp, nasn);
     if(w) {
         auto elsel = elements(*w, asp, nasn);
-        auto weighted_rows = rowsel % blaze::expand(elsel, mat.columns());
+        auto weighted_rows = rowsel % blaze::expand(elsel, (*mat).columns());
         // weighted sum over total weight -> weighted mean
         ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
     } else ctr = blaze::mean<blaze::columnwise>(rowsel);
@@ -527,7 +527,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         const auto asp = assigned[i].data();
         MINOCORE_VALIDATE(nasn != 0);
         if(nasn == 1) {
-            util::assign(ctrs[i], row(mat, *asp));
+            assign(ctrs[i], row(mat, *asp));
         } else {
             set_center_l2(ctrs[i], mat, asp, nasn, weights, eps);
 #if 0
@@ -602,7 +602,7 @@ void set_centroids_full_mean(const Mat &mat,
                 } while(!costs[r]);
             }
             auto &ctr = ctrs[id];
-            util::assign(ctr, row(mat, r));
+            assign(ctr, row(mat, r));
             ctrsums[id] = sum(ctr);
             costs = std::numeric_limits<FT>::max();
             OMP_PFOR
@@ -641,7 +641,7 @@ void set_centroids_full_mean(const Mat &mat,
         const auto asp = assigned[i].data();
         auto &ctr = ctrs[i];
         if(nasn == 1) {
-            util::assign(ctr, row(mat, *asp));
+            assign(ctr, row(mat, *asp));
         } else {
             set_center(ctr, mat, asp, nasn, weights);
         }

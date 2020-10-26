@@ -527,8 +527,8 @@ auto perform_hard_minibatch_clustering(const Matrix &mat, // TODO: consider repl
         const auto rowsum = rowsums[id];
         const auto centersum = centersums[cid];
         assert(ctr.size() == mr.size());
-        auto mrmult = mr / rowsum;
-        auto wctr = ctr * (1. / centersum);
+        //auto mrmult = mr / rowsum;
+        //auto wctr = ctr * (1. / centersum);
         //assert(measure == dist::JSD); // Temporary: this is only for sanity checking while debugging JSD calculation
         FT ret;
         switch(measure) {
@@ -706,7 +706,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat, // TODO: consider repl
         // 3. Calculate new center
         OMP_PFOR
         for(size_t i = 0; i < centers.size(); ++i) {
-            const FT eta = center_wsums[i];
+            //const FT eta = center_wsums[i];
             auto asnptr = assigned[i].data();
             const auto asnsz = assigned[i].size();
             if(!asnsz) continue;
