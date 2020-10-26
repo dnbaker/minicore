@@ -29,7 +29,7 @@ private:
         }
     }
 public:
-    SparseMatrixWrapper(std::string path, bool use_float=true) {
+    SparseMatrixWrapper(std::string path) {
         blaze::Archive<std::ifstream> arch(path);
         try {
             arch >> this->getfloat();
@@ -77,11 +77,12 @@ public:
             matrix_ = csc2sparse<double>(CSCMatrixView<IpT, IdxT, DataT>(indptr, idx, data, nnz, ydim, xdim));
     }
     SparseMatrixWrapper(py::object spmat, py::object skip_empty_py, py::object use_float_py) {
-        if(py::isinstance<py::str>(spmat)) {
+        if(py::isinstance<py::str>(spmat) || !hasattr(spmat, "indices")) {
             *this = SparseMatrixWrapper(spmat.cast<std::string>());
             return;
         }
-        py::array indices = spmat.attr("indices"), indptr = spmat.attr("indptr"), data = spmat.attr("data");
+        py::array indices = spmat.attr("indices");
+        py::array indptr = spmat.attr("indptr"), data = spmat.attr("data");
         py::tuple shape = py::cast<py::tuple>(spmat.attr("shape"));
         const bool use_float = py::cast<bool>(use_float_py), skip_empty = py::cast<bool>(skip_empty_py);
         size_t xdim = py::cast<size_t>(shape[0]), ydim = py::cast<size_t>(shape[1]);

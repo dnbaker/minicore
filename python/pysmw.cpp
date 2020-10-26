@@ -22,8 +22,8 @@ dist::DissimilarityMeasure assure_dm(py::object obj) {
 }
 void init_smw(py::module &m) {
     py::class_<SparseMatrixWrapper>(m, "SparseMatrixWrapper")
+    .def(py::init<std::string>())
     .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=true)
-    .def(py::init<std::string>(), py::arg("path"))
     .def("is_float", [](SparseMatrixWrapper &wrap) {
         return wrap.is_float();
     })
@@ -449,5 +449,8 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("data"), py::arg("sumopts"));
+    m.def("smat_from_blaze", [](py::object path) {
+         return SparseMatrixWrapper(path.cast<std::string>());
+    }, py::arg("path"));
 
 } // init_smw
