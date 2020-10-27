@@ -1,6 +1,13 @@
 #include "pycsparse.h"
 #include "smw.h"
 
+
+py::object run_kmpp_noso(const PyCSparseMatrix &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+                         Py_ssize_t lspp, bool use_exponential_skips,
+                         py::object weights) {
+    return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, weights);
+}
+
 void init_pycsparse(py::module &m) {
     py::class_<PyCSparseMatrix>(m, "CSparseMatrix").def(py::init<py::object>(), py::arg("sparray"))
     .def("__str__", [](const PyCSparseMatrix &x) {return std::string("CSparseMatrix, ") + std::to_string(x.rows()) + "x" + std::to_string(x.columns()) + ", " + std::to_string(x.nnz());})
@@ -8,18 +15,17 @@ void init_pycsparse(py::module &m) {
     .def("rows", [](const PyCSparseMatrix &x) {return x.rows();})
     .def("nnz", [](const PyCSparseMatrix &x) {return x.nnz();});
 
-     m.def("kmeanspp", [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {return py_kmeanspp_so(smw, so, weights);},
+     m.def("kmeanspp", [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {
+        return run_kmpp_noso(smw, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, so.kmc2_rounds, std::max(int(so.extra_sample_tries) - 1, 0),
+                       so.lspp, so.use_exponential_skips, weights);
+    },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("smw"),
        py::arg("opts"),
        py::arg("weights") = py::none()
     );
-    m.def("kmeanspp",  [](const PyCSparseMatrix &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                          Py_ssize_t lspp, bool use_exponential_skips,
-                          py::object weights) -> py::object
-    {
-        return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, weights);
-    }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
+    m.def("kmeanspp",  run_kmpp_noso,
+       "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
        "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
        py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("betaprior") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1,
        py::arg("lspp") = 0, py::arg("use_exponential_skips") = false,

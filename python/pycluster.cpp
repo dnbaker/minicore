@@ -48,21 +48,25 @@ py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
     throw std::invalid_argument("Weights were not float, double, or None.");
 }
 
+#if 0
 py::object cluster1_smw(const SparseMatrixWrapper &smw, py::int_ k, double beta,
                  py::object msr, py::object weights, double eps,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
 {
     return func1(smw, k, beta, msr, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
 }
+#endif
 
 
 void init_clustering(py::module &m) {
+#if 0
     m.def("cluster", cluster1_smw,
     py::arg("smw"), py::arg("k")=py::int_(10), py::arg("betaprior") = 0., py::arg("msr") = 5, py::arg("weights") = py::none(),
     py::arg("ntimes") = 2,
     py::arg("eps") = 1e-10, py::arg("seed") = 13,
     py::arg("lspprounds") = 1, py::arg("kmcrounds") = 10000, py::arg("kmeansmaxiter") = 1000,
     "Clusters a SparseMatrixWrapper object using settings; set betaprior to < 0 for it to be 1 / ncolumns(). Performs seeding, followed by EM or minibatch k-means");
+#endif
 
     m.def("cluster_from_centers", [](SparseMatrixWrapper &smw, py::object centers, double beta,
                     py::object msr, py::object weights, double eps,

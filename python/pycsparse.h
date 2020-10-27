@@ -45,11 +45,12 @@ struct PyCSparseMatrix {
     // Specialize for Data Types
     template<typename Func> void perform(const Func &func) const {
         switch(data_t_.front()) {
-            case 'B': _perform<uint8_t, Func>(func); break;
+            case 'B': _perform<uint8_t,  Func>(func); break;
             case 'H': _perform<uint16_t, Func>(func); break;
             case 'L': _perform<uint64_t, Func>(func); break;
             case 'I': _perform<unsigned, Func>(func); break;
-            case 'f': _perform<float, Func>(func); break;
+            case 'f': _perform<float,    Func>(func); break;
+            case 'd': _perform<double,   Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
         }
     }
@@ -60,6 +61,7 @@ struct PyCSparseMatrix {
             case 'L': _perform<uint64_t, Func>(func); break;
             case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float, Func>(func); break;
+            case 'd': _perform<double, Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
         }
     }
