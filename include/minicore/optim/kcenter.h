@@ -47,7 +47,7 @@ kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Nor
         if(unlikely(i == newc)) continue;
         distances[i] = dm(newc, i);
     }
-    bestind = reservoir_simd::argmax(distances);
+    bestind = reservoir_simd::argmax(distances, /*mutithread=*/true);
     assert(distances[newc] == 0.);
     if(k == 1) return std::make_pair(centers, distances);
     centers[1] = newc = bestind;
@@ -67,7 +67,7 @@ kcenter_greedy_2approx_costs(Iter first, Iter end, RNG &rng, size_t k, const Nor
             if(dist < ldist)
                 ldist = dist;
         }
-        bestind = reservoir_simd::argmax(distances);
+        bestind = reservoir_simd::argmax(distances, true);
         centers[ci] = newc = bestind;
         distances[newc] = 0.;
     }
@@ -98,7 +98,7 @@ kcenter_greedy_2approx_costs(Oracle &oracle, const size_t np, size_t k, RNG &rng
         }
     }
     if(k == 1) return std::make_pair(centers, distances);
-    newc = reservoir_simd::argmax(distances);
+    newc = reservoir_simd::argmax(distances, true);
     distances[newc] = 0.;
     centers.push_back(newc);
 
@@ -109,7 +109,7 @@ kcenter_greedy_2approx_costs(Oracle &oracle, const size_t np, size_t k, RNG &rng
             auto v = oracle(i, newc);
             if(v < distances[i]) distances[i] = v;
         }
-        IT bestind = reservoir_simd::argmax(distances);
+        IT bestind = reservoir_simd::argmax(distances, true);
         newc = bestind;
 #ifndef NDEBUG
         FT bestcost = distances[bestind];
@@ -144,6 +144,8 @@ kcenter_greedy_2approx_outliers_costs(Iter first, Iter end, RNG &rng, size_t k, 
                                       double gamma=0.001,
                                       const Norm &norm=Norm())
 {
+    static_assert(std::is_floating_point_v<FT>, "Sanity check: FT floating point");
+    static_assert(std::is_integral_v<IT>, "Sanity check: IT must be integral");
     auto dm = make_index_dm(first, norm);
     const size_t np = end - first;
     size_t farthestchunksize = std::ceil((1. + eps) * gamma * np);
@@ -181,7 +183,7 @@ kcenter_greedy_2approx_outliers_costs(Iter first, Iter end, RNG &rng, size_t k, 
 }// kcenter_greedy_2approx_outliers_costs
 
 
-template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm=L2Norm>
 auto
 kcenter_greedy_2approx_outliers_costs(Oracle &oracle, size_t np, RNG &rng, size_t k, double eps,

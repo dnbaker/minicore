@@ -6,6 +6,7 @@
 using blz::unchecked;
 
 using smw_t = SparseMatrixWrapper;
+
 dist::DissimilarityMeasure assure_dm(py::object obj) {
     dist::DissimilarityMeasure ret;
     if(py::isinstance<py::str>(obj)) {
@@ -19,128 +20,18 @@ dist::DissimilarityMeasure assure_dm(py::object obj) {
     if(!dist::is_valid_measure(ret)) throw std::invalid_argument(std::to_string(ret) + " is not a valid measure");
     return ret;
 }
-py::tuple py_kmeanspp(const SparseMatrixWrapper &smw, py::object msr, Py_ssize_t k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                 int lspp,
-                 py::object weights)
-{
-    const void *wptr = nullptr;
-    int kind = -1;
-    const auto mmsr = assure_dm(msr);
-    const size_t nr = smw.rows();
-    std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
-    if(py::isinstance<py::array>(weights)) {
-        auto arr = py::cast<py::array>(weights);
-        auto info = arr.request();
-        if(info.format.size() > 1) throw std::invalid_argument(std::string("Invalid array format: ") + info.format);
-        switch(info.format.front()) {
-            case 'i': case 'u': case 'f': case 'd': kind = info.format.front(); break;
-            default:throw std::invalid_argument(std::string("Invalid array format: ") + info.format + ". Expected 'd', 'f', 'i', or 'u'.\n");
-        }
-        wptr = info.ptr;
-    }
-    std::fprintf(stderr, "ki: %d\n", int(k));
-    wy::WyRand<uint64_t> rng(seed);
-    const auto psum = gamma_beta * smw.columns();
-    const blz::StaticVector<double, 1> prior({gamma_beta});
-    auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
-        // Note that this has been transposed
-        return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
-    };
-    py::array_t<uint32_t> ret(k);
-    int retasnbits;
-    if(k <= 256) {
-        retasnbits = 8;
-        std::fprintf(stderr, "uint8 labels\n");
-    } else if(k <= 63356) {
-        retasnbits = 16;
-        std::fprintf(stderr, "uint16 labels\n");
-    } else if(k <= 0xFFFFFFFF) {
-        retasnbits = 32;
-        std::fprintf(stderr, "uint32 labels\n");
-    } else {
-        retasnbits = 64;
-        std::fprintf(stderr, "uint64 labels. >4 billion centers, are you crazy?\n");
-    }
-    const char *kindstr = retasnbits == 8 ? "B": retasnbits == 16 ? "H": retasnbits == 32 ? "U": "L";
-    py::array retasn(py::dtype(kindstr), std::vector<Py_ssize_t>{{Py_ssize_t(nr)}});
-    auto retai = retasn.request();
-    auto rptr = (uint32_t *)ret.request().ptr;
-    py::array_t<float> costs(smw.rows());
-    auto costp = (float *)costs.request().ptr;
-    try {
-    smw.perform([&](auto &x) {
-        //using RT = decltype(repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, cmp));
-        auto sol =
-            kind == -1 ?
-            repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp)
-            : kind == 'f' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp, (const float *)wptr)
-            : kind == 'd' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp, (const double *)wptr)
-            : kind == 'u' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp, (const unsigned *)wptr)
-            : repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, cmp, (const int *)wptr);
-        auto &[lidx, lasn, lcosts] = sol;
-        for(size_t i = 0; i < lidx.size(); ++i) {
-            std::fprintf(stderr, "selected point %u for center %zu\n", lidx[i], i);
-            if(lidx[i] > nr) std::fprintf(stderr, "Warning: 'center' id is > # centers\n");
-        }
-        for(size_t i = 0; i < lasn.size(); ++i) {
-            if(lasn[i] > nr) {
-                std::fprintf(stderr, "asn %zu is %u (> nr)\n", i, unsigned(lasn[i]));
-            }
-        }
-        assert(lidx.size() == ki);
-        assert(lasn.size() == smw.rows());
-        switch(retasnbits) {
-            case 8: {
-                auto raptr = (uint8_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
-            case 16: {
-                auto raptr = (uint16_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
-            case 32: {
-                auto raptr = (uint32_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
-            case 64: {
-                auto raptr = (uint64_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
-            default: __builtin_unreachable();
-        }
-        OMP_PFOR
-        for(size_t i = 0; i < lcosts.size(); ++i)
-            costp[i] = lcosts[i];
-        for(size_t i = 0; i < lidx.size(); ++i)
-            rptr[i] = lidx[i];
-    });
-    } catch(const TODOError &) {
-        throw std::invalid_argument("Unsupported measure");
-    } catch(const std::runtime_error &ex) {
-        throw static_cast<std::exception>(ex);
-    } catch(...) {throw std::invalid_argument("No idea what exception was thrown, but it was unrecoverable.");}
-    return py::make_tuple(ret, retasn, costs);
-}
-
-py::tuple py_kmeanspp_so(const SparseMatrixWrapper &smw, const SumOpts &sm, py::object weights) {
-    return py_kmeanspp(smw, py::int_((int)sm.dis), sm.k, sm.gamma, sm.seed, sm.kmc2_rounds, std::max(sm.extra_sample_tries - 1, 0u),
-                       sm.lspp, weights);
-}
-
 void init_smw(py::module &m) {
     py::class_<SparseMatrixWrapper>(m, "SparseMatrixWrapper")
+    .def(py::init<>())
     .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=true)
-    .def(py::init<std::string, bool>(), py::arg("path"), py::arg("use_float") = true)
     .def("is_float", [](SparseMatrixWrapper &wrap) {
         return wrap.is_float();
+    })
+    .def("tofile", [](const SparseMatrixWrapper &wrap, std::string path) {
+        wrap.tofile(path);
+    })
+    .def("fromfile", [](SparseMatrixWrapper &wrap, std::string path) {
+        wrap.fromfile(path);
     })
     .def("is_double", [](SparseMatrixWrapper &wrap) {
         return wrap.is_double();
@@ -216,6 +107,7 @@ void init_smw(py::module &m) {
 #define DTCASE(chr, type) case chr: {if(wrap.is_float()) return blz::SM<float>(blaze::rows(wrap.getfloat(), (type *)inf.ptr, inf.size));\
                                      else               return blz::SM<double>(blaze::rows(wrap.getdouble(), (type *)inf.ptr, inf.size));}
             DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+            DTCASE('l', int64_t) DTCASE('i', int32_t) DTCASE('h', int16_t) DTCASE('b', int8_t)
  #undef DTCASE
             default: throw std::invalid_argument("Wrong dtype");
             }
@@ -225,7 +117,8 @@ void init_smw(py::module &m) {
             switch(inf.format[0]) {
 #define DTCASE(chr, type) case chr: {if(wrap.is_float()) return blz::SM<float>(blaze::columns(wrap.getfloat(), (type *)inf.ptr, inf.size));\
                                      else               return blz::SM<double>(blaze::columns(wrap.getdouble(), (type *)inf.ptr, inf.size));}
-                DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+            DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+            DTCASE('l', int64_t) DTCASE('i', int32_t) DTCASE('h', int16_t) DTCASE('b', int8_t)
  #undef DTCASE
                 default: throw std::invalid_argument("Wrong dtype");
             }
@@ -238,6 +131,7 @@ void init_smw(py::module &m) {
 #define DTCASE(chr, type) case chr: if(wrap.is_float()) return blz::SM<float>(columns(rows(wrap.getfloat(), (type *)rinf.ptr, rinf.size), (type *)cinf.ptr, cinf.size));\
                                     else                return blz::SM<double>(columns(rows(wrap.getdouble(), (type *)rinf.ptr, rinf.size), (type *)cinf.ptr, cinf.size));
                 DTCASE('L', uint64_t) DTCASE('I', uint32_t) DTCASE('H', uint16_t) DTCASE('B', uint8_t)
+                DTCASE('l', int64_t) DTCASE('i', int32_t) DTCASE('h', int16_t) DTCASE('b', int8_t)
 #undef DTCASE
                 default: throw std::invalid_argument("Wrong dtype");
             }
@@ -389,6 +283,7 @@ void init_smw(py::module &m) {
     .def_readwrite("soft", &SumOpts::soft)
     .def_readwrite("outlier_fraction", &SumOpts::outlier_fraction)
     .def_readwrite("discrete_metric_search", &SumOpts::discrete_metric_search)
+    .def_readwrite("use_exponential_skips", &SumOpts::use_exponential_skips)
     .def_property("cs",
             [](SumOpts &obj) -> py::str {
                 return std::string(coresets::sm2str(obj.sm));
@@ -437,111 +332,22 @@ void init_smw(py::module &m) {
             obj.prior = (dist::Prior)x;
         }
     });
+    static constexpr const char *kmeans_doc = 
+        "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
+       "\nSet nkmc to > 0 to use kmc2 instead of full D2 sampling, which is faster but may yield a slightly lower-quality result.\n"
+        "One can accelerate sampling via SIMD (default) or exponential skips via use_exponential_skips=True\n";
     m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                          Py_ssize_t lspp,
+                          Py_ssize_t lspp, bool use_exponential_skips,
                           py::object weights) -> py::object
     {
-        if(gamma_beta <= 0.) {
-            gamma_beta = 1. / smw.columns();
-            std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
-        }
-        const void *wptr = nullptr;
-        int kind = -1;
-        const auto mmsr = assure_dm(msr);
-        const size_t nr = smw.rows();
-        std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
-        if(py::isinstance<py::array>(weights)) {
-            auto arr = py::cast<py::array>(weights);
-            auto info = arr.request();
-            if(info.format.size() > 1) throw std::invalid_argument(std::string("Invalid array format: ") + info.format);
-            switch(info.format.front()) {
-                case 'i': case 'u': case 'f': case 'd': kind = info.format.front(); break;
-                default:throw std::invalid_argument(std::string("Invalid array format: ") + info.format + ". Expected 'd', 'f', 'i', or 'u'.\n");
-            }
-            wptr = info.ptr;
-        }
-        auto ki = k.cast<Py_ssize_t>();
-        wy::WyRand<uint64_t> rng(seed);
-        const auto psum = gamma_beta * smw.columns();
-        const blz::StaticVector<double, 1> prior({gamma_beta});
-        auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
-            // Note that this has been transposed
-            return cmp::msr_with_prior(measure, y, x, prior, psum, blz::sum(y), blz::sum(x));
-        };
-        py::array_t<uint32_t> ret(ki);
-        py::object retasn = py::none();
-        int retasnbits;
-        if(ki <= 256) {
-            retasn = py::array_t<uint8_t>(nr);
-            retasnbits = 8;
-        } else if(ki <= 63356) {
-            retasn = py::array_t<uint16_t>(nr);
-            retasnbits = 16;
-        } else {
-            retasn = py::array_t<uint32_t>(nr);
-            retasnbits = 32;
-        }
-        auto retai = py::cast<py::array>(retasn).request();
-        auto rptr = (uint32_t *)ret.request().ptr;
-        py::array_t<float> costs(smw.rows());
-        auto costp = (float *)costs.request().ptr;
-        smw.perform([&](auto &x) {
-            //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
-            auto sol =
-                kind == -1 ?
-                repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp)
-                : kind == 'f' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const float *)wptr)
-                : kind == 'd' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const double *)wptr)
-                : kind == 'u' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const unsigned *)wptr)
-                : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, cmp, (const int *)wptr);
-            auto &[lidx, lasn, lcosts] = sol;
-            for(size_t i = 0; i < lidx.size(); ++i) {
-                std::fprintf(stderr, "selected point %u for center %zu\n", lidx[i], i);
-                if(lidx[i] > nr) std::fprintf(stderr, "Warning: 'center' id is > # centers\n");
-            }
-            for(size_t i = 0; i < lasn.size(); ++i) {
-                if(lasn[i] > nr) {
-                    std::fprintf(stderr, "asn %zu is %u (> nr)\n", i, unsigned(lasn[i]));
-                }
-            }
-            assert(lidx.size() == ki);
-            assert(lasn.size() == smw.rows());
-            switch(retasnbits) {
-                case 8: {
-                    auto raptr = (uint8_t *)retai.ptr;
-                    OMP_PFOR
-                    for(size_t i = 0; i < lasn.size(); ++i)
-                        raptr[i] = lasn[i];
-                } break;
-                case 16: {
-                    auto raptr = (uint16_t *)retai.ptr;
-                    OMP_PFOR
-                    for(size_t i = 0; i < lasn.size(); ++i)
-                        raptr[i] = lasn[i];
-                } break;
-                case 32: {
-                    auto raptr = (uint32_t *)retai.ptr;
-                    OMP_PFOR
-                    for(size_t i = 0; i < lasn.size(); ++i)
-                        raptr[i] = lasn[i];
-                } break;
-                default: __builtin_unreachable();
-            }
-            OMP_PFOR
-            for(size_t i = 0; i < lcosts.size(); ++i)
-                costp[i] = lcosts[i];
-            for(size_t i = 0; i < lidx.size(); ++i)
-                rptr[i] = lidx[i];
-        });
-        return py::make_tuple(ret, retasn, costs);
-    }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
-       "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
+        return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, weights);
+    }, kmeans_doc,
        py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("betaprior") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1,
-       py::arg("lspp") = 0,
+       py::arg("lspp") = 0, py::arg("use_exponential_skips") = false,
        py::arg("weights") = py::none()
     );
     m.def("kmeanspp", [](const SparseMatrixWrapper &smw, const SumOpts &so, py::object weights) {return py_kmeanspp_so(smw, so, weights);},
-    "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
+        kmeans_doc,
        py::arg("smw"),
        py::arg("opts"),
        py::arg("weights") = py::none()
@@ -549,7 +355,6 @@ void init_smw(py::module &m) {
     m.def("d2_select",  [](SparseMatrixWrapper &smw, const SumOpts &so, py::object weights) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
-        std::vector<float> fc;
         double *wptr = nullptr;
         float *fwptr = nullptr;
         if(py::isinstance<py::array>(weights)) {
@@ -560,28 +365,20 @@ void init_smw(py::module &m) {
                 default: throw std::invalid_argument("Wrong format weights");
             }
         }
+        auto lhs = std::tie(centers, asn, dc);
         if(wptr) {
-            if(smw.is_float())
-                std::tie(centers, asn, fc) = minicore::m2d2(smw.getfloat(), so, wptr);
-            else
-                std::tie(centers, asn, dc) = minicore::m2d2(smw.getdouble(), so, wptr);
-        } else if(fwptr) {
-            if(smw.is_float())
-                std::tie(centers, asn, fc) = minicore::m2d2(smw.getfloat(), so, fwptr);
-            else
-                std::tie(centers, asn, dc) = minicore::m2d2(smw.getdouble(), so, fwptr);
+            smw.perform([&](auto &x) {lhs = minicore::m2d2(x, so, wptr);});
         } else {
-            if(smw.is_float())
-                std::tie(centers, asn, fc) = minicore::m2d2(smw.getfloat(), so);
-            else
-                std::tie(centers, asn, dc) = minicore::m2d2(smw.getdouble(), so);
+            // if fwptr is unset, fwptr is unused because is null,
+            // so this branch includes floating-point weights and non-existent weights
+            smw.perform([&](auto &x) {lhs = minicore::m2d2(x, so, fwptr);});
         }
-        py::array_t<uint32_t> ret(centers.size()), retasn(smw.rows());
+        py::array_t<uint64_t> ret(centers.size());
+        py::array_t<uint32_t> retasn(smw.rows());
         py::array_t<double> costs(smw.rows());
         auto rpi = ret.request(), api = retasn.request(), cpi = costs.request();
-        std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
-        if(fc.size()) std::copy(fc.begin(), fc.end(), (double *)cpi.ptr);
-        else          std::copy(dc.begin(), dc.end(), (double *)cpi.ptr);
+        std::copy(centers.begin(), centers.end(), (uint64_t *)rpi.ptr);
+        std::copy(dc.begin(), dc.end(), (double *)cpi.ptr);
         std::copy(asn.begin(), asn.end(), (uint32_t *)api.ptr);
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
@@ -593,11 +390,10 @@ void init_smw(py::module &m) {
             throw std::invalid_argument("bi format must be basic");
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
-        std::vector<float> fc;
         switch(bi.format.front()) {
             case 'f': {
                 blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> cm((float *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
-                std::tie(centers, asn, fc) = minicore::m2d2(cm, so);
+                std::tie(centers, asn, dc) = minicore::m2d2(cm, so);
             } break;
             case 'd': {
                 blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded> cm((double *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
@@ -609,18 +405,16 @@ void init_smw(py::module &m) {
         py::array_t<double> costs(bi.shape[0]);
         auto rpi = ret.request(), api = retasn.request(), cpi = costs.request();
         std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
-        if(fc.size()) std::copy(fc.begin(), fc.end(), (double *)cpi.ptr);
-        else          std::copy(dc.begin(), dc.end(), (double *)cpi.ptr);
+        std::copy(dc.begin(), dc.end(), (double *)cpi.ptr);
         std::copy(asn.begin(), asn.end(), (uint32_t *)api.ptr);
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("data"), py::arg("sumopts"));
     m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
-        std::vector<uint32_t> centers;
+        std::vector<uint64_t> centers;
         std::vector<double> dret;
-        std::vector<float> fret;
         if(smw.is_float()) {
-            std::tie(centers, fret) = minicore::m2greedysel(smw.getfloat(), so);
+            std::tie(centers, dret) = minicore::m2greedysel(smw.getfloat(), so);
         } else {
             std::tie(centers, dret) = minicore::m2greedysel(smw.getdouble(), so);
         }
@@ -628,8 +422,7 @@ void init_smw(py::module &m) {
         py::array_t<double> costs(smw.rows());
         auto rpi = ret.request(), cpi = costs.request();
         std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
-        if(fret.size()) std::copy(fret.begin(), fret.end(), (double *)cpi.ptr);
-        else            std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
+        std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("smw"), py::arg("sumopts"));
@@ -637,9 +430,8 @@ void init_smw(py::module &m) {
 
 
     m.def("greedy_select",  [](py::array arr, const SumOpts &so) {
-        std::vector<uint32_t> centers;
+        std::vector<uint64_t> centers;
         std::vector<double> dret;
-        std::vector<float> fret;
         auto bi = arr.request();
         if(bi.ndim != 2) throw std::invalid_argument("arr must have 2 dimensions");
         if(bi.format.size() != 1)
@@ -647,7 +439,7 @@ void init_smw(py::module &m) {
         switch(bi.format.front()) {
             case 'f': {
                 blaze::CustomMatrix<float, blaze::unaligned, blaze::unpadded> cm((float *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
-                std::tie(centers, fret) = minicore::m2greedysel(cm, so);
+                std::tie(centers, dret) = minicore::m2greedysel(cm, so);
             } break;
             case 'd': {
                 blaze::CustomMatrix<double, blaze::unaligned, blaze::unpadded> cm((double *)bi.ptr, bi.shape[0], bi.shape[1], bi.strides[1]);
@@ -659,10 +451,12 @@ void init_smw(py::module &m) {
         py::array_t<double> costs(bi.shape[0]);
         auto rpi = ret.request(), cpi = costs.request();
         std::copy(centers.begin(), centers.end(), (uint32_t *)rpi.ptr);
-        if(fret.size()) std::copy(fret.begin(), fret.end(), (double *)cpi.ptr);
-        else            std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
+        std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("data"), py::arg("sumopts"));
+    m.def("smat_from_blaze", [](py::object path) {
+         return SparseMatrixWrapper(path.cast<std::string>());
+    }, py::arg("path"));
 
 } // init_smw

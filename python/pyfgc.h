@@ -8,6 +8,7 @@
 
 
 void init_smw(py::module &);
+void init_pycsparse(py::module &);
 void init_cmp(py::module &);
 void init_merge(py::module &);
 void init_coreset(py::module &);
@@ -15,6 +16,7 @@ void init_centroid(py::module &);
 void init_hashers(py::module &);
 void init_omp_helpers(py::module &m);
 void init_clustering(py::module &m);
+void init_clustering_csr(py::module &m);
 
 using CSType = coresets::CoresetSampler<float, uint32_t>;
 using FNA =  py::array_t<float, py::array::c_style | py::array::forcecast>;

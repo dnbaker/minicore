@@ -42,31 +42,19 @@ using blz::sqrL2Norm;
  *
  * oracle: computes distance D(x, y) for i in [0, np)
  * weights: null if equal, used if provided
- * multithread: optionally multithreaded
  * lspprounds: how many localsearch++ rounds to perform. By default, perform none.
  */
 
 
-template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 auto
-kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0) {
+kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false) {
 #if 1
     std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
 #endif
     std::vector<IT> centers(k, IT(0));
     blz::DV<FT> distances(np, std::numeric_limits<FT>::max());
-    int nt = 1;
-#ifdef _OPENMP
-    #pragma omp parallel
-    {
-        nt = omp_get_num_threads();
-    }
-#endif
-    auto p = std::make_unique<RNG[]>(nt);
-    for(auto p2 = p.get(); p2 < p.get() + nt; ++p2) {
-        p2->seed(rng());
-    }
     {
         auto fc = rng() % np;
         centers[0] = fc;
@@ -84,6 +72,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     // (which is less important if dimensionaliy is high)
     // this is as optimized as it can be.
     // At least it's all embarassingly parallelizable
+    const SampleFmt fmt = use_exponential_skips ? USE_EXPONENTIAL_SKIPS: NEITHER;
     int d0s = 0;
     for(size_t center_idx = 1;center_idx < k;) {
         std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\n", center_idx, size_t(k), centers[center_idx - 1]);
@@ -96,9 +85,9 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         if(weights) {
             auto w = blz::make_cv(weights, np);
             rvals = w * distances;
-            newc = reservoir_simd::sample(rvals.data(), np, rng());
+            newc = reservoir_simd::sample(rvals.data(), np, rng(), fmt);
         } else {
-            newc = reservoir_simd::sample(distances.data(), np, rng());
+            newc = reservoir_simd::sample(distances.data(), np, rng(), fmt);
         }
         if(unlikely(distances[newc] == 0.)) {
             std::fprintf(stderr, "Selected point of weight 0 (this should not happen unless there are negative or infinite weights): %zu\n", size_t(newc));
@@ -140,21 +129,21 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     return std::make_tuple(std::move(centers), std::move(assignments), std::vector<FT>(distances.begin(), distances.end()));
 }
 
-template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 auto
-kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0) {
+kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false) {
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, lspprounds);
+    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, lspprounds, use_exponential_skips);
 }
 
-template<typename Oracle, typename FT=std::decay_t<decltype(std::declval<Oracle>()(0,0))>,
+template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights=static_cast<WFT *>(nullptr), int lspprounds=0, int ntimes=1);
 
-template<typename Iter, typename FT=shared::ContainedTypeFromIterator<Iter>,
+template<typename Iter, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
 reservoir_kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, int ntimes=1) {
@@ -164,7 +153,7 @@ reservoir_kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=No
 }
 
 
-template<typename Oracle, typename Sol, typename FT=float, typename IT=uint32_t>
+template<typename Oracle, typename Sol, typename FT=double, typename IT=uint32_t>
 std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(const Oracle &oracle, size_t np, const Sol &sol)
 {
     blaze::DynamicVector<IT> assignments(np);
@@ -186,7 +175,6 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
     std::fprintf(stderr, "Centers have total cost %g\n", blz::sum(costs));
     return std::make_pair(assignments, costs);
 }
-// dm, rng, end - first, k, weights, multithread, lspprounds);
 
 
 template<typename Oracle, typename FT,
@@ -339,17 +327,14 @@ kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm
 template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
 auto
-kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, size_t lspprounds=0) {
-    using FT = typename MT::ElementType;
-    std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
+kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false) {
     if(rowwise) {
         auto rowit = blz::rowiterator(*mat);
-        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, lspprounds);
+        return kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips);
     } else { // columnwise
         auto columnit = blz::columniterator(*mat);
-        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, lspprounds);
+        return kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips);
     }
-    return ret;
 }
 
 template<typename MT, bool SO,
@@ -387,11 +372,11 @@ kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
     return ret;
 }
 
-template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double, typename Functor=blz::sqrL2Norm>
-double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename CFT, typename WFT=double, typename Functor=blz::sqrL2Norm>
+double lloyd_iteration(std::vector<IT> &assignments, std::vector<CFT> &counts,
                        CMatrixType &centers, MatrixType &data,
                        const Functor &func=Functor(),
-                       const WFT *weights=nullptr,
+                       const WFT *weights=static_cast<WFT *>(nullptr),
                        uint64_t seed=0,
                        bool use_moving_average=false)
 {
@@ -513,13 +498,13 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     return total_loss;
 }
 
-template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double,
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename CFT, typename WFT=double,
          typename Functor=blz::sqrL2Norm>
-double lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
+double lloyd_loop(std::vector<IT> &assignments, std::vector<CFT> &counts,
                   CMatrixType &centers, MatrixType &data,
                   double tolerance=0., size_t maxiter=-1,
                   const Functor &func=Functor(),
-                  const WFT *weights=nullptr,
+                  const WFT *weights=static_cast<WFT *>(nullptr),
                   bool use_moving_average=false)
 {
     if(tolerance < 0.) throw 1;

@@ -2,6 +2,7 @@
 #ifndef FGC_KMEDIAN_H__
 #define FGC_KMEDIAN_H__
 #include "minicore/optim/kmeans.h"
+#include "minicore/util/csc.h"
 #include <algorithm>
 
 namespace minicore {
@@ -180,6 +181,80 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &_data, const Rows &rs, blz:
 
 
 
+template<typename DataT, typename IndicesT, typename IndPtrT, typename VT2, bool TF2, typename IT=uint32_t, typename WT>
+static inline void l1_median(const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &data, blz::Vector<VT2, TF2> &ret, const IT *indices=(const IT *)nullptr, size_t nasn=0, const WT *weights=static_cast<WT *>(nullptr)) {
+    const size_t nc = data.columns();
+    if((*ret).size() != nc) {
+        (*ret).resize(nc);
+    }
+    (*ret).reset();
+    if(unlikely((*data).columns() > ((uint64_t(1) << (sizeof(IT) * CHAR_BIT)) - 1)))
+        throw std::runtime_error("Use a different index type, there are more features than fit in IT");
+    const size_t npoints = indices ? nasn: (*data).rows();
+    if(!npoints) throw std::invalid_argument("Can't take the median of no points");
+    using FT = blaze::CommonType_t<DataT, blz::ElementType_t<VT2>, std::decay_t<blz::ElementType_t<WT>>>;
+    std::vector<std::vector<std::pair<DataT, IT>>> pairs(nc); // One list of pairs per column
+    for(auto &p: pairs) p.reserve(npoints);
+#ifdef _OPENMP
+    int nt;
+    #pragma omp parallel
+    {
+        nt = omp_get_num_threads();
+    }
+    auto mutexes = std::make_unique<std::mutex[]>(nt);
+    OMP_PFOR
+#endif
+    for(size_t i = 0; i < npoints; ++i) {
+        size_t j = 0;
+        const auto rowind = indices ? size_t(indices[i]): i;
+        const std::pair<DataT, IT> empty(0, rowind);
+        auto crow = row(data, rowind);
+        auto cbeg = crow.begin(), cend = crow.end();
+        for(;cbeg != cend;++cbeg, ++j) {
+            const auto ind = cbeg->index();
+            while(j < ind) {
+                OMP_ONLY(std::lock_guard<std::mutex> lock(mutexes[j]);)
+                pairs[j++].push_back(empty);
+            }
+            OMP_ONLY(std::lock_guard<std::mutex> lock(mutexes[ind]);)
+            pairs[ind].push_back(std::pair<DataT, IT>(cbeg->value(), rowind));
+            ++cbeg;
+        }
+        while(j < nc) {
+            OMP_ONLY(std::lock_guard<std::mutex> lock(mutexes[j]);)
+            pairs[j++].push_back(empty);
+        }
+    }
+    // First, compute sorted pairs
+    // Then find median for each column
+    OMP_PFOR_DYN
+    for(size_t i = 0; i < nc; ++i) {
+        auto &cpairs = pairs[i];
+        shared::sort(cpairs.begin(), cpairs.end());
+        FT wsum = 0., maxw = -std::numeric_limits<FT>::max();
+        IT maxind = -0;
+        for(size_t j = 0; j < npoints; ++j) {
+           double neww = 1.;
+           if(weights) neww = (*weights)[cpairs[j].second];
+           wsum += neww;
+           if(neww > maxw) maxw = neww, maxind = j;
+        }
+        if(maxw > wsum * .5) {
+            // Return the value of the tuple with maximum weight
+            __assign(*ret, i, cpairs[maxind].first);
+            continue;
+        }
+        FT mid = wsum * .5;
+        auto it = std::lower_bound(cpairs.begin(), cpairs.end(), mid,
+             [](std::pair<DataT, IT> x, FT y)
+        {
+            return x.first < y;
+        });
+        OMP_CRITICAL {
+            __assign(*ret, i, it->first == mid ? FT(.5 * (it->first + it[1].first)): FT(it[1].first));
+        }
+    }
+}
 template<typename MT, bool SO, typename VT2, bool TF2, typename IT=uint32_t, typename WT>
 static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT2, TF2> &ret, const WT &weights) {
     const size_t nc = (*data).columns();
@@ -194,7 +269,6 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<
     const size_t nr = (*data).rows();
     auto pairs = std::make_unique<std::pair<ElementType_t<MT>, IT>[]>(nr);
     using FT = blaze::CommonType_t<blz::ElementType_t<MT>, blz::ElementType_t<VT2>, std::decay_t<decltype(weights[0])>>;
-    std::unique_ptr<FT[]> cw(new FT[nr]); //
     for(size_t i = 0; i < nc; ++i) {
         auto col = column(*data, i);
         for(size_t j = 0; j < nr; ++j)
@@ -204,7 +278,6 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<
         IT maxind = -0;
         for(size_t j = 0; j < nr; ++j) {
            auto neww = weights[pairs[j].second];
-           wsum += neww, cw[j] = wsum;
            if(neww > maxw) maxw = neww, maxind = j;
         }
         if(maxw > wsum * .5) {
@@ -245,6 +318,24 @@ void l1_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret, const 
         weighted_median(dr, ret, selected_weights.data());
     } else l1_unweighted_median(data, rows, ret);
 }
+
+template<typename MT, bool SO, typename VT, bool TF, typename IT=uint64_t, typename WeightT=blz::DV<double>>
+void l1_median(const blaze::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret, IT *asp, size_t nasn=0, const WeightT *weights=static_cast<WeightT *>(nullptr)) {
+    if(!asp) {
+        if(weights) {
+            weighted_median(data, ret, *weights);
+        } else {
+            l1_unweighted_median(data, ret);
+        }
+    } else {
+        if(weights) {
+            weighted_median(rows(*data, asp, nasn), ret, *weights);
+        } else {
+            l1_unweighted_median(rows(*data, asp, nasn), ret);
+        }
+    }
+} 
+
 
 
 } // namespace coresets

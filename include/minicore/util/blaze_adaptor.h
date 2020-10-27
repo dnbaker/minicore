@@ -46,9 +46,8 @@
 #include "./Inf2Zero.h"
 
 namespace blz {
-template<typename FT, typename IT>
+template<blaze::AlignmentFlag AF = blaze::unaligned, blaze::PaddingFlag PF=blaze::unpadded, typename FT, typename IT>
 auto make_cv(FT *data, IT size);
-
 
 // These blaze adaptors exist for the purpose of
 // providing a pair of iterators.
@@ -606,10 +605,10 @@ auto columns_if(const M &mat, const F &func) {
 using functional::indices_if;
 
 
-template<typename FT, typename IT>
+template<blaze::AlignmentFlag AF, blaze::PaddingFlag PF, typename FT, typename IT>
 auto make_cv(FT *data, IT size) {
     using T = std::remove_const_t<FT>;
-    using BaseRetT = CustomVector<T, unaligned, unpadded>;
+    using BaseRetT = CustomVector<T, AF, PF>;
     using RetT = std::conditional_t<std::is_const_v<FT>, const BaseRetT, BaseRetT>;
     return RetT(const_cast<T *>(data), size);
 }
