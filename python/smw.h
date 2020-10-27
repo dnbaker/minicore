@@ -8,9 +8,17 @@
 dist::DissimilarityMeasure assure_dm(py::object obj);
 
 struct SparseMatrixWrapper {
-    void tofile(std::string path) {
+    void tofile(std::string path) const {
         blaze::Archive<std::ofstream> arch(path);
         perform([&arch](auto &x) {arch << x;});
+    }
+    void fromfile(std::string path) {
+        blaze::Archive<std::ifstream> arch(path);
+        try {
+            arch >> this->getfloat();
+        } catch(...) {
+            arch >> this->getdouble();
+        }
     }
 private:
     template<typename IndPtrT, typename IndicesT, typename Data>
@@ -29,13 +37,9 @@ private:
         }
     }
 public:
+    SparseMatrixWrapper() {}
     SparseMatrixWrapper(std::string path) {
-        blaze::Archive<std::ifstream> arch(path);
-        try {
-            arch >> this->getfloat();
-        } catch(...) {
-            arch >> this->getdouble();
-        }
+        fromfile(path);
     }
     template<typename FT>
     SparseMatrixWrapper(blz::SM<FT> &&mat): matrix_(std::move(mat)) {}

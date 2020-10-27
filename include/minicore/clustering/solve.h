@@ -14,6 +14,7 @@ using blz::rowVector;
 using blz::columnVector;
 using blz::rowMajor;
 using blz::columnMajor;
+using blz::unchecked;
 
 /*
  * set_centroids_* and assign_points_* functions form the E/M steps
@@ -234,46 +235,8 @@ void assign_points_hard(const Mat &mat,
     //       a suitable relaxation allowing similar acceleration.
     //       Also, if there are enough centers, a nearest neighbor structure
     //       could make centroid assignment faster
-    auto compute_cost = [&](auto id, auto cid) {
-        assert(size_t(id) < (*mat).rows());
-        auto mr = row(mat, id, blaze::unchecked);
-        const auto &ctr = centers[cid];
-        const auto rowsum = rowsums[id];
-        const auto centersum = centersums[cid];
-        assert(ctr.size() == mr.size());
-        auto mrmult = mr / rowsum;
-        auto wctr = ctr * (1. / centersum);
-        //assert(measure == dist::JSD); // Temporary: this is only for sanity checking while debugging JSD calculation
-        FT ret;
-        switch(measure) {
-
-            // Geometric
-            case L1:
-                ret = l1Dist(ctr, mr);
-            break;
-            case L2:    ret = l2Dist(ctr, mr); break;
-            case SQRL2: ret = sqrDist(ctr, mr); break;
-            case PSL2:  ret = sqrDist(wctr, mrmult); break;
-            case PL2:   ret = l2Dist(wctr, mrmult); break;
-
-            // Bregman divergences + convex combinations thereof, and Bhattacharyya
-            case HELLINGER:
-            case TVD:
-            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
-            case POISSON: case JSD: case JSM:
-            case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
-            case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:
-            case REVERSE_POISSON: case REVERSE_MKL:
-                ret = cmp::msr_with_prior(measure, mr, ctr, prior, prior_sum, rowsum, centersum); break;
-            case COSINE_DISTANCE:
-                ret = dot(mr, ctr) * (1. / (l2Norm(mr) * l2Norm(ctr)));
-                break;
-            default: {
-                const auto msg = std::string("Unsupported measure ") + msr2str(measure) + ", " + std::to_string((int)measure);
-                std::cerr << msg;
-                throw std::invalid_argument(msg);
-            }
-        }
+    auto compute_cost = [&](auto id, auto cid) ALWAYS_INLINE {
+        FT ret = cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0) {
             if(unlikely(ret < -1e-10)) {
                 std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s for ids %u/%u. Check details!\n", ret, (int)measure, msr2str(measure),
@@ -283,7 +246,9 @@ void assign_points_hard(const Mat &mat,
                 std::abort();
             }
             ret = 0.;
-        } else if(std::isnan(ret)) ret = 0.;
+        } else if(std::isnan(ret)) {
+            ret = 0.;
+        }
         return ret;
     };
     const size_t e = costs.size(), k = centers.size();
@@ -421,41 +386,9 @@ void set_centroids_soft(const Mat &mat,
                           : prior.size() == 1
                           ? double(prior[0] * mat.columns())
                           : double(blz::sum(prior));
-    auto compute_cost = [&](auto id, auto cid) -> FT {
-        auto mr = row(mat, id BLAZE_CHECK_DEBUG);
-        const auto rsum = rowsums[id];
-        const auto csum = centersums[cid];
+    auto compute_cost = [&](auto id, auto cid) ALWAYS_INLINE {
         assert(cid < centers.size());
-        const auto &ctr = centers[cid];
-        assert(ctr.size() == mr.size() || !std::fprintf(stderr, "ctr size: %zu. row size: %zu\n", ctr.size(), mr.size()));
-        auto mrmult = mr / rsum;
-        auto wctr = ctr / csum;
-        FT ret;
-        switch(measure) {
-
-            // Geometric
-            case L1:
-                ret = l1Dist(ctr, mr);
-            break;
-            case L2:    ret = l2Dist(ctr, mr); break;
-            case SQRL2: ret = sqrDist(ctr, mr); break;
-            case PSL2:  ret = sqrDist(wctr,  mrmult); break;
-            case PL2:   ret = l2Dist(wctr, mrmult); break;
-
-            // Discrete Probability Distribution Measures
-            case TVD:       ret = .5 * blz::sum(blz::abs(wctr - mrmult)); break;
-            case HELLINGER: ret = l2Norm(blz::sqrt(wctr) - blz::sqrt(mrmult)); break;
-
-            // Bregman divergences, convex combinations thereof, and Bhattacharyya measures
-            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
-            case POISSON: case JSD: case JSM:
-            case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
-            case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:
-            case REVERSE_MKL: case REVERSE_POISSON:
-                ret = cmp::msr_with_prior(measure, mr, ctr, prior, prior_sum, rsum, csum); break;
-            default: throw NotImplementedError("Unsupported measure for soft clustering");
-        }
-        return ret;
+        return cmp::msr_with_prior(measure, row(mat, id, unchecked), ctr[cid], prior, prior_sum, rowsums[id], centersums[cid]);
     };
     costs = blaze::generate(mat.rows(), centers.size(), compute_cost);
 }
@@ -510,7 +443,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat, // TODO: consider repl
     blz::DV<FT> centersums(centers.size());
     OMP_PFOR
     for(size_t i = 0; i < rowsums.size(); ++i)
-        rowsums[i] = sum(row(mat, i, blz::unchecked));
+        rowsums[i] = sum(row(mat, i, unchecked));
     OMP_PFOR
     for(size_t i = 0; i < centers.size(); ++i)
         centersums[i] = blz::sum(centers[i]);
@@ -520,37 +453,8 @@ auto perform_hard_minibatch_clustering(const Matrix &mat, // TODO: consider repl
     double initcost = std::numeric_limits<double>::max(), cost = initcost, bestcost = cost;
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
-    auto compute_point_cost = [&](auto id, auto cid) {
-        auto mr = row(mat, id, blaze::unchecked);
-        const auto &ctr = centers[cid];
-        const auto rowsum = rowsums[id];
-        const auto centersum = centersums[cid];
-        assert(ctr.size() == mr.size());
-        //auto mrmult = mr / rowsum;
-        //auto wctr = ctr * (1. / centersum);
-        //assert(measure == dist::JSD); // Temporary: this is only for sanity checking while debugging JSD calculation
-        FT ret;
-        switch(measure) {
-
-            case SQRL2: ret = sqrDist(ctr, mr); break;
-
-            // Bregman divergences + convex combinations thereof, and Bhattacharyya
-            case TVD:
-            case HELLINGER:
-            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
-            case POISSON: case JSD: case JSM:
-            case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
-            case SIS: case RSIS: case MKL: case UWLLR: case LLR: case SRULRT: case SRLRT:
-            case REVERSE_POISSON: case REVERSE_MKL:
-            case COSINE_DISTANCE:
-                ret = cmp::msr_with_prior(measure, mr, ctr, prior, prior_sum, rowsum, centersum); break;
-                break;
-            default: {
-                const auto msg = std::string("Unsupported measure ") + msr2str(measure) + ", " + std::to_string((int)measure);
-                std::cerr << msg;
-                throw std::invalid_argument(msg);
-            }
-        }
+    auto compute_point_cost = [&](auto id, auto cid) ALWAYS_INLINE {
+        FT ret = cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]); break;
         if(ret < 0) {
             if(unlikely(ret < -1e-10)) {
                 std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s for ids %u/%u. Check details!\n", ret, (int)measure, msr2str(measure),
