@@ -1787,6 +1787,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             const auto ix = FT(1.) / x, iy = FT(1.) / y, isq = std::sqrt(ix * iy);
             return FT(.25) * (x * iy + y * ix) - std::log((x + y) * isq) + dist::RSIS_OFFSET<FT>;
         };
+        static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
         // Consider -ffast-math/-fassociative-math?
         switch(msr) {
             case L1: ret = l1Dist(mr, ctr); break;
@@ -1967,6 +1968,23 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                             get_inc_rsis(lhinc, rhinc)
                         )
                     , FT(0));
+                break;
+            case COSINE_DISTANCE: case COSINE_SIMILARITY:
+                ret = 0.;
+                merge::for_each_if_shared(nd, mr.begin(), mr.end(), ctr.begin(), ctr.end(), [lhinc, rhinc](auto xval, auto yval) {ret += (xval + lhinc) * (yval + lhinc);});
+                ret /= l2norm(wr) * l2norm(wc);
+                if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV
+                break;
+            case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
+                ret = perform_core(wr, wc, FT(0),
+                            /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
+                                return (xval + lhinc) * (yval + rhinc);
+                            },
+                            /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * rhinc;},
+                            /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (yval + rhinc);},
+                            lhinc * rhinc
+                        );
+               if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
                 break;
             default: ret = 0.; throw TODOError("unexpected msr; not yet supported");
         }

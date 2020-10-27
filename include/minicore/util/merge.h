@@ -85,6 +85,33 @@ void for_each_by_case(const size_t n, IT1 start1, IT1 stop1, IT2 start2, IT2 sto
     }
 }
 
+template<typename IT1, typename IT2, typename FShared, typename LHF, typename RHF>
+size_t for_each_if_shared(const size_t n, IT1 start1, IT1 stop1, IT2 start2, IT2 stop2, const FShared &shfunc) {
+    size_t sharedz = 0, ci = 0, nextind = 0;
+    do {
+        switch(((start1 != stop1) << 1) | (start2 != stop2)) {
+            case 3: /* Both are not end*/
+                if(start1->index() == start2->index()) {
+                    nextind = start1->index();
+                    shfunc(nextind, start1->value(), start2->value());
+                    ++start1; ++start2;
+                } else if(start1->index() < start2->index()) {
+                    nextind = start1->index(); ++start1;
+                } else {
+                    nextind = start2->index(); ++start2;
+                }
+                break;
+            case 2: nextind = start1->index(); ++start1; break;
+            case 1: nextind = start2->index(); ++start2; break;
+            case 0: nextind = n; break;
+            default: __builtin_unreachable();
+        }
+        sharedz += nextind - ci;
+        ci = nextind + 1;
+    } while(ci < n);
+    return sharedz;
+}
+
 } // namespace merge
 
 } // namespace minicore
