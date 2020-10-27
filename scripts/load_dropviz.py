@@ -17,6 +17,6 @@ def load_files(pref):
 
 
 data, indices, indptr, shape = load_files(PREFIX)
-csrmat = sp.csr_matrix((data, indices, indptr), shape)
+zeisel_cns_mat = sp.csr_matrix((data, indices, indptr), shape)
 
-__all__ = ["csrmat"]
+__all__ = ["zeisel_cns_mat"]
