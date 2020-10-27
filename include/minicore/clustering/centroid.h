@@ -637,8 +637,6 @@ void set_centroids_full_mean(const Mat &mat,
 #if defined(_OPENMP) && !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
     #pragma message("Parallelizing loop, may cause things to break")
     #pragma omp parallel for
-#else
-#pragma message("Not parallelizing loop")
 #endif
     for(unsigned i = 0; i < k; ++i) {
         // Compute mean for centroid

@@ -2,7 +2,6 @@
 #include "smw.h"
 
 void init_pycsparse(py::module &m) {
-#if 0
     py::class_<PyCSparseMatrix>(m, "CSparseMatrix").def(py::init<py::object>(), py::arg("sparray"))
     .def("__str__", [](const PyCSparseMatrix &x) {return std::string("CSparseMatrix, ") + std::to_string(x.rows()) + "x" + std::to_string(x.columns()) + ", " + std::to_string(x.nnz());})
     .def("columns", [](const PyCSparseMatrix &x) {return x.columns();})
@@ -29,13 +28,7 @@ void init_pycsparse(py::module &m) {
     m.def("greedy_select",  [](PyCSparseMatrix &smw, const SumOpts &so) {
         std::vector<uint64_t> centers;
         const Py_ssize_t nr = smw.rows();
-        blz::DV<double> rsums;
-        //std::vector<double> prior({so.gamma < 0. ? 0.: so.gamma});
-        //const double prior_sum = prior[0] * smw.columns();
         std::vector<double> dret;
-        smw.perform([&](auto &matrix) {
-            rsums = util::sum<blaze::rowwise>(matrix);
-        });
         smw.perform([&](auto &matrix) {
             std::tie(centers, dret) = m2greedysel(matrix, so);
         });
@@ -57,23 +50,17 @@ void init_pycsparse(py::module &m) {
         std::vector<uint32_t> centers, asn;
         std::vector<double> dc;
         double *wptr = nullptr;
-        float *fwptr = nullptr;
+        blz::DV<double> tmpw;
         if(py::isinstance<py::array>(weights)) {
             auto inf = py::cast<py::array>(weights).request();
             switch(inf.format.front()) {
                 case 'd': wptr = (double *)inf.ptr; break;
-                case 'f': fwptr = (float *)inf.ptr; break;
+                case 'f': tmpw = blz::make_cv((float *)inf.ptr, smw.rows()); wptr = tmpw.data(); break;
                 default: throw std::invalid_argument("Wrong format weights");
             }
         }
         auto lhs = std::tie(centers, asn, dc);
-        if(wptr) {
-            smw.perform([&](auto &x) {lhs = minicore::m2d2(x, so, wptr);});
-        } else {
-            // if fwptr is unset, fwptr is still null and therefore unused,
-            // so this branch includes floating-point weights and non-existent weights
-            smw.perform([&](auto &x) {lhs = minicore::m2d2(x, so, fwptr);});
-        }
+        smw.perform([&](auto &x) {lhs = minicore::m2d2(x, so, wptr);});
         py::array_t<uint64_t> ret(centers.size());
         py::array_t<uint32_t> retasn(smw.rows());
         py::array_t<double> costs(smw.rows());
@@ -84,5 +71,4 @@ void init_pycsparse(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("smw"), py::arg("sumopts"), py::arg("weights") = py::none());
-#endif
 }

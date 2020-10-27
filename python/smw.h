@@ -202,6 +202,9 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
         wptr = info.ptr;
     }
     std::fprintf(stderr, "ki: %d\n", int(k));
+    if(seed == 0) {
+        seed = std::mt19937_64(std::rand())();
+    }
     wy::WyRand<uint64_t> rng(seed);
     const auto psum = gamma_beta * smw.columns();
     const blz::StaticVector<double, 1> prior({gamma_beta});
@@ -324,7 +327,7 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
             auto info = arr.request();
             if(info.format.size() > 1) throw std::invalid_argument(std::string("Invalid array format: ") + info.format);
             switch(info.format.front()) {
-                case 'i': case 'u': case 'f': case 'd': kind = info.format.front(); break;
+                case 'f': case 'd': kind = info.format.front(); break;
                 default:throw std::invalid_argument(std::string("Invalid array format: ") + info.format + ". Expected 'd', 'f', 'i', or 'u'.\n");
             }
             wptr = info.ptr;
@@ -360,21 +363,12 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
                 kind == -1 ?
                 repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp)
                 : kind == 'f' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr)
-                : kind == 'd' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const double *)wptr)
-                : kind == 'u' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const unsigned *)wptr)
-                : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const int *)wptr);
+                : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const double *)wptr);
             auto &[lidx, lasn, lcosts] = sol;
             for(size_t i = 0; i < lidx.size(); ++i) {
                 std::fprintf(stderr, "selected point %u for center %zu\n", lidx[i], i);
-                if(lidx[i] > nr) std::fprintf(stderr, "Warning: 'center' id is > # centers\n");
+                //if(lidx[i] > nr) std::fprintf(stderr, "Warning: 'center' id is > # centers\n");
             }
-            for(size_t i = 0; i < lasn.size(); ++i) {
-                if(lasn[i] > nr) {
-                    std::fprintf(stderr, "asn %zu is %u (> nr)\n", i, unsigned(lasn[i]));
-                }
-            }
-            assert(lidx.size() == ki);
-            assert(lasn.size() == smw.rows());
             switch(retasnbits) {
                 case 8: {
                     auto raptr = (uint8_t *)retai.ptr;

@@ -49,7 +49,6 @@ struct PyCSparseMatrix {
             case 'H': _perform<uint16_t, Func>(func); break;
             case 'L': _perform<uint64_t, Func>(func); break;
             case 'I': _perform<unsigned, Func>(func); break;
-            case 'd': _perform<double, Func>(func); break;
             case 'f': _perform<float, Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
         }
@@ -60,62 +59,44 @@ struct PyCSparseMatrix {
             case 'H': _perform<uint16_t, Func>(func); break;
             case 'L': _perform<uint64_t, Func>(func); break;
             case 'I': _perform<unsigned, Func>(func); break;
-            case 'd': _perform<double, Func>(func); break;
             case 'f': _perform<float, Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
         }
     }
-    template<typename DataT, typename Func> void _perform(const Func &func) const {
-        switch(indices_t_.front()) {
-            case 'B': __perform<DataT, uint8_t, Func>(func); break;
-            case 'b': __perform<DataT, int8_t, Func>(func); break;
-            case 'H': __perform<DataT, uint16_t, Func>(func); break;
-            case 'L': __perform<DataT, uint64_t, Func>(func); break;
-            case 'I': __perform<DataT, unsigned, Func>(func); break;
+#define PERF3(c, IPtr, Indices) \
+                case c: {auto smat = util::make_csparse_matrix((DataT *)datap_, (Indices *)indicesp_, (IPtr *)indptrp_, nr_, nc_, nnz_); func(smat);} break
+
+#define PERF2(c, Indices) \
+        case c: { \
+            switch(indptr_t_[0]) { \
+                PERF3('L', uint64_t, Indices);\
+                PERF3('I', uint32_t, Indices);\
+            }\
+        } break
+
+    template<typename DataT, typename Func> INLINE void _perform(const Func &func) const {
+        switch(indices_t_[0]) {
+            PERF2('B', uint8_t);
+            PERF2('H', uint16_t);
+            PERF2('I', uint32_t);
+            PERF2('L', uint64_t);
             default: throw std::invalid_argument(std::string("Unsupported type for indices: ") + indices_t_);
         }
     }
-    template<typename DataT, typename Func> void _perform(const Func &func) {
+    template<typename DataT, typename Func> INLINE void _perform(const Func &func) {
         switch(indices_t_.front()) {
-            case 'B': __perform<DataT, uint8_t, Func>(func); break;
-            case 'b': __perform<DataT, int8_t, Func>(func); break;
-            case 'H': __perform<DataT, uint16_t, Func>(func); break;
-            case 'L': __perform<DataT, uint64_t, Func>(func); break;
-            case 'I': __perform<DataT, unsigned, Func>(func); break;
+            PERF2('B', uint8_t);
+            PERF2('H', uint16_t);
+            PERF2('I', uint32_t);
+            PERF2('L', uint64_t);
             default: throw std::invalid_argument(std::string("Unsupported type for indices: ") + indices_t_);
         }
-    }
-    template<typename DataT, typename IndicesT, typename Func> void __perform(const Func &func) const {
-        switch(indptr_t_.front()) {
-            case 'L': ___perform<DataT, IndicesT, uint64_t, Func>(func); break;
-            case 'l': ___perform<DataT, IndicesT, int64_t, Func>(func); break;
-            case 'I': ___perform<DataT, IndicesT, unsigned, Func>(func); break;
-            case 'i': ___perform<DataT, IndicesT, int, Func>(func); break;
-            default: throw std::invalid_argument(std::string("Unsupported type for indptr: ") + indptr_t_);
-        }
-    }
-    template<typename DataT, typename IndicesT, typename Func> void __perform(const Func &func) {
-        switch(indptr_t_.front()) {
-            case 'L': ___perform<DataT, IndicesT, uint64_t, Func>(func); break;
-            case 'l': ___perform<DataT, IndicesT, int64_t, Func>(func); break;
-            case 'I': ___perform<DataT, IndicesT, unsigned, Func>(func); break;
-            case 'i': ___perform<DataT, IndicesT, int, Func>(func); break;
-            default: throw std::invalid_argument(std::string("Unsupported type for indptr: ") + indptr_t_);
-        }
-    }
-    template<typename DataT, typename IndicesT, typename IndPtrT, typename Func>
-    void ___perform(const Func func) const {
-        auto smat = util::make_csparse_matrix((DataT *)datap_, (IndicesT *)indicesp_, (IndPtrT *)indptrp_, nr_, nc_, nnz_);
-        func(smat);
-    }
-    template<typename DataT, typename IndicesT, typename IndPtrT, typename Func>
-    void perform(const Func func) {
-        auto smat = util::make_csparse_matrix((DataT *)datap_, (IndicesT *)indicesp_, (IndPtrT *)indptrp_, nr_, nc_, nnz_);
-        func(smat);
     }
     size_t rows() const {return nr_;}
     size_t columns() const {return nc_;}
     size_t nnz() const {return nnz_;}
 };
+#undef PERF3
+#undef PERF2
 
 #endif

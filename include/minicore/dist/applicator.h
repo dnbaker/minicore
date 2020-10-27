@@ -1699,6 +1699,7 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
 template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
 FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
 {
+    static_assert(std::is_floating_point_v<FT>, "FT must be floating-point");
     if constexpr(!(blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && !(blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
         std::fprintf(stderr, "Using non-specialized form\n");
         const auto div = 1. / (mrsum + prior_sum);
