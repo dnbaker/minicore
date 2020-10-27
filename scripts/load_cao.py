@@ -2,7 +2,7 @@ import numpy as np
 import scipy.sparse as sp
 import minicore as mc
 
-'''Loads the DropViz experiment dataset,
+'''Loads the Cao, et al. experiment dataset,
    ensures that the types are correct and the sizes match
 '''
 
