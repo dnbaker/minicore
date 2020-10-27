@@ -1972,9 +1972,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 break;
             case COSINE_DISTANCE: case COSINE_SIMILARITY:
                 ret = 0.;
-                merge::for_each_if_shared(nd, mr.begin(), mr.end(), ctr.begin(), ctr.end(), [lhinc, rhinc](auto xval, auto yval) {ret += (xval + lhinc) * (yval + lhinc);});
+                merge::for_each_if_shared(nd, mr.begin(), mr.end(), ctr.begin(), ctr.end(), [lhinc, rhinc,&ret](auto xval, auto yval) {ret += (xval + lhinc) * (yval + lhinc);});
                 ret /= l2norm(wr) * l2norm(wc);
-                if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV
+                if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
                 break;
             case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
                 ret = perform_core(wr, wc, FT(0),

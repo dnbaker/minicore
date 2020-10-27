@@ -1,5 +1,5 @@
 #include "pycluster.h"
-#if 1
+
 py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
                  py::object msr, py::object weights, double eps,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
@@ -37,9 +37,8 @@ py::object cluster1_csr(const PyCSparseMatrix &smw, py::int_ k, double beta,
 {
     return func1(smw, k, beta, msr, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
 }
-#endif
+
 void init_clustering_csr(py::module &m) {
-#if 1
     m.def("cluster", cluster1_csr,
     py::arg("smw"), py::arg("k")=py::int_(10), py::arg("betaprior") = 0., py::arg("msr") = 5, py::arg("weights") = py::none(),
     py::arg("ntimes") = 2,
@@ -69,5 +68,4 @@ void init_clustering_csr(py::module &m) {
     py::arg("reseed_count") = Py_ssize_t(5),
     py::arg("with_rep") = true
     );
-#endif
 } // init_clustering_csr
