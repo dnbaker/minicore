@@ -210,9 +210,11 @@ struct CSparseVector {
         auto di = reinterpret_cast<uint64_t>(data_);
         if(di % aln && n_ > (aln / sizeof(VT)) && di % sizeof(VT) == 0) {
             // Break into short unaligned + long aligned sum
-            const auto offset = (aln % (di % aln)) / sizeof(VT);
-            ret = blz::sum(blz::make_cv((NCVT *)data_, offset))
-                + blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_ + offset, n_ - offset));
+            const auto offset = (aln - (di % aln));
+            const auto offset_n = offset / sizeof(VT);
+            assert(reinterpret_cast<uint64_t>((NCVT *)data_ + offset_n) % aln == 0);
+            ret = blz::sum(blz::make_cv((NCVT *)data_, offset_n))
+                + blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_ + offset_n, n_ - offset_n));
         } else ret = blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
         return ret ;
     }
@@ -356,9 +358,11 @@ struct ProdCSparseVector {
         auto di = reinterpret_cast<uint64_t>(data_);
         if(di % aln && n_ > (aln / sizeof(VT)) && di % sizeof(VT) == 0) {
             // Break into short unaligned + long aligned sum
-            const auto offset = (aln % (di % aln)) / sizeof(VT);
-            ret = blz::sum(blz::make_cv((NCVT *)data_, offset))
-                + blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_ + offset, n_ - offset));
+            const auto offset = (aln - (di % aln));
+            const auto offset_n = offset / sizeof(VT);
+            assert(reinterpret_cast<uint64_t>((NCVT *)data_ + offset_n) % aln == 0);
+            ret = blz::sum(blz::make_cv((NCVT *)data_, offset_n))
+                + blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_ + offset_n, n_ - offset_n));
         } else ret = blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
         return ret * prod_;
     }
