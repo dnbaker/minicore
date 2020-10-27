@@ -88,6 +88,11 @@ void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, 
     VERBOSE_ONLY(std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';)
 }
 
+template<typename VT, typename Alloc, typename IT>
+decltype(auto) elements(const std::vector<VT, Alloc> &w, IT *asp, size_t nasn) {
+    return elements(blz::make_cv(&w[0], w.size()), asp, nasn);
+}
+
 template<typename CtrT, typename MT, bool SO, typename IT, typename WeightT=blz::DV<blz::ElementType_t<MT>>>
 void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nasn, WeightT *w = static_cast<WeightT>(nullptr)) {
     auto rowsel = rows(*mat, asp, nasn);

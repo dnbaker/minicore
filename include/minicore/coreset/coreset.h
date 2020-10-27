@@ -386,7 +386,7 @@ struct CoresetSampler {
             this->probs_[i] *= si;
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
-    template<typename CFT, typename CFT2>
+    template<typename CFT, typename CFT2=CFT>
     void make_sampler(size_t np, size_t ncenters,
                       const CFT *costs, const IT *assignments,
                       const CFT2 *weights=nullptr,

@@ -41,7 +41,7 @@ py::object cluster1_csr(const PyCSparseMatrix &smw, py::int_ k, double beta,
 void init_clustering_csr(py::module &m) {
 #if 0
     m.def("cluster", cluster1_csr,
-    py::arg("smw"), py::arg("k")=py::int_(10), py::arg("betaprior") = -1., py::arg("msr") = 5, py::arg("weights") = py::none(),
+    py::arg("smw"), py::arg("k")=py::int_(10), py::arg("betaprior") = 0., py::arg("msr") = 5, py::arg("weights") = py::none(),
     py::arg("ntimes") = 2,
     py::arg("eps") = 1e-10, py::arg("seed") = 13,
     py::arg("lspprounds") = 1, py::arg("kmcrounds") = 10000, py::arg("kmeansmaxiter") = 1000);
@@ -55,7 +55,7 @@ void init_clustering_csr(py::module &m) {
     },
     py::arg("smw"),
     py::arg("centers"),
-    py::arg("betaprior") = -1.,
+    py::arg("betaprior") = 0.,
     py::arg("msr") = 5,
     py::arg("weights") = py::none(),
     py::arg("eps") = 1e-10,

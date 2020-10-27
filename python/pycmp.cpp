@@ -83,7 +83,7 @@ void init_cmp(py::module &m) {
         }
         __builtin_unreachable();
         return py::array_t<float>();
-    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 5, py::arg("betaprior") = 1.);
+    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 5, py::arg("betaprior") = 0.);
     m.def("cmp", [](const SparseMatrixWrapper &lhs, const SparseMatrixWrapper &rhs, py::object msr, py::object betaprior) {
         const double priorv = betaprior.cast<double>(), priorsum = priorv * lhs.columns();
         const auto ms = assure_dm(msr);
@@ -125,5 +125,5 @@ void init_cmp(py::module &m) {
             }
         }
         return ret;
-    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 5, py::arg("betaprior") = 1.);
+    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 5, py::arg("betaprior") = 0.);
 }

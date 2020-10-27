@@ -241,8 +241,8 @@ void assign_points_hard(const Mat &mat,
             if(unlikely(ret < -1e-10)) {
                 std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s for ids %u/%u. Check details!\n", ret, (int)measure, msr2str(measure),
                              (unsigned)id, (unsigned)cid);
-                std::cerr << ctr << '\n';
-                std::cerr << mr << '\n';
+                std::cerr << centers[cid] << '\n';
+                std::cerr << row(mat, id) << '\n';
                 std::abort();
             }
             ret = 0.;
@@ -388,7 +388,7 @@ void set_centroids_soft(const Mat &mat,
                           : double(blz::sum(prior));
     auto compute_cost = [&](auto id, auto cid) ALWAYS_INLINE {
         assert(cid < centers.size());
-        return cmp::msr_with_prior(measure, row(mat, id, unchecked), ctr[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        return cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
     };
     costs = blaze::generate(mat.rows(), centers.size(), compute_cost);
 }
@@ -454,13 +454,13 @@ auto perform_hard_minibatch_clustering(const Matrix &mat, // TODO: consider repl
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        FT ret = cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]); break;
+        FT ret = cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0) {
             if(unlikely(ret < -1e-10)) {
                 std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s for ids %u/%u. Check details!\n", ret, (int)measure, msr2str(measure),
                              (unsigned)id, (unsigned)cid);
-                std::cerr << ctr << '\n';
-                std::cerr << mr << '\n';
+                std::cerr << centers[cid] << '\n';
+                std::cerr << row(mat, id) << '\n';
                 std::abort();
             }
             ret = 0.;
