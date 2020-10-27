@@ -205,8 +205,16 @@ struct CSparseVector {
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
     using NCVT = std::remove_const_t<VT>;
-    VT sum() const {
-        return blz::sum(blz::CustomVector<NCVT,blz::unaligned,blz::unpadded>((NCVT *)data_, n_));
+    NCVT sum() const {
+        std::remove_const_t<VT> ret;
+        auto di = reinterpret_cast<uint64_t>(data_);
+        if(di % aln && n_ > (aln / sizeof(VT)) && di % sizeof(VT) == 0) {
+            // Break into short unaligned + long aligned sum
+            const auto offset = (aln % (di % aln)) / sizeof(VT);
+            ret = blz::sum(blz::make_cv((NCVT *)data_, offset))
+                + blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_ + offset, n_ - offset));
+        } else ret = blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
+        return ret ;
     }
     using CView = SView<VT>;
     using ConstCView = ConstSView<VT>;
@@ -287,9 +295,22 @@ struct CSparseVector {
         CSparseVectorIteratorBase(ColType &col, size_t ind): col_(col), index_(ind) {
         }
     };
+    static constexpr size_t aln =
+#ifdef __AVX512F__
+        sizeof(__m512) / sizeof(char);
+#elif __AVX2__ || __AVX__
+        sizeof(__m256) / sizeof(char);
+#elif __SSE4_1__ || __SSE2__
+        sizeof(__m128) / sizeof(char);
+#else
+        1;
+#endif
     double l2Norm() const {
-        auto v = blz::make_cv(data_, n_);
-        return blz::l2Norm(v);
+        if(uint64_t(data_) % aln) {
+            return blz::l2Norm(blz::make_cv(data_, n_));
+        } else {
+            return blz::l2Norm(blz::make_cv<blaze::aligned>(data_, n_));
+        }
     }
     using ConstCSparseIterator = CSparseVectorIteratorBase<true>;
     using CSparseIterator = CSparseVectorIteratorBase<false>;
@@ -329,8 +350,17 @@ struct ProdCSparseVector {
     }
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
+    using NCVT = std::remove_const_t<VT>;
     double sum() const {
-        return blz::sum(blz::CustomVector<VT,blz::unaligned,blz::unpadded>(data_, n_)) * prod_;
+        double ret;
+        auto di = reinterpret_cast<uint64_t>(data_);
+        if(di % aln && n_ > (aln / sizeof(VT)) && di % sizeof(VT) == 0) {
+            // Break into short unaligned + long aligned sum
+            const auto offset = (aln % (di % aln)) / sizeof(VT);
+            ret = blz::sum(blz::make_cv((NCVT *)data_, offset))
+                + blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_ + offset, n_ - offset));
+        } else ret = blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
+        return ret * prod_;
     }
     using ConstCView = ConstSViewMul<VT>;
     using DataType = VT;
@@ -402,9 +432,22 @@ struct ProdCSparseVector {
         ProdCSparseVectorIteratorBase(ColType &col, size_t ind, VT prod): col_(col), index_(ind), data_(prod) {
         }
     };
+    static constexpr size_t aln =
+#ifdef __AVX512F__
+        sizeof(__m512) / sizeof(char);
+#elif __AVX2__ || __AVX__
+        sizeof(__m256) / sizeof(char);
+#elif __SSE4_1__ || __SSE2__
+        sizeof(__m128) / sizeof(char);
+#else
+        1;
+#endif
     double l2Norm() const {
-        auto v = blz::make_cv(data_, n_);
-        return prod_ * l2Norm(v);
+        if(uint64_t(data_) % aln) {
+            return prod_ * blz::l2Norm(blz::make_cv((NCVT *)data_, n_));
+        } else {
+            return prod_ * blz::l2Norm(blz::make_cv<blaze::aligned>((NCVT *)data_, n_));
+        }
     }
     using CSparseIterator = ProdCSparseVectorIteratorBase;
     CSparseIterator begin() {return CSparseIterator(*this, 0, prod_);}
