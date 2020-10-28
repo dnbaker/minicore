@@ -6,7 +6,7 @@
 
 def getmat(name):
     if name == "zeisel":
-        from load_dropviz import zeisel_cnt_mat as ret
+        from load_dropviz import zeisel_cns_mat as ret
     elif name == 'cao':
         from load_cao import cao_mat as ret
     elif name == 'pbmc':

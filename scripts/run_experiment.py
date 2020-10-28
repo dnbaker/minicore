@@ -24,6 +24,7 @@ ap.add_argument("--outdir", default="outdir", help="base output directory")
 ap.add_argument("--mbsize", default=-1, help="minibatch size. If unset or less than 0, performs full EM.", type=int)
 ap.add_argument("--expskip", default=0, help="Skip ahead <arg> experiment files in calculations", type=int)
 ap.add_argument("--endskip", default=len(ordering), help="Skip ahead <arg> experiment files in calculations", type=int)
+ap.add_argument("--nkmc", default=0, type=int)
 
 
 args = ap.parse_args()
@@ -33,6 +34,7 @@ num_threads = args.num_threads
 mbsize = args.mbsize
 outdir = args.outdir
 mc.set_num_threads(num_threads)
+NKMC = args.nkmc
 
 
 def run_experiment(resultdir, msr, matrix, k, beta):
@@ -40,7 +42,7 @@ def run_experiment(resultdir, msr, matrix, k, beta):
     results = [[] for i in range(ntrials)]
     for i in range(ntrials):
         start = time.time()
-        results[i] = mc.kmeanspp(matrix, msr=msr, betaprior=beta, k=k)
+        results[i] = mc.kmeanspp(matrix, msr=msr, betaprior=beta, k=k, nkmc=NKMC)
         stop = time.time()
         times[i] = stop - start
     argmed = times.index(np.median(times))
@@ -64,7 +66,10 @@ for exp_name in ordering[args.expskip:args.endskip]:
         startt = time.time()
         betavalset = beta_vals.get(msr, [0.])
         msrname = mc.meas2str(msr)
-        resultdir = "/".join([outdir, exp_name, msrname])
+        items = [outdir, exp_name, msrname]
+        if NKMC > 0:
+            items.append(str(NKMC))
+        resultdir = "/".join(items)
         if not os.path.isdir(resultdir):
             os.makedirs(resultdir)
         results = compute_experiment(resultdir, msr, mcmat, KSET, betavalset)
