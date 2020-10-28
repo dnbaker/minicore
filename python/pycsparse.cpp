@@ -1,14 +1,17 @@
 #include "pycsparse.h"
 #include "smw.h"
 
+#if BUILD_CSR_CLUSTERING
 
 py::object run_kmpp_noso(const PyCSparseMatrix &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
                          Py_ssize_t lspp, bool use_exponential_skips,
                          py::object weights) {
     return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, weights);
 }
+#endif
 
 void init_pycsparse(py::module &m) {
+#if BUILD_CSR_CLUSTERING
     py::class_<PyCSparseMatrix>(m, "CSparseMatrix").def(py::init<py::object>(), py::arg("sparray"))
     .def("__str__", [](const PyCSparseMatrix &x) {return std::string("CSparseMatrix, ") + std::to_string(x.rows()) + "x" + std::to_string(x.columns()) + ", " + std::to_string(x.nnz());})
     .def("columns", [](const PyCSparseMatrix &x) {return x.columns();})
@@ -77,4 +80,5 @@ void init_pycsparse(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("smw"), py::arg("sumopts"), py::arg("weights") = py::none());
+#endif
 }

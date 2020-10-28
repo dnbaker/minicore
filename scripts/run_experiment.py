@@ -3,16 +3,18 @@ import scipy.sparse as sp
 import numpy as np
 import os
 import time
+import sys
 import argparse as agp
+from load_lazy import ordering, exp_loads
 
 
-measures_to_use = [2, 5, 12, 7, 4, 11]
+measures_to_use = [2, 12, 7, 4]
 
 beta_set = [0., .1, 1]
 
-KSET = {5, 15, 25, 50, 250, 500}
+KSET = [5, 15, 25, 50]
 
-beta_vals = {5: beta_set}
+beta_vals = {5: beta_set, 11: [0., 1.]}
 
 
 ap = agp.ArgumentParser()
@@ -20,11 +22,12 @@ ap.add_argument("--trials", default=3, help="Number of trials to use. must be od
 ap.add_argument("--num-threads", '-p', default=1, help="Number of threadsto use.", type=int)
 ap.add_argument("--outdir", default="outdir", help="base output directory")
 ap.add_argument("--mbsize", default=-1, help="minibatch size. If unset or less than 0, performs full EM.", type=int)
+ap.add_argument("--expskip", default=0, help="Skip ahead <arg> experiment files in calculations", type=int)
+ap.add_argument("--endskip", default=len(ordering), help="Skip ahead <arg> experiment files in calculations", type=int)
 
 
 args = ap.parse_args()
 
-from load_files import all_experiments, ordering
 ntrials = args.trials
 num_threads = args.num_threads
 mbsize = args.mbsize
@@ -39,7 +42,7 @@ def run_experiment(resultdir, msr, matrix, k, beta):
         start = time.time()
         results[i] = mc.kmeanspp(matrix, msr=msr, betaprior=beta, k=k)
         stop = time.time()
-        times[i] = start - stop
+        times[i] = stop - start
     argmed = times.index(np.median(times))
     return (times[argmed], results[argmed], k, beta)
 
@@ -50,10 +53,11 @@ def compute_experiment(resultdir, msr, matrix, kset, betavalset):
         for beta in betavalset:
             ret.append(run_experiment(resultdir, msr, matrix, k, beta))
             print("for path " + resultdir + ", median time for %d %f is %f" % (k, beta, ret[-1][0]))
+    return ret
 
 
-for exp_name in ordering:
-    matrix = all_experiments[exp_name]
+for exp_name in ordering[args.expskip:args.endskip]:
+    matrix = exp_loads[exp_name]()
     print("About to parse matrix with name %s" % exp_name, file=sys.stderr)
     mcmat = mc.smw(matrix)
     for msr in measures_to_use:
@@ -61,13 +65,14 @@ for exp_name in ordering:
         betavalset = beta_vals.get(msr, [0.])
         msrname = mc.meas2str(msr)
         resultdir = "/".join([outdir, exp_name, msrname])
-        os.make_dirs(resultdir)
+        if not os.path.isdir(resultdir):
+            os.makedirs(resultdir)
         results = compute_experiment(resultdir, msr, mcmat, KSET, betavalset)
         with open(resultdir + "/timing.txt", "w") as f:
-            print("\t".join(["Experiment", "Measure", "K", "Prior", "Total cost"]), file=f)
+            print("\t".join(["Experiment", "Measure", "K", "Prior", "Total cost", "Median time"]), file=f)
             for median_time, result, k, beta in results:
                 total_cost = str(np.sum(result[2]))
-                print("\t".join([exp_name, msrname, str(k), str(beta), total_cost]), file=f)
+                print("\t".join([exp_name, msrname, str(k), str(beta), total_cost, str(median_time)]), file=f)
         for _, result, k, beta in results:
             result[0].tofile(resultdir + "/centers.%s.%d.%f.npy" % (result[0].dtype.char, k, beta))
             result[1].tofile(resultdir + "/asn.%s.%d.%f.npy" % (result[1].dtype.char, k, beta))
