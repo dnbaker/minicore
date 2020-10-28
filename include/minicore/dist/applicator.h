@@ -1863,8 +1863,13 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         tmplogy[nnz_either] = yv * mi;
                         ++nnz_either;
                     });
-                ret =  lambda * sum(lambda * subvector(tmpmulx, 0, nnz_either) * log(subvector(tmplogx, 0, nnz_either)))
-                    + m1l * sum(subvector(tmpmuly, 0, nnz_either) * log(subvector(tmplogy, 0, nnz_either))) + emptycontrib * sharedz;
+                tmplogx.resize(nnz_either);
+                tmplogy.resize(nnz_either);
+                tmpmulx.resize(nnz_either);
+                tmpmuly.resize(nnz_either);
+                ret =  lambda * dot(tmpmulx, log(tmplogx))
+                      + m1l * dot(tmpmuly, log(tmplogy))
+                      + emptycontrib * sharedz;
 #else
                 ret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
