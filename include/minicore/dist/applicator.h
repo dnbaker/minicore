@@ -1752,7 +1752,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         const FT lhsum = mrsum + prior_sum;
         const FT rhsum = ctrsum + prior_sum;
         const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
-        static constexpr const FT smallest_prior = sizeof(FT) == 4 ? FT(1.40130e-25f): FT(4.94065645841246e-280);
+        static constexpr const FT smallest_prior = FT(1.40130e-30f); // Since we're doing computations in floats downstream
         // Not the smallest values expressible, but we need to leave space at the bottom of precision
         // for these numbers to be divided by lhsum and rhsum, respectively
         const FT pv = std::max(FT(prior[0]), smallest_prior);
@@ -1833,42 +1833,44 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
 #if 1
                 size_t nnz_either = 0;
                 blz::DV<float> tmpmuly(nd), tmpmulx(nd);
-                blz::DV<float> tmplogx(nd), tmplogy(nd);
+                //blz::DV<float> tmplogx(nd), tmplogy(nd);
+                blz::DV<float> miv(nd);
                 auto sharedz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
                     [&](auto,auto x, auto y) {
                         auto xv = x + lhinc, yv = y + rhinc;
-                        auto mi = FT(1.) / (lambda * xv + m1l * yv);
+                        miv[nnz_either] = FT(1.) / (lambda * xv + m1l * yv);
                         tmpmulx[nnz_either] = xv;
                         tmpmuly[nnz_either] = yv;
-                        tmplogx[nnz_either] = xv * mi;
-                        tmplogy[nnz_either] = yv * mi;
+                        //tmplogx[nnz_either] = xv * mi;
+                        //tmplogy[nnz_either] = yv * mi;
                         ++nnz_either;
                     },
                     // x only
                     [&](auto,auto x) {
                         auto xv = x + lhinc;
-                        auto mi = FT(1.) / (lambda * xv + m1l * rhinc);
+                        miv[nnz_either] = FT(1.) / (lambda * xv + m1l * rhinc);
                         tmpmulx[nnz_either] = xv;
                         tmpmuly[nnz_either] = rhinc;
-                        tmplogx[nnz_either] = xv * mi;
-                        tmplogy[nnz_either] = rhinc * mi;
+                        //tmplogx[nnz_either] = xv * mi;
+                        //tmplogy[nnz_either] = rhinc * mi;
                         ++nnz_either;
                     },
                     [&](auto,auto y) {
                         auto yv = y + rhinc;
-                        auto mi = FT(1.) / (lambda * lhinc + m1l * yv);
+                        miv[nnz_either] = FT(1.) / (lambda * lhinc + m1l * yv);
                         tmpmulx[nnz_either] = lhinc;
                         tmpmuly[nnz_either] = yv;
-                        tmplogx[nnz_either] = lhinc * mi;
-                        tmplogy[nnz_either] = yv * mi;
+                        //tmplogx[nnz_either] = lhinc * mi;
+                        //tmplogy[nnz_either] = yv * mi;
                         ++nnz_either;
                     });
-                tmplogx.resize(nnz_either);
-                tmplogy.resize(nnz_either);
+                //tmplogx.resize(nnz_either);
+                //tmplogy.resize(nnz_either);
+                miv.resize(nnz_either);
                 tmpmulx.resize(nnz_either);
                 tmpmuly.resize(nnz_either);
-                ret =  lambda * dot(tmpmulx, log(tmplogx))
-                      + m1l * dot(tmpmuly, log(tmplogy))
+                ret =  lambda * dot(tmpmulx, log(tmpmulx * miv))
+                      + m1l * dot(tmpmuly, log(tmpmuly * miv))
                       + emptycontrib * sharedz;
 #else
                 ret = perform_core(wr, wc, FT(0),
@@ -1921,16 +1923,39 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case POISSON:
             case MKL:
             {
+#if 0
+                blz::DV<FT> lhv(nd), rhv(nd);
+                size_t useidx = 0;
+                size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
+                            [&](auto, auto x, auto y) {lhv[useidx] = x + lhinc; rhv[useidx] = y + rhinc; ++useidx;},
+                            [&](auto, auto x) {lhv[useidx] = x + lhinc; rhv[useidx] = rhinc; ++useidx;},
+                            [&](auto, auto y) {lhv[useidx] = lhinc; rhv[useidx] = y + rhinc; ++useidx;});
+                lhv.resize(useidx);
+                rhv.resize(useidx);
+                ret = dot(lhv, log(lhv / rhv)) - sharednz * lhinc * rhl;
+#else
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
                     -lhinc * rhl);
+#endif
             }
             break;
             case REVERSE_POISSON:
             case REVERSE_MKL:
             {
+#if 0
+                blz::DV<FT> lhv(nd), rhv(nd);
+                size_t useidx = 0;
+                size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
+                            [&](auto, auto x, auto y) {lhv[useidx] = x + lhinc; rhv[useidx] = y + rhinc; ++useidx;},
+                            [&](auto, auto x) {lhv[useidx] = x + lhinc; rhv[useidx] = rhinc; ++useidx;},
+                            [&](auto, auto y) {lhv[useidx] = lhinc; rhv[useidx] = y + rhinc; ++useidx;});
+                lhv.resize(useidx);
+                rhv.resize(useidx);
+                ret = dot(rhv, log(rhv / lhv)) - sharednz * rhinc * lhl;
+#else
                 ret = perform_core(wr, wc, 0.,
                     /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (yval + rhinc) * (std::log((yval + rhinc) / (xval + lhinc)));},
                     /* xonly */    [&](auto xval) ALWAYS_INLINE  {return rhinc * (rhl - std::log(xval + lhinc));},
@@ -1939,6 +1964,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                     return yv * (std::log(yv) - lhl);
                     },
                     -rhinc * lhl);
+#endif
             }
             break;
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
