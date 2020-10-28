@@ -1752,7 +1752,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         const FT lhsum = mrsum + prior_sum;
         const FT rhsum = ctrsum + prior_sum;
         const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
-        static constexpr const FT smallest_prior = sizeof(FT) == 4 ? FT(1.40130e-30f): FT(4.940656458412465441765687928682213723651e-300);
+        static constexpr const FT smallest_prior = sizeof(FT) == 4 ? FT(1.40130e-25f): FT(4.940656458412465441765687928682213723651e-300);
         // Not the smallest values expressible, but we need to leave space at the bottom of precision
         // for these numbers to be divided by lhsum and rhsum, respectively
         const FT pv = std::max(FT(prior[0]), smallest_prior);
