@@ -389,7 +389,7 @@ struct CoresetSampler {
     template<typename CFT, typename CFT2=CFT>
     void make_sampler(size_t np, size_t ncenters,
                       const CFT *costs, const IT *assignments,
-                      const CFT2 *weights=nullptr,
+                      const CFT2 *weights=static_cast<CFT2 *>(nullptr),
                       uint64_t seed=137,
                       SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG,
                       unsigned k = unsigned(-1),

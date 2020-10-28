@@ -75,7 +75,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     const SampleFmt fmt = use_exponential_skips ? USE_EXPONENTIAL_SKIPS: NEITHER;
     int d0s = 0;
     for(size_t center_idx = 1;center_idx < k;) {
-        std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\n", center_idx, size_t(k), centers[center_idx - 1]);
+        std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\r\n", center_idx, size_t(k), centers[center_idx - 1]);
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
         auto cd = centers.data();
