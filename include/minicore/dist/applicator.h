@@ -1830,6 +1830,42 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 const auto emptymean = lambda * lhinc + m1l * rhinc;
                 const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
                                         + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
+#if 1
+                size_t nnz_either = 0;
+                blz::DV<float> tmpmuly(nd), tmpmulx(nd);
+                blz::DV<float> tmplogx(nd), tmplogy(nd);
+                auto sharedz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
+                    [&](auto,auto x, auto y) {
+                        auto xv = x + lhinc, yv = y + rhinc;
+                        auto mi = FT(1.) / (lambda * xv + m1l * yv);
+                        tmpmulx[nnz_either] = xv;
+                        tmpmuly[nnz_either] = yv;
+                        tmplogx[nnz_either] = xv * mi;
+                        tmplogy[nnz_either] = yv * mi;
+                        ++nnz_either;
+                    },
+                    // x only
+                    [&](auto,auto x) {
+                        auto xv = x + lhinc;
+                        auto mi = FT(1.) / (lambda * xv + m1l * rhinc);
+                        tmpmulx[nnz_either] = xv;
+                        tmpmuly[nnz_either] = rhinc;
+                        tmplogx[nnz_either] = xv * mi;
+                        tmplogy[nnz_either] = rhinc * mi;
+                        ++nnz_either;
+                    },
+                    [&](auto,auto y) {
+                        auto yv = y + rhinc;
+                        auto mi = FT(1.) / (lambda * lhinc + m1l * yv);
+                        tmpmulx[nnz_either] = lhinc;
+                        tmpmuly[nnz_either] = yv;
+                        tmplogx[nnz_either] = lhinc * mi;
+                        tmplogy[nnz_either] = yv * mi;
+                        ++nnz_either;
+                    });
+                ret =  lambda * sum(lambda * subvector(tmpmulx, 0, nnz_either) * log(subvector(tmplogx, 0, nnz_either)))
+                    + m1l * sum(subvector(tmpmuly, 0, nnz_either) * log(subvector(tmplogy, 0, nnz_either))) + emptycontrib * sharedz;
+#else
                 ret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
                         auto xv = xval + lhinc, yv = yval + rhinc;
@@ -1850,6 +1886,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         return lambda * lhinc * xvl + m1l * yv * yvl;
                     },
                     emptycontrib);
+#endif
                 if(msr == LLR || msr == SRLRT) ret *= bothsum;
                 ret = std::max(ret, FT(0)); // ensure non-negativity
                 if(msr == SRULRT || msr == SRLRT)
