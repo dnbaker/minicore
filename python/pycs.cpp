@@ -26,5 +26,14 @@ void init_coreset(py::module &m) {
         py::array_t<float> ret(cs.np_);
         std::copy(cs.probs_.get(), cs.probs_.get() + cs.np_, (float *)ret.request().ptr);
         return ret;
-    }, "Create a numpy array of sampling probabilities");
+    }, "Create a numpy array of sampling probabilities")
+    .def("sample", [](CSType &cs, Py_ssize_t size, Py_ssize_t seed) {
+        if(seed == 0) seed = std::rand();
+        auto ret = cs.sample(size);
+        py::array_t<float> rf(size);
+        py::array_t<uint64_t> ri(size);
+        std::copy(ret.weights_.begin(), ret.weights_.end(), (float *)rf.request().ptr);
+        std::copy(ret.indices_.begin(), ret.indices_.end(), (uint64_t *)ri.request().ptr);
+        return py::make_tuple(rf, ri);
+    }, py::arg("size"), py::arg("seed") = 0);
 }

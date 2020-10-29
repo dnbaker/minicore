@@ -43,7 +43,7 @@ void assign_points_hard(const Mat &mat,
                         AsnT &asn,
                         CostsT &costs,
                         const WeightT *,
-                        SumT &centersums,
+                        const SumT &centersums,
                         const SumT &rowsums);
 template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT, typename SumT>
 void set_centroids_hard(const Mat &mat,
@@ -93,45 +93,39 @@ auto perform_hard_clustering(const MT &mat, // TODO: consider replacing blaze::M
                              double eps=1e-10,
                              size_t maxiter=size_t(-1))
 {
-    auto centers_cpy = centers;
     auto compute_cost = [&costs,w=weights]() -> FT {
         if(w) return blz::dot(costs, *w);
         else  return blz::sum(costs);
     };
-#if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
     const blz::DV<FT> rowsums = sum<blz::rowwise>(mat);
-    blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
-#else
-    blz::DV<FT> rowsums((mat).rows());
-    blz::DV<FT> centersums(centers.size());
-    OMP_PFOR
-    for(size_t i = 0; i < rowsums.size(); ++i)
-        rowsums[i] = sum(row(mat, i));
-    OMP_PFOR
-    for(size_t i = 0; i < centers.size(); ++i)
-        centersums[i] = sum(centers[i]);
-#endif
+    blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return sum(centers[x]);});
     assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
+#ifndef NDEBUG
+    for(size_t i = 0; i < centers.size(); ++i) {
+        assert(std::abs(sum(centers[i]) - centersums[i]) < 1e-10 || !std::fprintf(stderr, "%g, %g, %i\n", sum(centers[i]),  centersums[i], int(i)));
+    }
+#endif
     const auto initcost = compute_cost();
     FT cost = initcost;
     std::fprintf(stderr, "initial cost: %0.12g\n", cost);
     size_t iternum = 0;
+    auto centers_cpy = centers;
     for(;;) {
-        DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
+        std::fprintf(stderr, "Beginning iter %zu\n", iternum);
         set_centroids_hard<FT>(mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
-        DBG_ONLY(std::fprintf(stderr, "Set centroids %zu\n", iternum);)
+        //std::fprintf(stderr, "Set centroids %zu\n", iternum);
 
         assign_points_hard<FT>(mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
         auto newcost = compute_cost();
         std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);
         if(newcost > cost) {
             std::cerr << "Warning: New cost " << newcost << " > original cost " << cost << ". Using prior iteration.\n;";
-            centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
+            centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
             assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums);
             //DBG_ONLY(std::abort();)
             break;
         }
-        std::swap_ranges(centers.begin(), centers.end(), centers_cpy.begin());
+        std::copy(centers_cpy.begin(), centers_cpy.begin(), centers.begin());
         if(cost - newcost < eps * initcost) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g init cost\n",
@@ -196,6 +190,10 @@ void set_centroids_hard(const Mat &mat,
             std::cerr << msg;
             throw std::runtime_error(msg);
     }
+    for(size_t i = 0; i < centers.size(); ++i) {
+        ctrsums[i] = sum(centers[i]);
+        //std::fprintf(stderr, "After setting, ctr %zu has %g for a sum\n", i, ctrsums[i]);
+    }
 }
 
 template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT, typename SumT>
@@ -206,7 +204,7 @@ void assign_points_hard(const Mat &mat,
                         AsnT &asn,
                         CostsT &costs,
                         const WeightT *,
-                        SumT &centersums,
+                        const SumT &centersums,
                         const SumT &rowsums)
 {
 
@@ -402,7 +400,7 @@ template<typename Matrix, // MatrixType
          typename WeightT=CtrT, // Vector Type
          typename=std::enable_if_t<std::is_floating_point_v<FT>>
         >
-auto perform_hard_minibatch_clustering(const Matrix &mat, // TODO: consider replacing blaze::Matrix with template Mat for CSR matrices
+auto perform_hard_minibatch_clustering(const Matrix &mat,
                                        const dist::DissimilarityMeasure measure,
                                        const PriorT &prior,
                                        std::vector<CtrT> &centers,
@@ -510,13 +508,13 @@ auto perform_hard_minibatch_clustering(const Matrix &mat, // TODO: consider repl
             }
             blaze::SmallArray<uint32_t, 8> foundindices;
             for(size_t i = 0; i < center_counts.size(); ++i) {
-                std::fprintf(stderr, "Center %zu has %" PRIu64 " items\n", i, center_counts[i]);
+                //std::fprintf(stderr, "Center %zu has %" PRIu64 " items\n", i, center_counts[i]);
                 if(center_counts[i] <= reseed_after) { // If there are 0 or 1 points assigned to a center, restart it
                     foundindices.pushBack(i);
                 }
             }
             if(foundindices.size()) {
-                std::fprintf(stderr, "Found %zu centers with no assigned points; let's restart them.\n", foundindices.size());
+                DBG_ONLY(std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());)
                 for(const auto fidx: foundindices) {
                     // set new centers
                     auto &ctr = centers[fidx];
@@ -620,7 +618,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat, // TODO: consider repl
         // Set the new centers
         //cost = newcost;
     }
-    std::swap(centers, savectrs);
+    centers = std::move(savectrs);
     cost = bestcost;
 #ifndef NDEBUG
     std::fprintf(stderr, "Completing clustering after %zu rounds. Initial cost %0.12g. Final cost %0.12g.\n", iternum, initcost, cost);

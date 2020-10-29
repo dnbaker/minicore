@@ -8,7 +8,7 @@ import argparse as agp
 from load_lazy import ordering, exp_loads
 
 
-measures_to_use = [2, 12, 7, 4]
+measures_to_use = [11, 5, 14]
 
 beta_set = [0., .1, 1]
 
