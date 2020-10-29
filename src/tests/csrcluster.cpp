@@ -98,6 +98,16 @@ int main(int argc, char *argv[]) {
         }
     }
     CSparseMatrix<DataT, IndicesT, IndptrT> x(data.data(), indices.data(), indptr.data(), nrows, ncols, total_nnz);
+    auto frow = row(x, 0);
+    blz::DV<DataT> v(x.columns(), 0.);
+    for(const auto &item: frow) {
+        v[item.index()] = item.value();
+    }
+    blz::DV<DataT> v2(x.columns(), 0);
+    for(size_t i = indptr[0]; i < indptr[1]; ++i) {
+        v2[indices[i]] = data[i];
+    }
+    assert(v == v2);
     const size_t nr = x.rows(), nc = x.columns();
     std::fprintf(stderr, "prior: %g\n", prior[0]);
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));

@@ -14,6 +14,22 @@ namespace minicore {
 
 namespace util {
 
+template<typename T>
+INLINE auto abs_diff(T x, T y) {
+    if constexpr(std::is_unsigned_v<T>) {
+        return std::max(x, y) - std::min(x, y);
+    } else {
+        return std::abs(x - y);
+    }
+}
+
+template<typename T, typename T2>
+INLINE auto abs_diff(T x, T2 y) {
+    using CT = std::common_type_t<T, T2>;
+    return abs_diff(CT(x), CT(y));
+}
+
+
 static inline bool is_file(std::string path) noexcept {
     return ::access(path.data(), F_OK) != -1;
 }
@@ -436,10 +452,16 @@ ProdCSparseVector<VT, IT> operator/(const CSparseVector<VT, IT> &lhs, OVT rhs) {
 template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, TF> &rhs) {
     if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
-    std::common_type_t<VT1, blaze::ElementType_t<VT2>> ret = 0;
-    merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), (*rhs).begin(), (*rhs).end(),
+    for(const auto &pair: lhs) {
+        std::fprintf(stderr, "%g:%u\t", pair.value(), pair.index());
+        std::fputc('\n', stderr);
+    }
+    auto &rr = *rhs;
+    using CT = std::common_type_t<VT1, blaze::ElementType_t<VT2>>;
+    CT ret = 0;
+    merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), rr.begin(), rr.end(),
                                  [&ret](auto, auto lhv, auto rhv) {
-                                    auto v = lhv - rhv; ret += v * v;},
+                                    auto v = abs_diff(lhv, rhv); ret += v * v;},
                                  [&ret](auto, auto rhv) {ret += rhv * rhv;},
                                  [&ret](auto, auto lhv) {ret += lhv * lhv;});
     return ret;
@@ -454,7 +476,8 @@ auto l2Dist(const ProdCSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT
     std::common_type_t<VT1, blz::ElementType_t<VT2>> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), (*rhs).begin(), (*rhs).end(),
                                  [&ret](auto, auto lhv, auto rhv) {
-                                    auto v = lhv - rhv; ret += v * v;},
+                                    auto v = abs_diff(lhv, rhv);
+                                    ret += v * v;},
                                  [&ret](auto, auto rhv) {ret += rhv * rhv;},
                                  [&ret](auto, auto lhv) {ret += lhv * lhv;});
     return ret;
@@ -465,7 +488,7 @@ auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const CSparseVector<VT2, IT2> &r
     std::common_type_t<VT1, VT2> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
                                  [&ret](auto, auto lhv, auto rhv) {
-                                    auto v = lhv - rhv; ret += v * v;},
+                                    auto v = abs_diff(lhv, rhv); ret += v * v;},
                                  [&ret](auto, auto rhv) {ret += rhv * rhv;},
                                  [&ret](auto, auto lhv) {ret += lhv * lhv;});
     return ret;
@@ -476,7 +499,7 @@ auto l2Dist(const ProdCSparseVector<VT1, IT1> &lhs, const CSparseVector<VT2, IT2
     std::common_type_t<VT1, VT2> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
                                  [&ret](auto, auto lhv, auto rhv) {
-                                    auto v = lhv - rhv; ret += v * v;},
+                                    auto v = abs_diff(lhv, rhv); ret += v * v;},
                                  [&ret](auto, auto rhv) {ret += rhv * rhv;},
                                  [&ret](auto, auto lhv) {ret += lhv * lhv;});
     return ret;
@@ -491,7 +514,7 @@ std::common_type_t<VT1, VT2> l2Dist(const ProdCSparseVector<VT1, IT1> &lhs, cons
     std::common_type_t<VT1, VT2> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
                                  [&ret](auto, auto lhv, auto rhv) {
-                                    auto v = lhv - rhv; ret += v * v;},
+                                    auto v = abs_diff(lhv, rhv); ret += v * v;},
                                  [&ret](auto, auto rhv) {ret += rhv * rhv;},
                                  [&ret](auto, auto lhv) {ret += lhv * lhv;});
     return ret;
@@ -509,21 +532,6 @@ auto sqrDist(const T1 &lhs, const T2 &rhs) {
 template<typename T1, typename T2>
 auto sqrl2Dist(const T1 &lhs, const T2 &rhs) {
     return sqrDist(lhs, rhs);
-}
-
-template<typename T>
-INLINE auto abs_diff(T x, T y) {
-    if constexpr(std::is_unsigned_v<T>) {
-        return std::max(x, y) - std::min(x, y);
-    } else {
-        return std::abs(x - y);
-    }
-}
-
-template<typename T, typename T2>
-INLINE auto abs_diff(T x, T2 y) {
-    using CT = std::common_type_t<T, T2>;
-    return abs_diff(CT(x), CT(y));
 }
 
 template<typename T>
@@ -695,12 +703,6 @@ struct COOMatrix {
     void add(IT x, IT y, VT data) {
         x_.push_back(x); y_.push_back(y); data_.push_back(data_);
     }
-#if 0
-    void sort(bool rowMajor=true) {
-        if(rowMajor) {
-        }
-    }
-#endif
 };
 
 
@@ -972,26 +974,6 @@ struct COOElement {
     }
 };
 
-#if 0
-template<typename FT, typename IT=size_t, bool SO=blaze::rowMajor>
-struct COORadixTraits {
-    using VT = COOElement<FT, IT, SO>;
-    static constexpr int nBytes = sizeof(VT);
-    static int kth_byte(const VT &x, int k) {
-        if constexpr(SO == blaze::rowMajor) {
-            return 0xFF & (k < 8 ? (x.x >> (k * 8)): (x.y >> ((k - 8) * 8)) );
-        } else {
-            return 0xFF & (k < 8 ? (x.y >> (k * 8)): (x.x >> ((k - 8) * 8)) );
-        }
-    }
-    static constexpr bool compare(const VT &x, const VT &y) {
-        if constexpr(SO == blaze::rowMajor)
-            return std::tie(x.x, x.y, x.z) < std::tie(y.x, y.y, y.z);
-        else
-            return std::tie(x.y, x.x, x.z) < std::tie(y.y, y.x, y.z);
-    }
-};
-#endif
 
 template<typename FT=float, bool SO=blaze::rowMajor, typename IT=size_t>
 blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false) {

@@ -1752,8 +1752,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
         */
         FT ret;
-        assert((std::abs(mrsum - blz::sum(mr)) < 1e-10 && std::abs(ctrsum - blz::sum(ctr)) < 1e-10)
-               || !std::fprintf(stderr, "Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", blz::sum(mr), blz::sum(ctr), mrsum, ctrsum));
+        assert((std::abs(mrsum - sum(mr)) < 1e-10 && std::abs(ctrsum - sum(ctr)) < 1e-10)
+               || !std::fprintf(stderr, "[%s] Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", __PRETTY_FUNCTION__, sum(mr), sum(ctr), mrsum, ctrsum));
         const FT lhsum = mrsum + prior_sum;
         const FT rhsum = ctrsum + prior_sum;
         const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
