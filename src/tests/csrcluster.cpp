@@ -38,13 +38,13 @@ int main(int argc, char *argv[]) {
     //FLOAT_TYPE temp = 1.;
     dist::DissimilarityMeasure msr = dist::MKL;
     blz::DV<FLOAT_TYPE> prior{FLOAT_TYPE(1)};
-    bool loaded_blaze = false;
-    bool skip_empty = false, transpose = true;
+    //bool loaded_blaze = false;
+    //bool skip_empty = false, transpose = true;
     std::string outprefix;
     std::vector<double> vd{1.,2.,5.};
     std::vector<int> vi{1, 2, 5};
     auto v = util::CSparseVector<double, int>(vd.data(), vi.data(), 3, 6);
-    for(const auto &pair: v) std::fprintf(stderr, "index: %u, v: %g\b", pair.index(), pair.value());
+    for(const auto &pair: v) std::fprintf(stderr, "index: %zu, v: %g\b", pair.index(), pair.value());
     auto vit = v.begin();
     assert(vit->value() == 1.);
     assert(vit->index() == 1);
@@ -56,12 +56,12 @@ int main(int argc, char *argv[]) {
     assert(vit->index() == 5);
     
     for(int c;(c = getopt(argc, argv, "o:M:z:m:p:P:k:TEh?")) >= 0;) {switch(c) {
-        case 'T': transpose = false; break;
+        //case 'T': transpose = false; break;
         case 'm': msr = (dist::DissimilarityMeasure)std::atoi(optarg); break;
         case 'P': prior[0] = std::atof(optarg); break;
         case 'p': nthreads = std::atoi(optarg); break;
         case 'k': k = std::atoi(optarg); break;
-        case 'E': skip_empty = true; break;
+        //case 'E': skip_empty = true; break;
         case 'o': outprefix = optarg; break;
         case '?':
         case 'h':dist::print_measures();  

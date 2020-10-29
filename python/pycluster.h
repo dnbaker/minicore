@@ -202,6 +202,7 @@ py::object __py_cluster_from_centers(const Matrix &smw,
     } else throw std::invalid_argument("Centers must be a 2d numpy array or a list of numpy arrays");
     const unsigned k = dvecs.size();
     blz::DV<uint32_t> asn(smw.rows());
+    if(k > 0xFFFFFFFFull) throw std::invalid_argument("k must be < 4.3 billion to fit into a uint32_t");
     const auto psum = beta * smw.columns();
     blz::DV<double> centersums = blaze::generate(k, [&dvecs](auto x) {
         return blz::sum(dvecs[x]);

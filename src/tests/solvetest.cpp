@@ -140,6 +140,11 @@ int main(int argc, char *argv[]) {
             asn[id] = it - r.begin();
             return *it;
         });
+        int cid = 0;
+        for(const auto id: ids) {
+            complete_hardcost(id, cid) = 0.;
+            asn[id] = cid++;
+        }
     }
     ocenters = centers;
     assert(rowsums.size() == x.rows());
