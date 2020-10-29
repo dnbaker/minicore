@@ -1872,7 +1872,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
 #if __AVX512F__
                 constexpr size_t nperel = sizeof(__m512) / sizeof(float);
                 size_t i;
-                __m512 sum = __m512_setzero_ps();
+                __m512 sum = _mm512_setzero_ps();
                 size_t nsimd = nnz_either / nperel;
                 for(i = 0; i < nsimd; ++i) {
                     __m512 lhsa = _mm512_load_ps(&tmpmulx[i * nperel]);

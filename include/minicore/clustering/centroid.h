@@ -634,9 +634,8 @@ void set_centroids_full_mean(const Mat &mat,
             assert(r < std::ptrdiff_t(mat.rows()));
             const auto id = sa[i];
             auto &ctr = ctrs[id];
-            auto oldctrsum = ctrsums[id];
+            DBG_ONLY(auto oldctrsum = ctrsums[id];)
             set_center(ctr, row(mat, r));
-            //assign(ctr, row(mat, r));
             ctrsums[id] = sum(ctr);
             DBG_ONLY(std::fprintf(stderr, "for id %u, old ctrsum %g. new ctrsum: %g. sum of ctr: %g. sum of row: %g\n", int(id), double(oldctrsum), double(ctrsums[id]), sum(ctr), sum(row(mat, r)));)
         }
@@ -698,18 +697,9 @@ void set_centroids_full_mean(const Mat &mat,
         } else if(nasn == 0) {
             // do nothing
         } else {
-            //std::cerr << "Assigning " << nasn << "  points to center\n";
             set_center(ctr, mat, asp, nasn, weights);
-            //std::cerr << "Assigned " << nasn << "  points to center\n";
         }
-        //DBG_ONLY(std::fprintf(stderr, "ctrsums[%d] = %g, compared to sum of center %g\n", i, ctrsums[i], sum(ctr));)
     }
-#if 0
-    for(size_t i = 0; i < ctrs.size(); ++i) {
-        auto s = sum(ctrs[i]);
-        assert(std::abs(s - ctrsums[i]) <= 1e-4 || !std::fprintf(stderr, "sum expected %g, got %g\n", s, ctrsums[i]));
-    }
-#endif
 }
 
 template<typename FT=double, typename Mat, typename PriorT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t, typename SumT>
