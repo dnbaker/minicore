@@ -490,10 +490,6 @@ ProdCSparseVector<VT, IT> operator/(const CSparseVector<VT, IT> &lhs, OVT rhs) {
 template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, TF> &rhs) {
     if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
-    for(const auto &pair: lhs) {
-        std::fprintf(stderr, "%g:%u\t", pair.value(), pair.index());
-        std::fputc('\n', stderr);
-    }
     auto &rr = *rhs;
     using CT = std::common_type_t<VT1, blaze::ElementType_t<VT2>>;
     CT ret = 0;
