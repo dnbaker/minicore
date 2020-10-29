@@ -24,16 +24,30 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
             v.emplace_back(trans(cv));
         }
         break;
-        case 'i': {
+        case 'L': case 'l': {
+        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
+            auto cv = blz::make_cv((uint64_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            v.emplace_back(trans(cv));
+        }
+        }
+        break;
+        case 'I': case 'i': {
         for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
             auto cv = blz::make_cv((int *)bi.ptr + i * bi.shape[1], bi.shape[1]);
             v.emplace_back(trans(cv));
         }
         }
         break;
-        case 'u': {
+        case 'B': case 'b': {
         for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((unsigned *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            auto cv = blz::make_cv((uint8_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            v.emplace_back(trans(cv));
+        }
+        }
+        break;
+        case 'H': case 'h': {
+        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
+            auto cv = blz::make_cv((uint16_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
             v.emplace_back(trans(cv));
         }
         }
