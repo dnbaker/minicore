@@ -53,6 +53,7 @@ struct IndexPQ: public std::priority_queue<std::pair<CI, IT>, std::vector<std::p
     const auto &getc() const {return this->c;}
     auto getsorted() const {
         auto tmp = getc();
+        std::fprintf(stderr, "pq size: %zu\n", tmp.size());
         std::sort(tmp.begin(), tmp.end(), this->comp);
         return tmp;
     }
@@ -91,9 +92,13 @@ void sparse_l1_unweighted_median(const blz::SparseMatrix<MT, SO> &data, blz::Vec
             while(cid < pq.top().first->index())
                 __assign(ctr, cid++, 0);
             if(unlikely(cid > pq.top().first->index())) {
+                std::fprintf(stderr, "cid: %u. top index: %zu\n", cid, pq.top().first->index());
+                std::exit(1);
+#if 0
                 auto pqs = pq.getsorted();
                 for(const auto v: pqs) std::fprintf(stderr, "%zu:%g\n", v.first->index(), v.first->value());
                 std::exit(1);
+#endif
             }
         } else cid = pq.top().first->index();
         while(pq.top().first->index() == cid) {
@@ -130,7 +135,7 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT, TF> &
         return;
     }
 #endif
-    std::fprintf(stderr, "%s unweighted l1 median. data shape: %zu/%zu. Return shape: %zu\n", blaze::IsDenseMatrix_v<MT> ? "Dense": "Sparse", (*data).rows(), (*data).columns(), (*ret).size());
+    //std::fprintf(stderr, "%s unweighted l1 median. data shape: %zu/%zu. Return shape: %zu\n", blaze::IsDenseMatrix_v<MT> ? "Dense": "Sparse", (*data).rows(), (*data).columns(), (*ret).size());
     assert((*ret).size() == (*data).columns());
     auto &rr(*ret);
     const auto &dr(*data);

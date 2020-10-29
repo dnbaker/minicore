@@ -69,7 +69,7 @@ extra_compile_args = ['-march=native', '-DNDEBUG',
                       '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',
                       '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
                       "-DBLAZE_USE_SLEEF=1", "-pipe",
-                      '-Wno-deprecated-declarations']
+                      '-Wno-deprecated-declarations', '-O3']
 
 if 'BOOST_DIR' in environ:
     extra_compile_args.append("-I%s" % environ['BOOST_DIR'])

@@ -386,10 +386,10 @@ struct CoresetSampler {
             this->probs_[i] *= si;
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
-    template<typename CFT>
+    template<typename CFT, typename CFT2=CFT>
     void make_sampler(size_t np, size_t ncenters,
                       const CFT *costs, const IT *assignments,
-                      const FT *weights=nullptr,
+                      const CFT2 *weights=static_cast<CFT2 *>(nullptr),
                       uint64_t seed=137,
                       SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG,
                       unsigned k = unsigned(-1),
@@ -403,7 +403,7 @@ struct CoresetSampler {
         k_ = k;
         if(weights) {
             weights_.reset(new blaze::DynamicVector<FT>(np_));
-            std::memcpy(weights_->data(), weights, sizeof(FT) * np_);
+            std::copy(weights, weights + np, weights_->data());
         } else weights_.release();
         if(sens == LUCIC_FAULKNER_KRAUSE_FELDMAN) {
             make_gmm_sampler(ncenters, costs, assignments, seed, alpha_est);

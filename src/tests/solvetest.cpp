@@ -1,6 +1,6 @@
 #include "include/minicore/clustering/solve.h"
 #include "blaze/util/Serialization.h"
-#include "src/tests/solvetestdata.cpp"
+//#include "src/tests/solvetestdata.cpp"
 
         
 namespace clust = minicore::clustering;
@@ -21,6 +21,7 @@ int main(int argc, char *argv[]) {
     if(const char *s = std::getenv("NUMITER")) {
         NUMITER = std::atoi(s) > 0 ? std::atoi(s): 1;
     }
+    blz::SM<FLOAT_TYPE> x;
     const bool with_replacement = std::getenv("WITHREPS");
     //const bool use_importance_sampling = std::getenv("USE_IMPORTANCE_SAMPLING");
     std::srand(0);
@@ -73,6 +74,9 @@ int main(int argc, char *argv[]) {
                 std::fprintf(stderr, "Usage: %s <flags> \n-z: load blaze matrix from path\n-P: set prior (1.)\n-T set temp [1.]\n-p set num threads\n-m Set measure (MKL, 5)\n-k: set k [10]\t-T transpose mtx file\t-M parse mtx file from argument\n", *argv);
                 return EXIT_FAILURE;
     }}
+    if(!x.rows() && !x.columns()) {
+        x = blz::generate(500, 200, [](auto x, auto y) -> int {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); auto v = mt(); if(v % 8) return 0;return (v >> 6) % 64;});
+    }
     OMP_ONLY(omp_set_num_threads(nthreads);)
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv) {
         dist::print_measures();
@@ -88,7 +92,7 @@ int main(int argc, char *argv[]) {
     blz::DV<FLOAT_TYPE> centersums(k);
     blz::DV<FLOAT_TYPE> hardcosts;
     blz::DV<uint32_t> asn(nr);
-    std::vector<uint64_t> ids{1018, 2624, 5481, 6006, 8972};
+    std::vector<uint64_t> ids;
     blz::DM<FLOAT_TYPE> complete_hardcost;
     if(loaded_blaze == true) {
         auto fp = x.rows() <= 0xFFFFFFFFu ? size_t(std::rand() % x.rows()): size_t(((uint64_t(std::rand()) << 32) | std::rand()) % x.rows());
@@ -136,6 +140,11 @@ int main(int argc, char *argv[]) {
             asn[id] = it - r.begin();
             return *it;
         });
+        int cid = 0;
+        for(const auto id: ids) {
+            complete_hardcost(id, cid) = 0.;
+            asn[id] = cid++;
+        }
     }
     ocenters = centers;
     assert(rowsums.size() == x.rows());
@@ -161,13 +170,14 @@ int main(int argc, char *argv[]) {
     }
     std::fprintf(stderr, "mbsize: %zu\n", mbsize);
     auto mbcenters = ocenters;
-    std::vector<FLOAT_TYPE> weights(x.rows(), 1.);
+    blz::DV<FLOAT_TYPE> weights(x.rows(), 1.);
+    int minreseed = 0;
     std::fprintf(stderr, "minibatch clustering with no weights, %s replacement, %s importance sampling\n",  with_replacement ? "with": "without", "without");
-    clust::perform_hard_minibatch_clustering(x, msr, prior, mbcenters, asn, hardcosts, (std::vector<FLOAT_TYPE> *)nullptr, mbsize, NUMITER, 10, /*reseed_after=*/10, /*with_replacement=*/with_replacement, /*seed=*/rng());
+    clust::perform_hard_minibatch_clustering(x, msr, prior, mbcenters, asn, hardcosts, (std::vector<FLOAT_TYPE> *)nullptr, mbsize, NUMITER, 10, minreseed, /*with_replacement=*/with_replacement, /*seed=*/rng());
     auto mbuwcenters = ocenters;
     std::fprintf(stderr, "minibatch clustering with uniform weights, %s replacement, %s importance sampling\n",  with_replacement ? "with": "without", "without");
-    clust::perform_hard_minibatch_clustering(x, msr, prior, mbuwcenters, asn, hardcosts,  &weights, mbsize, NUMITER, 10, /*reseed_after=*/10, /*with_replacement=*/with_replacement, /*seed=*/rng());
+    clust::perform_hard_minibatch_clustering(x, msr, prior, mbuwcenters, asn, hardcosts,  &weights, mbsize, NUMITER, 10, /*reseed_after=*/minreseed, /*with_replacement=*/with_replacement, /*seed=*/rng());
     auto is_mbcenters = ocenters;
     std::fprintf(stderr, "minibatch clustering with uniform weights, %sreplacement, %s importance sampling\n", with_replacement ? "with": "without", "without");
-    clust::perform_hard_minibatch_clustering(x, msr, prior, is_mbcenters, asn, hardcosts, &weights, mbsize, NUMITER, 10, /*reseed_after=*/10, /*with_replacement=*/with_replacement, /*seed=*/rng());
+    clust::perform_hard_minibatch_clustering(x, msr, prior, is_mbcenters, asn, hardcosts, &weights, mbsize, NUMITER, 10, /*reseed_after=*/minreseed, /*with_replacement=*/with_replacement, /*seed=*/rng());
 }

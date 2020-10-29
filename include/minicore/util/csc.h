@@ -29,23 +29,20 @@ INLINE auto abs_diff(T x, T2 y) {
     return abs_diff(CT(x), CT(y));
 }
 
+    static constexpr size_t MINICORE_UTIL_ALN =
+#ifdef __AVX512F__
+        sizeof(__m512) / sizeof(char);
+#elif __AVX2__ || __AVX__
+        sizeof(__m256) / sizeof(char);
+#elif __SSE4_1__ || __SSE2__
+        sizeof(__m128) / sizeof(char);
+#else
+        1;
+#endif
 
 static inline bool is_file(std::string path) noexcept {
     return ::access(path.data(), F_OK) != -1;
 }
-template<typename DataType>
-struct SView: public std::pair<DataType *, size_t> {
-    size_t index() const {return this->second;}
-    size_t &index() {return this->second;}
-    DataType &value() {return *this->first;}
-    const DataType &value() const {return *this->first;}
-};
-template<typename DataType>
-struct ConstSView: public std::pair<const DataType*, size_t> {
-    size_t index() const {return this->second;}
-    size_t &index() {return this->second;}
-    const DataType &value() const {return *this->first;}
-};
 
 template<typename DataType>
 struct ConstSViewMul: public std::pair<const DataType*, size_t> {
@@ -78,8 +75,6 @@ struct CSCMatrixView {
         nf_(nfeat), n_(nitems)
     {
     }
-    using CView = SView<DataType>;
-    using ConstCView = ConstSView<DataType>;
     struct Column {
         const CSCMatrixView &mat_;
         size_t start_;
@@ -106,7 +101,14 @@ struct CSCMatrixView {
         size_t size() const {return mat_.columns();}
         template<bool is_const>
         struct ColumnIteratorBase {
-            using ViewType = std::conditional_t<is_const, ConstCView, CView>;
+            struct ViewType {
+                using VT = DataType;
+                ViewType(const ColumnIteratorBase &it): it_(it) {}
+                const ColumnIteratorBase &it_;
+                INLINE size_t index() const {return it_.col_.indices_[it_.index_];}
+                INLINE std::conditional_t<is_const, std::add_const_t<VT>, VT> &value()  {return it_.col_.data_[it_.index_];}
+                INLINE std::add_const_t<VT> &value() const {return it_.col_.data_[it_.index_];}
+            };
             using ColType = std::conditional_t<is_const, const Column, Column>;
             using ViewedType = std::conditional_t<is_const, const DataType, DataType>;
             using difference_type = std::ptrdiff_t;
@@ -157,24 +159,16 @@ struct CSCMatrixView {
                 ++index_;
                 return ret;
             }
-            const CView &operator*() const {
-                set();
+            const auto &operator*() const {
                 return data_;
             }
-            CView &operator*() {
-                set();
+            auto &operator*() {
                 return data_;
-            }
-            void set() const {
-                data_.first = const_cast<DataType *>(&col_.mat_.data_[index_]);
-                data_.second = col_.mat_.indices_[index_];
             }
             ViewType *operator->() {
-                set();
                 return &data_;
             }
             const ViewType *operator->() const {
-                set();
                 return &data_;
             }
             ColumnIteratorBase(ColType &col, size_t ind): col_(col), index_(ind) {
@@ -221,15 +215,33 @@ struct CSparseVector {
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
     using NCVT = std::remove_const_t<VT>;
-    VT sum() const {
-        return blz::sum(blz::CustomVector<NCVT,blz::unaligned,blz::unpadded>((NCVT *)data_, n_));
+    NCVT sum() const {
+#if 0
+        std::remove_const_t<VT> ret;
+        auto di = reinterpret_cast<uint64_t>(data_);
+        if(di % MINICORE_UTIL_ALN && n_ > (MINICORE_UTIL_ALN / sizeof(VT)) && di % sizeof(VT) == 0) {
+            // Break into short unaligned + long aligned sum
+            const auto offset = (MINICORE_UTIL_ALN - (di % MINICORE_UTIL_ALN));
+            const auto offset_n = offset / sizeof(VT);
+            assert(reinterpret_cast<uint64_t>((NCVT *)data_ + offset_n) % MINICORE_UTIL_ALN == 0);
+            ret = blz::sum(blz::make_cv((NCVT *)data_, offset_n))
+                + blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_ + offset_n, n_ - offset_n));
+        } else ret = blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
+        return ret ;
+#else
+        return blz::sum(blz::make_cv((NCVT *)data_, n_));
+#endif
     }
-    using CView = SView<VT>;
-    using ConstCView = ConstSView<VT>;
     using DataType = VT;
     template<bool is_const>
     struct CSparseVectorIteratorBase {
-        using ViewType = std::conditional_t<is_const, ConstCView, CView>;
+        struct ViewType {
+            ViewType(const CSparseVectorIteratorBase &it): it_(it) {}
+            const CSparseVectorIteratorBase &it_;
+            INLINE size_t index() const {return it_.col_.indices_[it_.index_];}
+            INLINE std::conditional_t<is_const, std::add_const_t<VT>, VT> &value()  {return it_.col_.data_[it_.index_];}
+            INLINE std::add_const_t<VT> &value() const {return it_.col_.data_[it_.index_];}
+        };
         using ColType = std::conditional_t<is_const, std::add_const_t<CSparseVector>, CSparseVector>;
         using ViewedType = std::conditional_t<is_const, std::add_const_t<DataType>, DataType>;
         using difference_type = std::ptrdiff_t;
@@ -281,31 +293,36 @@ struct CSparseVector {
             return ret;
         }
         const ViewType &operator*() const {
-            set();
             return data_;
         }
         ViewType &operator*() {
-            set();
             return data_;
         }
-        void set() const {
-            data_.first = const_cast<ViewedType *>(std::addressof(col_.data_[index_]));
-            data_.second = col_.indices_[index_];
-        }
         ViewType *operator->() {
-            set();
             return &data_;
         }
         const ViewType *operator->() const {
-            set();
             return &data_;
         }
-        CSparseVectorIteratorBase(ColType &col, size_t ind): col_(col), index_(ind) {
+        CSparseVectorIteratorBase(ColType &col, size_t ind): col_(col), index_(ind), data_(*this) {
         }
     };
     double l2Norm() const {
-        auto v = blz::make_cv(data_, n_);
-        return blz::l2Norm(v);
+        double ret;
+        auto di = reinterpret_cast<uint64_t>(data_);
+        if(di % MINICORE_UTIL_ALN) {
+            if(n_ > (MINICORE_UTIL_ALN / sizeof(VT)) && di % sizeof(VT) == 0) {
+                // Break into short unaligned + long aligned sum
+                const auto offset = (MINICORE_UTIL_ALN - (di % MINICORE_UTIL_ALN));
+                const auto offset_n = offset / sizeof(VT);
+                assert(reinterpret_cast<uint64_t>((NCVT *)data_ + offset_n) % MINICORE_UTIL_ALN == 0);
+                ret = sqrNorm(blz::make_cv((NCVT *)data_, offset_n))
+                    + sqrNorm(blz::make_cv<blz::aligned>((NCVT *)data_ + offset_n, n_ - offset_n));
+            } else {
+                ret = sqrNorm(blz::make_cv((NCVT *)data_, n_));
+            }
+        } else ret = sqrNorm(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
+        return std::sqrt(ret);
     }
     using ConstCSparseIterator = CSparseVectorIteratorBase<true>;
     using CSparseIterator = CSparseVectorIteratorBase<false>;
@@ -315,22 +332,14 @@ struct CSparseVector {
     ConstCSparseIterator end()   const {return ConstCSparseIterator(*this, n_);}
 };
 
+template<typename VT, typename IT, typename IPtrT>
+struct CSparseMatrix;
+
 template<typename VT, typename IT>
-std::ostream& operator<< (std::ostream& out, const CSparseVector<VT, IT> & item)
-{
-    auto it = item.begin();
-    for(size_t i = 0; i < item.dim_; ++i) {
-        if(it->index() > i) {
-            out << 0.;
-        } else {
-            out << it->value();
-            if(it != item.end()) ++it;
-        }
-        out << ' ';
-    }
-    out << '\n';
-    return out;
-}
+std::ostream& operator<< (std::ostream& out, const CSparseVector<VT, IT> & item);
+template<typename VT, typename IT, typename IPtrT>
+std::ostream& operator<< (std::ostream& out, const CSparseMatrix<VT, IT, IPtrT> & item);
+
 
 
 template<typename VT, typename IT>
@@ -345,13 +354,33 @@ struct ProdCSparseVector {
     }
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
+    using NCVT = std::remove_const_t<VT>;
     double sum() const {
-        return blz::sum(blz::CustomVector<VT,blz::unaligned,blz::unpadded>(data_, n_)) * prod_;
+#if 0
+        double ret;
+        auto di = reinterpret_cast<uint64_t>(data_);
+        if(di % MINICORE_UTIL_ALN && n_ > (MINICORE_UTIL_ALN / sizeof(VT)) && di % sizeof(VT) == 0) {
+            // Break into short unaligned + long aligned sum
+            const auto offset = (MINICORE_UTIL_ALN - (di % MINICORE_UTIL_ALN));
+            const auto offset_n = offset / sizeof(VT);
+            assert(reinterpret_cast<uint64_t>((NCVT *)data_ + offset_n) % MINICORE_UTIL_ALN == 0);
+            ret = blz::sum(blz::make_cv((NCVT *)data_, offset_n))
+                + blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_ + offset_n, n_ - offset_n));
+        } else ret = blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
+        return ret * prod_;
+#else
+        return blz::sum(blz::make_cv((NCVT *)data_, n_)) * prod_;
+#endif
     }
     using ConstCView = ConstSViewMul<VT>;
     using DataType = VT;
     struct ProdCSparseVectorIteratorBase {
-        using ViewType = ConstCView;
+        struct ViewType {
+            ViewType(const ProdCSparseVectorIteratorBase &it): it_(it) {}
+            const ProdCSparseVectorIteratorBase &it_;
+            INLINE size_t index() const {assert(it_.index_ < it_.col_.nnz()); return it_.col_.indices_[it_.index_];}
+            INLINE double value() const {assert(it_.index_ < it_.col_.nnz()); return it_.col_.prod_ * it_.col_.data_[it_.index_];}
+        };
         using ColType = std::add_const_t<ProdCSparseVector>;
         using ViewedType = std::add_const_t<DataType>;
         using difference_type = std::ptrdiff_t;
@@ -396,37 +425,46 @@ struct ProdCSparseVector {
             return ret;
         }
         const ViewType &operator*() const {
-            set();
             return data_;
         }
         ViewType &operator*() {
-            set();
             return data_;
         }
-        void set() const {
-            data_.first = const_cast<ViewedType *>(std::addressof(col_.data_[index_]));
-            data_.second = col_.indices_[index_];
-        }
         ViewType *operator->() {
-            set();
             return &data_;
         }
         const ViewType *operator->() const {
-            set();
             return &data_;
         }
-        ProdCSparseVectorIteratorBase(ColType &col, size_t ind, VT prod): col_(col), index_(ind), data_(prod) {
+        ProdCSparseVectorIteratorBase(ColType &col, size_t ind): col_(col), index_(ind), data_(*this) {
         }
     };
     double l2Norm() const {
-        auto v = blz::make_cv(data_, n_);
-        return prod_ * l2Norm(v);
+#if 0
+        double ret;
+        auto di = reinterpret_cast<uint64_t>(data_);
+        if(di % MINICORE_UTIL_ALN) {
+            if(n_ > (MINICORE_UTIL_ALN / sizeof(VT)) && di % sizeof(VT) == 0) {
+                // Break into short unaligned + long aligned sum
+                const auto offset = (MINICORE_UTIL_ALN - (di % MINICORE_UTIL_ALN));
+                const auto offset_n = offset / sizeof(VT);
+                assert(reinterpret_cast<uint64_t>((NCVT *)data_ + offset_n) % MINICORE_UTIL_ALN == 0);
+                ret = sqrNorm(blz::make_cv((NCVT *)data_, offset_n))
+                    + sqrNorm(blz::make_cv<blz::aligned>((NCVT *)data_ + offset_n, n_ - offset_n));
+            } else {
+                ret = sqrNorm(blz::make_cv((NCVT *)data_, n_));
+            }
+        } else ret = sqrNorm(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
+#else
+        double ret = blz::sqrNorm(blz::make_cv((NCVT *)data_, n_));
+#endif
+        return prod_ * std::sqrt(ret);
     }
     using CSparseIterator = ProdCSparseVectorIteratorBase;
-    CSparseIterator begin() {return CSparseIterator(*this, 0, prod_);}
-    CSparseIterator end()   {return CSparseIterator(*this, n_, prod_);}
-    CSparseIterator begin() const {return CSparseIterator(*this, 0, prod_);}
-    CSparseIterator end()   const {return CSparseIterator(*this, n_, prod_);}
+    CSparseIterator begin() {return CSparseIterator(*this, 0);}
+    CSparseIterator end()   {return CSparseIterator(*this, n_);}
+    CSparseIterator begin() const {return CSparseIterator(*this, 0);}
+    CSparseIterator end()   const {return CSparseIterator(*this, n_);}
 };
 
 template<typename VT, typename IT>
@@ -791,18 +829,74 @@ inline decltype(auto) sum(const CSparseMatrix<VT, IT, IPtrT> &sm) {
     }
 }
 
+template<typename VT, typename IT>
+std::ostream& operator<< (std::ostream& out, const CSparseVector<VT, IT> & item)
+{
+    auto it = item.begin();
+    for(size_t i = 0; i < item.dim_; ++i) {
+        if(it->index() > i) {
+            out << 0.;
+        } else {
+            out << it->value();
+            if(it != item.end()) ++it;
+        }
+        out << ' ';
+    }
+    out << '\n';
+    return out;
+}
+
+template<typename VT, typename IT, typename IPtrT>
+std::ostream& operator<< (std::ostream& out, const CSparseMatrix<VT, IT, IPtrT> & item)
+{
+    out << "( ";
+    for(size_t i = 0; i < item.rows(); ++i) {
+        out << row(item, i, blz::unchecked);
+    }
+    out << ")";
+    out << '\n';
+    return out;
+}
 template<typename VT, bool SO, typename SVT, typename SVI>
-decltype(auto) assign(blaze::Vector<VT, SO> &lhs, const CSparseVector<SVT, SVI> &rhs) {
+decltype(auto) assign(blaze::DenseVector<VT, SO> &lhs, const CSparseVector<SVT, SVI> &rhs) {
+    //std::fprintf(stderr, "[%s] Beginning assignment\n", __PRETTY_FUNCTION__);
+    if((*lhs).size() != rhs.size()) (*lhs).resize(rhs.size());
+    *lhs = 0.;
+    DBG_ONLY(size_t i = 0;)
+    for(const auto &pair: rhs) {
+        assert(rhs.data_[i] == pair.value());
+        assert(rhs.indices_[i] == pair.index());
+        (*lhs)[pair.index()] = pair.value();
+        DBG_ONLY(++i;)
+    }
+    DBG_ONLY(std::cerr << *lhs;)
+    return *lhs;
+}
+
+template<typename VT, bool SO, typename SVT, typename SVI>
+decltype(auto) assign(blaze::SparseVector<VT, SO> &lhs, const CSparseVector<SVT, SVI> &rhs) {
+    //std::fprintf(stderr, "[%s] Beginning assignment\n", __PRETTY_FUNCTION__);
     auto nnz = rhs.nnz();
     if((*lhs).size() != rhs.size()) (*lhs).resize(rhs.size());
+    (*lhs).reset();
     if(!nnz) {
-        (*lhs).reset();
         return *lhs;
     }
     (*lhs).reserve(nnz);
+    size_t i = 0;
     for(const auto &pair: rhs) {
-        (*lhs)[pair.index()] = pair.value();
+        assert(rhs.data_[i] == pair.value());
+        assert(rhs.indices_[i] == pair.index());
+        (*lhs).append(pair.index(), pair.value());
+        ++i;
     }
+    assert((*lhs).size() == rhs.size());
+    assert(i == rhs.nnz());
+    std::fprintf(stderr, "Ending assignment\n");
+#ifndef NDEBUG
+    std::cerr << *lhs;
+    std::cerr << rhs;
+#endif
     return *lhs;
 }
 

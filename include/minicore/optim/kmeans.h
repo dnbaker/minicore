@@ -75,7 +75,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     const SampleFmt fmt = use_exponential_skips ? USE_EXPONENTIAL_SKIPS: NEITHER;
     int d0s = 0;
     for(size_t center_idx = 1;center_idx < k;) {
-        std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\n", center_idx, size_t(k), centers[center_idx - 1]);
+        std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\r\n", center_idx, size_t(k), centers[center_idx - 1]);
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
         auto cd = centers.data();
@@ -328,16 +328,13 @@ template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
 auto
 kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false) {
-    using FT = typename MT::ElementType;
-    std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
     if(rowwise) {
         auto rowit = blz::rowiterator(*mat);
-        ret = kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips);
+        return kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips);
     } else { // columnwise
         auto columnit = blz::columniterator(*mat);
-        ret = kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips);
+        return kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips);
     }
-    return ret;
 }
 
 template<typename MT, bool SO,
@@ -375,11 +372,11 @@ kmc2(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k,
     return ret;
 }
 
-template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double, typename Functor=blz::sqrL2Norm>
-double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename CFT, typename WFT=double, typename Functor=blz::sqrL2Norm>
+double lloyd_iteration(std::vector<IT> &assignments, std::vector<CFT> &counts,
                        CMatrixType &centers, MatrixType &data,
                        const Functor &func=Functor(),
-                       const WFT *weights=nullptr,
+                       const WFT *weights=static_cast<WFT *>(nullptr),
                        uint64_t seed=0,
                        bool use_moving_average=false)
 {
@@ -501,13 +498,13 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<WFT> &counts,
     return total_loss;
 }
 
-template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename WFT=double,
+template<typename IT, typename MatrixType, typename CMatrixType=MatrixType, typename CFT, typename WFT=double,
          typename Functor=blz::sqrL2Norm>
-double lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
+double lloyd_loop(std::vector<IT> &assignments, std::vector<CFT> &counts,
                   CMatrixType &centers, MatrixType &data,
                   double tolerance=0., size_t maxiter=-1,
                   const Functor &func=Functor(),
-                  const WFT *weights=nullptr,
+                  const WFT *weights=static_cast<WFT *>(nullptr),
                   bool use_moving_average=false)
 {
     if(tolerance < 0.) throw 1;
