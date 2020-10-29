@@ -201,6 +201,7 @@ struct CSparseVector {
     size_t size() const {return dim_;}
     using NCVT = std::remove_const_t<VT>;
     NCVT sum() const {
+#if 0
         std::remove_const_t<VT> ret;
         auto di = reinterpret_cast<uint64_t>(data_);
         if(di % MINICORE_UTIL_ALN && n_ > (MINICORE_UTIL_ALN / sizeof(VT)) && di % sizeof(VT) == 0) {
@@ -212,6 +213,9 @@ struct CSparseVector {
                 + blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_ + offset_n, n_ - offset_n));
         } else ret = blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
         return ret ;
+#else
+        return blz::sum(blz::make_cv((NCVT *)data_, n_));
+#endif
     }
     using DataType = VT;
     template<bool is_const>
@@ -313,22 +317,14 @@ struct CSparseVector {
     ConstCSparseIterator end()   const {return ConstCSparseIterator(*this, n_);}
 };
 
+template<typename VT, typename IT, typename IPtrT>
+struct CSparseMatrix;
+
 template<typename VT, typename IT>
-std::ostream& operator<< (std::ostream& out, const CSparseVector<VT, IT> & item)
-{
-    auto it = item.begin();
-    for(size_t i = 0; i < item.dim_; ++i) {
-        if(it->index() > i) {
-            out << 0.;
-        } else {
-            out << it->value();
-            if(it != item.end()) ++it;
-        }
-        out << ' ';
-    }
-    out << '\n';
-    return out;
-}
+std::ostream& operator<< (std::ostream& out, const CSparseVector<VT, IT> & item);
+template<typename VT, typename IT, typename IPtrT>
+std::ostream& operator<< (std::ostream& out, const CSparseMatrix<VT, IT, IPtrT> & item);
+
 
 
 template<typename VT, typename IT>
@@ -345,6 +341,7 @@ struct ProdCSparseVector {
     size_t size() const {return dim_;}
     using NCVT = std::remove_const_t<VT>;
     double sum() const {
+#if 0
         double ret;
         auto di = reinterpret_cast<uint64_t>(data_);
         if(di % MINICORE_UTIL_ALN && n_ > (MINICORE_UTIL_ALN / sizeof(VT)) && di % sizeof(VT) == 0) {
@@ -356,6 +353,9 @@ struct ProdCSparseVector {
                 + blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_ + offset_n, n_ - offset_n));
         } else ret = blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
         return ret * prod_;
+#else
+        return blz::sum(blz::make_cv((NCVT *)data_, n_)) * prod_;
+#endif
     }
     using ConstCView = ConstSViewMul<VT>;
     using DataType = VT;
@@ -363,8 +363,8 @@ struct ProdCSparseVector {
         struct ViewType {
             ViewType(const ProdCSparseVectorIteratorBase &it): it_(it) {}
             const ProdCSparseVectorIteratorBase &it_;
-            INLINE size_t index() const {return it_.col_.indices_[it_.index_];}
-            INLINE double value() const {return it_.col_.prod_ * it_.col_.data_[it_.index_];}
+            INLINE size_t index() const {assert(it_.index_ < it_.col_.nnz()); return it_.col_.indices_[it_.index_];}
+            INLINE double value() const {assert(it_.index_ < it_.col_.nnz()); return it_.col_.prod_ * it_.col_.data_[it_.index_];}
         };
         using ColType = std::add_const_t<ProdCSparseVector>;
         using ViewedType = std::add_const_t<DataType>;
@@ -425,6 +425,7 @@ struct ProdCSparseVector {
         }
     };
     double l2Norm() const {
+#if 0
         double ret;
         auto di = reinterpret_cast<uint64_t>(data_);
         if(di % MINICORE_UTIL_ALN) {
@@ -439,6 +440,9 @@ struct ProdCSparseVector {
                 ret = sqrNorm(blz::make_cv((NCVT *)data_, n_));
             }
         } else ret = sqrNorm(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
+#else
+        double ret = blz::sqrNorm(blz::make_cv((NCVT *)data_, n_));
+#endif
         return prod_ * std::sqrt(ret);
     }
     using CSparseIterator = ProdCSparseVectorIteratorBase;
@@ -824,18 +828,74 @@ inline decltype(auto) sum(const CSparseMatrix<VT, IT, IPtrT> &sm) {
     }
 }
 
+template<typename VT, typename IT>
+std::ostream& operator<< (std::ostream& out, const CSparseVector<VT, IT> & item)
+{
+    auto it = item.begin();
+    for(size_t i = 0; i < item.dim_; ++i) {
+        if(it->index() > i) {
+            out << 0.;
+        } else {
+            out << it->value();
+            if(it != item.end()) ++it;
+        }
+        out << ' ';
+    }
+    out << '\n';
+    return out;
+}
+
+template<typename VT, typename IT, typename IPtrT>
+std::ostream& operator<< (std::ostream& out, const CSparseMatrix<VT, IT, IPtrT> & item)
+{
+    out << "( ";
+    for(size_t i = 0; i < item.rows(); ++i) {
+        out << row(item, i, blz::unchecked);
+    }
+    out << ")";
+    out << '\n';
+    return out;
+}
 template<typename VT, bool SO, typename SVT, typename SVI>
-decltype(auto) assign(blaze::Vector<VT, SO> &lhs, const CSparseVector<SVT, SVI> &rhs) {
+decltype(auto) assign(blaze::DenseVector<VT, SO> &lhs, const CSparseVector<SVT, SVI> &rhs) {
+    //std::fprintf(stderr, "[%s] Beginning assignment\n", __PRETTY_FUNCTION__);
+    if((*lhs).size() != rhs.size()) (*lhs).resize(rhs.size());
+    *lhs = 0.;
+    DBG_ONLY(size_t i = 0;)
+    for(const auto &pair: rhs) {
+        assert(rhs.data_[i] == pair.value());
+        assert(rhs.indices_[i] == pair.index());
+        (*lhs)[pair.index()] = pair.value();
+        DBG_ONLY(++i;)
+    }
+    DBG_ONLY(std::cerr << *lhs;)
+    return *lhs;
+}
+
+template<typename VT, bool SO, typename SVT, typename SVI>
+decltype(auto) assign(blaze::SparseVector<VT, SO> &lhs, const CSparseVector<SVT, SVI> &rhs) {
+    //std::fprintf(stderr, "[%s] Beginning assignment\n", __PRETTY_FUNCTION__);
     auto nnz = rhs.nnz();
     if((*lhs).size() != rhs.size()) (*lhs).resize(rhs.size());
+    (*lhs).reset();
     if(!nnz) {
-        (*lhs).reset();
         return *lhs;
     }
     (*lhs).reserve(nnz);
+    size_t i = 0;
     for(const auto &pair: rhs) {
-        (*lhs)[pair.index()] = pair.value();
+        assert(rhs.data_[i] == pair.value());
+        assert(rhs.indices_[i] == pair.index());
+        (*lhs).append(pair.index(), pair.value());
+        ++i;
     }
+    assert((*lhs).size() == rhs.size());
+    assert(i == rhs.nnz());
+    std::fprintf(stderr, "Ending assignment\n");
+#ifndef NDEBUG
+    std::cerr << *lhs;
+    std::cerr << rhs;
+#endif
     return *lhs;
 }
 

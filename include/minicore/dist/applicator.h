@@ -8,6 +8,8 @@
 #include "minicore/optim/kmeans.h"
 #include "minicore/util/csc.h"
 #include <set>
+#include <x86intrin.h>
+#include "sleef.h"
 
 
 namespace minicore {
@@ -1747,8 +1749,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
         */
         FT ret;
-        assert((std::abs(mrsum - blz::sum(mr)) < 1e-10 && std::abs(ctrsum - blz::sum(ctr)) < 1e-10)
-               || !std::fprintf(stderr, "Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", blz::sum(mr), blz::sum(ctr), mrsum, ctrsum));
+        assert((std::abs(mrsum - sum(mr)) < 1e-10 && std::abs(ctrsum - sum(ctr)) < 1e-10)
+               || !std::fprintf(stderr, "Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", sum(mr), sum(ctr), mrsum, ctrsum));
         const FT lhsum = mrsum + prior_sum;
         const FT rhsum = ctrsum + prior_sum;
         const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
@@ -1830,48 +1832,88 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 const auto emptymean = lambda * lhinc + m1l * rhinc;
                 const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
                                         + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
-#if 1
+#if __AVX512F__ || __AVX2__
+                assert(wr.size() == wc.size());
                 size_t nnz_either = 0;
-                blz::DV<float> tmpmuly(nd), tmpmulx(nd);
-                //blz::DV<float> tmplogx(nd), tmplogy(nd);
-                blz::DV<float> miv(nd);
+                //std::cerr << "Allocating memory\n";
+                blz::DV<float> tmpmuly(nd), tmpmulx(nd), miv(nd);
                 auto sharedz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
                     [&](auto,auto x, auto y) {
+                        assert(nnz_either < nd);
                         auto xv = x + lhinc, yv = y + rhinc;
-                        miv[nnz_either] = FT(1.) / (lambda * xv + m1l * yv);
+                        miv[nnz_either] = lambda * xv + m1l * yv;
                         tmpmulx[nnz_either] = xv;
                         tmpmuly[nnz_either] = yv;
-                        //tmplogx[nnz_either] = xv * mi;
-                        //tmplogy[nnz_either] = yv * mi;
                         ++nnz_either;
                     },
                     // x only
                     [&](auto,auto x) {
+                        assert(nnz_either < nd);
                         auto xv = x + lhinc;
-                        miv[nnz_either] = FT(1.) / (lambda * xv + m1l * rhinc);
+                        miv[nnz_either] = lambda * xv + m1l * rhinc;
                         tmpmulx[nnz_either] = xv;
                         tmpmuly[nnz_either] = rhinc;
-                        //tmplogx[nnz_either] = xv * mi;
-                        //tmplogy[nnz_either] = rhinc * mi;
                         ++nnz_either;
                     },
                     [&](auto,auto y) {
+                        assert(nnz_either < nd);
                         auto yv = y + rhinc;
-                        miv[nnz_either] = FT(1.) / (lambda * lhinc + m1l * yv);
+                        miv[nnz_either] = lambda * lhinc + m1l * yv;
                         tmpmulx[nnz_either] = lhinc;
                         tmpmuly[nnz_either] = yv;
-                        //tmplogx[nnz_either] = lhinc * mi;
-                        //tmplogy[nnz_either] = yv * mi;
                         ++nnz_either;
                     });
-                //tmplogx.resize(nnz_either);
-                //tmplogy.resize(nnz_either);
                 miv.resize(nnz_either);
                 tmpmulx.resize(nnz_either);
                 tmpmuly.resize(nnz_either);
-                ret =  lambda * dot(tmpmulx, log(tmpmulx * miv))
-                      + m1l * dot(tmpmuly, log(tmpmuly * miv))
-                      + emptycontrib * sharedz;
+#if __AVX512F__
+                constexpr size_t nperel = sizeof(__m512) / sizeof(float);
+                size_t i;
+                __m512 sum = __m512_setzero_ps();
+                size_t nsimd = nnz_either / nperel;
+                for(i = 0; i < nsimd; ++i) {
+                    __m512 lhsa = _mm512_load_ps(&tmpmulx[i * nperel]);
+                    __m512 mv = _mm512_load_ps(&miv[i * nperel]);
+                    __m512 lv = Sleef_logf16_u35(_mm512_div_ps(lhsa, mv));
+                    __m512 lvmul = _mm512_mul_ps(lhsa, lv);
+                    __m512 rhsa = _mm512_load_ps(&tmpmuly[i * nperel]);
+                    __m512 rv = Sleef_logf16_u35(_mm512_mul_ps(mv, rhsa));
+                    __m512 rvmul = _mm512_mul_ps(rhsa, rv);
+                    __m512 acc = _mm512_add_ps(_mm512_mul_ps(rvmul, _mm512_set1_ps(m1l)), _mm512_mul_ps(lvmul, _mm512_set1_ps(lambda)));
+                    sum = _mm512_add_ps(acc, sum);
+                }
+                for(ret = 0., i *= nperel;i < nnz_either; ++i) {
+                    ret += tmpmulx[i] * std::log(tmpmulx[i] * miv[i]);
+                }
+                SK_UNROLL_16
+                for(size_t i = 0; i < 16; ++i) {
+                    ret += sum[i];
+                }
+#elif __AVX2__
+                constexpr size_t nperel = sizeof(__m256) / sizeof(float);
+                size_t i;
+                __m256 sum = _mm256_setzero_ps();
+                size_t nsimd = nnz_either / nperel;
+                SK_UNROLL_4
+                for(i = 0; i < nsimd; ++i) {
+                    __m256 lhsa = _mm256_load_ps(&tmpmulx[i * nperel]);
+                    __m256 mv = _mm256_load_ps(&miv[i * nperel]);
+                    __m256 lv = Sleef_logf8_u35(_mm256_div_ps(lhsa, mv));
+                    __m256 lvmul = _mm256_mul_ps(lhsa, lv);
+                    __m256 rhsa = _mm256_load_ps(&tmpmuly[i * nperel]);
+                    __m256 rv = Sleef_logf8_u35(_mm256_div_ps(rhsa, mv));
+                    __m256 rvmul = _mm256_mul_ps(rhsa, rv);
+                    __m256 acc = _mm256_add_ps(_mm256_mul_ps(rvmul, _mm256_set1_ps(m1l)), _mm256_mul_ps(lvmul, _mm256_set1_ps(lambda)));
+                    sum = _mm256_add_ps(acc, sum);
+                }
+                for(ret = 0., i *= nperel;i < nnz_either; ++i) {
+                    ret += tmpmulx[i] * std::log(tmpmulx[i] / miv[i]);
+                }
+                SK_UNROLL_8
+                for(size_t i = 0; i < 8; ++i) {
+                    ret += sum[i];
+                }
+#endif
 #else
                 ret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
@@ -1892,8 +1934,10 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         auto xvl = std::log(lhinc * mi), yvl = std::log(yv * mi);
                         return lambda * lhinc * xvl + m1l * yv * yvl;
                     },
-                    emptycontrib);
+                    0.);
 #endif
+                ret += emptycontrib * sharedz;
+                //std::cerr << "ret: " << ret << '\n';
                 if(msr == LLR || msr == SRLRT) ret *= bothsum;
                 ret = std::max(ret, FT(0)); // ensure non-negativity
                 if(msr == SRULRT || msr == SRLRT)

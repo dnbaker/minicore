@@ -126,7 +126,7 @@ auto perform_hard_clustering(const MT &mat, // TODO: consider replacing blaze::M
         std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);
         if(newcost > cost) {
             std::cerr << "Warning: New cost " << newcost << " > original cost " << cost << ". Using prior iteration.\n;";
-            centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
+            centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
             assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums);
             //DBG_ONLY(std::abort();)
             break;

@@ -206,7 +206,7 @@ py::object __py_cluster_from_centers(const Matrix &smw,
     blz::DV<double> centersums = blaze::generate(k, [&dvecs](auto x) {
         return blz::sum(dvecs[x]);
     });
-    blz::DV<double> costs;
+    blz::DV<float> costs;
     smw.perform([&](auto &mat) {
         costs = blaze::generate(mat.rows(), [&](size_t idx) {
             double bestcost;

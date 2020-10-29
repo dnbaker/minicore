@@ -36,3 +36,4 @@ script:
   - ./istestdbg
   - ./msvdbg
   - ./knntestdbg
+  - ./solvetestdbg

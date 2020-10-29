@@ -31,6 +31,13 @@ static constexpr const char *cp2str(CentroidPol pol) {
 
 template<typename CtrT, typename VT, bool TF>
 void set_center(CtrT &lhs, const blaze::Vector<VT, TF> &rhs) {
+    //std::fprintf(stderr, "Assigning from rhs of size %zu to lhs of size %zu and capacity %zu\n", (*rhs).size(), lhs.size(), lhs.capacity());
+    if(lhs.size() != (*rhs).size()) {
+        lhs.resize((*rhs).size());
+    }
+    if constexpr(blaze::IsSparseVector_v<CtrT>) {
+        lhs.reserve((*rhs).size());
+    }
     lhs = *rhs;
 }
 
@@ -46,7 +53,7 @@ template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typ
 void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asn, size_t nasn, WeightT *w = static_cast<WeightT>(nullptr))
 {
     using VT = std::conditional_t<std::is_floating_point_v<DataT>, DataT, std::conditional_t<(sizeof(DataT) < 8), float, double>>;
-    blz::DV<VT> mv(mat.columns(), VT(0));
+    blz::DV<VT, blz::TransposeFlag_v<CtrT>> mv(mat.columns(), VT(0));
     double wsum = 0.;
     OMP_PFOR_DYN
     for(size_t i = 0; i < nasn; ++i) {
@@ -63,13 +70,7 @@ void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &
         }
     }
     wsum = 1. / (w ? wsum: double(nasn));
-    ctr.reset();
-    for(size_t i = 0; i < mv.size(); ++i) {
-        if(mv[i] > 0.) {
-            ctr[i] = mv[i];
-        }
-    }
-    ctr *= wsum;
+    ctr = mv * wsum;
 }
 
 template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT>
@@ -94,8 +95,9 @@ decltype(auto) elements(const std::vector<VT, Alloc> &w, IT *asp, size_t nasn) {
 }
 
 template<typename CtrT, typename MT, bool SO, typename IT, typename WeightT=blz::DV<blz::ElementType_t<MT>>>
-void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nasn, WeightT *w = static_cast<WeightT>(nullptr)) {
+void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nasn, WeightT *w = static_cast<WeightT*>(nullptr)) {
     auto rowsel = rows(*mat, asp, nasn);
+    //std::fprintf(stderr, "%zu asn\n", nasn);
     if(w) {
         auto elsel = elements(*w, asp, nasn);
         auto weighted_rows = rowsel % blaze::expand(elsel, (*mat).columns());
@@ -556,7 +558,7 @@ void set_centroids_full_mean(const Mat &mat,
 {
     assert(rowsums.size() == (*mat).rows());
     assert(ctrsums.size() == ctrs.size());
-    DBG_ONLY(std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p\n", (void *)weights);)
+    DBG_ONLY(std::fprintf(stderr, "[%s] Calling set_centroids_full_mean with weights = %p\n", __PRETTY_FUNCTION__, (void *)weights);)
     //
 
     assert(asn.size() == costs.size() || !std::fprintf(stderr, "asn size %zu, cost size %zu\n", asn.size(), costs.size()));
@@ -567,10 +569,11 @@ void set_centroids_full_mean(const Mat &mat,
     const size_t np = costs.size(), k = ctrs.size();
     std::vector<std::vector<asn_t>> assigned(k);
     std::unique_ptr<blz::DV<FT>> probup;
-    set_asn:
+    //set_asn:
     for(size_t i = 0; i < np; ++i) {
         assigned[asn[i]].push_back(i);
     }
+    DBG_ONLY(std::fprintf(stderr, "mean distance: %g. max distance: %g\n", blz::mean(costs), blz::max(costs));)
 #ifndef NDEBUG
     for(unsigned i = 0; i < assigned.size(); ++i) std::fprintf(stderr, "Center %u has %zu assigned points\n", i, assigned[i].size());
 #endif
@@ -587,6 +590,7 @@ void set_centroids_full_mean(const Mat &mat,
         const constexpr RestartMethodPol restartpol = RESTART_D2;
         const FT psum = prior.size() == 1 ? FT(prior[0]) * prior.size(): sum(prior);
         for(const auto id: sa) {
+            assigned[id].clear();
             // Instead, use a temporary buffer to store partial sums and randomly select newly-started centers
             // for D2, and just ran
             std::ptrdiff_t r;
@@ -607,14 +611,16 @@ void set_centroids_full_mean(const Mat &mat,
                 } while(!costs[r]);
             }
             auto &ctr = ctrs[id];
+            std::fprintf(stderr, "Assigning center\n");
             assign(ctr, row(mat, r));
             ctrsums[id] = sum(ctr);
             costs = std::numeric_limits<FT>::max();
             OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
-                unsigned bestid = asn[i], obi = bestid;
+                unsigned bestid = 0;
                 auto r = row(mat, i, unchecked);
                 const auto rsum = rowsums[i];
+                costs[i] = cmp::msr_with_prior(measure, r, ctrs[0], prior, psum, rsum, ctrsums[0]);
                 assert(std::abs(sum(r) - rsum) < 1e-6 || !std::fprintf(stderr, "rsum %g and summed %g\n", rsum, sum(r)));
                 for(unsigned j = 0; j < k; ++j) {
                     const auto csum = ctrsums[j];
@@ -626,13 +632,11 @@ void set_centroids_full_mean(const Mat &mat,
                         costs[i] = c, bestid = j;
                     }
                 }
-                if(bestid != obi)
-                    asn[i] = bestid;
+                asn[i] = bestid;
             }
         }
         sa.clear();
         for(auto &x: assigned) x.clear();
-        goto set_asn;
     }
 #if defined(_OPENMP) && !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
     #pragma message("Parallelizing loop, may cause things to break")
@@ -649,6 +653,7 @@ void set_centroids_full_mean(const Mat &mat,
             set_center(ctr, mat, asp, nasn, weights);
         }
         ctrsums[i] = sum(ctr);
+        DBG_ONLY(std::fprintf(stderr, "ctrsums[%d] = %g\n", i, ctrsums[i]);)
     }
 }
 
