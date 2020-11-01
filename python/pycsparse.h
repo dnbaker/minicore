@@ -43,22 +43,32 @@ struct PyCSparseMatrix {
         indptr_t_ = indptrinf.format;
     }
     // Specialize for Data Types
+#if ENABLE_CONST_FUNCS
     template<typename Func> void perform(const Func &func) const {
         switch(data_t_.front()) {
+#if ENABLE_8BITINT_DATA
             case 'b': case 'B': _perform<uint8_t,  Func>(func); break;
+#endif
+#if ENABLE_16BITINT_DATA
             case 'h': case 'H': _perform<uint16_t, Func>(func); break;
-            case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
+#endif
+            case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
             case 'i': case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float,    Func>(func); break;
             case 'd': _perform<double,   Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
         }
     }
+#endif
     template<typename Func> void perform(const Func &func) {
         switch(data_t_.front()) {
+#if ENABLE_8BITINT_DATA
             case 'b': case 'B': _perform<uint8_t, Func>(func); break;
+#endif
+#if ENABLE_16BITINT_DATA
             case 'h': case 'H': _perform<uint16_t, Func>(func); break;
-            case 'l': case 'L': _perform<uint64_t, Func>(func); break;
+#endif
+            case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
             case 'i': case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float, Func>(func); break;
             case 'd': _perform<double, Func>(func); break;
@@ -76,21 +86,23 @@ struct PyCSparseMatrix {
             }\
         } break
 
-    template<typename DataT, typename Func> INLINE void _perform(const Func &func) const {
+#if ENABLE_CONST_FUNCS
+    template<typename DataT, typename Func> void _perform(const Func &func) const {
         switch(indices_t_[0]) {
             PERF2('B', 'b', uint8_t);
             PERF2('H', 'h', uint16_t);
             PERF2('I', 'i', uint32_t);
-            PERF2('L', 'l', uint64_t);
+            //PERF2('L', 'l', uint64_t);
             default: throw std::invalid_argument(std::string("Unsupported type for indices: ") + indices_t_);
         }
     }
-    template<typename DataT, typename Func> INLINE void _perform(const Func &func) {
+#endif
+    template<typename DataT, typename Func> void _perform(const Func &func) {
         switch(indices_t_.front()) {
             PERF2('B', 'b', uint8_t);
             PERF2('H', 'h', uint16_t);
             PERF2('I', 'i', uint32_t);
-            PERF2('L', 'l', uint64_t);
+            //PERF2('L', 'l', uint64_t);
             default: throw std::invalid_argument(std::string("Unsupported type for indices: ") + indices_t_);
         }
     }

@@ -30,13 +30,20 @@ size_t for_each_by_case(const size_t n, IT1 start1, IT1 stop1, IT2 start2, IT2 s
         switch(((start1 != stop1) << 1) | (start2 != stop2)) {
             case 3: /* Both are not end*/
                 if(start1->index() == start2->index()) {
+                    //std::fprintf(stderr, "[%s] Processing index %zu, shared\n", __PRETTY_FUNCTION__, start1->index());
                     nextind = start1->index();
                     shfunc(nextind, start1->value(), start2->value());
-                    ++start1; ++start2;
+                    //std::fprintf(stderr, "index before inc: %zu\n", start1->index());
+                    ++start1;
+                    //std::fprintf(stderr, "index now: %zu\n", start1->index());
+                    ++start2;
+                    //std::fprintf(stderr, "index now (rhs): %zu\n", start2->index());
                 } else if(start1->index() < start2->index()) {
+                    //std::fprintf(stderr, "Processing index %zu, unshared\n", start1->index());
                     nextind = start1->index();
                     lhfunc(nextind, start1->value()); ++start1;
                 } else {
+                    //std::fprintf(stderr, "Processing index %zu, rhunshared\n", start2->index());
                     nextind = start2->index();
                     rhfunc(nextind, start2->value()); ++start2;
                 }
@@ -52,6 +59,7 @@ size_t for_each_by_case(const size_t n, IT1 start1, IT1 stop1, IT2 start2, IT2 s
             case 0: nextind = n; break;
             default: __builtin_unreachable();
         }
+        std::fprintf(stderr, "current indices: %zu/%zu\n", start1->index(), start2->index());
         assert(nextind <= n);
         if(nextind > ci) sharedz += nextind - ci;
         ci = nextind + 1;

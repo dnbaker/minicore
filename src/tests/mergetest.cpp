@@ -1,3 +1,4 @@
+#undef NDEBUG
 #include "minicore/util/merge.h"
 #include "blaze/Math.h"
 using namespace minicore;

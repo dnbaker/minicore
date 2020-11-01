@@ -91,8 +91,7 @@ int main(int argc, char *argv[]) {
     std::poisson_distribution<IndicesT> pd2(avg_sample);
     wy::WyRand<std::conditional_t<sizeof(IndicesT) <= 4, uint32_t, uint64_t>, 4> rng;
     for(size_t i = 0; i < nrows; ++i) {
-        auto nextnnz = std::min(pd(rng), IndicesT(ncols));
-        indptr[i + 1] = indptr[i] + nextnnz;
+        indptr[i + 1] = indptr[i] + std::min(pd(rng), IndicesT(ncols));
     }
     unsigned total_nnz = indptr[nrows];
     data.resize(total_nnz);

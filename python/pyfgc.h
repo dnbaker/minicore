@@ -19,7 +19,7 @@ void init_clustering(py::module &m);
 void init_clustering_csr(py::module &m);
 
 #ifndef BUILD_CSR_CLUSTERING
-#define BUILD_CSR_CLUSTERING 1
+#define BUILD_CSR_CLUSTERING 0
 #endif
 
 using CSType = coresets::CoresetSampler<float, uint32_t>;
