@@ -253,7 +253,7 @@ struct CSparseVector {
         using pointer = ViewedType *;
         using iterator_category = std::random_access_iterator_tag;
         ColType &col_;
-        size_t index_;
+        mutable size_t index_;
         private:
         mutable ViewType data_;
         public:

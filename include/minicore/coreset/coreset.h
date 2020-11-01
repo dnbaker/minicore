@@ -520,6 +520,7 @@ struct CoresetSampler {
             total_costs += w * costs[i];
         }
         double weight_sum = blaze::sum(weight_sums);
+        DBG_ONLY(std::fprintf(stderr, "wsum: %g\n", weight_sum);)
         total_costs /= weight_sum;
         const double tcinv = alpha / total_costs;
         blaze::DynamicVector<FT> sens(np_);

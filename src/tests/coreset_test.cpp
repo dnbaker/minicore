@@ -25,5 +25,8 @@ int main() {
     //sample.show();
     sample.compact();
     std::fprintf(stderr, "sample of 20 is of size %zu after compacting\n", sample.size());
+    coresets::CoresetSampler<float, uint32_t> sampler2;
+    sampler2.make_sampler(npoints, ncenters, costs.data(), assignments.data(), (double *)nullptr, coresets::LBK);
+    sampler2.sample(20);
     //if(0) sampler.make_sampler(10, 10, nullptr, nullptr);
 }
