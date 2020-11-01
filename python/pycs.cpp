@@ -29,9 +29,12 @@ void init_coreset(py::module &m) {
     }, "Create a numpy array of sampling probabilities")
     .def("sample", [](CSType &cs, Py_ssize_t size, Py_ssize_t seed) {
         if(seed == 0) seed = std::rand();
+        std::fprintf(stderr, "Gathering sample\n");
         auto ret = cs.sample(size);
+        std::fprintf(stderr, "Gathered sample\n");
         py::array_t<float> rf(size);
         py::array_t<uint64_t> ri(size);
+        std::fprintf(stderr, "Copying results back\n");
         std::copy(ret.weights_.begin(), ret.weights_.end(), (float *)rf.request().ptr);
         std::copy(ret.indices_.begin(), ret.indices_.end(), (uint64_t *)ri.request().ptr);
         return py::make_tuple(rf, ri);

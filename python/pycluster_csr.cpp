@@ -5,7 +5,6 @@ py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
                  py::object msr, py::object weights, double eps,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
 {
-    if(beta < 0) beta = 1. / smw.columns();
     const dist::DissimilarityMeasure measure = assure_dm(msr);
     std::fprintf(stderr, "Beginning pycluster (v1)\n");
     py::object ret;
