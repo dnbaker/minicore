@@ -52,6 +52,7 @@ int main() {
             auto v2 = cmp::msr_with_prior(msr, csv, cv4, prior, psum, s1, sum(cv4));
             assert(!std::isnan(v));
             assert(!std::isnan(v2) || pval == 0. || sum(cv4) == 0.);
+            if(!std::isnan(v2)) assert(v2 > 0.);
             } catch(const exception::TODOError &ex) {
                 // don't care
             }

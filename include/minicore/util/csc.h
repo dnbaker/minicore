@@ -601,7 +601,7 @@ auto l1Dist(const ProdCSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT
     std::common_type_t<VT1, blz::ElementType_t<VT2>, float> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), (*rhs).begin(), (*rhs).end(),
                                  [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
-                                 [&ret](auto ind, auto rhv) {ret += abs(rhv);},
+                                 [&ret](auto, auto rhv) {ret += abs(rhv);},
                                  [&ret](auto, auto lhv) {ret += abs(lhv);});
     return ret;
 }

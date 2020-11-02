@@ -74,8 +74,17 @@ int main(int argc, char *argv[]) {
                 std::fprintf(stderr, "Usage: %s <flags> \n-z: load blaze matrix from path\n-P: set prior (1.)\n-T set temp [1.]\n-p set num threads\n-m Set measure (MKL, 5)\n-k: set k [10]\t-T transpose mtx file\t-M parse mtx file from argument\n", *argv);
                 return EXIT_FAILURE;
     }}
+    int nrows = 500, ncols = 1000;
+    if(char *s = std::getenv("NCOLS")) {
+        ncols = std::atoi(s);
+        if(ncols == 0) ncols = 1000;
+    }
+    if(char *s = std::getenv("NROWS")) {
+        nrows = std::atoi(s);
+        if(nrows == 0) nrows = 500;
+    }
     if(!x.rows() && !x.columns()) {
-        x = blz::generate(500, 200, [](auto x, auto y) -> int {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); auto v = mt(); if(v % 8) return 0;return (v >> 6) % 64;});
+        x = blz::generate(nrows, ncols, [](auto x, auto y) -> int {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); auto v = mt(); if(v % 8) return 0;return (v >> 6) % 64;});
     }
     OMP_ONLY(omp_set_num_threads(nthreads);)
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv) {
@@ -134,6 +143,7 @@ int main(int argc, char *argv[]) {
         complete_hardcost = blaze::generate(nr, k, [&](auto r, auto col) {
             return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
         });
+        std::cerr << "full costs range: " << min(complete_hardcost) << " -> " << max(complete_hardcost) << '\n';
         hardcosts = blaze::generate(nr, [&](auto id) {
             auto r = row(complete_hardcost, id, blaze::unchecked);
             auto it = std::min_element(r.begin(), r.end());

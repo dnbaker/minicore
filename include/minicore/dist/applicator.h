@@ -1697,6 +1697,72 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
     return cs;
 }
 
+static INLINE double __kl_reduce_aligned(const float *__restrict__ lhs, const float *__restrict__ rhs, size_t n) {
+    double ret = 0.;
+    size_t i;
+#if __AVX512F__
+    assert(reinterpret_cast<uint64_t>(lhs) % 64 == 0);
+    const size_t nper = sizeof(__m512) / sizeof(float);
+    const size_t nsimd = n / nper;
+    __m512 v = _mm512_setzero_ps();
+    SK_UNROLL_4
+    for(i = 0; i < nsimd; ++i) {
+        __m512 lh = _mm512_load_ps(lhs + (i * nper));
+        __m512 rh = _mm512_load_ps(rhs + (i * nper));
+        __m512 div = _mm512_div_ps(lh, rh);
+        __m512 logv = Sleef_logf16_u35(div);
+        __m512 res = _mm512_mul_ps(lh, logv);
+        v = _mm512_add_ps(v, res);
+    }
+    ret += _mm512_reduce_add_ps(v);
+    i *= nper;
+#elif __AVX2__
+    assert(reinterpret_cast<uint64_t>(lhs) % 32 == 0);
+    const size_t nper = sizeof(__m256) / sizeof(float);
+    const size_t nsimd = n / nper;
+    __m256 v = _mm256_setzero_ps();
+    SK_UNROLL_4
+    for(i = 0; i < nsimd; ++i) {
+        __m256 lh = _mm256_load_ps(lhs + (i * nper));
+        __m256 rh = _mm256_load_ps(rhs + (i * nper));
+        __m256 div = _mm256_div_ps(lh, rh);
+        __m256 logv = Sleef_logf8_u35(div);
+        __m256 res = _mm256_mul_ps(lh, logv);
+        v = _mm256_add_ps(v, res);
+    }
+    SK_UNROLL_8
+    for(size_t i = 0; i < nper; ++i) {
+        ret += v[i];
+    }
+    i *= nper;
+#elif __SSE2__
+    assert(reinterpret_cast<uint64_t>(lhs) % 16 == 0);
+    const size_t nper = sizeof(__m128) / sizeof(float);
+    const size_t nsimd = n / nper;
+    __m128 v = _mm_setzero_ps();
+    SK_UNROLL_4
+    for(i = 0; i < nsimd; ++i) {
+        __m128 lh = _mm_load_ps(lhs + (i * nper));
+        __m128 rh = _mm_load_ps(rhs + (i * nper));
+        __m128 div = _mm_div_ps(lh, rh);
+        __m128 logv = Sleef_logf4_u35(div);
+        __m128 res = _mm_mul_ps(lh, logv);
+        v = _mm_add_ps(v, res);
+    }
+    SK_UNROLL_4
+    for(size_t i = 0; i < nper; ++i) {
+        ret += v[i];
+    }
+    i *= nper;
+#else
+    i = 0;
+#endif
+    SK_UNROLL_8
+    for(; i < n; ++i) {
+        ret += lhs[i] * std::log(lhs[i] / rhs[i]);
+    }
+    return ret;
+}
 
 template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
 FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
@@ -1728,6 +1794,13 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
     } else if constexpr((blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && (blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
         // If geometric,
         const size_t nd = mr.size();
+        thread_local blz::DV<float> mkltmpx, mkltmpy, tmpmulx, tmpmuly, miv;
+        if(mkltmpx.capacity() < nd) mkltmpx.resize(nd);
+        if(mkltmpy.capacity() < nd) mkltmpy.resize(nd);
+        if(tmpmulx.capacity() < nd) tmpmulx.resize(nd);
+        if(tmpmuly.capacity() < nd) tmpmuly.resize(nd);
+        if(miv.capacity() < nd) miv.resize(nd);
+
         auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, auto nsharedmult)
             -> FT
         {
@@ -1856,7 +1929,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 assert(wr.size() == wc.size());
                 size_t nnz_either = 0;
                 //std::cerr << "Allocating memory\n";
-                blz::DV<float> tmpmuly(nd), tmpmulx(nd), miv(nd);
                 auto sharedz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
                     [&](auto,auto x, auto y) {
                         assert(nnz_either < nd);
@@ -1987,23 +2059,44 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case POISSON:
             case MKL:
             {
-                if(nonZeros(mr) + nonZeros(ctr) > 50) {
-                    blz::DV<FT> lhv(nd), rhv(nd);
-                    size_t useidx = 0;
+#ifndef NDEBUG
+                double retsimd, retmanual;
+                {
+                    //auto ts = std::chrono::high_resolution_clock::now();
+                    auto lhp = mkltmpx.data(), rhp = mkltmpy.data();
                     size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
-                                [&](auto, auto x, auto y) {lhv[useidx] = x + lhinc; rhv[useidx] = y + rhinc; ++useidx;},
-                                [&](auto, auto x) {lhv[useidx] = x + lhinc; rhv[useidx] = rhinc; ++useidx;},
-                                [&](auto, auto y) {lhv[useidx] = lhinc; rhv[useidx] = y + rhinc; ++useidx;});
-                    lhv.resize(useidx);
-                    rhv.resize(useidx);
-                    ret = serial(dot(lhv, log(lhv / rhv))) - sharednz * (lhinc * (lhl - rhl));
-                } else {
-                    ret = perform_core(wr, wc, 0.,
+                                [&](auto, auto x, auto y) {*lhp++ = x + lhinc; *rhp++ = y + rhinc;},
+                                [&](auto, auto x) {*lhp++ = x + lhinc; *rhp++ = rhinc;},
+                                [&](auto, auto y) {*lhp++ = lhinc; *rhp++ = y + rhinc;});
+                    size_t useidx = nd - sharednz;
+                    retsimd = __kl_reduce_aligned(mkltmpx.data(), mkltmpy.data(), useidx) + sharednz * lhinc * (rhl - lhl);
+                    //auto tst = std::chrono::high_resolution_clock::now();
+                    assert(sharednz == (nd - useidx));
+                }
+                {
+                //    auto ts = std::chrono::high_resolution_clock::now();
+                    retmanual = perform_core(wr, wc, 0.,
                         /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
                         /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
                         /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
                         -lhinc * (lhl - rhl));
+                //    auto tst = std::chrono::high_resolution_clock::now();
                 }
+                assert(std::abs(retsimd - retmanual) <= std::max(retsimd, retmanual) * 1e-6 || !std::fprintf(stderr, "simd: %g. manual: %g. diff: %0.20g\n", retsimd, retmanual, retsimd - retmanual));
+                ret = retsimd;
+#else
+                {
+                    auto &lhv(mkltmpx);
+                    auto &rhv(mkltmpy);
+                    auto lhp = mkltmpx.data(), rhp = mkltmpy.data();
+                    size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
+                                [&](auto, auto x, auto y) {*lhp++ = x + lhinc; *rhp++ = y + rhinc;},
+                                [&](auto, auto x) {*lhp++ = x + lhinc; *rhp++ = rhinc;},
+                                [&](auto, auto y) {*lhp++ = lhinc; *rhp++ = y + rhinc;});
+                    size_t useidx = nd - sharednz;
+                    ret = __kl_reduce_aligned(lhv.data(), rhv.data(), useidx) + sharednz * lhinc * (rhl - lhl);
+                }
+#endif
                 if(std::isnan(ret))
                     ret = std::numeric_limits<FT>::max();
             }
@@ -2012,15 +2105,14 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case REVERSE_MKL:
             {
                 if(nonZeros(wr) + nonZeros(wc) > 50) {
-                    blz::DV<FT> lhv(nd), rhv(nd);
-                    size_t useidx = 0;
+                    auto &lhv(mkltmpx);
+                    auto &rhv(mkltmpy);
+                    auto lhp = lhv.data(), rhp = rhv.data();
                     size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
-                                [&](auto, auto x, auto y) {lhv[useidx] = x + lhinc; rhv[useidx] = y + rhinc; ++useidx;},
-                                [&](auto, auto x) {lhv[useidx] = x + lhinc; rhv[useidx] = rhinc; ++useidx;},
-                                [&](auto, auto y) {lhv[useidx] = lhinc; rhv[useidx] = y + rhinc; ++useidx;});
-                    lhv.resize(useidx);
-                    rhv.resize(useidx);
-                    ret = dot(rhv, log(rhv / lhv)) - sharednz * rhinc * (rhl - lhl);
+                                [&](auto, auto x, auto y) {*lhp++ = x + lhinc; *rhp++ = y + rhinc;},
+                                [&](auto, auto x) {*lhp++ = x + lhinc; *rhp++ = rhinc;},
+                                [&](auto, auto y) {*lhp++ = lhinc; *rhp++ = y + rhinc;});
+                    ret = __kl_reduce_aligned(rhv.data(), lhv.data(), nd - sharednz) + sharednz * rhinc * (lhl - rhl);
                 } else {
                     ret = perform_core(wr, wc, 0.,
                         /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (yval + rhinc) * (std::log((yval + rhinc) / (xval + lhinc)));},

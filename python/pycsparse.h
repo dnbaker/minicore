@@ -4,6 +4,8 @@
 #include "blaze/util/Serialization.h"
 #include "minicore/util/csc.h"
 
+#define ENABLE_CONST_FUNCS 1
+
 struct PyCSparseMatrix {
     void *datap_;
     void *indicesp_;
