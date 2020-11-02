@@ -32,6 +32,9 @@ void init_coreset(py::module &m) {
         std::fprintf(stderr, "Gathering sample\n");
         auto ret = cs.sample(size);
         std::fprintf(stderr, "Gathered sample\n");
+        for(size_t i = 0; i < size; ++i) {
+            std::fprintf(stderr, "weight: %g. index: %zu\n", ret.weights_[i], size_t(ret.indices_[i]));
+        }
         py::array_t<float> rf(size);
         py::array_t<uint64_t> ri(size);
         std::fprintf(stderr, "Copying results back\n");

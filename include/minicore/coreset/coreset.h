@@ -498,6 +498,7 @@ struct CoresetSampler {
     {
         const double alpha = 16 * std::log(k_) + 32., alpha2 = 2. * alpha;
 
+        std::fprintf(stderr, "alpha: %g\n", alpha);
         //auto center_counts = std::make_unique<IT[]>(ncenters);
         blaze::DynamicVector<FT> weight_sums(ncenters, FT(0));
         blaze::DynamicVector<FT> cost_sums(ncenters, FT(0));
@@ -509,6 +510,7 @@ struct CoresetSampler {
             assert(asn < ncenters);
             const auto w = getweight(i);
 
+            std::fprintf(stderr, "weight %zu: %g with asn %u\n", i, w, asn);
             OMP_ATOMIC
             weight_sums[asn] += w; // If unweighted, weights are 1.
             //OMP_ATOMIC
@@ -520,17 +522,20 @@ struct CoresetSampler {
             total_costs += w * costs[i];
         }
         double weight_sum = blaze::sum(weight_sums);
-        DBG_ONLY(std::fprintf(stderr, "wsum: %g\n", weight_sum);)
+        std::fprintf(stderr, "wsum: %g\n", weight_sum);
         total_costs /= weight_sum;
         const double tcinv = alpha / total_costs;
+        std::fprintf(stderr, "tcinv: %g\n", tcinv);
         blaze::DynamicVector<FT> sens(np_);
         for(size_t i = 0; i < ncenters; ++i) {
             cost_sums[i] = alpha2 * cost_sums[i] / (weight_sums[i] * total_costs) + 4 * weight_sum / weight_sums[i];
+            std::fprintf(stderr, "Adjusted cost: %g\n", cost_sums[i]);
         }
         OMP_PFOR
         for(size_t i = 0; i < np_; ++i) {
             sens[i] = tcinv * costs[i] + cost_sums[assignments[i]];
         }
+        std::fprintf(stderr, "sensitivity sum: %g\n", sum(sens));
         sampler_.reset(new Sampler(sens.data(), sens.data() + np_, seed));
     }
     template<typename CFT>
@@ -541,10 +546,12 @@ struct CoresetSampler {
         // This is for a bicriteria approximation
         // Use make_sampler_vx for a constant approximation for arbitrary metric spaces,
         // and make_sampler_lbk for bicriteria approximations for \mu-similar divergences.
+        std::fprintf(stderr, "Creating sampling, BFL\n");
         const auto cv = blz::make_cv(const_cast<CFT *>(costs), np_);
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                     : blaze::sum(cv);
+        std::fprintf(stderr, "total cost: %g\n", total_cost);
         probs_.reset(new FT[np_]);
         double total_probs = 0.;
         std::vector<IT> center_counts(ncenters);
@@ -559,6 +566,9 @@ struct CoresetSampler {
             OMP_ATOMIC
             ++center_counts[asn];
         }
+        for(size_t i = 0; i < ncenters; ++i) {
+            std::fprintf(stderr, "center %zu has total %zu and weight sum %g\n", i, center_counts[i], weight_sums[i]);
+        }
         OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
         for(size_t i = 0; i < np_; ++i) {
             const auto w = getweight(i);
@@ -567,6 +577,7 @@ struct CoresetSampler {
             double fracw = w / (weight_sums[asn] * center_counts[asn]);
             probs_[i] = .5 * (fraccost + fracw);
             total_probs += probs_[i];
+            std::fprintf(stderr, "fraccost: %g. fracw: %g. Total weight: %g\n", fraccost, fracw, probs_[i]);
         }
         // Because this doesn't necessarily sum to 1.
         blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np_) /= total_probs;
@@ -622,14 +633,18 @@ struct CoresetSampler {
         if(unlikely(!sampler_.get())) throw std::runtime_error("Sampler not constructed");
         if(seed) sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
+        assert(ret.indices_.data());
+        assert(ret.weights_.data());
         const double dn = n;
         size_t sampled_directly = n;
         if(sens_ == FL) sampled_directly = std::max((long)(n - b_), 0L);
+        std::fprintf(stderr, "Sampling directly %zu points\n", sampled_directly);
         for(size_t i = 0; i < sampled_directly; ++i) {
             const auto ind = sampler_->sample();
             assert(ind < np_);
             ret.indices_[i] = ind;
             ret.weights_[i] = getweight(ind) / (dn * probs_[ind]);
+            std::fprintf(stderr, "Point %zu is %zu with weight %g (sample prob %g)\n", i, size_t(ind), ret.weights_[i], probs_[ind]);
         }
         if(sens_ == FL && fl_bicriteria_points_) {
             assert(fl_bicriteria_points_->size() == b_);

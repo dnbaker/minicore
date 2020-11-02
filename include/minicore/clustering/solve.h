@@ -237,6 +237,7 @@ void assign_points_hard(const Mat &mat,
         FT ret = cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0) {
             if(unlikely(ret < -1e-10)) {
+                std::fprintf(stderr, "rowsum: %g. csum: %g. expected rsum: %g expected csum: %g\n", double(sum(row(mat, id))), double(sum(centers[cid])), rowsums[id], centersums[cid]);
                 std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s for ids %u/%u. Check details. Total L1 distance: %g\n", ret, (int)measure, msr2str(measure),
                              (unsigned)id, (unsigned)cid, l1Dist(centers[cid], row(mat, id)));
                 std::cerr << centers[cid] << '\n';
