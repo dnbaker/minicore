@@ -39,3 +39,4 @@ script:
   - ./solvetestdbg
   - ./mergetestdbg
   - ./testmsrdbg
+  - ./testmsrcsrdbg

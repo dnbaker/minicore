@@ -29,48 +29,32 @@ int main() {
     prior[0] = 1.;
     FT s1 = sum(cv1), s2 = sum(cv2), s3 = sum(cv3);
     int anyfail = 0.;
+    auto checkv = [&](auto v) {
+        if(v != 0) {
+            std::fprintf(stderr, "FAILURE (both blaze): %g != 0.\n", v);
+            if(v > 2e-8) {
+                assert(v == 0.);
+            }
+            ++anyfail;
+        }
+    };
     for(const auto msr: minicore::distance::detail::USABLE_MEASURES) {
-        if(msr == distance::SYMMETRIC_ITAKURA_SAITO) {
+        if(msr == distance::SYMMETRIC_ITAKURA_SAITO || msr == minicore::distance::COSINE_SIMILARITY) {
             continue;
         }
         for(const auto pval: {0., 1e-5, 1., 50.}) {
             std::fprintf(stderr, "Msr %d/%s with prior %g: %s. \n", (int)msr, prob2str(msr), pval, prob2desc(msr));
+            psum = pval * cv1.size();
+            prior[0] = pval;
             try {
-            auto v = cmp::msr_with_prior(msr, cv1, cv1, prior, psum, s1, s1);
-            if(msr == minicore::distance::COSINE_SIMILARITY) {
-                if(v != 1.) assert(v == 1.);
-                continue;
-            }
-            if(v != 0) {
-                std::fprintf(stderr, "FAILURE (both blaze): %g != 0.\n", v);
-                if(v > 1e-8) {
-                    assert(v == 0.);
-                }
-                ++anyfail;
-            }
-            if(std::isnan(v)) {
-                std::fprintf(stderr, "ISNAN: %g\n", v);
-                assert(std::isnan(v));
-                ++anyfail;
-            }
+            auto v = cmp::msr_with_prior(msr, csv, csv, prior, psum, s1, s1);
+            checkv(v);
+            auto v2 = cmp::msr_with_prior(msr, csv, cv4, prior, psum, s1, sum(cv4));
+            assert(!std::isnan(v));
+            assert(!std::isnan(v2) || pval == 0. || sum(cv4) == 0.);
             } catch(const exception::TODOError &ex) {
                 // don't care
             }
-#if 0
-            std::cerr << cv1;
-            std::cerr << csv;
-            auto v2 = cmp::msr_with_prior(msr, cv1, csv, prior, psum, s1, s1);
-            if(v2 != 0) {
-                std::fprintf(stderr, "FAILURE (only one blaze): %g != 0.\n", v2);
-                assert(v2 == 0.);
-                ++anyfail;
-            }
-            if(std::isnan(v2)) {
-                std::fprintf(stderr, "ISNAN: %g\n", v2);
-                assert(std::isnan(v2));
-                ++anyfail;
-            }
-#endif
         }
     }
     std::fprintf(stderr, "%d failures\n", anyfail);

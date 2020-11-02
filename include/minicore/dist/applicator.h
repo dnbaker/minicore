@@ -1755,30 +1755,31 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         const FT rhsum = ctrsum + prior_sum;
         const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
 #ifndef SMALLEST_PRIOR
-#define SMALLEST_PRIOR 1.40130e-41f
+#define SMALLEST_PRIOR 1.40130e-35f
 #endif
         static constexpr const FT smallest_prior = FT(SMALLEST_PRIOR); // Since we're doing computations in floats downstream
         // Not the smallest values expressible, but we need to leave space at the bottom of precision
         // for these numbers to be divided by lhsum and rhsum, respectively
         const FT pv = std::max(FT(prior[0]), smallest_prior);
         if(pv == 0.) prior_sum = smallest_prior * nd;
-        const FT lhinc = pv * lhrsi, rhinc = pv * rhrsi;
+        const FT lhinc = !std::isinf(pv * lhrsi) ? FT(pv * lhrsi): FT(0),
+                 rhinc = !std::isinf(pv * rhrsi) ? FT(pv * rhrsi): FT(0.);
         const FT rhl = std::log(rhinc),
                  lhl = std::log(lhinc),
-                 rhincl = rhl * rhinc,
-                 lhincl = lhl * lhinc,
+                 rhincl = rhinc ? rhl * rhinc: FT(0.),
+                 lhincl = lhinc ? lhl * lhinc: FT(0.),
                  shl = std::log((lhinc + rhinc) * FT(.5)),
                  shincl = (lhinc + rhinc) * shl;
+#if 0
+        std::fprintf(stderr, "pv: %g. lhsum: %g, lhinc:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g\n",
+                     pv, lhsum, lhinc, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl);
+#endif
         assert(!std::isnan(rhincl));
         assert(!std::isnan(lhincl));
-        assert(!std::isnan(rhl));
-        assert(!std::isnan(lhl));
         assert(!std::isnan(shl));
         assert(!std::isnan(shincl));
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
-        // TODO: consider batching logs from sparse vectors with some extra dispatching code
-        // For better vectorization
         auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
         auto get_inc_sis = [](auto x, auto y) ALWAYS_INLINE {
             //return std::log(x + y) - FT(.5) * std::log(x * y) + dist::SIS_OFFSET<FT>;;
@@ -1794,12 +1795,11 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             return FT(.25) * (x * iy + y * ix) - std::log((x + y) * isq) + dist::RSIS_OFFSET<FT>;
         };
         static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
-        // Consider -ffast-math/-fassociative-math?
         switch(msr) {
             case L1: ret = l1Dist(mr, ctr); break;
             case L2: ret = l2Dist(mr, ctr); break;
             case SQRL2: ret = sqrDist(mr, ctr); break;
-            case TVD: std::fprintf(stderr, "Computing TVD from l1Dist\n"); std::cerr << (mr / mrsum) << "===\n" << (ctr / ctrsum); ret = l1Dist(mr / mrsum, ctr / ctrsum); std::fprintf(stderr, "ret: %g\n", ret); break;
+            case TVD: ret = l1Dist(mr / mrsum, ctr / ctrsum);break;
             case JSM: case JSD: {
                 ret = 0.;
                 auto sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
@@ -1808,37 +1808,34 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         auto addv = xv + yv;
                         auto ly = yv * std::log(yv);
                         auto lx = xv * std::log(xv);
-                        std::fprintf(stderr, "%g/%g\n", xval, yval);
                         auto lh = -addv * (std::log(.5 * addv));
                         auto reti = lx + ly + lh;
-                        std::fprintf(stderr, "Contrib is %g/%g/%g->%g\n", lx, ly, lh, reti);
                         ret += reti;
-                        std::fprintf(stderr, "Current ret: %g\n", ret);
                     },
                     /* xonly */    [&](auto,auto xval) ALWAYS_INLINE  {
                         auto xv = xval + lhinc;
                         assert(xv <= 1.);
                         auto addv = xv + rhinc, halfv = addv * .5;
                         auto reti = (xv * std::log(xv) + rhincl - std::log(halfv) * addv);
-                        std::fprintf(stderr, "%g/0. + %g/%g->%g\n", xval, addv, rhinc, reti);
+                        //std::fprintf(stderr, "%g/0. + %g/%g->%g\n", xval, addv, rhinc, reti);
                         ret += reti;
-                        std::fprintf(stderr, "Current ret: %g\n", ret);
+                        //std::fprintf(stderr, "Current ret: %g\n", ret);
                     },
                     /* yonly */    [&](auto,auto yval) ALWAYS_INLINE  {
                         auto yv = yval + rhinc;
                         auto addv = yv + lhinc, halfv = addv * .5;
                         auto reti = (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
-                        std::fprintf(stderr, "0./%g + %g/%g->%g\n", yval, lhinc, yv, reti);
+                        //std::fprintf(stderr, "0./%g + %g/%g->%g\n", yval, lhinc, yv, reti);
                         ret += reti;
-                        std::fprintf(stderr, "Current ret: %g\n", ret);
+                        //std::fprintf(stderr, "Current ret: %g\n", ret);
                 });
-                //std::fprintf(stderr, "ret before empty contrib: %g. lhinc: %g. lhincl: %g. rhincl: %g. shincl: %g. Shared nz: %zu\n", ret, lhinc, lhincl, rhincl, shincl, sharednz);
+                //DBG_ONLY(std::fprintf(stderr, "ret before empty contrib: %g. lhinc: %g. lhincl: %g. rhincl: %g. shincl: %g. Shared nz: %zu\n", ret, lhinc, lhincl, rhincl, shincl, sharednz);)
                 ret += (lhincl + rhincl - shincl) * sharednz;
-                //std::fprintf(stderr, "ret after emptycontrib of %g: %g\n", ret, (lhincl + rhincl - shincl) * sharednz);
+                //DBG_ONLY(std::fprintf(stderr, "ret after emptycontrib of %g: %g\n", ret, (lhincl + rhincl - shincl) * sharednz);)
                 ret = std::max(FT(0.5) * ret, FT(0));
-                //std::fprintf(stderr, "ret after halving %g: %g\n", ret, (lhincl + rhincl - shincl) * sharednz);
+                //DBG_ONLY(std::fprintf(stderr, "ret after halving %g: %g\n", ret, (lhincl + rhincl - shincl) * sharednz);)
                 if(msr == JSM) ret = std::sqrt(ret);
-                //std::fprintf(stderr, "ret: %g\n", ret);
+                ///DBG_ONLY(std::fprintf(stderr, "ret: %g\n", ret);)
             }
             break;
             case SRULRT: case SRLRT:
@@ -1994,13 +1991,15 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     lhv.resize(useidx);
                     rhv.resize(useidx);
                     ret = dot(lhv, log(lhv / rhv)) - sharednz * (lhinc * (lhl - rhl));
+                } else {
+                    ret = perform_core(wr, wc, 0.,
+                        /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
+                        /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
+                        /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
+                        -lhinc * (lhl - rhl));
                 }
-            } else {
-                ret = perform_core(wr, wc, 0.,
-                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
-                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
-                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
-                    -lhinc * (lhl - rhl));
+                if(std::isnan(ret))
+                    ret = std::numeric_limits<FT>::max();
             }
             break;
             case REVERSE_POISSON:

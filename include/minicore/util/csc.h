@@ -231,20 +231,13 @@ struct CSparseVector {
         } else ret = blz::sum(blz::make_cv<blz::aligned>((NCVT *)data_, n_));
         return ret ;
 #else
-        std::fprintf(stderr, "Calling sum. value: %g\n", double(blz::sum(blz::make_cv((NCVT *)data_, n_))));
+        //std::fprintf(stderr, "Calling sum. value: %g\n", double(blz::sum(blz::make_cv((NCVT *)data_, n_))));
         return blz::sum(blz::make_cv((NCVT *)data_, n_));
 #endif
     }
     using DataType = VT;
     template<bool is_const>
     struct CSparseVectorIteratorBase {
-        struct ViewType {
-            ViewType(const CSparseVectorIteratorBase &it): it_(it) {}
-            const CSparseVectorIteratorBase &it_;
-            INLINE size_t index() const {return it_.col_.indices_[it_.index_];}
-            INLINE std::conditional_t<is_const, std::add_const_t<VT>, VT> &value()  {return it_.col_.data_[it_.index_];}
-            INLINE std::add_const_t<VT> &value() const {return it_.col_.data_[it_.index_];}
-        };
         using ColType = std::conditional_t<is_const, std::add_const_t<CSparseVector>, CSparseVector>;
         using ViewedType = std::conditional_t<is_const, std::add_const_t<DataType>, DataType>;
         using difference_type = std::ptrdiff_t;
@@ -253,11 +246,12 @@ struct CSparseVector {
         using pointer = ViewedType *;
         using iterator_category = std::random_access_iterator_tag;
         ColType &col_;
-        mutable size_t index_;
-        private:
-        mutable ViewType data_;
-        public:
+        size_t index_;
 
+        INLINE size_t index() const {return col_.indices_[index_];}
+        INLINE std::conditional_t<is_const, std::add_const_t<VT>, VT> &value()  {return col_.data_[index_];}
+        INLINE std::add_const_t<VT> &value() const {return col_.data_[index_];}
+        using ViewType = CSparseVectorIteratorBase<is_const>;
         template<bool oconst>
         bool operator==(const CSparseVectorIteratorBase<oconst> &o) const {
             return index_ == o.index_;
@@ -287,9 +281,9 @@ struct CSparseVector {
             return this->index_ - o.index_;
         }
         CSparseVectorIteratorBase<is_const> &operator++() {
-            std::fprintf(stderr, "before incrementing: indptr: %zu. index: %zu. value: %g\n", index_, col_.indices_[index_], col_.data_[index_]);
+            //std::fprintf(stderr, "before incrementing: indptr: %zu. index: %zu. value: %g\n", index_, size_t(col_.indices_[index_]), col_.data_[index_]);
             ++index_;
-            std::fprintf(stderr, "after incrementing: indptr: %zu. index: %zu. value: %g\n", index_, col_.indices_[index_], col_.data_[index_]);
+            //std::fprintf(stderr, "after incrementing: indptr: %zu. index: %zu. value: %g\n", index_, size_t(col_.indices_[index_]), col_.data_[index_]);
             return *this;
         }
 #if 0
@@ -300,20 +294,16 @@ struct CSparseVector {
         }
 #endif
         const ViewType &operator*() const {
-            return data_;
+            return *this;
         }
         ViewType &operator*() {
-            return data_;
-        }
-        ViewType *operator->() {
-            std::fprintf(stderr, "Calling non-const -> operator\n");
-            return &data_;
+            return *this;
         }
         const ViewType *operator->() const {
-            std::fprintf(stderr, "Calling const -> operator\n");
-            return &data_;
+            //std::fprintf(stderr, "Calling const -> operator\n");
+            return this;
         }
-        CSparseVectorIteratorBase(ColType &col, size_t ind): col_(col), index_(ind), data_(*this) {
+        CSparseVectorIteratorBase(ColType &col, size_t ind): col_(col), index_(ind) {
         }
     };
     double l2Norm() const {
@@ -385,12 +375,6 @@ struct ProdCSparseVector {
     using ConstCView = ConstSViewMul<VT>;
     using DataType = VT;
     struct ProdCSparseVectorIteratorBase {
-        struct ViewType {
-            ViewType(const ProdCSparseVectorIteratorBase &it): it_(it) {}
-            const ProdCSparseVectorIteratorBase &it_;
-            INLINE size_t index() const {assert(it_.index_ < it_.col_.nnz()); return it_.col_.indices_[it_.index_];}
-            INLINE double value() const {assert(it_.index_ < it_.col_.nnz()); return it_.col_.prod_ * it_.col_.data_[it_.index_];}
-        };
         using ColType = std::add_const_t<ProdCSparseVector>;
         using ViewedType = std::add_const_t<DataType>;
         using difference_type = std::ptrdiff_t;
@@ -398,10 +382,11 @@ struct ProdCSparseVector {
         using reference = ViewedType &;
         using pointer = ViewedType *;
         using iterator_category = std::random_access_iterator_tag;
+        using ViewType = ProdCSparseVectorIteratorBase;
         ColType &col_;
         size_t index_;
-        private:
-        mutable ViewType data_;
+        size_t index() const {return col_.indices_[index_];}
+        double value() const {return col_.data_[index_] * col_.prod_;}
         public:
 
         bool operator==(const ProdCSparseVectorIteratorBase &o) const {
@@ -429,26 +414,24 @@ struct ProdCSparseVector {
             ++index_;
             return *this;
         }
-#if 0
         ProdCSparseVectorIteratorBase operator++(int) {
             ProdCSparseVectorIteratorBase ret(col_, index_);
             ++index_;
             return ret;
         }
-#endif
         const ViewType &operator*() const {
-            return data_;
+            return this;
         }
         ViewType &operator*() {
-            return data_;
+            return this;
         }
         ViewType *operator->() {
-            return &data_;
+            return this;
         }
         const ViewType *operator->() const {
-            return &data_;
+            return this;
         }
-        ProdCSparseVectorIteratorBase(ColType &col, size_t ind): col_(col), index_(ind), data_(*this) {
+        ProdCSparseVectorIteratorBase(ColType &col, size_t ind): col_(col), index_(ind) {
         }
     };
     double l2Norm() const {
@@ -611,7 +594,7 @@ auto l1Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, T
 
 template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l1Dist(const blaze::SparseVector<VT2, TF> &rhs, const CSparseVector<VT1, IT1> &lhs) {
-    std::fprintf(stderr, "%s l1dist with %zu/%zu sizes\n", __PRETTY_FUNCTION__, lhs.size(), rhs.size());
+    std::fprintf(stderr, "%s l1dist with %zu/%zu sizes\n", __PRETTY_FUNCTION__, lhs.size(), (*rhs).size());
     return l1Dist(lhs, rhs);
 }
 template<typename VT1, typename IT1, typename VT2, bool TF>

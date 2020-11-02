@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cassert>
+#include "macros.h"
 
 namespace minicore {
 namespace merge {
@@ -59,7 +60,7 @@ size_t for_each_by_case(const size_t n, IT1 start1, IT1 stop1, IT2 start2, IT2 s
             case 0: nextind = n; break;
             default: __builtin_unreachable();
         }
-        std::fprintf(stderr, "current indices: %zu/%zu\n", start1->index(), start2->index());
+        //DBG_ONLY(std::fprintf(stderr, "current indices: %zu/%zu\n", start1->index(), start2->index());)
         assert(nextind <= n);
         if(nextind > ci) sharedz += nextind - ci;
         ci = nextind + 1;
