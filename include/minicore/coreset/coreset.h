@@ -577,7 +577,7 @@ struct CoresetSampler {
             double fracw = w / (weight_sums[asn] * center_counts[asn]);
             probs_[i] = .5 * (fraccost + fracw);
             total_probs += probs_[i];
-            std::fprintf(stderr, "fraccost: %g. fracw: %g. Total weight: %g\n", fraccost, fracw, probs_[i]);
+            //std::fprintf(stderr, "fraccost: %g. fracw: %g. Total weight: %g\n", fraccost, fracw, probs_[i]);
         }
         // Because this doesn't necessarily sum to 1.
         blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np_) /= total_probs;

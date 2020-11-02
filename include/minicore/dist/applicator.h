@@ -2063,44 +2063,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case POISSON:
             case MKL:
             {
-#ifndef NDEBUG
-                double retsimd, retmanual;
-                {
-                    auto lhp = mkltmpx.data(), rhp = mkltmpy.data();
-                    double xsum = 0., ysum = 0.;
-                    size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
-                                [&](auto, auto x, auto y) {
-                                    *lhp++ = x + lhinc; *rhp++ = y + rhinc;
-                                    xsum += x + lhinc;
-                                    ysum += y + rhinc;
-                                 },
-                                [&](auto, auto x) {
-                                    *lhp++ = x + lhinc; *rhp++ = rhinc;
-                                    xsum += x + lhinc;
-                                    ysum += rhinc;
-                                },
-                                [&](auto, auto y) {
-                                    *lhp++ = lhinc; *rhp++ = y + rhinc;
-                                    xsum += lhinc;
-                                    ysum += y + rhinc;
-                                });
-                    size_t useidx = nd - sharednz;
-                    auto klc = __kl_reduce_aligned(mkltmpx.data(), mkltmpy.data(), useidx);
-                    auto oc = sharednz * lhinc * (lhl - rhl);
-                    retsimd = klc + oc;
-                    //std::fprintf(stderr, "klv: %g. oc: %g. together: %g\n", klc, oc, retsimd);
-                    assert(sharednz == (nd - useidx));
-                }
-                {
-                    retmanual = perform_core(wr, wc, 0.,
-                        /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
-                        /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
-                        /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
-                        lhinc * (lhl - rhl));
-                }
-                assert(std::abs(retsimd - retmanual) <= std::max(retsimd, retmanual) * 1e-6 || !std::fprintf(stderr, "simd: %g. manual: %g. diff: %0.20g\n", retsimd, retmanual, retsimd - retmanual));
-                ret = retsimd;
-#else
                 {
                     auto &lhv(mkltmpx);
                     auto &rhv(mkltmpy);
@@ -2110,8 +2072,15 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                 [&](auto, auto x) {        *lhp++ = x + lhinc; *rhp++ = rhinc;},
                                 [&](auto, auto y) {        *lhp++ = lhinc;     *rhp++ = y + rhinc;});
                     ret = __kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz) + sharednz * lhinc * (lhl - rhl);
-                }
+#ifndef NDEBUG
+                    double retmanual = perform_core(wr, wc, 0.,
+                        /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
+                        /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
+                        /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
+                        lhinc * (lhl - rhl));
+                    assert(std::abs(ret - retmanual) <= std::max(ret, retmanual) * 1e-6 || !std::fprintf(stderr, "simd: %g. manual: %g. diff: %0.20g\n", ret, retmanual, ret - retmanual));
 #endif
+                }
                 if(std::isnan(ret))
                     ret = std::numeric_limits<FT>::max();
             }
