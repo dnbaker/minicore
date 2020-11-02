@@ -15,12 +15,10 @@ namespace minicore {
 namespace util {
 
 template<typename T>
-INLINE auto abs_diff(T x, T y) {
+INLINE T abs_diff(T x, T y) {
     if constexpr(std::is_unsigned_v<T>) {
-        std::fprintf(stderr, "unsigned: %g/%g\n", double(x), double(y));
         return std::max(x, y) - std::min(x, y);
     } else {
-        std::fprintf(stderr, "signed: %g/%g -> %g\n", double(x), double(y), double(std::abs(x - y)));
         return std::abs(x - y);
     }
 }
@@ -485,10 +483,12 @@ ProdCSparseVector<VT, IT> operator/(const CSparseVector<VT, IT> &lhs, OVT rhs) {
 template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, TF> &rhs) {
     if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
+#if 0
     for(const auto &pair: lhs) {
         std::fprintf(stderr, "%g:%zu\t", pair.value(), pair.index());
         std::fputc('\n', stderr);
     }
+#endif
     auto &rr = *rhs;
     using CT = std::common_type_t<VT1, blaze::ElementType_t<VT2>>;
     CT ret = 0;
@@ -579,40 +579,36 @@ INLINE auto abs(T x) {
 
 template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l1Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, TF> &rhs) {
-    for(const auto &x: lhs) std::fprintf(stderr, "lhs %zu/%g\n", x.index(), x.value());
-    for(const auto &x: *rhs) std::fprintf(stderr, "rhs %zu/%g\n", x.index(), x.value());
-    std::fprintf(stderr, "%s l1dist with %zu/%zu sizes\n", __PRETTY_FUNCTION__, lhs.size(), (*rhs).size());
+    //for(const auto &x: lhs) std::fprintf(stderr, "lhs %zu/%g\n", x.index(), x.value());
+    //for(const auto &x: *rhs) std::fprintf(stderr, "rhs %zu/%g\n", x.index(), x.value());
+    //std::fprintf(stderr, "%s l1dist with %zu/%zu sizes\n", __PRETTY_FUNCTION__, lhs.size(), (*rhs).size());
     if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
-    std::common_type_t<VT1, blaze::ElementType_t<VT2>> ret = 0;
+    std::common_type_t<VT1, blaze::ElementType_t<VT2>, float> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), (*rhs).begin(), (*rhs).end(),
-                                 [&ret](auto, auto lhv, auto rhv) {std::fprintf(stderr, "Contributing from %g/%g: %g\n", lhv, rhv, abs_diff(lhv, rhv)); ret += abs_diff(lhv, rhv);},
-                                 [&ret](auto ind, auto rhv) {std::fprintf(stderr, "lh only ind %zu/%g\n", ind, rhv); ret += abs(rhv);},
-                                 [&ret](auto ind, auto lhv) {std::fprintf(stderr, "rh only ind %zu/%g\n", ind, lhv); ret += abs(lhv);});
-    std::fprintf(stderr, "ret now: %g\n", ret);
+                                 [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
+                                 [&ret](auto, auto rhv) {ret += abs(rhv);},
+                                 [&ret](auto, auto lhv) {ret += abs(lhv);});
     return ret;
 }
 
 template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l1Dist(const blaze::SparseVector<VT2, TF> &rhs, const CSparseVector<VT1, IT1> &lhs) {
-    std::fprintf(stderr, "%s l1dist with %zu/%zu sizes\n", __PRETTY_FUNCTION__, lhs.size(), (*rhs).size());
     return l1Dist(lhs, rhs);
 }
 template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l1Dist(const ProdCSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, TF> &rhs) {
-    std::fprintf(stderr, "%s l1dist with %zu/%zu sizes\n", __PRETTY_FUNCTION__, lhs.size(), (*rhs).size());
     if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
-    std::common_type_t<VT1, blz::ElementType_t<VT2>> ret = 0;
+    std::common_type_t<VT1, blz::ElementType_t<VT2>, float> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), (*rhs).begin(), (*rhs).end(),
-                                 [&ret](auto, auto lhv, auto rhv) {std::fprintf(stderr, "Contributing from %g/%g: %g\n", lhv, rhv, abs_diff(lhv, rhv)); ret += abs_diff(lhv, rhv);},
-                                 [&ret](auto ind, auto rhv) {std::fprintf(stderr, "lh has only nz at %zu, %g\n", ind, double(rhv)); ret += abs(rhv);},
-                                 [&ret](auto, auto lhv) {std::fprintf(stderr, "rh only\n"); ret += abs(lhv);});
+                                 [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
+                                 [&ret](auto ind, auto rhv) {ret += abs(rhv);},
+                                 [&ret](auto, auto lhv) {ret += abs(lhv);});
     return ret;
 }
 template<typename VT1, typename IT1, typename VT2, typename IT2>
 auto l1Dist(const CSparseVector<VT1, IT1> &lhs, const CSparseVector<VT2, IT2> &rhs) {
-    std::fprintf(stderr, "%s l1dist with %zu/%zu sizes\n", __PRETTY_FUNCTION__, lhs.size(), rhs.size());
     if(lhs.size() != rhs.size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
-    std::common_type_t<VT1, VT2> ret = 0;
+    std::common_type_t<VT1, VT2, float> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
                                  [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
                                  [&ret](auto, auto rhv) {ret += abs(rhv);},
@@ -621,9 +617,8 @@ auto l1Dist(const CSparseVector<VT1, IT1> &lhs, const CSparseVector<VT2, IT2> &r
 }
 template<typename VT1, typename IT1, typename VT2, typename IT2>
 auto l1Dist(const ProdCSparseVector<VT1, IT1> &lhs, const CSparseVector<VT2, IT2> &rhs) {
-    std::fprintf(stderr, "%s l1dist with %zu/%zu sizes\n", __PRETTY_FUNCTION__, lhs.size(), rhs.size());
     if(lhs.size() != rhs.size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
-    std::common_type_t<VT1, VT2> ret = 0;
+    std::common_type_t<VT1, VT2, float> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
                                  [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
                                  [&ret](auto, auto rhv) {ret += abs(rhv);},
@@ -632,17 +627,15 @@ auto l1Dist(const ProdCSparseVector<VT1, IT1> &lhs, const CSparseVector<VT2, IT2
 }
 template<typename VT1, typename IT1, typename VT2, typename IT2>
 auto l1Dist(const CSparseVector<VT1, IT1> &lhs, const ProdCSparseVector<VT2, IT2> &rhs) {
-    std::fprintf(stderr, "%s l1dist with %zu/%zu sizes\n", __PRETTY_FUNCTION__, lhs.size(), rhs.size());
     return l1Dist(rhs, lhs);
 }
 template<typename VT1, typename IT1, typename VT2, typename IT2>
 std::common_type_t<VT1, VT2> l1Dist(const ProdCSparseVector<VT1, IT1> &lhs, const ProdCSparseVector<VT2, IT2> &rhs) {
-    std::fprintf(stderr, "%s l1dist with %zu/%zu sizes\n", __PRETTY_FUNCTION__, lhs.size(), rhs.size());
     if(lhs.size() != rhs.size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
-    std::common_type_t<VT1, VT2> ret = 0;
+    std::common_type_t<VT1, VT2, float> ret = 0;
     merge::for_each_by_case(lhs.size(), lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
-                                 [&ret](auto, auto lhv, auto rhv) {std::fprintf(stderr, "Contributing from %g/%g: %g\n", lhv, rhv, abs_diff(lhv, rhv)); ret += abs_diff(lhv, rhv);},
-                                 [&ret](auto, auto rhv) {std::fprintf(stderr, "Contribute rhs only\n"); ret += abs(rhv);},
+                                 [&ret](auto, auto lhv, auto rhv) {ret += abs_diff(lhv, rhv);},
+                                 [&ret](auto, auto rhv) {ret += abs(rhv);},
                                  [&ret](auto, auto lhv) {ret += abs(lhv);});
     std::fprintf(stderr, "ret for l1Dist: %g\n", ret);
     return ret;

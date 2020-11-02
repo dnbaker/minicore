@@ -29,11 +29,11 @@ int main() {
     prior[0] = 1.;
     FT s1 = sum(cv1), s2 = sum(cv2), s3 = sum(cv3);
     int anyfail = 0.;
-    auto checkv = [&](auto v) {
+    auto checkv = [&](auto v, auto dis) {
         if(v != 0) {
             std::fprintf(stderr, "FAILURE (both blaze): %g != 0.\n", v);
-            if(v > 2e-8) {
-                assert(v == 0.);
+            if(v > 1e-8) {
+                assert(v == 0. || dis == minicore::distance::BHATTACHARYYA_METRIC);
             }
             ++anyfail;
         }
@@ -48,7 +48,7 @@ int main() {
             prior[0] = pval;
             try {
             auto v = cmp::msr_with_prior(msr, csv, csv, prior, psum, s1, s1);
-            checkv(v);
+            checkv(v, msr);
             auto v2 = cmp::msr_with_prior(msr, csv, cv4, prior, psum, s1, sum(cv4));
             assert(!std::isnan(v));
             assert(!std::isnan(v2) || pval == 0. || sum(cv4) == 0.);

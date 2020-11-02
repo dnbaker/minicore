@@ -43,7 +43,7 @@ int main() {
             }
             if(v != 0) {
                 std::fprintf(stderr, "FAILURE (both blaze): %g != 0.\n", v);
-                if(v > 1e-8) {
+                if(v > 5e-9) {
                     assert(v == 0.);
                 }
                 ++anyfail;

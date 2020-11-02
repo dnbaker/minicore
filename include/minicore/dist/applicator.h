@@ -1805,12 +1805,18 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 auto sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
                    [&](auto,auto xval, auto yval) ALWAYS_INLINE {
                         auto xv = xval + lhinc, yv = yval + rhinc;
+                        if(xv == yv) {
+                            return;
+                        }
                         auto addv = xv + yv;
                         auto ly = yv * std::log(yv);
                         auto lx = xv * std::log(xv);
                         auto lh = -addv * (std::log(.5 * addv));
                         auto reti = lx + ly + lh;
+                        //std::fprintf(stderr, "(%g + %g:%g)/(%g + %g:%g)lx: %g. ly: %g. lh: %g\n", xval, lhinc, xv, yval, rhinc, yv, lx, ly, lh);
+                        //std::fprintf(stderr, "[BEFORE] Current ret: %g\n", ret);
                         ret += reti;
+                        //std::fprintf(stderr, "Current ret: %g\n", ret);
                     },
                     /* xonly */    [&](auto,auto xval) ALWAYS_INLINE  {
                         auto xv = xval + lhinc;
@@ -1990,7 +1996,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                 [&](auto, auto y) {lhv[useidx] = lhinc; rhv[useidx] = y + rhinc; ++useidx;});
                     lhv.resize(useidx);
                     rhv.resize(useidx);
-                    ret = dot(lhv, log(lhv / rhv)) - sharednz * (lhinc * (lhl - rhl));
+                    ret = serial(dot(lhv, log(lhv / rhv))) - sharednz * (lhinc * (lhl - rhl));
                 } else {
                     ret = perform_core(wr, wc, 0.,
                         /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
@@ -2031,17 +2037,13 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             {
                 const FT tmp = perform_core(wr, wc, 0.,
                     [&](auto xval, auto yval) ALWAYS_INLINE {
-                        xval += lhinc;
-                        yval += rhinc;
-                        return std::sqrt(xval * yval);
+                        return std::sqrt((xval + lhinc) * (yval + rhinc));
                     },
                     [&](auto xval) ALWAYS_INLINE {
-                        xval += rhinc;
-                        return std::sqrt(rhinc * xval);
+                        return std::sqrt(rhinc * (xval + lhinc));
                     },
                     [&](auto yval) ALWAYS_INLINE {
-                        yval += rhinc;
-                        return std::sqrt(lhinc * yval);
+                        return std::sqrt(lhinc * (yval + rhinc));
                     },
                     std::sqrt(lhinc * rhinc));
                 if(msr == BHATTACHARYYA_METRIC)
