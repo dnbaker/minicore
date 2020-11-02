@@ -73,7 +73,7 @@ BLAZE_ALWAYS_INLINE const SIMDfloat neginf2zero( const SIMDf32<T>& a ) noexcept
    const auto v = _mm512_set1_ps(-std::numeric_limits<float>::infinity());
    const auto z = _mm512_set1_ps(float(0.));
    auto value = (*a).eval().value;
-   return _mm512_mask_blend_ps(_mm512_cmpeq_ps_mask(value, v), value, z);
+   return _mm512_mask_blend_ps(_mm512_cmp_ps_mask(value, v, _CMP_EQ_OQ), value, z);
 }
 #elif BLAZE_AVX_MODE
 {
@@ -119,7 +119,7 @@ BLAZE_ALWAYS_INLINE const SIMDdouble neginf2zero( const SIMDf64<T>& a ) noexcept
    const auto v = _mm512_set1_pd(-std::numeric_limits<double>::infinity());
    const auto z = _mm512_set1_pd(0.);
    auto value = (*a).eval().value;
-   return _mm512_mask_blend_pd(_mm512_cmpeq_pd_mask(value, v), value, z);
+   return _mm512_mask_blend_pd(_mm512_cmp_pd_mask(value, v, _CMP_EQ_OQ), value, z);
 }
 #elif BLAZE_AVX_MODE
 {
