@@ -6,6 +6,7 @@ void init_coreset(py::module &m) {
     .def("make_sampler", [](
         CSType &cs, size_t ncenters, py::array costs, INA assignments, py::object weights, uint64_t seed, int sens_)
     {
+        if(costs.ndim() != 1) throw std::invalid_argument("costs must be 1-dimensional");
         std::fprintf(stderr, "Making sampler. %zu centers, costs has %zd items, sens = %d\n", ncenters, costs.shape(0), sens_);
         const auto sens(static_cast<minicore::coresets::SensitivityMethod>(sens_));
         py::buffer_info buf1 = costs.request();
@@ -15,22 +16,24 @@ void init_coreset(py::module &m) {
         double *dp = nullptr;
         if(!weights.is_none()) {
             auto winf = py::cast<py::array>(weights).request();
+            if(winf.ndim != 1) throw std::invalid_argument("weightss must be 1-dimensional");
             if(winf.format[0] == 'f')
                 wp = (float *)winf.ptr;
             else if(winf.format[0] == 'd')
                 dp = (double *)winf.ptr;
             else throw std::invalid_argument("Weights can only be double or float");
         }
+        const Py_ssize_t np = costs.shape(0);
         switch(buf1.format[0]) {
             case 'f': if(dp) {
-                        cs.make_sampler(costs.shape(0), ncenters, (float *)buf1.ptr, asnp, dp, seed, sens); break;
+                        cs.make_sampler(np, ncenters, (float *)buf1.ptr, asnp, dp, seed, sens); break;
                       } else {
-                        cs.make_sampler(costs.shape(0), ncenters, (float *)buf1.ptr, asnp, wp, seed, sens); break;
+                        cs.make_sampler(np, ncenters, (float *)buf1.ptr, asnp, wp, seed, sens); break;
                       }
             case 'd': if(dp) {
-                        cs.make_sampler(costs.shape(0), ncenters, (double *)buf1.ptr, asnp, dp, seed, sens); break;
+                        cs.make_sampler(np, ncenters, (double *)buf1.ptr, asnp, dp, seed, sens); break;
                       } else {
-                        cs.make_sampler(costs.shape(0), ncenters, (double *)buf1.ptr, asnp, wp, seed, sens); break;
+                        cs.make_sampler(np, ncenters, (double *)buf1.ptr, asnp, wp, seed, sens); break;
                       }
             default: throw std::invalid_argument("Costs is not double or float");
         }
