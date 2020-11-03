@@ -689,9 +689,9 @@ int main(int argc, char **argv) {
                      static_cast<const void *>(cost_data), static_cast<const void *>(assignments_data),
                      x_size);
         sampler.make_sampler(x_size, k, cost_data, assignments_data,
-                             nullptr, seed * 137, coresets::VARADARAJAN_XIAO);
+                             (double *)nullptr, seed * 137, coresets::VARADARAJAN_XIAO);
         bflsampler.make_sampler(x_size, k, cost_data, assignments_data,
-                             nullptr, seed * 662607, coresets::BRAVERMAN_FELDMAN_LANG);
+                             (double *)nullptr, seed * 662607, coresets::BRAVERMAN_FELDMAN_LANG);
         auto sampler_path = coreset_sampler_path.size() ? coreset_sampler_path: std::to_string(seed);
         sampler.write(sampler_path);
         if(cache_prefix.size()) {
