@@ -544,8 +544,10 @@ struct CoresetSampler {
         for(size_t i = 0; i < np_; ++i) {
             sens[i] = tcinv * costs[i] + cost_sums[assignments[i]];
         }
-        std::fprintf(stderr, "sensitivity sum: %g\n", sum(sens));
+        DBG_ONLY(std::fprintf(stderr, "sensitivity sum: %g\n", sum(sens));)
         sampler_.reset(new Sampler(sens.data(), sens.data() + np_, seed));
+        probs_.reset(new FT[np_]);
+        std::transform(sens.data(),  sens.data() + np_, probs_.get(), [tsi=1./sum(sens)](auto x) {return x * tsi;});
     }
     template<typename CFT>
     void make_sampler_bfl(size_t ncenters,
@@ -555,12 +557,11 @@ struct CoresetSampler {
         // This is for a bicriteria approximation
         // Use make_sampler_vx for a constant approximation for arbitrary metric spaces,
         // and make_sampler_lbk for bicriteria approximations for \mu-similar divergences.
-        std::fprintf(stderr, "Creating sampling, BFL\n");
         const auto cv = blz::make_cv(const_cast<CFT *>(costs), np_);
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                     : blaze::sum(cv);
-        std::fprintf(stderr, "total cost: %g (sum of costs w/o weights: %g)\n", total_cost, std::accumulate(costs, costs + np_, 0.));
+        //std::fprintf(stderr, "total cost: %g (sum of costs w/o weights: %g)\n", total_cost, std::accumulate(costs, costs + np_, 0.));
         probs_.reset(new FT[np_]);
         double total_probs = 0.;
         std::vector<IT> center_counts(ncenters);
@@ -572,13 +573,15 @@ struct CoresetSampler {
             const auto w = getweight(i);
             OMP_ATOMIC
             weight_sums[asn] += w; // If unweighted, weights are 1.
-            std::fprintf(stderr, "weight: %g. wsum: %g\n", w, weight_sums[asn]);
+            //std::fprintf(stderr, "weight: %g. wsum: %g\n", w, weight_sums[asn]);
             OMP_ATOMIC
             ++center_counts[asn];
         }
+#if 0
         for(size_t i = 0; i < ncenters; ++i) {
             std::fprintf(stderr, "center %zu has total %zu and weight sum %g\n", i, size_t(center_counts[i]), weight_sums[i]);
         }
+#endif
         OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
         for(size_t i = 0; i < np_; ++i) {
             const auto w = getweight(i);
@@ -649,15 +652,11 @@ struct CoresetSampler {
         const double dn = n;
         size_t sampled_directly = n;
         if(sens_ == FL) sampled_directly = std::max((long)(n - b_), 0L);
-        std::fprintf(stderr, "Sampling directly %zu points\n", sampled_directly);
         for(size_t i = 0; i < sampled_directly; ++i) {
-            std::fprintf(stderr, "About to sample\n");
             const auto ind = sampler_->sample();
             assert(ind < np_);
             ret.indices_[i] = ind;
-            std::fprintf(stderr, "About to sample. Idex: %zu. ind: %zu\n", i, ind);
             ret.weights_[i] = getweight(ind) / (dn * probs_[ind]);
-            std::fprintf(stderr, "Point %zu is %zu with weight %g (sample prob %g)\n", i, size_t(ind), ret.weights_[i], probs_[ind]);
         }
         if(sens_ == FL && fl_bicriteria_points_) {
             assert(fl_bicriteria_points_->size() == b_);

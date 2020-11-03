@@ -12,13 +12,26 @@ void init_coreset(py::module &m) {
         const uint32_t *asnp = (const uint32_t *)assignments.request().ptr;
         if(buf1.ndim != 1) throw std::runtime_error("buffer must have one dimension (reshape if necessary)");
         float *wp = nullptr;
+        double *dp = nullptr;
         if(!weights.is_none()) {
-            auto winf = py::cast<py::array_t<float>>(weights).request();
-            wp = (float *)winf.ptr;
+            auto winf = py::cast<py::array>(weights).request();
+            if(winf.format[0] == 'f')
+                wp = (float *)winf.ptr;
+            else if(winf.format[0] == 'd')
+                dp = (double *)winf.ptr;
+            else throw std::invalid_argument("Weights can only be double or float");
         }
         switch(buf1.format[0]) {
-            case 'f': cs.make_sampler(costs.shape(0), ncenters, (float *)buf1.ptr, asnp, wp, seed, sens); break;
-            case 'd': cs.make_sampler(costs.shape(0), ncenters, (double *)buf1.ptr, asnp, wp, seed, sens); break;
+            case 'f': if(dp) {
+                        cs.make_sampler(costs.shape(0), ncenters, (float *)buf1.ptr, asnp, dp, seed, sens); break;
+                      } else {
+                        cs.make_sampler(costs.shape(0), ncenters, (float *)buf1.ptr, asnp, wp, seed, sens); break;
+                      }
+            case 'd': if(dp) {
+                        cs.make_sampler(costs.shape(0), ncenters, (double *)buf1.ptr, asnp, dp, seed, sens); break;
+                      } else {
+                        cs.make_sampler(costs.shape(0), ncenters, (double *)buf1.ptr, asnp, wp, seed, sens); break;
+                      }
             default: throw std::invalid_argument("Costs is not double or float");
         }
     },
@@ -33,15 +46,9 @@ void init_coreset(py::module &m) {
     .def("sample", [](CSType &cs, Py_ssize_t size, Py_ssize_t seed) {
         if(cs.sampler_ == nullptr) throw std::invalid_argument("Can't sample without created sampler. Call make_ampler");
         if(seed == 0) seed = std::rand();
-        std::fprintf(stderr, "Gathering sample\n");
         auto ret = cs.sample(size);
-        std::fprintf(stderr, "Gathered sample\n");
-        for(size_t i = 0; i < size; ++i) {
-            std::fprintf(stderr, "weight: %g. index: %zu\n", ret.weights_[i], size_t(ret.indices_[i]));
-        }
         py::array_t<float> rf(size);
         py::array_t<uint64_t> ri(size);
-        std::fprintf(stderr, "Copying results back\n");
         std::copy(ret.weights_.begin(), ret.weights_.end(), (float *)rf.request().ptr);
         std::copy(ret.indices_.begin(), ret.indices_.end(), (uint64_t *)ri.request().ptr);
         return py::make_tuple(rf, ri);
