@@ -532,7 +532,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                     } else {
                         clustering::set_center(ctr, row(mat, reservoir_simd::sample(costs.data(), np, rngv)));
                     }
-                    centersums[fidx] = blz::sum(ctr);
+                    centersums[fidx] = sum(ctr);
                 }
                 OMP_PFOR
                 for(size_t i = 0; i < np; ++i) {
@@ -613,7 +613,10 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             const auto asnsz = assigned[i].size();
             if(!asnsz) continue;
             clustering::set_center(centers[i], mat, asnptr, asnsz, weights);
+        }
+        for(size_t i = 0; i < centers.size(); ++i) {
             centersums[i] = sum(centers[i]);
+            DBG_ONLY(std::fprintf(stderr, "center sum: %g. csums: %g\n", centersums[i], sum(centers[i]));)
         }
         
         // Set the new centers

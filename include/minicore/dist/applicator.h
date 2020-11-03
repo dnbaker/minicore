@@ -1697,6 +1697,36 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
     return cs;
 }
 
+namespace reduce_detail {
+
+#if __AVX2__
+template<typename Func>                                                                                 
+INLINE __m256 broadcast_reduce(__m256 x, const Func &func) {                                            
+    const __m256 permHalves = _mm256_permute2f128_ps(x, x, 1);                                          
+    const __m256 m0 = func(permHalves, x);                                                              
+    const __m256 perm0 = _mm256_permute_ps(m0, 0b01001110);                                             
+    const __m256 m1 = func(m0, perm0);                                                                  
+    const __m256 perm1 = _mm256_permute_ps(m1, 0b10110001);                                             
+    const __m256 m2 = func(perm1, m1);                                                                  
+    return m2;                                                                                          
+}                                                                                                       
+                                                                                                        
+INLINE __m256 broadcast_max(__m256 x) {                                                                 
+    return broadcast_reduce<decltype(_mm256_max_ps)>(x, _mm256_max_ps);                                 
+}                                                                                                       
+INLINE __m256 broadcast_min(__m256 x) {                                                                 
+    return broadcast_reduce<decltype(_mm256_min_ps)>(x, _mm256_min_ps);                                 
+}                                                                                                       
+INLINE __m256 broadcast_mul(__m256 x) {                                                                 
+    return broadcast_reduce<decltype(_mm256_mul_ps)>(x, _mm256_mul_ps);                                 
+}                                                                                                       
+INLINE __m256 broadcast_add(__m256 x) {                                                                 
+    return broadcast_reduce<decltype(_mm256_add_ps)>(x, _mm256_add_ps);                                 
+}
+
+#endif // AVX2
+
+}/// reduce_detail
 static INLINE double __kl_reduce_aligned(const float *__restrict__ lhs, const float *__restrict__ rhs, size_t n) {
     double ret = 0.;
     size_t i;
@@ -1730,10 +1760,7 @@ static INLINE double __kl_reduce_aligned(const float *__restrict__ lhs, const fl
         __m256 res = _mm256_mul_ps(lh, logv);
         v = _mm256_add_ps(v, res);
     }
-    SK_UNROLL_8
-    for(size_t i = 0; i < nper; ++i) {
-        ret += v[i];
-    }
+    ret = reduce_detail::broadcast_add(v)[0];
     i *= nper;
 #elif __SSE2__
     assert(reinterpret_cast<uint64_t>(lhs) % 16 == 0);
@@ -1848,7 +1875,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                  lhincl = lhinc ? lhl * lhinc: FT(0.),
                  shl = std::log((lhinc + rhinc) * FT(.5)),
                  shincl = rhinc + lhinc > 0. ? (lhinc + rhinc) * shl: 0.;
-#if 0
+#if VERBOSE_AF
         std::fprintf(stderr, "pv: %g. lhsum: %g, lhinc:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g\n",
                      pv, lhsum, lhinc, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl);
 #endif
@@ -1930,38 +1957,29 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 const auto emptymean = lambda * lhinc + m1l * rhinc;
                 const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
                                         + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
-#if __AVX512F__ || __AVX2__
+                auto lhp = tmpmulx.data(), rhp = tmpmuly.data(), mip = miv.data();
                 assert(wr.size() == wc.size());
-                size_t nnz_either = 0;
                 auto sharedz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
                     [&](auto,auto x, auto y) {
-                        assert(nnz_either < nd);
                         auto xv = x + lhinc, yv = y + rhinc;
-                        miv[nnz_either] = lambda * xv + m1l * yv;
-                        tmpmulx[nnz_either] = xv;
-                        tmpmuly[nnz_either] = yv;
-                        ++nnz_either;
+                        *mip++ = lambda * xv + m1l * yv;
+                        *lhp++ = xv;
+                        *rhp++ = yv;
                     },
                     // x only
                     [&](auto,auto x) {
-                        assert(nnz_either < nd);
                         auto xv = x + lhinc;
-                        miv[nnz_either] = lambda * xv + m1l * rhinc;
-                        tmpmulx[nnz_either] = xv;
-                        tmpmuly[nnz_either] = rhinc;
-                        ++nnz_either;
+                        *mip++ = lambda * xv + m1l * rhinc;
+                        *lhp++ = xv;
+                        *rhp++ = rhinc;
                     },
                     [&](auto,auto y) {
-                        assert(nnz_either < nd);
                         auto yv = y + rhinc;
-                        miv[nnz_either] = lambda * lhinc + m1l * yv;
-                        tmpmulx[nnz_either] = lhinc;
-                        tmpmuly[nnz_either] = yv;
-                        ++nnz_either;
+                        *mip++ = lambda * lhinc + m1l * yv;
+                        *lhp++ = lhinc;
+                        *rhp++ = yv;
                     });
-                miv.resize(nnz_either);
-                tmpmulx.resize(nnz_either);
-                tmpmuly.resize(nnz_either);
+                const size_t nnz_either = nd - sharedz;
 #if __AVX512F__
                 constexpr size_t nperel = sizeof(__m512) / sizeof(float);
                 size_t i;
@@ -1973,43 +1991,47 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     __m512 lv = Sleef_logf16_u35(_mm512_div_ps(lhsa, mv));
                     __m512 lvmul = _mm512_mul_ps(lhsa, lv);
                     __m512 rhsa = _mm512_load_ps(&tmpmuly[i * nperel]);
-                    __m512 rv = Sleef_logf16_u35(_mm512_mul_ps(mv, rhsa));
+                    __m512 rv = Sleef_logf16_u35(_mm512_div_ps(rhsa, mv));
                     __m512 rvmul = _mm512_mul_ps(rhsa, rv);
                     __m512 acc = _mm512_add_ps(_mm512_mul_ps(rvmul, _mm512_set1_ps(m1l)), _mm512_mul_ps(lvmul, _mm512_set1_ps(lambda)));
                     sum = _mm512_add_ps(acc, sum);
                 }
                 for(ret = 0., i *= nperel;i < nnz_either; ++i) {
-                    ret += tmpmulx[i] * std::log(tmpmulx[i] * miv[i]);
+                    ret += lambda * tmpmulx[i] * std::log(tmpmulx[i] / miv[i])
+                         + m1l * tmpmuly[i] * std::log(tmpmuly[i] / miv[i]);
                 }
                 SK_UNROLL_16
                 for(size_t i = 0; i < 16; ++i) {
                     ret += sum[i];
                 }
+                ret += emptycontrib * sharedz;
 #elif __AVX2__
                 constexpr size_t nperel = sizeof(__m256) / sizeof(float);
                 size_t i;
-                __m256 sum = _mm256_setzero_ps();
+                __m256 lhsum = _mm256_setzero_ps(), rhsum = _mm256_setzero_ps();
                 size_t nsimd = nnz_either / nperel;
                 SK_UNROLL_4
                 for(i = 0; i < nsimd; ++i) {
+                    const __m256 mv = _mm256_div_ps(_mm256_set1_ps(1.), _mm256_load_ps(&miv[i * nperel]));
+                    // load 1 / mv
                     __m256 lhsa = _mm256_load_ps(&tmpmulx[i * nperel]);
-                    __m256 mv = _mm256_load_ps(&miv[i * nperel]);
-                    __m256 lv = Sleef_logf8_u35(_mm256_div_ps(lhsa, mv));
+                    __m256 lv = Sleef_logf8_u35(_mm256_mul_ps(lhsa, mv));
                     __m256 lvmul = _mm256_mul_ps(lhsa, lv);
+                    lhsum = _mm256_add_ps(lhsum, lvmul);
                     __m256 rhsa = _mm256_load_ps(&tmpmuly[i * nperel]);
-                    __m256 rv = Sleef_logf8_u35(_mm256_div_ps(rhsa, mv));
+                    __m256 rv = Sleef_logf8_u35(_mm256_mul_ps(rhsa, mv));
                     __m256 rvmul = _mm256_mul_ps(rhsa, rv);
-                    __m256 acc = _mm256_add_ps(_mm256_mul_ps(rvmul, _mm256_set1_ps(m1l)), _mm256_mul_ps(lvmul, _mm256_set1_ps(lambda)));
-                    sum = _mm256_add_ps(acc, sum);
+                    rhsum = _mm256_add_ps(rvmul, rhsum);
                 }
-                for(ret = 0., i *= nperel;i < nnz_either; ++i) {
-                    ret += tmpmulx[i] * std::log(tmpmulx[i] / miv[i]);
+                lhsum = _mm256_mul_ps(lhsum, _mm256_set1_ps(lambda));
+                rhsum = _mm256_mul_ps(rhsum, _mm256_set1_ps(m1l));
+                lhsum = _mm256_add_ps(lhsum, rhsum);
+                ret = reduce_detail::broadcast_add(lhsum)[0];
+                for(i *= nperel;i < nnz_either; ++i) {
+                    ret += lambda * tmpmulx[i] * std::log(tmpmulx[i] / miv[i])
+                         + m1l * tmpmuly[i] * std::log(tmpmuly[i] / miv[i]);
                 }
-                SK_UNROLL_8
-                for(size_t i = 0; i < 8; ++i) {
-                    ret += sum[i];
-                }
-#endif
+                ret += emptycontrib * sharedz;
 #else
                 ret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
@@ -2030,14 +2052,37 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         auto xvl = std::log(lhinc * mi), yvl = std::log(yv * mi);
                         return lambda * lhinc * xvl + m1l * yv * yvl;
                     },
-                    0.);
+                    emptycontrib);
 #endif
-                ret += emptycontrib * sharedz;
+                VERBOSE_ONLY(std::fprintf(stderr, "ret before: %g. empty: %g->%g [%g,%g,%g]\n", ret, emptycontrib * sharedz, ret + emptycontrib * sharedz, pv, lhinc, rhinc);)
+#ifndef NDEBUG
+                double oret = perform_core(wr, wc, FT(0),
+                   [&](auto xval, auto yval) ALWAYS_INLINE {
+                        auto xv = xval + lhinc, yv = yval + rhinc;
+                        auto meanv = lambda * xv + m1l * yv, mi = FT(1.) / meanv;
+                        auto xvl = std::log(xv * mi), yvl = std::log(yv * mi);
+                        return lambda * xv * xvl + m1l * yv * yvl;
+                    },
+                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {
+                        auto xv = xval + lhinc;
+                        auto meanv = lambda * xv + m1l * rhinc, mi = FT(1) / meanv;
+                        auto xvl = std::log(xv * mi), yvl = std::log(rhinc * mi);
+                        return lambda * xv * xvl + m1l * rhinc * yvl;
+                    },
+                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {
+                        auto yv = yval + rhinc;
+                        auto meanv = lambda * lhinc + m1l * (yval + rhinc), mi = FT(1) / meanv;
+                        auto xvl = std::log(lhinc * mi), yvl = std::log(yv * mi);
+                        return lambda * lhinc * xvl + m1l * yv * yvl;
+                    },
+                    emptycontrib);
+                 assert(std::abs(oret - ret) < 1e-5 || !std::fprintf(stderr, "oret: %g. ret: %g\n", oret, ret));
+#endif
                 //std::cerr << "ret: " << ret << '\n';
                 if(msr == LLR || msr == SRLRT) ret *= bothsum;
                 ret = std::max(ret, FT(0)); // ensure non-negativity
                 if(msr == SRULRT || msr == SRLRT)
-                    ret = std::sqrt(ret);
+                    ret = std::sqrt(std::max(FT(0), ret));
             }
             break;
             case ITAKURA_SAITO:
@@ -2078,7 +2123,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
                         /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
                         lhinc * (lhl - rhl));
-                    assert(std::abs(ret - retmanual) <= std::max(ret, retmanual) * 1e-6 || !std::fprintf(stderr, "simd: %g. manual: %g. diff: %0.20g\n", ret, retmanual, ret - retmanual));
+                    assert(std::abs(ret - retmanual) <= std::max(ret, retmanual) * 1e-5 || !std::fprintf(stderr, "simd: %g. manual: %g. diff: %0.20g\n", ret, retmanual, ret - retmanual));
 #endif
                 }
                 if(std::isnan(ret))

@@ -567,7 +567,7 @@ struct CoresetSampler {
             ++center_counts[asn];
         }
         for(size_t i = 0; i < ncenters; ++i) {
-            std::fprintf(stderr, "center %zu has total %zu and weight sum %g\n", i, center_counts[i], weight_sums[i]);
+            std::fprintf(stderr, "center %zu has total %zu and weight sum %g\n", i, size_t(center_counts[i]), weight_sums[i]);
         }
         OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
         for(size_t i = 0; i < np_; ++i) {

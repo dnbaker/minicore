@@ -11,7 +11,7 @@ int main() {
     blz::CompressedVector<FT> cv1{{10., 0., 4., 6.}};
     blz::CompressedVector<FT> cv2 = cv1 * 2;
     blz::CompressedVector<FT> cv3 = cv1;
-    blz::CompressedVector<FT> cv4 = {0., 0., 0., 0.,};
+    blz::CompressedVector<FT> cv4 = {0., 0., 0., 1.,};
     blz::CompressedVector<FT> cv5 = {1., 1., 1., 1.,};
     blz::DV<FT> data({10, 4, 6});
     blz::DV<uint64_t> indices{0, 2, 3};
@@ -27,7 +27,7 @@ int main() {
     blz::DV<FT> prior(1);
     FT psum = prior[0] * cv1.size();
     prior[0] = 1.;
-    FT s1 = sum(cv1), s2 = sum(cv2), s3 = sum(cv3);
+    FT s1 = sum(cv1);
     int anyfail = 0.;
     auto checkv = [&](auto v, auto dis) {
         if(v != 0) {
@@ -48,11 +48,13 @@ int main() {
             prior[0] = pval;
             try {
             auto v = cmp::msr_with_prior(msr, csv, csv, prior, psum, s1, s1);
+            assert(v == cmp::msr_with_prior(msr, cv1, csv, prior, psum, s1, s1));
+            if(pval == 0. && std::isnan(v)) v = 0.;
             checkv(v, msr);
             auto v2 = cmp::msr_with_prior(msr, csv, cv4, prior, psum, s1, sum(cv4));
             assert(!std::isnan(v));
             assert(!std::isnan(v2) || pval == 0. || sum(cv4) == 0.);
-            if(!std::isnan(v2)) assert(v2 > 0.);
+            if(!std::isnan(v2)) assert(v2 > 0. || !std::fprintf(stderr, "v2: %g\n", v2));
             } catch(const exception::TODOError &ex) {
                 // don't care
             }

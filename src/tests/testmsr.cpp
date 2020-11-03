@@ -28,13 +28,13 @@ int main() {
     blz::DV<FT> prior(1);
     FT psum = prior[0] * cv1.size();
     prior[0] = 1.;
-    FT s1 = sum(cv1), s2 = sum(cv2), s3 = sum(cv3);
+    FT s1 = sum(cv1);
     int anyfail = 0.;
     for(const auto msr: minicore::distance::detail::USABLE_MEASURES) {
         if(msr == distance::SYMMETRIC_ITAKURA_SAITO) {
             break;
         }
-        for(const auto pval: {0., 1e-5, 1., 50.}) {
+        for(const auto pval: {0., 1., 50., 1e-5}) {
             std::fprintf(stderr, "Msr %d/%s with prior %g: %s. \n", (int)msr, prob2str(msr), pval, prob2desc(msr));
             psum = pval * nd;
             prior[0] = pval;
@@ -42,6 +42,8 @@ int main() {
             auto v = cmp::msr_with_prior(msr, cv1, cv1, prior, psum, s1, s1);
             if(msr == minicore::distance::COSINE_SIMILARITY) {
                 if(v != 1.) assert(v == 1.);
+                continue;
+            } else if(pval == 0. && msr == minicore::distance::MKL) {
                 continue;
             }
             if(v != 0) {
@@ -56,8 +58,8 @@ int main() {
                 assert(std::isnan(v));
                 ++anyfail;
             }
-            if(auto v = cmp::msr_with_prior(msr, cv1, cv4, prior, psum, sum(cv1), sum(cv4)); v < 0) {
-                assert(v >= 0);
+            if(auto v = cmp::msr_with_prior(msr, cv1, cv4, prior, psum, sum(cv1), sum(cv4)); v <= 0) {
+                assert(v > 0);
             }
             } catch(const exception::TODOError &ex) {
                 // don't care

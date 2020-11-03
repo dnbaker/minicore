@@ -88,10 +88,10 @@ libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampl
 	ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
 
 %dbg: src/%.cpp $(HEADERS) $(STATIC_LIBS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(STATIC_LIBS) -O0
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(STATIC_LIBS) -O1
 
 %dbg: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS) -O0
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS) -O1
 
 %: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
