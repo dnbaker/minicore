@@ -84,7 +84,7 @@ int main(int argc, char *argv[]) {
         if(nrows == 0) nrows = 500;
     }
     if(!x.rows() && !x.columns()) {
-        x = blz::generate(nrows, ncols, [](auto x, auto y) -> int {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); auto v = mt(); if(v % 8) return 0;return (v >> 6) % 64;});
+        x = blz::generate(nrows, ncols, [](auto x, auto y) -> int {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); auto v = mt(); if(v % 8) return 0;return x * ((v >> 6) % 64);});
     }
     OMP_ONLY(omp_set_num_threads(nthreads);)
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv) {

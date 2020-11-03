@@ -88,7 +88,7 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
         clusterret = perform_hard_clustering(mat, measure, prior, ctrs, asn, costs, weights, eps, kmeansmaxiter);
     } else {
         if(ncheckins < 0) ncheckins = 10;
-        Py_ssize_t checkin_freq = (mbsize + ncheckins - 1) / ncheckins;
+        Py_ssize_t checkin_freq = (kmeansmaxiter + ncheckins - 1) / ncheckins;
         clusterret = perform_hard_minibatch_clustering(mat, measure, prior, ctrs, asn, costs, weights,
                                                        mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
     }

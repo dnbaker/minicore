@@ -1851,18 +1851,21 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         FT ret;
         assert((std::abs(mrsum - sum(mr)) < 1e-10 && std::abs(ctrsum - sum(ctr)) < 1e-10)
                || !std::fprintf(stderr, "[%s] Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", __PRETTY_FUNCTION__, sum(mr), sum(ctr), mrsum, ctrsum));
-        const FT lhsum = mrsum + prior_sum;
-        const FT rhsum = ctrsum + prior_sum;
-        const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
 #ifndef SMALLEST_PRIOR
 #define SMALLEST_PRIOR 7.0069e-42f
 #endif
         // Not the smallest values expressible, but we need to leave space at the bottom of precision
         // for these numbers to be divided by lhsum and rhsum, respectively
         //std::fprintf(stderr, "sums: %g/%g\n", lhsum, rhsum);
+        FT lhsum = mrsum + prior_sum;
+        FT rhsum = ctrsum + prior_sum;
         FT smallest_pv = FT(SMALLEST_PRIOR) * (std::max(lhsum, rhsum));
         const FT pv = std::max(FT(prior[0]), smallest_pv);
         prior_sum = pv * nd;
+        lhsum = mrsum + prior_sum;
+        rhsum = ctrsum + prior_sum;
+        const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
+        //std::fprintf(stderr, "mrsum: %g. prior_sum: %g. ctrsum: %g. lhsum : %g. rhsum: %g\n", mrsum, prior_sum, ctrsum, lhsum, rhsum);
         const FT lhinc = pv && lhsum ? FT(pv * lhrsi): FT(0),
                  rhinc = pv && rhsum ? FT(pv * rhrsi): FT(0);
         assert(!std::isnan(lhinc));
@@ -1875,10 +1878,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                  lhincl = lhinc ? lhl * lhinc: FT(0.),
                  shl = std::log((lhinc + rhinc) * FT(.5)),
                  shincl = rhinc + lhinc > 0. ? (lhinc + rhinc) * shl: 0.;
-#if VERBOSE_AF
-        std::fprintf(stderr, "pv: %g. lhsum: %g, lhinc:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g\n",
-                     pv, lhsum, lhinc, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl);
-#endif
         assert(!std::isnan(rhincl));
         assert(!std::isnan(lhincl));
         assert(!std::isnan(shl));
@@ -2117,13 +2116,17 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                 [&](auto, auto x) {        *lhp++ = x + lhinc; *rhp++ = rhinc;},
                                 [&](auto, auto y) {        *lhp++ = lhinc;     *rhp++ = y + rhinc;});
                     ret = __kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz) + sharednz * lhinc * (lhl - rhl);
+                    if(ret < 0) {
+                        std::fprintf(stderr, "pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g\n",
+                                     pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl);
+                    }
 #ifndef NDEBUG
                     double retmanual = perform_core(wr, wc, 0.,
                         /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
                         /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
                         /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
                         lhinc * (lhl - rhl));
-                    assert(std::abs(ret - retmanual) <= std::max(ret, retmanual) * 1e-5 || !std::fprintf(stderr, "simd: %g. manual: %g. diff: %0.20g\n", ret, retmanual, ret - retmanual));
+                    assert(std::abs(ret - retmanual) <= std::abs(std::max(ret, retmanual)) * 1e-5 || !std::fprintf(stderr, "simd: %g. manual: %g. diff: %0.20g\n", ret, retmanual, ret - retmanual));
 #endif
                 }
                 if(std::isnan(ret))
