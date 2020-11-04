@@ -1734,6 +1734,7 @@ static INLINE double __kl_reduce_aligned(const float *const __restrict__ lhs, co
     assert(reinterpret_cast<uint64_t>(lhs) % 64 == 0);
     const size_t nper = sizeof(__m512) / sizeof(float);
     const size_t nsimd = n / nper;
+    const size_t nsimd4 = (nsimd / 4) * 4;
     for(; i < nsimd4; i += 4) {
         __m512 lh0 = _mm512_load_ps(lhs + (i * nper));
         __m512 lh1 = _mm512_load_ps(lhs + ((i + 1) * nper));
