@@ -2115,10 +2115,12 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                 [&](auto, auto x, auto y) {*lhp++ = x + lhinc; *rhp++ = y + rhinc;},
                                 [&](auto, auto x) {        *lhp++ = x + lhinc; *rhp++ = rhinc;},
                                 [&](auto, auto y) {        *lhp++ = lhinc;     *rhp++ = y + rhinc;});
-                    ret = __kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz) + sharednz * lhinc * (lhl - rhl);
+                    auto klc = __kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz);
+                    auto zc = sharednz * lhinc * (lhl - rhl);
+                    ret = klc + zc;
                     if(ret < 0) {
-                        std::fprintf(stderr, "pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g\n",
-                                     pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl);
+                        std::fprintf(stderr, "pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
+                                     pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
                     }
 #ifndef NDEBUG
                     double retmanual = perform_core(wr, wc, 0.,

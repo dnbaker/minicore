@@ -15,7 +15,6 @@ py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter);
 template<typename VecT>
 void set_centers(VecT *vec, const py::buffer_info &bi) {
-    std::fprintf(stderr, "Centers start at size %zu before buffer info\n", vec->size());
     auto &v = *vec;
     switch(bi.format.front()) {
         case 'f':
@@ -60,7 +59,6 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
         break;
         default: throw std::invalid_argument(std::string("Invalid format string: ") + bi.format);
     }
-    std::fprintf(stderr, "Set centers of size %zu from buffer info\n", vec->size());
 }
 
 template<typename Matrix, typename WFT, typename CtrT, typename AsnT=blz::DV<uint32_t>, typename CostsT=blz::DV<double>>

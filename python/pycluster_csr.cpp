@@ -14,7 +14,7 @@ py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
     }
     auto weightinfo = py::cast<py::array>(weights).request();
     switch(weightinfo.format.front()) {
-    case 'I': {
+    case 'i': case 'I': {
         auto cv = blz::make_cv((int *)weightinfo.ptr, smw.rows());
         return pycluster(smw, k, beta, measure, &cv, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
     }
@@ -62,7 +62,7 @@ void init_clustering_csr(py::module &m) {
     py::arg("mbsize") = Py_ssize_t(-1),
     py::arg("ncheckins") = Py_ssize_t(-1),
     py::arg("reseed_count") = Py_ssize_t(5),
-    py::arg("with_rep") = true
+    py::arg("with_rep") = false
     );
 
 #endif

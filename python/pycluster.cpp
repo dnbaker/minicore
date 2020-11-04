@@ -70,6 +70,6 @@ void init_clustering(py::module &m) {
     py::arg("mbsize") = Py_ssize_t(-1),
     py::arg("ncheckins") = Py_ssize_t(-1),
     py::arg("reseed_count") = Py_ssize_t(5),
-    py::arg("with_rep") = true,
+    py::arg("with_rep") = false,
     "Clusters a SparseMatrixWrapper object using settings and the centers provided above; set betaprior to < 0 for it to be 1 / ncolumns(). Performs seeding, followed by EM or minibatch k-means");
 } // init_clustering

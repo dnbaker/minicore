@@ -27,9 +27,11 @@ void init_cmp(py::module &m) {
                 switch(dt) {
 #define CASE_F(char, type) \
                     case char: {\
-                        auto ov = blz::make_cv(static_cast<type *>(inf.ptr), nr);\
-                        const auto vsum = blz::sum(ov);\
-                        v = blz::generate(nr, [vsum,priorsum,ms,&matrix,&rsums,&ov,&priorc](auto x) {return cmp::msr_with_prior(ms, row(matrix, x), ov, priorc, priorsum, rsums[x], vsum);});\
+                        std::fprintf(stderr, "Making cv of type %c\n", char); \
+                        blz::SV<float> sv(blz::make_cv((type *)inf.ptr, inf.size));\
+                        const auto vsum = blz::sum(sv);\
+                        std::fprintf(stderr, "Made of type %c and sum %g\n", char, vsum); \
+                        v = blz::generate(nr, [vsum,priorsum,ms,&matrix,&rsums,&sv,&priorc](auto x) {return cmp::msr_with_prior(ms, row(matrix, x), sv, priorc, priorsum, rsums[x], vsum);});\
                     } break;
                     CASE_F('f', float)
                     CASE_F('d', double)
@@ -50,15 +52,18 @@ void init_cmp(py::module &m) {
             const Py_ssize_t nc = inf.shape[1], ndr = inf.shape[0];
             if(nc != Py_ssize_t(lhs.columns()))
                 throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
+            std::fprintf(stderr, "Processing matrix of shape %zu/%zu\n", nc, ndr);
             py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), nc});
-            blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)ret.request().ptr, nr, ndr, inf.strides[0]);
+            blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)ret.request().ptr, nr, ndr);
             lhs.perform([&](auto &matrix) {
 #define CASE_F(char, type) \
                         case char: {\
                             blaze::CustomMatrix<type, unaligned, unpadded> ocm(static_cast<type *>(inf.ptr), ndr, nc);\
+                            std::cerr << ocm << '\n';\
                             const auto cmsums = blz::evaluate(blz::sum<blz::rowwise>(ocm));\
+                            blz::SM<float> sv = ocm;\
                             cm = blz::generate(nr, ndr, [&](auto x, auto y) -> float {\
-                                return cmp::msr_with_prior(ms, blz::row(matrix, x, unchecked), blz::row(ocm, y, unchecked), priorc, priorsum, rsums[x], cmsums[y]);\
+                                return cmp::msr_with_prior(ms, blz::row(matrix, x, unchecked), blz::row(sv, y, unchecked), priorc, priorsum, rsums[x], cmsums[y]);\
                             });\
                         } break;
                     switch(dt) {
@@ -83,7 +88,7 @@ void init_cmp(py::module &m) {
         }
         __builtin_unreachable();
         return py::array_t<float>();
-    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 5, py::arg("betaprior") = 0.);
+    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("betaprior") = 0.);
     m.def("cmp", [](const SparseMatrixWrapper &lhs, const SparseMatrixWrapper &rhs, py::object msr, py::object betaprior) {
         const double priorv = betaprior.cast<double>(), priorsum = priorv * lhs.columns();
         const auto ms = assure_dm(msr);
@@ -125,5 +130,5 @@ void init_cmp(py::module &m) {
             }
         }
         return ret;
-    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 5, py::arg("betaprior") = 0.);
+    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("betaprior") = 0.);
 }
