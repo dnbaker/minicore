@@ -71,8 +71,8 @@ void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &
             mv[pair.index()] += v;
         }
     }
-    wsum = 1. / (w ? wsum: double(nasn));
-    ctr = mv * wsum;
+    if(!wsum) wsum = nasn;
+    ctr = mv / wsum;
 }
 
 template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT>
