@@ -1700,67 +1700,104 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
 namespace reduce_detail {
 
 #if __AVX2__
-template<typename Func>                                                                                 
-INLINE __m256 broadcast_reduce(__m256 x, const Func &func) {                                            
-    const __m256 permHalves = _mm256_permute2f128_ps(x, x, 1);                                          
-    const __m256 m0 = func(permHalves, x);                                                              
-    const __m256 perm0 = _mm256_permute_ps(m0, 0b01001110);                                             
-    const __m256 m1 = func(m0, perm0);                                                                  
-    const __m256 perm1 = _mm256_permute_ps(m1, 0b10110001);                                             
-    const __m256 m2 = func(perm1, m1);                                                                  
-    return m2;                                                                                          
-}                                                                                                       
-                                                                                                        
-INLINE __m256 broadcast_max(__m256 x) {                                                                 
-    return broadcast_reduce<decltype(_mm256_max_ps)>(x, _mm256_max_ps);                                 
-}                                                                                                       
-INLINE __m256 broadcast_min(__m256 x) {                                                                 
-    return broadcast_reduce<decltype(_mm256_min_ps)>(x, _mm256_min_ps);                                 
-}                                                                                                       
-INLINE __m256 broadcast_mul(__m256 x) {                                                                 
-    return broadcast_reduce<decltype(_mm256_mul_ps)>(x, _mm256_mul_ps);                                 
-}                                                                                                       
-INLINE __m256 broadcast_add(__m256 x) {                                                                 
-    return broadcast_reduce<decltype(_mm256_add_ps)>(x, _mm256_add_ps);                                 
+template<typename Func>
+INLINE __m256 broadcast_reduce(__m256 x, const Func &func) {
+    const __m256 permHalves = _mm256_permute2f128_ps(x, x, 1);
+    const __m256 m0 = func(permHalves, x);
+    const __m256 perm0 = _mm256_permute_ps(m0, 0b01001110);
+    const __m256 m1 = func(m0, perm0);
+    const __m256 perm1 = _mm256_permute_ps(m1, 0b10110001);
+    const __m256 m2 = func(perm1, m1);
+    return m2;
+}
+
+INLINE __m256 broadcast_max(__m256 x) {
+    return broadcast_reduce<decltype(_mm256_max_ps)>(x, _mm256_max_ps);
+}
+INLINE __m256 broadcast_min(__m256 x) {
+    return broadcast_reduce<decltype(_mm256_min_ps)>(x, _mm256_min_ps);
+}
+INLINE __m256 broadcast_mul(__m256 x) {
+    return broadcast_reduce<decltype(_mm256_mul_ps)>(x, _mm256_mul_ps);
+}
+INLINE __m256 broadcast_add(__m256 x) {
+    return broadcast_reduce<decltype(_mm256_add_ps)>(x, _mm256_add_ps);
 }
 
 #endif // AVX2
 
 }/// reduce_detail
-static INLINE double __kl_reduce_aligned(const float *__restrict__ lhs, const float *__restrict__ rhs, size_t n) {
+static INLINE double __kl_reduce_aligned(const float *const __restrict__ lhs, const float *const __restrict__ rhs, const size_t n) {
     double ret = 0.;
-    size_t i;
+    size_t i = 0;
 #if __AVX512F__
     assert(reinterpret_cast<uint64_t>(lhs) % 64 == 0);
     const size_t nper = sizeof(__m512) / sizeof(float);
     const size_t nsimd = n / nper;
-    __m512 v = _mm512_setzero_ps();
-    SK_UNROLL_4
-    for(i = 0; i < nsimd; ++i) {
+    for(; i < nsimd4; i += 4) {
+        __m512 lh0 = _mm512_load_ps(lhs + (i * nper));
+        __m512 lh1 = _mm512_load_ps(lhs + ((i + 1) * nper));
+        __m512 lh2 = _mm512_load_ps(lhs + ((i + 2) * nper));
+        __m512 lh3 = _mm512_load_ps(lhs + ((i + 3) * nper));
+        __m512 rh0 = _mm512_load_ps(rhs + (i * nper));
+        __m512 rh1 = _mm512_load_ps(rhs + ((i + 1) * nper));
+        __m512 rh2 = _mm512_load_ps(rhs + ((i + 2) * nper));
+        __m512 rh3 = _mm512_load_ps(rhs + ((i + 3) * nper));
+        __m512 v0 = _mm512_mul_ps(lh0, Sleef_logf16_u35(_mm512_div_ps(lh0, rh0)));
+        __m512 v1 = _mm512_mul_ps(lh1, Sleef_logf16_u35(_mm512_div_ps(lh1, rh1)));
+        __m512 v2 = _mm512_mul_ps(lh2, Sleef_logf16_u35(_mm512_div_ps(lh2, rh2)));
+        __m512 v3 = _mm512_mul_ps(lh3, Sleef_logf16_u35(_mm512_div_ps(lh3, rh3)));
+        __m512 v4 = _mm512_add_ps(v0, v1);
+        __m512 v5 = _mm512_add_ps(v2, v3);
+        __m512 v6 = _mm512_add_ps(v4, v5);
+        ret += _mm512_reduce_add_ps(v6);
+    }
+    for(; i < nsimd; ++i) {
         __m512 lh = _mm512_load_ps(lhs + (i * nper));
         __m512 rh = _mm512_load_ps(rhs + (i * nper));
         __m512 div = _mm512_div_ps(lh, rh);
         __m512 logv = Sleef_logf16_u35(div);
-        __m512 res = _mm512_mul_ps(lh, logv);
-        v = _mm512_add_ps(v, res);
+        ret += _mm512_reduce_add_ps(_mm512_mul_ps(lh, logv));
     }
-    ret += _mm512_reduce_add_ps(v);
     i *= nper;
 #elif __AVX2__
     assert(reinterpret_cast<uint64_t>(lhs) % 32 == 0);
     const size_t nper = sizeof(__m256) / sizeof(float);
     const size_t nsimd = n / nper;
-    __m256 v = _mm256_setzero_ps();
-    SK_UNROLL_4
-    for(i = 0; i < nsimd; ++i) {
+    const size_t nsimd4 = (nsimd / 4) * 4;
+    for(; i < nsimd4; i += 4) {
+        __m256 lh0 = _mm256_load_ps(lhs + (i * nper));
+        __m256 lh1 = _mm256_load_ps(lhs + ((i + 1) * nper));
+        __m256 lh2 = _mm256_load_ps(lhs + ((i + 2) * nper));
+        __m256 lh3 = _mm256_load_ps(lhs + ((i + 3) * nper));
+        __m256 rh0 = _mm256_load_ps(rhs + (i * nper));
+        __m256 rh1 = _mm256_load_ps(rhs + ((i + 1) * nper));
+        __m256 rh2 = _mm256_load_ps(rhs + ((i + 2) * nper));
+        __m256 rh3 = _mm256_load_ps(rhs + ((i + 3) * nper));
+        __m256 v0 = _mm256_mul_ps(lh0, Sleef_logf8_u35(_mm256_div_ps(lh0, rh0)));
+        __m256 v1 = _mm256_mul_ps(lh1, Sleef_logf8_u35(_mm256_div_ps(lh1, rh1)));
+        __m256 v2 = _mm256_mul_ps(lh2, Sleef_logf8_u35(_mm256_div_ps(lh2, rh2)));
+        __m256 v3 = _mm256_mul_ps(lh3, Sleef_logf8_u35(_mm256_div_ps(lh3, rh3)));
+        __m256 v4 = _mm256_add_ps(v0, v1);
+        __m256 v5 = _mm256_add_ps(v2, v3);
+        __m256 v6 = _mm256_add_ps(v4, v5);
+        auto ct = reduce_detail::broadcast_add(v6)[0];
+#ifndef NDEBUG
+        auto man_ct = 0.f;
+        for(size_t j = 0; j < nper * 4; ++j) {
+            man_ct += lhs[j + i * nper] * std::log(lhs[j + i * nper] / rhs[j + i * nper]);
+        }
+        assert(std::abs(ct - man_ct) < 1e-5);
+#endif
+        ret += ct;
+
+    }
+    for(; i < nsimd; ++i) {
         __m256 lh = _mm256_load_ps(lhs + (i * nper));
         __m256 rh = _mm256_load_ps(rhs + (i * nper));
-        __m256 div = _mm256_div_ps(lh, rh);
-        __m256 logv = Sleef_logf8_u35(div);
-        __m256 res = _mm256_mul_ps(lh, logv);
-        v = _mm256_add_ps(v, res);
+        __m256 res = _mm256_mul_ps(lh, Sleef_logf8_u35(_mm256_div_ps(lh, rh)));
+        ret += reduce_detail::broadcast_add(res)[0];
     }
-    ret = reduce_detail::broadcast_add(v)[0];
     i *= nper;
 #elif __SSE2__
     assert(reinterpret_cast<uint64_t>(lhs) % 16 == 0);
@@ -1768,7 +1805,7 @@ static INLINE double __kl_reduce_aligned(const float *__restrict__ lhs, const fl
     const size_t nsimd = n / nper;
     __m128 v = _mm_setzero_ps();
     SK_UNROLL_4
-    for(i = 0; i < nsimd; ++i) {
+    for(; i < nsimd; ++i) {
         __m128 lh = _mm_load_ps(lhs + (i * nper));
         __m128 rh = _mm_load_ps(rhs + (i * nper));
         __m128 div = _mm_div_ps(lh, rh);
@@ -1776,18 +1813,21 @@ static INLINE double __kl_reduce_aligned(const float *__restrict__ lhs, const fl
         __m128 res = _mm_mul_ps(lh, logv);
         v = _mm_add_ps(v, res);
     }
-    SK_UNROLL_4
-    for(size_t i = 0; i < nper; ++i) {
-        ret += v[i];
-    }
     i *= nper;
-#else
-    i = 0;
 #endif
     SK_UNROLL_8
     for(; i < n; ++i) {
+        //std::fprintf(stderr, "processing %zu/%zu. ret before: %g. add: %g\n", i, n, ret,  lhs[i] * std::log(lhs[i] / rhs[i]));
         ret += lhs[i] * std::log(lhs[i] / rhs[i]);
     }
+#ifndef NDEBUG
+    double oret = 0.;
+    for(size_t j = 0; j < n; ++j) {
+        //std::fprintf(stderr, "About to inc by %g * std::log(%g / %g = %g) -> %g * %g -> %g\n", lhs[j], lhs[j], rhs[j], lhs[j] / rhs[j], lhs[j],  std::log(lhs[j] / rhs[j]), lhs[j] * std::log(lhs[j] / rhs[j]));
+        oret += lhs[j] * std::log(lhs[j] / rhs[j]);
+    }
+    assert(std::abs(oret - ret) < 1e-5);
+#endif
     return ret;
 }
 
@@ -1956,6 +1996,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 const auto emptymean = lambda * lhinc + m1l * rhinc;
                 const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
                                         + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
+                //std::fprintf(stderr, "empty: %g. lhinc: %g. lhcontrib (nz): %g. rhinc: %g. rhcontrib (nz): %g\n", emptycontrib, lhinc, lambda * lhinc * std::log(lhinc / emptymean), rhinc,  m1l * rhinc * std::log(rhinc / emptymean));
                 auto lhp = tmpmulx.data(), rhp = tmpmuly.data(), mip = miv.data();
                 assert(wr.size() == wc.size());
                 auto sharedz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
@@ -2115,6 +2156,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                 [&](auto, auto x, auto y) {*lhp++ = x + lhinc; *rhp++ = y + rhinc;},
                                 [&](auto, auto x) {        *lhp++ = x + lhinc; *rhp++ = rhinc;},
                                 [&](auto, auto y) {        *lhp++ = lhinc;     *rhp++ = y + rhinc;});
+                    assert(lhp - mkltmpx.data() == rhp - mkltmpy.data());
                     auto klc = __kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz);
                     auto zc = sharednz * lhinc * (lhl - rhl);
                     ret = klc + zc;
@@ -2124,9 +2166,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     }
 #ifndef NDEBUG
                     double retmanual = perform_core(wr, wc, 0.,
-                        /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * (std::log((xval + lhinc) / (yval + rhinc)));},
-                        /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * (std::log(xval + lhinc) - rhl);},
-                        /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (lhl - std::log(yval + rhinc));},
+                        /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * std::log((xval + lhinc) / (yval + rhinc));},
+                        /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * std::log((xval + lhinc) / rhinc);},
+                        /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * std::log(lhinc / (yval + rhinc));},
                         lhinc * (lhl - rhl));
                     assert(std::abs(ret - retmanual) <= std::abs(std::max(ret, retmanual)) * 1e-5 || !std::fprintf(stderr, "simd: %g. manual: %g. diff: %0.20g\n", ret, retmanual, ret - retmanual));
 #endif
