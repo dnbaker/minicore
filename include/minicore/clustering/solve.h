@@ -613,9 +613,9 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             const auto asnsz = assigned[i].size();
             if(!asnsz) continue;
             clustering::set_center(centers[i], mat, asnptr, asnsz, weights);
-            DBG_ONLY(std::cerr << "##center with sum " << sum(centers[i]) << " and index "  << i << ": " << centers[i] << '\n';)
+            VERBOSE_ONLY(std::cerr << "##center with sum " << sum(centers[i]) << " and index "  << i << ": " << centers[i] << '\n';)
             centersums[i] = sum(centers[i]);
-            DBG_ONLY(std::fprintf(stderr, "center sum: %g. csums: %g\n", centersums[i], sum(centers[i]));)
+            VERBOSE_ONLY(std::fprintf(stderr, "center sum: %g. csums: %g\n", centersums[i], sum(centers[i]));)
         }
         // Set the new centers
         //cost = newcost;
