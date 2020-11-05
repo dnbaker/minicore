@@ -4,6 +4,8 @@
 #include "blaze/util/Serialization.h"
 #include "minicore/util/csc.h"
 
+#define ENABLE_CONST_FUNCS 1
+
 struct PyCSparseMatrix {
     void *datap_;
     void *indicesp_;
@@ -43,52 +45,66 @@ struct PyCSparseMatrix {
         indptr_t_ = indptrinf.format;
     }
     // Specialize for Data Types
+#if ENABLE_CONST_FUNCS
     template<typename Func> void perform(const Func &func) const {
         switch(data_t_.front()) {
-            case 'B': _perform<uint8_t, Func>(func); break;
-            case 'H': _perform<uint16_t, Func>(func); break;
-            case 'L': _perform<uint64_t, Func>(func); break;
-            case 'I': _perform<unsigned, Func>(func); break;
-            case 'f': _perform<float, Func>(func); break;
+#if ENABLE_8BITINT_DATA
+            case 'b': case 'B': _perform<uint8_t,  Func>(func); break;
+#endif
+#if ENABLE_16BITINT_DATA
+            case 'h': case 'H': _perform<uint16_t, Func>(func); break;
+#endif
+            case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
+            case 'i': case 'I': _perform<unsigned, Func>(func); break;
+            case 'f': _perform<float,    Func>(func); break;
+            case 'd': _perform<double,   Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
         }
     }
+#endif
     template<typename Func> void perform(const Func &func) {
         switch(data_t_.front()) {
-            case 'B': _perform<uint8_t, Func>(func); break;
-            case 'H': _perform<uint16_t, Func>(func); break;
-            case 'L': _perform<uint64_t, Func>(func); break;
-            case 'I': _perform<unsigned, Func>(func); break;
+#if ENABLE_8BITINT_DATA
+            case 'b': case 'B': _perform<uint8_t, Func>(func); break;
+#endif
+#if ENABLE_16BITINT_DATA
+            case 'h': case 'H': _perform<uint16_t, Func>(func); break;
+#endif
+            case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
+            case 'i': case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float, Func>(func); break;
+            case 'd': _perform<double, Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
         }
     }
-#define PERF3(c, IPtr, Indices) \
-                case c: {auto smat = util::make_csparse_matrix((DataT *)datap_, (Indices *)indicesp_, (IPtr *)indptrp_, nr_, nc_, nnz_); func(smat);} break
+#define PERF3(c, c2, IPtr, Indices) \
+                case c: case c2: {auto smat = util::make_csparse_matrix((DataT *)datap_, (Indices *)indicesp_, (IPtr *)indptrp_, nr_, nc_, nnz_); func(smat);} break
 
-#define PERF2(c, Indices) \
-        case c: { \
+#define PERF2(c, c2, Indices) \
+        case c: case c2: { \
             switch(indptr_t_[0]) { \
-                PERF3('L', uint64_t, Indices);\
-                PERF3('I', uint32_t, Indices);\
+                PERF3('L', 'l', uint64_t, Indices);\
+                PERF3('I', 'i', uint32_t, Indices);\
             }\
         } break
 
-    template<typename DataT, typename Func> INLINE void _perform(const Func &func) const {
+#if ENABLE_CONST_FUNCS
+    template<typename DataT, typename Func> void _perform(const Func &func) const {
         switch(indices_t_[0]) {
-            PERF2('B', uint8_t);
-            PERF2('H', uint16_t);
-            PERF2('I', uint32_t);
-            PERF2('L', uint64_t);
+            PERF2('B', 'b', uint8_t);
+            PERF2('H', 'h', uint16_t);
+            PERF2('I', 'i', uint32_t);
+            //PERF2('L', 'l', uint64_t);
             default: throw std::invalid_argument(std::string("Unsupported type for indices: ") + indices_t_);
         }
     }
-    template<typename DataT, typename Func> INLINE void _perform(const Func &func) {
+#endif
+    template<typename DataT, typename Func> void _perform(const Func &func) {
         switch(indices_t_.front()) {
-            PERF2('B', uint8_t);
-            PERF2('H', uint16_t);
-            PERF2('I', uint32_t);
-            PERF2('L', uint64_t);
+            PERF2('B', 'b', uint8_t);
+            PERF2('H', 'h', uint16_t);
+            PERF2('I', 'i', uint32_t);
+            //PERF2('L', 'l', uint64_t);
             default: throw std::invalid_argument(std::string("Unsupported type for indices: ") + indices_t_);
         }
     }

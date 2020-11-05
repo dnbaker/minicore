@@ -206,8 +206,18 @@ kcenter_coreset_outliers(Iter first, Iter end, RNG &rng, size_t k, double eps=0.
     coresets::flat_hash_map<IT, uint32_t> counts;
     counts.reserve(centers.size());
     size_t i = 0;
-    SK_UNROLL_8
     do ++counts[labels[i++]]; while(i < np);
+    while(np - i > 8) {
+        ++counts[labels[i++]];
+        ++counts[labels[i++]];
+        ++counts[labels[i++]];
+        ++counts[labels[i++]];
+        ++counts[labels[i++]];
+        ++counts[labels[i++]];
+        ++counts[labels[i++]];
+        ++counts[labels[i++]];
+    }
+    while(i < np) ++counts[labels[i++]];
     coresets::IndexCoreset<IT, FT> ret(centers.size() + outliers.size());
     std::fprintf(stderr, "ret size: %zu. centers size: %zu. counts size %zu. outliers size: %zu\n", ret.size(), centers.size(), counts.size(), outliers.size());
     for(i = 0; i < outliers.size(); ++i) {

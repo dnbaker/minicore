@@ -8,7 +8,6 @@ py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
                  py::object msr, py::object weights, double eps,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
 {
-    if(beta < 0) beta = 1. / smw.columns();
     const dist::DissimilarityMeasure measure = assure_dm(msr);
     std::fprintf(stderr, "Beginning pycluster (v1)\n");
     if(weights.is_none()) {
@@ -48,21 +47,8 @@ py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
     throw std::invalid_argument("Weights were not float, double, or None.");
 }
 
-py::object cluster1_smw(const SparseMatrixWrapper &smw, py::int_ k, double beta,
-                 py::object msr, py::object weights, double eps,
-                 int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
-{
-    return func1(smw, k, beta, msr, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
-}
-
 
 void init_clustering(py::module &m) {
-    m.def("cluster", cluster1_smw,
-    py::arg("smw"), py::arg("k")=py::int_(10), py::arg("betaprior") = 0., py::arg("msr") = 5, py::arg("weights") = py::none(),
-    py::arg("ntimes") = 2,
-    py::arg("eps") = 1e-10, py::arg("seed") = 13,
-    py::arg("lspprounds") = 1, py::arg("kmcrounds") = 10000, py::arg("kmeansmaxiter") = 1000,
-    "Clusters a SparseMatrixWrapper object using settings; set betaprior to < 0 for it to be 1 / ncolumns(). Performs seeding, followed by EM or minibatch k-means");
 
     m.def("cluster_from_centers", [](SparseMatrixWrapper &smw, py::object centers, double beta,
                     py::object msr, py::object weights, double eps,
@@ -84,6 +70,6 @@ void init_clustering(py::module &m) {
     py::arg("mbsize") = Py_ssize_t(-1),
     py::arg("ncheckins") = Py_ssize_t(-1),
     py::arg("reseed_count") = Py_ssize_t(5),
-    py::arg("with_rep") = true,
+    py::arg("with_rep") = false,
     "Clusters a SparseMatrixWrapper object using settings and the centers provided above; set betaprior to < 0 for it to be 1 / ncolumns(). Performs seeding, followed by EM or minibatch k-means");
 } // init_clustering

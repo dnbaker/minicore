@@ -108,17 +108,17 @@ int m2d2core(std::string in, std::string out, SumOpts &opts)
 
     ts.add_event("Coreset sampler");
     coresets::CoresetSampler<FT, uint32_t> cs;
-    cs.make_sampler(sm.rows(), opts.k, costs.data(), asn.data(), nullptr, opts.seed, opts.sm, opts.fl_b, centers.data());
+    cs.make_sampler(sm.rows(), opts.k, costs.data(), asn.data(), (FT *)nullptr, opts.seed, opts.sm, opts.fl_b, centers.data());
     ts.add_event("Save results");
     std::FILE *ofp;
     if(!(ofp = std::fopen((out + ".centers").data(), "w"))) throw 1;
     for(size_t i = 0; i < opts.k; ++i) {
-        std::fprintf(ofp, "%u\n", centers[i]);
+        std::fprintf(ofp, "%u\n", int(centers[i]));
     }
     std::fclose(ofp);
     if(!(ofp = std::fopen((out + ".assignments").data(), "w"))) throw 1;
     for(size_t i = 0; i < asn.size(); ++i) {
-        std::fprintf(ofp, "%zu\t%u\n", i, asn[i]);
+        std::fprintf(ofp, "%zu\t%u\n", i, int(asn[i]));
     }
     std::fclose(ofp);
     std::string fmt = sizeof(FT) == 4 ? ".float32": ".double";
@@ -249,7 +249,7 @@ int m2greedycore(std::string in, std::string out, SumOpts &opts)
     std::FILE *ofp;
     if(!(ofp = std::fopen((out + ".centers").data(), "w"))) throw 1;
     for(size_t i = 0; i < opts.k; ++i) {
-        std::fprintf(ofp, "%u\n", centers[i]);
+        std::fprintf(ofp, "%u\n", int(centers[i]));
     }
     std::fclose(ofp);
     return 0;
@@ -323,7 +323,7 @@ int m2ccore(std::string in, std::string out, SumOpts &opts)
         auto &[centers, asn, costs] = hardresult;
         ts.add_event("Build coreset sampler");
         coresets::CoresetSampler<FT, uint32_t> cs;
-        cs.make_sampler(sm.rows(), opts.k, costs.data(), asn.data(), nullptr, opts.seed, opts.sm);
+        cs.make_sampler(sm.rows(), opts.k, costs.data(), asn.data(), (FT *)nullptr, opts.seed, opts.sm);
         ts.add_event("Write summary data to disk");
         cs.write(out + ".coreset_sampler");
         std::FILE *ofp;

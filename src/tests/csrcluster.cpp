@@ -27,8 +27,8 @@ int main(int argc, char *argv[]) {
     if(const char *s = std::getenv("NUMITER")) {
         NUMITER = std::atoi(s) > 0 ? std::atoi(s): 1;
     }
-    const bool with_replacement = std::getenv("WITHREPS");
-    const bool use_simd_sample = std::getenv("SIMDSAMPLE");
+    //const bool with_replacement = std::getenv("WITHREPS");
+    const bool use_simd_sample = true;
     //const bool use_importance_sampling = std::getenv("USE_IMPORTANCE_SAMPLING");
     std::srand(0);
     std::ios_base::sync_with_stdio(false);
@@ -38,16 +38,31 @@ int main(int argc, char *argv[]) {
     //FLOAT_TYPE temp = 1.;
     dist::DissimilarityMeasure msr = dist::MKL;
     blz::DV<FLOAT_TYPE> prior{FLOAT_TYPE(1)};
-    bool loaded_blaze = false;
-    bool skip_empty = false, transpose = true;
+    //bool loaded_blaze = false;
+    //bool skip_empty = false, transpose = true;
     std::string outprefix;
+    std::vector<double> vd{1.,2.,5.};
+    std::vector<int> vi{1, 2, 5};
+    auto csv = util::CSparseVector<double, int>(vd.data(), vi.data(), 3, 6);
+    assert(sum(csv) == 1 + 2 + 5);
+    for(const auto &pair: csv) std::fprintf(stderr, "index: %zu, v: %g\b", pair.index(), pair.value());
+    auto vit = csv.begin();
+    assert(vit->value() == 1.);
+    assert(vit->index() == 1);
+    ++vit;
+    assert(vit->value() == 2.);
+    assert(vit->index() == 2);
+    ++vit;
+    assert(vit->value() == 5.);
+    assert(vit->index() == 5);
+    
     for(int c;(c = getopt(argc, argv, "o:M:z:m:p:P:k:TEh?")) >= 0;) {switch(c) {
-        case 'T': transpose = false; break;
+        //case 'T': transpose = false; break;
         case 'm': msr = (dist::DissimilarityMeasure)std::atoi(optarg); break;
         case 'P': prior[0] = std::atof(optarg); break;
         case 'p': nthreads = std::atoi(optarg); break;
         case 'k': k = std::atoi(optarg); break;
-        case 'E': skip_empty = true; break;
+        //case 'E': skip_empty = true; break;
         case 'o': outprefix = optarg; break;
         case '?':
         case 'h':dist::print_measures();  
@@ -61,14 +76,14 @@ int main(int argc, char *argv[]) {
     blz::DV<IndptrT> indptr;
 
 #ifndef NCOLS
-#define NCOLS 1000
+#define NCOLS 100
 #endif
 #ifndef NROWS
-#define NROWS 10000
+#define NROWS 1000
 #endif
     unsigned nrows = NROWS;
     unsigned ncols = NCOLS;
-    unsigned avg_nnz = std::ceil(ncols * 0.55);
+    unsigned avg_nnz = std::ceil(ncols * 0.85);
     indptr.resize(nrows + 1);
     indptr[0] = 0;
     int avg_sample = 14;
@@ -76,8 +91,7 @@ int main(int argc, char *argv[]) {
     std::poisson_distribution<IndicesT> pd2(avg_sample);
     wy::WyRand<std::conditional_t<sizeof(IndicesT) <= 4, uint32_t, uint64_t>, 4> rng;
     for(size_t i = 0; i < nrows; ++i) {
-        auto nextnnz = std::min(pd(rng), IndicesT(ncols));
-        indptr[i + 1] = indptr[i] + nextnnz;
+        indptr[i + 1] = indptr[i] + std::min(pd(rng), IndicesT(ncols));
     }
     unsigned total_nnz = indptr[nrows];
     data.resize(total_nnz);
@@ -98,6 +112,16 @@ int main(int argc, char *argv[]) {
         }
     }
     CSparseMatrix<DataT, IndicesT, IndptrT> x(data.data(), indices.data(), indptr.data(), nrows, ncols, total_nnz);
+    auto frow = row(x, 0);
+    blz::DV<DataT> v(x.columns(), 0.);
+    for(const auto &item: frow) {
+        v[item.index()] = item.value();
+    }
+    blz::DV<DataT> v2(x.columns(), 0);
+    for(size_t i = indptr[0]; i < indptr[1]; ++i) {
+        v2[indices[i]] = data[i];
+    }
+    assert(v == v2);
     const size_t nr = x.rows(), nc = x.columns();
     std::fprintf(stderr, "prior: %g\n", prior[0]);
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
@@ -107,13 +131,12 @@ int main(int argc, char *argv[]) {
     blz::DV<FLOAT_TYPE> rowsums = util::sum<blz::rowwise>(x);
     blz::DV<FLOAT_TYPE> centersums(k);
     blz::DV<FLOAT_TYPE> hardcosts;
-    blz::DV<uint32_t> asn(nr);
-    asn = 0;
+    blz::DV<uint32_t> asn(nr, 0);
     std::vector<uint64_t> ids;
     blz::DM<FLOAT_TYPE> complete_hardcost;
     auto fp = x.rows() <= 0xFFFFFFFFu ? size_t(std::rand() % x.rows()): size_t(((uint64_t(std::rand()) << 32) | std::rand()) % x.rows());
     ids = {fp};
-    blz::CompressedVector<FLOAT_TYPE, blz::rowVector> fctr;
+    blz::DynamicVector<FLOAT_TYPE, blz::rowVector> fctr;
     {
         util::assign(fctr, row(x, fp));
         centers.emplace_back(std::move(fctr));
@@ -166,6 +189,7 @@ int main(int argc, char *argv[]) {
     complete_hardcost = blaze::generate(nr, k, [&](auto r, auto col) {
         return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
     });
+    std::cerr << complete_hardcost;
     //assert(blaze::min<blaze::rowwise>(complete_hardcost) == 
     ocenters = centers;
     assert(rowsums.size() == x.rows());
@@ -178,7 +202,6 @@ int main(int argc, char *argv[]) {
         std::fprintf(stderr, "Center %d with sum %g has %u supporting, with total cost of assigned points %g\n", i, blz::sum(centers[i]), counts[i],
                      blz::sum(blz::generate(nr, [&](auto id) { return asn[id] == i ? hardcosts[id]: 0.;})));
     }
-    assert(min(asn) == 0);
     assert(max(asn) == centers.size() - 1);
     auto t1 = std::chrono::high_resolution_clock::now();
     clust::perform_hard_clustering(x, msr, prior, centers, asn, hardcosts);

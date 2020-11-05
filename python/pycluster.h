@@ -15,7 +15,6 @@ py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter);
 template<typename VecT>
 void set_centers(VecT *vec, const py::buffer_info &bi) {
-    std::fprintf(stderr, "Centers start at size %zu before buffer info\n", vec->size());
     auto &v = *vec;
     switch(bi.format.front()) {
         case 'f':
@@ -24,16 +23,30 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
             v.emplace_back(trans(cv));
         }
         break;
-        case 'i': {
+        case 'L': case 'l': {
+        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
+            auto cv = blz::make_cv((uint64_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            v.emplace_back(trans(cv));
+        }
+        }
+        break;
+        case 'I': case 'i': {
         for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
             auto cv = blz::make_cv((int *)bi.ptr + i * bi.shape[1], bi.shape[1]);
             v.emplace_back(trans(cv));
         }
         }
         break;
-        case 'u': {
+        case 'B': case 'b': {
         for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((unsigned *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            auto cv = blz::make_cv((uint8_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
+            v.emplace_back(trans(cv));
+        }
+        }
+        break;
+        case 'H': case 'h': {
+        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
+            auto cv = blz::make_cv((uint16_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
             v.emplace_back(trans(cv));
         }
         }
@@ -46,7 +59,6 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
         break;
         default: throw std::invalid_argument(std::string("Invalid format string: ") + bi.format);
     }
-    std::fprintf(stderr, "Set centers of size %zu from buffer info\n", vec->size());
 }
 
 template<typename Matrix, typename WFT, typename CtrT, typename AsnT=blz::DV<uint32_t>, typename CostsT=blz::DV<double>>
@@ -74,7 +86,7 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
         clusterret = perform_hard_clustering(mat, measure, prior, ctrs, asn, costs, weights, eps, kmeansmaxiter);
     } else {
         if(ncheckins < 0) ncheckins = 10;
-        Py_ssize_t checkin_freq = (mbsize + ncheckins - 1) / ncheckins;
+        Py_ssize_t checkin_freq = (kmeansmaxiter + ncheckins - 1) / ncheckins;
         clusterret = perform_hard_minibatch_clustering(mat, measure, prior, ctrs, asn, costs, weights,
                                                        mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
     }
@@ -202,11 +214,12 @@ py::object __py_cluster_from_centers(const Matrix &smw,
     } else throw std::invalid_argument("Centers must be a 2d numpy array or a list of numpy arrays");
     const unsigned k = dvecs.size();
     blz::DV<uint32_t> asn(smw.rows());
+    if(k > 0xFFFFFFFFull) throw std::invalid_argument("k must be < 4.3 billion to fit into a uint32_t");
     const auto psum = beta * smw.columns();
     blz::DV<double> centersums = blaze::generate(k, [&dvecs](auto x) {
         return blz::sum(dvecs[x]);
     });
-    blz::DV<double> costs;
+    blz::DV<float> costs;
     smw.perform([&](auto &mat) {
         costs = blaze::generate(mat.rows(), [&](size_t idx) {
             double bestcost;

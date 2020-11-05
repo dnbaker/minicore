@@ -389,7 +389,7 @@ struct CoresetSampler {
     template<typename CFT, typename CFT2=CFT>
     void make_sampler(size_t np, size_t ncenters,
                       const CFT *costs, const IT *assignments,
-                      const CFT2 *weights=nullptr,
+                      const CFT2 *weights=static_cast<CFT2 *>(nullptr),
                       uint64_t seed=137,
                       SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG,
                       unsigned k = unsigned(-1),
@@ -402,9 +402,13 @@ struct CoresetSampler {
         if(k == (unsigned)-1) k = ncenters;
         k_ = k;
         if(weights) {
+            std::fprintf(stderr,"[%s] Copying to weights\n", __PRETTY_FUNCTION__);
             weights_.reset(new blaze::DynamicVector<FT>(np_));
             std::copy(weights, weights + np, weights_->data());
-        } else weights_.release();
+        } else {
+            weights_.release();
+            assert(!weights_.get());
+        }
         if(sens == LUCIC_FAULKNER_KRAUSE_FELDMAN) {
             make_gmm_sampler(ncenters, costs, assignments, seed, alpha_est);
         } else if(sens == VARADARAJAN_XIAO) {
@@ -428,34 +432,39 @@ struct CoresetSampler {
                          uint64_t seed=137)
     {
         const auto cv = blz::make_cv(const_cast<CFT *>(costs), np_);
+        std::cerr << "Costs: " << trans(cv) << '\n';
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                      : blaze::sum(cv);
         probs_.reset(new FT[np_]);
-        auto sensitivies = blz::make_cv(probs_.get(), np_);
+        auto sensitivities = blz::make_cv(probs_.get(), np_);
         std::vector<IT> center_counts(ncenters);
         OMP_PFOR
         for(size_t i = 0; i < np_; ++i) {
             OMP_ATOMIC
             ++center_counts[assignments[i]];
         }
-        if(weights_) {
-            sensitivies = (*weights_) * cv * (1. / total_cost);
-        } else {
-            sensitivies = cv * (1. / total_cost);
+        for(size_t i = 0; i < ncenters; ++i) {
+            std::fprintf(stderr, "center %zu has %u asn\n", i, int(center_counts[i]));
         }
+        if(weights_) {
+            sensitivities = (*weights_) * cv / total_cost;
+        } else {
+            sensitivities = cv / total_cost;
+        }
+        std::cerr << "Sensitivities: " << trans(sensitivities) << '\n';
         // sensitivities = weights * costs / total_cost
         blaze::DynamicVector<FT> ccinv(ncenters);
-        for(unsigned i = 0; i < ncenters; ++i)
-            ccinv[i] = 1. / center_counts[i];
+        std::transform(center_counts.begin(), center_counts.end(), ccinv.begin(), [](auto x) -> FT {return FT(1) / x;});
         OMP_PFOR
         for(size_t i = 0; i < np_; ++i) {
-            sensitivies[i] += ccinv[assignments[i]];
+            sensitivities[i] += ccinv[assignments[i]];
         }
+        std::cerr << "New sensitivities: " << trans(sensitivities) << '\n';
         // sensitivities = weights * costs / total_cost + 1. / (cluster_size)
-        const double total_sensitivity = blaze::sum(sensitivies);
+        const double total_sensitivity = blaze::sum(sensitivities);
         // probabilities = sensitivity / sum(sensitivities) [use the same location in memory because we no longer need sensitivities]
-        sensitivies *= 1. / total_sensitivity;
+        sensitivities *= 1. / total_sensitivity;
         sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
     template<typename CFT>
@@ -498,6 +507,7 @@ struct CoresetSampler {
     {
         const double alpha = 16 * std::log(k_) + 32., alpha2 = 2. * alpha;
 
+        DBG_ONLY(std::fprintf(stderr, "alpha: %g\n", alpha);)
         //auto center_counts = std::make_unique<IT[]>(ncenters);
         blaze::DynamicVector<FT> weight_sums(ncenters, FT(0));
         blaze::DynamicVector<FT> cost_sums(ncenters, FT(0));
@@ -509,6 +519,7 @@ struct CoresetSampler {
             assert(asn < ncenters);
             const auto w = getweight(i);
 
+            DBG_ONLY(std::fprintf(stderr, "weight %zu: %g with asn %u\n", i, w, asn);)
             OMP_ATOMIC
             weight_sums[asn] += w; // If unweighted, weights are 1.
             //OMP_ATOMIC
@@ -520,17 +531,23 @@ struct CoresetSampler {
             total_costs += w * costs[i];
         }
         double weight_sum = blaze::sum(weight_sums);
+        DBG_ONLY(std::fprintf(stderr, "wsum: %g\n", weight_sum);)
         total_costs /= weight_sum;
         const double tcinv = alpha / total_costs;
+        DBG_ONLY(std::fprintf(stderr, "tcinv: %g\n", tcinv);)
         blaze::DynamicVector<FT> sens(np_);
         for(size_t i = 0; i < ncenters; ++i) {
             cost_sums[i] = alpha2 * cost_sums[i] / (weight_sums[i] * total_costs) + 4 * weight_sum / weight_sums[i];
+            DBG_ONLY(std::fprintf(stderr, "Adjusted cost: %g\n", cost_sums[i]);)
         }
         OMP_PFOR
         for(size_t i = 0; i < np_; ++i) {
             sens[i] = tcinv * costs[i] + cost_sums[assignments[i]];
         }
+        DBG_ONLY(std::fprintf(stderr, "sensitivity sum: %g\n", sum(sens));)
         sampler_.reset(new Sampler(sens.data(), sens.data() + np_, seed));
+        probs_.reset(new FT[np_]);
+        std::transform(sens.data(),  sens.data() + np_, probs_.get(), [tsi=1./sum(sens)](auto x) {return x * tsi;});
     }
     template<typename CFT>
     void make_sampler_bfl(size_t ncenters,
@@ -544,6 +561,7 @@ struct CoresetSampler {
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                     : blaze::sum(cv);
+        //std::fprintf(stderr, "total cost: %g (sum of costs w/o weights: %g)\n", total_cost, std::accumulate(costs, costs + np_, 0.));
         probs_.reset(new FT[np_]);
         double total_probs = 0.;
         std::vector<IT> center_counts(ncenters);
@@ -555,9 +573,15 @@ struct CoresetSampler {
             const auto w = getweight(i);
             OMP_ATOMIC
             weight_sums[asn] += w; // If unweighted, weights are 1.
+            //std::fprintf(stderr, "weight: %g. wsum: %g\n", w, weight_sums[asn]);
             OMP_ATOMIC
             ++center_counts[asn];
         }
+#if 0
+        for(size_t i = 0; i < ncenters; ++i) {
+            std::fprintf(stderr, "center %zu has total %zu and weight sum %g\n", i, size_t(center_counts[i]), weight_sums[i]);
+        }
+#endif
         OMP_PRAGMA("omp parallel for reduction(+:total_probs)")
         for(size_t i = 0; i < np_; ++i) {
             const auto w = getweight(i);
@@ -566,6 +590,7 @@ struct CoresetSampler {
             double fracw = w / (weight_sums[asn] * center_counts[asn]);
             probs_[i] = .5 * (fraccost + fracw);
             total_probs += probs_[i];
+            //std::fprintf(stderr, "fraccost: %g. fracw: %g. Total weight: %g\n", fraccost, fracw, probs_[i]);
         }
         // Because this doesn't necessarily sum to 1.
         blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np_) /= total_probs;
@@ -621,6 +646,9 @@ struct CoresetSampler {
         if(unlikely(!sampler_.get())) throw std::runtime_error("Sampler not constructed");
         if(seed) sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
+        assert(ret.indices_.size() == n);
+        assert(ret.weights_.size() == n);
+        assert(probs_.get());
         const double dn = n;
         size_t sampled_directly = n;
         if(sens_ == FL) sampled_directly = std::max((long)(n - b_), 0L);

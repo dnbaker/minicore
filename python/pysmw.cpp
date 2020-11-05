@@ -7,6 +7,12 @@ using blz::unchecked;
 
 using smw_t = SparseMatrixWrapper;
 
+py::object run_kmpp_noso(const SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+                         Py_ssize_t lspp, bool use_exponential_skips,
+                         py::object weights) {
+    return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, weights);
+}
+
 dist::DissimilarityMeasure assure_dm(py::object obj) {
     dist::DissimilarityMeasure ret;
     if(py::isinstance<py::str>(obj)) {
@@ -336,17 +342,16 @@ void init_smw(py::module &m) {
         "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
        "\nSet nkmc to > 0 to use kmc2 instead of full D2 sampling, which is faster but may yield a slightly lower-quality result.\n"
         "One can accelerate sampling via SIMD (default) or exponential skips via use_exponential_skips=True\n";
-    m.def("kmeanspp",  [](SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                          Py_ssize_t lspp, bool use_exponential_skips,
-                          py::object weights) -> py::object
-    {
-        return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, weights);
-    }, kmeans_doc,
+    m.def("kmeanspp", run_kmpp_noso
+       , kmeans_doc,
        py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("betaprior") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1,
        py::arg("lspp") = 0, py::arg("use_exponential_skips") = false,
        py::arg("weights") = py::none()
     );
-    m.def("kmeanspp", [](const SparseMatrixWrapper &smw, const SumOpts &so, py::object weights) {return py_kmeanspp_so(smw, so, weights);},
+    m.def("kmeanspp", [](const SparseMatrixWrapper &smw, const SumOpts &so, py::object weights) {
+        return run_kmpp_noso(smw, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, so.kmc2_rounds, std::max(int(so.extra_sample_tries) - 1, 0),
+                       so.lspp, so.use_exponential_skips, weights);
+    },
         kmeans_doc,
        py::arg("smw"),
        py::arg("opts"),
