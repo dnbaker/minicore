@@ -7,7 +7,7 @@ Here, I am trying to provide more of a user guide.
 We have exposed a subset of functionality to Python. The `CoresetSampler` generates a coreset from a set of costs and a construction method,
 while the more involved clustering code is also exposed.
 
-# Clsutering
+# Clustering
 For clustering Bregman divergences (squared distance, Itakura-Saito, and KL-divergence, for instance), kmeans++ sampling (via `kmeanspp`) provides accurate fast initial
 centers, while `cluster_from_centers` performs EM from an initial set of points.
 
