@@ -35,7 +35,7 @@ beta = 0.5   # Pseudocount prior for Bregman divergences
              # unique features. The smaller, the more surprising.
              # See Witten, 2011
 
-ntimes = 5   # Perform kmeans++ sampling %i times, use the best-scoring set of centers
+ntimes = 2   # Perform kmeans++ sampling %i times, use the best-scoring set of centers
              # defaults to 1
 
 seed = 0     # if seed is not set, defaults to 0. Results will be identical with the same seed.
@@ -53,8 +53,6 @@ centers, assignments, costs = mc.kmeanspp(mcmat, msr=measure, k=k, betaprior=bet
 
 
 lspprounds = 2 # Perform %i rounds of localsearch++. Yields a higher quality set of centers at the expense of more runtime
-
-# cluster_from_centers(smw: pyfgc.SparseMatrixWrapper, centers: object, betaprior: float = -1.0, msr: object = 5, weights: object = None, eps: float = 1e-10, maxiter: int = 1000, kmcrounds: int = 10000, ntimes: int = 1, lspprounds: int = 1, seed: int = 0)
 
 ctr_rows = mc.rowsel(centers)
 
