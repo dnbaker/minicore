@@ -161,22 +161,22 @@ mpi%: src/%.cpp $(wildcard include/minicore/*.h)
 	$(CXX) $(CXXFLAGS) $< $(OMP_STR) -o $@
 
 
-osm2dimacsdbg: src/utils/osm2dimacs.cpp
+osm2dimacsdbg: src/utils/osm2dimacs.cpp $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@
 
-osm2dimacs: src/utils/osm2dimacs.cpp
+osm2dimacs: src/utils/osm2dimacs.cpp $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@ -O3 $(OMP_STR) -DNDEBUG
 
-osm2dimacspgf: src/utils/osm2dimacs.cpp
+osm2dimacspgf: src/utils/osm2dimacs.cpp $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg -DNDEBUG $(OMP_STR)
 
-osm2dimacspg: src/utils/osm2dimacs.cpp
+osm2dimacspg: src/utils/osm2dimacs.cpp $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
