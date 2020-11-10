@@ -208,10 +208,6 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
     wy::WyRand<uint64_t> rng(seed);
     const auto psum = gamma_beta * smw.columns();
     const blz::StaticVector<double, 1> prior({gamma_beta});
-    auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
-        // Note that this has been transposed
-        return cmp::msr_with_prior(measure, y, x, prior, psum, sum(y), sum(x));
-    };
     py::array_t<uint32_t> ret(k);
     int retasnbits;
     if(k <= 256) {
@@ -235,7 +231,12 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
     auto costp = (float *)costs.request().ptr;
     try {
     smw.perform([&](auto &x) {
-        //using RT = decltype(repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, cmp));
+        using ET = typename std::decay_t<decltype(x)>::ElementType;
+        using FT = std::conditional_t<std::is_floating_point_v<ET>, ET, std::conditional_t<(sizeof(ET) <= 4), float, double>>;
+        auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
+            // Note that this has been transposed
+            return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));
+        };
         auto sol =
             kind == -1 ?
             repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp)
@@ -336,10 +337,6 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
         wy::WyRand<uint64_t> rng(seed);
         const auto psum = gamma_beta * smw.columns();
         const blz::StaticVector<double, 1> prior({gamma_beta});
-        auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
-            // Note that this has been transposed
-            return cmp::msr_with_prior(measure, y, x, prior, psum, sum(y), sum(x));
-        };
         py::array_t<uint32_t> ret(ki);
         py::object retasn = py::none();
         int retasnbits;
@@ -358,6 +355,11 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
         py::array_t<float> costs(smw.rows());
         auto costp = (float *)costs.request().ptr;
         smw.perform([&](auto &x) {
+            using FT = std::conditional_t<std::is_floating_point_v<typename std::decay_t<decltype(x)>::ElementType>, typename std::decay_t<decltype(x)>::ElementType, std::conditional_t<(sizeof(typename std::decay_t<decltype(x)>::ElementType) <= 4), float, double>>;
+            auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
+                // Note that this has been transposed
+                return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));
+            };
             //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
             auto sol =
                 kind == -1 ?

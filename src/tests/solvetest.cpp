@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
         centers.emplace_back(row(x, fp));
         centersums[0] = blz::sum(centers[0]);
         hardcosts = blaze::generate(nr, [&](auto id) {
-            return cmp::msr_with_prior(msr, row(x, id, blz::unchecked), centers[0], prior, psum, rowsums[id], centersums[0]);
+            return cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, id, blz::unchecked), centers[0], prior, psum, rowsums[id], centersums[0]);
         });
         while(centers.size() < k) {
             size_t index = reservoir_simd::sample(hardcosts.data(), nr, rng());
@@ -123,13 +123,13 @@ int main(int argc, char *argv[]) {
                 if(id == index) {
                     asn[id] = cid; hardcosts[id] = 0.;
                 } else {
-                    auto v = cmp::msr_with_prior(msr, row(x, id, blz::unchecked), centers[cid], prior, psum, rowsums[id], centersums[cid]);
+                    auto v = cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, id, blz::unchecked), centers[cid], prior, psum, rowsums[id], centersums[cid]);
                     if(v < hardcosts[id]) hardcosts[id] = v, asn[id] = cid;
                 }
             }
         }
         complete_hardcost = blaze::generate(nr, k, [&](auto r, auto col) {
-            return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
+            return cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
         });
         //assert(blaze::min<blaze::rowwise>(complete_hardcost) == 
     } else {
@@ -141,7 +141,7 @@ int main(int argc, char *argv[]) {
         for(const auto id: ids) centers.emplace_back(row(x, id));
         centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
         complete_hardcost = blaze::generate(nr, k, [&](auto r, auto col) {
-            return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
+            return cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
         });
         std::cerr << "full costs range: " << min(complete_hardcost) << " -> " << max(complete_hardcost) << '\n';
         hardcosts = blaze::generate(nr, [&](auto id) {

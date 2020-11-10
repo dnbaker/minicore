@@ -1830,7 +1830,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             //==
             //return std::log(x + y) - std::log(std::max(smallest_prior, x * y));
             //==
-            return std::log((x + y) / std::max(smallest_pv, x * y));
+            return std::log((x + y) / std::max(smallest_pv, FT(x * y)));
         };
         auto get_inc_rsis = [](auto x, auto y) ALWAYS_INLINE {
             const auto ix = FT(1.) / x, iy = FT(1.) / y, isq = std::sqrt(ix * iy);
@@ -1889,7 +1889,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 //DBG_ONLY(std::fprintf(stderr, "ret before: %g. empty: %g->%g [%g,%g,%g]\n", ret, emptycontrib * sharedz, ret + emptycontrib * sharedz, pv, lhinc, rhinc);)
                 ret += emptycontrib * sharedz;
 #ifndef NDEBUG
-                double oret = perform_core(wr, wc, FT(0),
+                FT oret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
                         auto xv = xval + lhinc, yv = yval + rhinc;
                         auto meanv = lambda * xv + m1l * yv, mi = FT(1.) / meanv;
@@ -1951,7 +1951,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                 [&](auto, auto x) {        *lhp++ = x; *rhp++ = FT(0);},
                                 [&](auto, auto y) {        *lhp++ = FT(0); *rhp++ = y;});
                     assert(lhp - mkltmpx.data() == rhp - mkltmpy.data());
-                    double klc, zc;
+                    FT klc, zc;
                     if(msr == MKL || msr == POISSON) {
                         klc = libkl::kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz, lhinc, rhinc);
                         zc = sharednz * lhinc * (lhl - rhl);
@@ -1965,7 +1965,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                      pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
                     }
 #ifndef NDEBUG
-                    double retmanual = perform_core(wr, wc, 0.,
+                    FT retmanual = perform_core(wr, wc, 0.,
                         /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * std::log((xval + lhinc) / (yval + rhinc));},
                         /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * std::log((xval + lhinc) / rhinc);},
                         /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * std::log(lhinc / (yval + rhinc));},
@@ -2052,7 +2052,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     nd, mr.begin(), mr.end(), ctr.begin(), ctr.end(),
                     [&ret](auto, auto xval, auto yval) {ret += xval * yval;});
                 ret /= l2Norm(mr) * l2Norm(ctr);
-               ret = std::max(std::min(ret, double(1.)), double(0.));
+                ret = std::max(std::min(ret, FT(1.)), FT(0.));
                 if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
                 break;
             case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
@@ -2064,7 +2064,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                             /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (yval + rhinc);},
                             lhinc * rhinc
                         );
-               ret = std::max(std::min(ret, double(1.)), double(0.));
+               ret = std::max(std::min(ret, FT(1.)), FT(0.));
                if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
                 break;
             default: ret = 0.; throw TODOError("unexpected msr; not yet supported");

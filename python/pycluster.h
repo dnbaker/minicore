@@ -140,8 +140,10 @@ py::dict cpp_pycluster(const Matrix &mat, unsigned int k, double beta,
         std::fprintf(stderr, "D2 sampling may not provide a bicriteria approximation alone. TODO: use more expensive metric clustering for better objective functions.\n");
     }
     wy::WyRand<uint32_t> rng(seed);
+    using ET = typename Matrix::ElementType;
+    using MsrType = std::conditional_t<std::is_floating_point_v<ET>, ET, std::conditional_t<(sizeof(ET) <= 4), float, double>>;
     auto functor = [&](const auto &x, const auto &y) {
-        return cmp::msr_with_prior(measure, y, x, prior, psum, sum(y), sum(x));
+        return cmp::msr_with_prior<MsrType>(measure, y, x, prior, psum, sum(y), sum(x));
     };
     std::fprintf(stderr, "About to try to get initial centers\n");
     auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, kmcrounds, ntimes, lspprounds, use_exponential_skips, functor);
@@ -212,7 +214,7 @@ py::object __py_cluster_from_centers(const Matrix &smw,
             }
         }
     } else throw std::invalid_argument("Centers must be a 2d numpy array or a list of numpy arrays");
-    const unsigned k = dvecs.size();
+    const unsigned long long k = dvecs.size();
     blz::DV<uint32_t> asn(smw.rows());
     if(k > 0xFFFFFFFFull) throw std::invalid_argument("k must be < 4.3 billion to fit into a uint32_t");
     const auto psum = beta * smw.columns();
@@ -221,15 +223,17 @@ py::object __py_cluster_from_centers(const Matrix &smw,
     });
     blz::DV<float> costs;
     smw.perform([&](auto &mat) {
+        using ET = typename std::decay_t<decltype(mat)>::ElementType;
+        using MsrType = std::conditional_t<std::is_floating_point_v<ET>, ET, std::conditional_t<(sizeof(ET) <= 4), float, double>>;
         costs = blaze::generate(mat.rows(), [&](size_t idx) {
             double bestcost;
             uint32_t bestind;
                 auto r = row(mat, idx);
                 const double rsum = sum(r);
                 bestind = 0;
-                auto c = cmp::msr_with_prior(measure, r, dvecs[0], prior, psum, rsum, centersums[0]);
+                auto c = cmp::msr_with_prior<MsrType>(measure, r, dvecs[0], prior, psum, rsum, centersums[0]);
                 for(unsigned j = 1; j < k; ++j) {
-                    auto nextc = cmp::msr_with_prior(measure, r, dvecs[j], prior, psum, rsum, centersums[j]);
+                    auto nextc = cmp::msr_with_prior<MsrType>(measure, r, dvecs[j], prior, psum, rsum, centersums[j]);
                     if(nextc < c)
                         c = nextc, bestind = j;
                 }

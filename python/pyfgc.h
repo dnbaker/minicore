@@ -22,7 +22,7 @@ void init_clustering_csr(py::module &m);
 // Direct CSR mode (no copying) saves memory, but takes a long time to compile
 // define BUILD_CSR_CLUSTERING to 1 or modify this file to enable.
 #ifndef BUILD_CSR_CLUSTERING
-#define BUILD_CSR_CLUSTERING 0
+#define BUILD_CSR_CLUSTERING 1
 #endif
 
 using CSType = coresets::CoresetSampler<float, uint32_t>;
