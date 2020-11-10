@@ -1938,6 +1938,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhrsi * (yval + rhinc));},
                     __isc(lhsum * rhrsi));
             break;
+            case REVERSE_POISSON: case REVERSE_MKL:
             case POISSON:
             case MKL:
             {
@@ -1950,8 +1951,14 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                                 [&](auto, auto x) {        *lhp++ = x; *rhp++ = FT(0);},
                                 [&](auto, auto y) {        *lhp++ = FT(0); *rhp++ = y;});
                     assert(lhp - mkltmpx.data() == rhp - mkltmpy.data());
-                    auto klc = libkl::kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz, lhinc, rhinc);
-                    auto zc = sharednz * lhinc * (lhl - rhl);
+                    double klc, zc;
+                    if(msr == MKL || msr == POISSON) {
+                        klc = libkl::kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz, lhinc, rhinc);
+                        zc = sharednz * lhinc * (lhl - rhl);
+                    } else {
+                        klc = libkl::kl_reduce_aligned(rhv.data(), lhv.data(), nd - sharednz, rhinc, lhinc);
+                        zc = sharednz * rhinc * (rhl - lhl);
+                    }
                     ret = klc + zc;
                     if(ret < 0) {
                         std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
@@ -1970,30 +1977,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 }
                 if(std::isnan(ret))
                     ret = std::numeric_limits<FT>::max();
-            }
-            break;
-            case REVERSE_POISSON:
-            case REVERSE_MKL:
-            {
-                if(nonZeros(wr) + nonZeros(wc) > 50) {
-                    auto &lhv(mkltmpx);
-                    auto &rhv(mkltmpy);
-                    auto lhp = lhv.data(), rhp = rhv.data();
-                    size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
-                                [&](auto, auto x, auto y) {*lhp++ = x; *rhp++ = y;},
-                                [&](auto, auto x) {*lhp++ = x; *rhp++ = FT(0);},
-                                [&](auto, auto y) {*lhp++ = FT(0); *rhp++ = y;});
-                    ret = libkl::kl_reduce_aligned(rhv.data(), lhv.data(), nd - sharednz, rhinc, lhinc) + sharednz * rhinc * (rhl - lhl);
-                } else {
-                    ret = perform_core(wr, wc, 0.,
-                        /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (yval + rhinc) * (std::log((yval + rhinc) / (xval + lhinc)));},
-                        /* xonly */    [&](auto xval) ALWAYS_INLINE  {return rhinc * (rhl - std::log(xval + lhinc));},
-                        /* yonly */    [&](auto yval) ALWAYS_INLINE  {
-                                        const auto yv = yval + rhinc;
-                                        return yv * (std::log(yv) - lhl);
-                        },
-                        rhinc * (rhl - lhl));
-                }
             }
             break;
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
