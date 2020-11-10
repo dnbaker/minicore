@@ -89,7 +89,7 @@ CXXFLAGS += $(EXTRA)
 CXXFLAGS += $(LDFLAGS)
 
 HEADERS=$(shell find include -name '*.h')
-STATIC_LIBS=libsimdsampling/libsimdsampling.a libsleef.a
+STATIC_LIBS=libsimdsampling/libsimdsampling.a libsleef.a  libkl/libkl.a
 
 libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.a
 	ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
@@ -119,10 +119,10 @@ printlibs:
 %: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)  libkl/libkl.a
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
-mtx%: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+mtx%: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)  libkl/libkl.a
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
 mtx%dbg: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
@@ -182,6 +182,9 @@ osm2dimacspg: src/utils/osm2dimacs.cpp
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
+libkl/libkl.a: libkl/libkl.c libkl/libkl.h
+	cd libkl && $(MAKE)
+
 libsleef.a:
 	+ls libsleef.a 2>/dev/null || (cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..)
 
@@ -189,8 +192,6 @@ libsleef.a:
 soft: solvetestdbg solvetest solvesoft solvesoftdbg
 ssoft: solvesoft solvesoftdbg
 hsoft: solvetest solvetestdbg
-
-
 
 
 clean:

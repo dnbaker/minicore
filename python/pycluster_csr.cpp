@@ -31,12 +31,15 @@ py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
     throw std::invalid_argument("Weights were not float, double, or None.");
 }
 
+#if 0
 py::object cluster1_csr(const PyCSparseMatrix &smw, py::int_ k, double beta,
                  py::object msr, py::object weights, double eps,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
 {
     return func1(smw, k, beta, msr, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
 }
+#endif
+
 #endif
 
 void init_clustering_csr(py::module &m) {
