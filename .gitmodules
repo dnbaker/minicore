@@ -40,3 +40,6 @@
 [submodule "libsimdsampling"]
 	path = libsimdsampling
 	url = https://github.com/dnbaker/libsimdsampling
+[submodule "libkl"]
+	path = libkl
+	url = https://github.com/dnbaker/libkl

@@ -7,11 +7,18 @@ INCLUDE_PATHS += $(BOOST_DIR)
 endif
 
 
+LIBKL?=./libkl
+LIBPATHS+=$(LIBKL)
+
+LINKS+=libkl/libkl.a -lz
+
+
 ifdef HDFPATH
 INCLUDE_PATHS+= $(HDFPATH)/include
 LIBPATHS+= $(HDFPATH)/lib
 LINKS+=-lhdf5  -lhdf5_hl  -lhdf5_hl_cpp -lhdf5_cpp
 endif
+
 
 
 # Handle SLEEF
@@ -87,14 +94,22 @@ STATIC_LIBS=libsimdsampling/libsimdsampling.a libsleef.a
 libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.a
 	ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
 
-%dbg: src/%.cpp $(HEADERS) $(STATIC_LIBS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(STATIC_LIBS) -O1
+#%dbg: src/%.cpp $(HEADERS) $(STATIC_LIBS)
+#	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(STATIC_LIBS) -O1
 
-%dbg: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS) -O1
+#%dbg: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
+#	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS) -O1
 
-%: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
+%: src/tests/%.o $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
+
+src/tests/%.o: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
+
+%.dbgo: %.cpp $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS) -DNDEBUG
+%dbg: src/tests/%.dbgo $(HEADERS) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS) -DNDEBUG
 
 printlibs:
 	echo $(LIBPATHS)

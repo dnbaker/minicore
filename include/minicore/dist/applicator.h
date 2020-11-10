@@ -10,6 +10,7 @@
 #include <set>
 #include <x86intrin.h>
 #include "sleef.h"
+#include "libkl/libkl.h"
 
 
 namespace minicore {
@@ -1727,110 +1728,6 @@ INLINE __m256 broadcast_add(__m256 x) {
 #endif // AVX2
 
 }/// reduce_detail
-static INLINE double __kl_reduce_aligned(const float *const __restrict__ lhs, const float *const __restrict__ rhs, const size_t n) {
-    double ret = 0.;
-    size_t i = 0;
-#if __AVX512F__
-    assert(reinterpret_cast<uint64_t>(lhs) % 64 == 0);
-    const size_t nper = sizeof(__m512) / sizeof(float);
-    const size_t nsimd = n / nper;
-    const size_t nsimd4 = (nsimd / 4) * 4;
-    for(; i < nsimd4; i += 4) {
-        __m512 lh0 = _mm512_load_ps(lhs + (i * nper));
-        __m512 lh1 = _mm512_load_ps(lhs + ((i + 1) * nper));
-        __m512 lh2 = _mm512_load_ps(lhs + ((i + 2) * nper));
-        __m512 lh3 = _mm512_load_ps(lhs + ((i + 3) * nper));
-        __m512 rh0 = _mm512_load_ps(rhs + (i * nper));
-        __m512 rh1 = _mm512_load_ps(rhs + ((i + 1) * nper));
-        __m512 rh2 = _mm512_load_ps(rhs + ((i + 2) * nper));
-        __m512 rh3 = _mm512_load_ps(rhs + ((i + 3) * nper));
-        __m512 v0 = _mm512_mul_ps(lh0, Sleef_logf16_u35(_mm512_div_ps(lh0, rh0)));
-        __m512 v1 = _mm512_mul_ps(lh1, Sleef_logf16_u35(_mm512_div_ps(lh1, rh1)));
-        __m512 v2 = _mm512_mul_ps(lh2, Sleef_logf16_u35(_mm512_div_ps(lh2, rh2)));
-        __m512 v3 = _mm512_mul_ps(lh3, Sleef_logf16_u35(_mm512_div_ps(lh3, rh3)));
-        __m512 v4 = _mm512_add_ps(v0, v1);
-        __m512 v5 = _mm512_add_ps(v2, v3);
-        __m512 v6 = _mm512_add_ps(v4, v5);
-        ret += _mm512_reduce_add_ps(v6);
-    }
-    for(; i < nsimd; ++i) {
-        __m512 lh = _mm512_load_ps(lhs + (i * nper));
-        __m512 rh = _mm512_load_ps(rhs + (i * nper));
-        __m512 div = _mm512_div_ps(lh, rh);
-        __m512 logv = Sleef_logf16_u35(div);
-        ret += _mm512_reduce_add_ps(_mm512_mul_ps(lh, logv));
-    }
-    i *= nper;
-#elif __AVX2__
-    assert(reinterpret_cast<uint64_t>(lhs) % 32 == 0);
-    const size_t nper = sizeof(__m256) / sizeof(float);
-    const size_t nsimd = n / nper;
-    const size_t nsimd4 = (nsimd / 4) * 4;
-    for(; i < nsimd4; i += 4) {
-        __m256 lh0 = _mm256_load_ps(lhs + (i * nper));
-        __m256 lh1 = _mm256_load_ps(lhs + ((i + 1) * nper));
-        __m256 lh2 = _mm256_load_ps(lhs + ((i + 2) * nper));
-        __m256 lh3 = _mm256_load_ps(lhs + ((i + 3) * nper));
-        __m256 rh0 = _mm256_load_ps(rhs + (i * nper));
-        __m256 rh1 = _mm256_load_ps(rhs + ((i + 1) * nper));
-        __m256 rh2 = _mm256_load_ps(rhs + ((i + 2) * nper));
-        __m256 rh3 = _mm256_load_ps(rhs + ((i + 3) * nper));
-        __m256 v0 = _mm256_mul_ps(lh0, Sleef_logf8_u35(_mm256_div_ps(lh0, rh0)));
-        __m256 v1 = _mm256_mul_ps(lh1, Sleef_logf8_u35(_mm256_div_ps(lh1, rh1)));
-        __m256 v2 = _mm256_mul_ps(lh2, Sleef_logf8_u35(_mm256_div_ps(lh2, rh2)));
-        __m256 v3 = _mm256_mul_ps(lh3, Sleef_logf8_u35(_mm256_div_ps(lh3, rh3)));
-        __m256 v4 = _mm256_add_ps(v0, v1);
-        __m256 v5 = _mm256_add_ps(v2, v3);
-        __m256 v6 = _mm256_add_ps(v4, v5);
-        auto ct = reduce_detail::broadcast_add(v6)[0];
-#ifndef NDEBUG
-        auto man_ct = 0.f;
-        for(size_t j = 0; j < nper * 4; ++j) {
-            man_ct += lhs[j + i * nper] * std::log(lhs[j + i * nper] / rhs[j + i * nper]);
-        }
-        assert(std::abs(ct - man_ct) < 1e-5);
-#endif
-        ret += ct;
-
-    }
-    for(; i < nsimd; ++i) {
-        __m256 lh = _mm256_load_ps(lhs + (i * nper));
-        __m256 rh = _mm256_load_ps(rhs + (i * nper));
-        __m256 res = _mm256_mul_ps(lh, Sleef_logf8_u35(_mm256_div_ps(lh, rh)));
-        ret += reduce_detail::broadcast_add(res)[0];
-    }
-    i *= nper;
-#elif __SSE2__
-    assert(reinterpret_cast<uint64_t>(lhs) % 16 == 0);
-    const size_t nper = sizeof(__m128) / sizeof(float);
-    const size_t nsimd = n / nper;
-    __m128 v = _mm_setzero_ps();
-    SK_UNROLL_4
-    for(; i < nsimd; ++i) {
-        __m128 lh = _mm_load_ps(lhs + (i * nper));
-        __m128 rh = _mm_load_ps(rhs + (i * nper));
-        __m128 div = _mm_div_ps(lh, rh);
-        __m128 logv = Sleef_logf4_u35(div);
-        __m128 res = _mm_mul_ps(lh, logv);
-        v = _mm_add_ps(v, res);
-    }
-    i *= nper;
-#endif
-    SK_UNROLL_8
-    for(; i < n; ++i) {
-        //std::fprintf(stderr, "processing %zu/%zu. ret before: %g. add: %g\n", i, n, ret,  lhs[i] * std::log(lhs[i] / rhs[i]));
-        ret += lhs[i] * std::log(lhs[i] / rhs[i]);
-    }
-#ifndef NDEBUG
-    double oret = 0.;
-    for(size_t j = 0; j < n; ++j) {
-        //std::fprintf(stderr, "About to inc by %g * std::log(%g / %g = %g) -> %g * %g -> %g\n", lhs[j], lhs[j], rhs[j], lhs[j] / rhs[j], lhs[j],  std::log(lhs[j] / rhs[j]), lhs[j] * std::log(lhs[j] / rhs[j]));
-        oret += lhs[j] * std::log(lhs[j] / rhs[j]);
-    }
-    assert(std::abs(oret - ret) < 1e-5);
-#endif
-    return ret;
-}
 
 template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
 FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
@@ -1862,7 +1759,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
     } else if constexpr((blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && (blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
         // If geometric,
         const size_t nd = mr.size();
-        thread_local blz::DV<float> mkltmpx, mkltmpy, tmpmulx, tmpmuly, miv;
+        thread_local blz::DV<FT> mkltmpx, mkltmpy, tmpmulx, tmpmuly, miv;
         if(mkltmpx.capacity() < nd) mkltmpx.resize(nd);
         if(mkltmpy.capacity() < nd) mkltmpy.resize(nd);
         if(tmpmulx.capacity() < nd) tmpmulx.resize(nd);
@@ -1947,46 +1844,23 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case TVD: ret = l1Dist(mr / mrsum, ctr / ctrsum);break;
             case JSM: case JSD: {
                 ret = 0.;
-                auto sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
-                   [&](auto,auto xval, auto yval) ALWAYS_INLINE {
-                        auto xv = xval + lhinc, yv = yval + rhinc;
-                        if(xv == yv) {
-                            return;
-                        }
-                        auto addv = xv + yv;
-                        auto ly = yv * std::log(yv);
-                        auto lx = xv * std::log(xv);
-                        auto lh = -addv * (std::log(.5 * addv));
-                        auto reti = lx + ly + lh;
-                        //std::fprintf(stderr, "(%g + %g:%g)/(%g + %g:%g)lx: %g. ly: %g. lh: %g\n", xval, lhinc, xv, yval, rhinc, yv, lx, ly, lh);
-                        //std::fprintf(stderr, "[BEFORE] Current ret: %g\n", ret);
-                        ret += reti;
-                        //std::fprintf(stderr, "Current ret: %g\n", ret);
+                auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
+                assert(wr.size() == wc.size());
+                auto sharedz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
+                    [&](auto,auto x, auto y) {
+                        *lhp++ = x; *rhp++ = y;
                     },
-                    /* xonly */    [&](auto,auto xval) ALWAYS_INLINE  {
-                        auto xv = xval + lhinc;
-                        assert(xv <= 1.);
-                        auto addv = xv + rhinc, halfv = addv * .5;
-                        auto reti = (xv * std::log(xv) + rhincl - std::log(halfv) * addv);
-                        //std::fprintf(stderr, "%g/0. + %g/%g->%g\n", xval, addv, rhinc, reti);
-                        ret += reti;
-                        //std::fprintf(stderr, "Current ret: %g\n", ret);
+                    // x only
+                    [&](auto,auto x) {
+                        *lhp++ = x; *rhp++ = FT(0);
                     },
-                    /* yonly */    [&](auto,auto yval) ALWAYS_INLINE  {
-                        auto yv = yval + rhinc;
-                        auto addv = yv + lhinc, halfv = addv * .5;
-                        auto reti = (yv * std::log(yv) + lhincl - std::log(halfv) * addv);
-                        //std::fprintf(stderr, "0./%g + %g/%g->%g\n", yval, lhinc, yv, reti);
-                        ret += reti;
-                        //std::fprintf(stderr, "Current ret: %g\n", ret);
-                });
-                //DBG_ONLY(std::fprintf(stderr, "ret before empty contrib: %g. lhinc: %g. lhincl: %g. rhincl: %g. shincl: %g. Shared nz: %zu\n", ret, lhinc, lhincl, rhincl, shincl, sharednz);)
-                ret += (lhincl + rhincl - shincl) * sharednz;
-                //DBG_ONLY(std::fprintf(stderr, "ret after emptycontrib of %g: %g\n", ret, (lhincl + rhincl - shincl) * sharednz);)
-                ret = std::max(FT(0.5) * ret, FT(0));
-                //DBG_ONLY(std::fprintf(stderr, "ret after halving %g: %g\n", ret, (lhincl + rhincl - shincl) * sharednz);)
+                    [&](auto,auto y) {
+                        *lhp++ = FT(0); *rhp++ = y;
+                    });
+                ret = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd - sharedz, lhinc, rhinc);
+                ret += ((lhincl + rhincl - shincl) * sharedz) * .5;
+                ret = std::max(ret, FT(0));
                 if(msr == JSM) ret = std::sqrt(ret);
-                ///DBG_ONLY(std::fprintf(stderr, "ret: %g\n", ret);)
             }
             break;
             case SRULRT: case SRLRT:
@@ -1997,105 +1871,23 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 const auto emptymean = lambda * lhinc + m1l * rhinc;
                 const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
                                         + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
-                //std::fprintf(stderr, "empty: %g. lhinc: %g. lhcontrib (nz): %g. rhinc: %g. rhcontrib (nz): %g\n", emptycontrib, lhinc, lambda * lhinc * std::log(lhinc / emptymean), rhinc,  m1l * rhinc * std::log(rhinc / emptymean));
-                auto lhp = tmpmulx.data(), rhp = tmpmuly.data(), mip = miv.data();
+                auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
                 assert(wr.size() == wc.size());
                 auto sharedz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
                     [&](auto,auto x, auto y) {
-                        auto xv = x + lhinc, yv = y + rhinc;
-                        *mip++ = lambda * xv + m1l * yv;
-                        *lhp++ = xv;
-                        *rhp++ = yv;
+                        *lhp++ = x; *rhp++ = y;
                     },
                     // x only
                     [&](auto,auto x) {
-                        auto xv = x + lhinc;
-                        *mip++ = lambda * xv + m1l * rhinc;
-                        *lhp++ = xv;
-                        *rhp++ = rhinc;
+                        *lhp++ = x; *rhp++ = FT(0);
                     },
                     [&](auto,auto y) {
-                        auto yv = y + rhinc;
-                        *mip++ = lambda * lhinc + m1l * yv;
-                        *lhp++ = lhinc;
-                        *rhp++ = yv;
+                        *lhp++ = FT(0); *rhp++ = y;
                     });
-                const size_t nnz_either = nd - sharedz;
-#if __AVX512F__
-                constexpr size_t nperel = sizeof(__m512) / sizeof(float);
-                size_t i;
-                __m512 sum = _mm512_setzero_ps();
-                size_t nsimd = nnz_either / nperel;
-                for(i = 0; i < nsimd; ++i) {
-                    __m512 lhsa = _mm512_load_ps(&tmpmulx[i * nperel]);
-                    __m512 mv = _mm512_load_ps(&miv[i * nperel]);
-                    __m512 lv = Sleef_logf16_u35(_mm512_div_ps(lhsa, mv));
-                    __m512 lvmul = _mm512_mul_ps(lhsa, lv);
-                    __m512 rhsa = _mm512_load_ps(&tmpmuly[i * nperel]);
-                    __m512 rv = Sleef_logf16_u35(_mm512_div_ps(rhsa, mv));
-                    __m512 rvmul = _mm512_mul_ps(rhsa, rv);
-                    __m512 acc = _mm512_add_ps(_mm512_mul_ps(rvmul, _mm512_set1_ps(m1l)), _mm512_mul_ps(lvmul, _mm512_set1_ps(lambda)));
-                    sum = _mm512_add_ps(acc, sum);
-                }
-                for(ret = 0., i *= nperel;i < nnz_either; ++i) {
-                    ret += lambda * tmpmulx[i] * std::log(tmpmulx[i] / miv[i])
-                         + m1l * tmpmuly[i] * std::log(tmpmuly[i] / miv[i]);
-                }
-                SK_UNROLL_16
-                for(size_t i = 0; i < 16; ++i) {
-                    ret += sum[i];
-                }
+                const size_t nnz_either = lhp - tmpmulx.data();
+                ret = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lambda, lhinc, rhinc);
+                //DBG_ONLY(std::fprintf(stderr, "ret before: %g. empty: %g->%g [%g,%g,%g]\n", ret, emptycontrib * sharedz, ret + emptycontrib * sharedz, pv, lhinc, rhinc);)
                 ret += emptycontrib * sharedz;
-#elif __AVX2__
-                constexpr size_t nperel = sizeof(__m256) / sizeof(float);
-                size_t i;
-                __m256 lhsum = _mm256_setzero_ps(), rhsum = _mm256_setzero_ps();
-                size_t nsimd = nnz_either / nperel;
-                SK_UNROLL_4
-                for(i = 0; i < nsimd; ++i) {
-                    const __m256 mv = _mm256_div_ps(_mm256_set1_ps(1.), _mm256_load_ps(&miv[i * nperel]));
-                    // load 1 / mv
-                    __m256 lhsa = _mm256_load_ps(&tmpmulx[i * nperel]);
-                    __m256 lv = Sleef_logf8_u35(_mm256_mul_ps(lhsa, mv));
-                    __m256 lvmul = _mm256_mul_ps(lhsa, lv);
-                    lhsum = _mm256_add_ps(lhsum, lvmul);
-                    __m256 rhsa = _mm256_load_ps(&tmpmuly[i * nperel]);
-                    __m256 rv = Sleef_logf8_u35(_mm256_mul_ps(rhsa, mv));
-                    __m256 rvmul = _mm256_mul_ps(rhsa, rv);
-                    rhsum = _mm256_add_ps(rvmul, rhsum);
-                }
-                lhsum = _mm256_mul_ps(lhsum, _mm256_set1_ps(lambda));
-                rhsum = _mm256_mul_ps(rhsum, _mm256_set1_ps(m1l));
-                lhsum = _mm256_add_ps(lhsum, rhsum);
-                ret = reduce_detail::broadcast_add(lhsum)[0];
-                for(i *= nperel;i < nnz_either; ++i) {
-                    ret += lambda * tmpmulx[i] * std::log(tmpmulx[i] / miv[i])
-                         + m1l * tmpmuly[i] * std::log(tmpmuly[i] / miv[i]);
-                }
-                ret += emptycontrib * sharedz;
-#else
-                ret = perform_core(wr, wc, FT(0),
-                   [&](auto xval, auto yval) ALWAYS_INLINE {
-                        auto xv = xval + lhinc, yv = yval + rhinc;
-                        auto meanv = lambda * xv + m1l * yv, mi = FT(1.) / meanv;
-                        auto xvl = std::log(xv * mi), yvl = std::log(yv * mi);
-                        return lambda * xv * xvl + m1l * yv * yvl;
-                    },
-                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {
-                        auto xv = xval + lhinc;
-                        auto meanv = lambda * xv + m1l * rhinc, mi = FT(1) / meanv;
-                        auto xvl = std::log(xv * mi), yvl = std::log(rhinc * mi);
-                        return lambda * xv * xvl + m1l * rhinc * yvl;
-                    },
-                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {
-                        auto yv = yval + rhinc;
-                        auto meanv = lambda * lhinc + m1l * (yval + rhinc), mi = FT(1) / meanv;
-                        auto xvl = std::log(lhinc * mi), yvl = std::log(yv * mi);
-                        return lambda * lhinc * xvl + m1l * yv * yvl;
-                    },
-                    emptycontrib);
-#endif
-                VERBOSE_ONLY(std::fprintf(stderr, "ret before: %g. empty: %g->%g [%g,%g,%g]\n", ret, emptycontrib * sharedz, ret + emptycontrib * sharedz, pv, lhinc, rhinc);)
 #ifndef NDEBUG
                 double oret = perform_core(wr, wc, FT(0),
                    [&](auto xval, auto yval) ALWAYS_INLINE {
@@ -2154,15 +1946,15 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     auto &rhv(mkltmpy);
                     auto lhp = mkltmpx.data(), rhp = mkltmpy.data();
                     size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
-                                [&](auto, auto x, auto y) {*lhp++ = x + lhinc; *rhp++ = y + rhinc;},
-                                [&](auto, auto x) {        *lhp++ = x + lhinc; *rhp++ = rhinc;},
-                                [&](auto, auto y) {        *lhp++ = lhinc;     *rhp++ = y + rhinc;});
+                                [&](auto, auto x, auto y) {*lhp++ = x; *rhp++ = y;},
+                                [&](auto, auto x) {        *lhp++ = x; *rhp++ = FT(0);},
+                                [&](auto, auto y) {        *lhp++ = FT(0); *rhp++ = y;});
                     assert(lhp - mkltmpx.data() == rhp - mkltmpy.data());
-                    auto klc = __kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz);
+                    auto klc = libkl::kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz, lhinc, rhinc);
                     auto zc = sharednz * lhinc * (lhl - rhl);
                     ret = klc + zc;
                     if(ret < 0) {
-                        std::fprintf(stderr, "pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
+                        std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
                                      pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
                     }
 #ifndef NDEBUG
@@ -2171,6 +1963,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                         /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * std::log((xval + lhinc) / rhinc);},
                         /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * std::log(lhinc / (yval + rhinc));},
                         lhinc * (lhl - rhl));
+                    std::fprintf(stderr, "pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
+                                 pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
                     assert(std::abs(ret - retmanual) <= std::abs(std::max(ret, retmanual)) * 1e-5 || !std::fprintf(stderr, "simd: %g. manual: %g. diff: %0.20g\n", ret, retmanual, ret - retmanual));
 #endif
                 }
@@ -2186,10 +1980,10 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     auto &rhv(mkltmpy);
                     auto lhp = lhv.data(), rhp = rhv.data();
                     size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
-                                [&](auto, auto x, auto y) {*lhp++ = x + lhinc; *rhp++ = y + rhinc;},
-                                [&](auto, auto x) {*lhp++ = x + lhinc; *rhp++ = rhinc;},
-                                [&](auto, auto y) {*lhp++ = lhinc; *rhp++ = y + rhinc;});
-                    ret = __kl_reduce_aligned(rhv.data(), lhv.data(), nd - sharednz) + sharednz * rhinc * (rhl - lhl);
+                                [&](auto, auto x, auto y) {*lhp++ = x; *rhp++ = y;},
+                                [&](auto, auto x) {*lhp++ = x; *rhp++ = FT(0);},
+                                [&](auto, auto y) {*lhp++ = FT(0); *rhp++ = y;});
+                    ret = libkl::kl_reduce_aligned(rhv.data(), lhv.data(), nd - sharednz, rhinc, lhinc) + sharednz * rhinc * (rhl - lhl);
                 } else {
                     ret = perform_core(wr, wc, 0.,
                         /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (yval + rhinc) * (std::log((yval + rhinc) / (xval + lhinc)));},
