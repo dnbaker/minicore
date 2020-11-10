@@ -182,8 +182,8 @@ osm2dimacspg: src/utils/osm2dimacs.cpp
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
-libkl/libkl.a: libkl/libkl.c libkl/libkl.h
-	cd libkl && $(MAKE)
+libkl/libkl.a: libkl/libkl.c libkl/libkl.h libsleef.a
+	+cd libkl && $(MAKE) SLEEF_DIR=../sleef/build
 
 libsleef.a:
 	+ls libsleef.a 2>/dev/null || (cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..)

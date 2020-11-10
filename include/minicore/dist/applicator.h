@@ -1698,37 +1698,6 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
     return cs;
 }
 
-namespace reduce_detail {
-
-#if __AVX2__
-template<typename Func>
-INLINE __m256 broadcast_reduce(__m256 x, const Func &func) {
-    const __m256 permHalves = _mm256_permute2f128_ps(x, x, 1);
-    const __m256 m0 = func(permHalves, x);
-    const __m256 perm0 = _mm256_permute_ps(m0, 0b01001110);
-    const __m256 m1 = func(m0, perm0);
-    const __m256 perm1 = _mm256_permute_ps(m1, 0b10110001);
-    const __m256 m2 = func(perm1, m1);
-    return m2;
-}
-
-INLINE __m256 broadcast_max(__m256 x) {
-    return broadcast_reduce<decltype(_mm256_max_ps)>(x, _mm256_max_ps);
-}
-INLINE __m256 broadcast_min(__m256 x) {
-    return broadcast_reduce<decltype(_mm256_min_ps)>(x, _mm256_min_ps);
-}
-INLINE __m256 broadcast_mul(__m256 x) {
-    return broadcast_reduce<decltype(_mm256_mul_ps)>(x, _mm256_mul_ps);
-}
-INLINE __m256 broadcast_add(__m256 x) {
-    return broadcast_reduce<decltype(_mm256_add_ps)>(x, _mm256_add_ps);
-}
-
-#endif // AVX2
-
-}/// reduce_detail
-
 template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
 FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
 {
