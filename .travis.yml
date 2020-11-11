@@ -19,7 +19,7 @@ install:
   - git submodule sync
   - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 60 --slave /usr/bin/g++ g++ /usr/bin/g++-9
 script:
-  - make tests -j8
+  - make tests -j1
   - ./coreset_testdbg
   - ./btestdbg
   - ./kmpptestdbg
