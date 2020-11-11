@@ -187,14 +187,18 @@ osm2dimacspg: src/utils/osm2dimacs.cpp $(STATIC_LIBS)
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
-libkl/libkl.so: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen
-	+ls $@ libkl/libkl.dylib || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
+libkl/libkl.so: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen sleef.h
+	ls $@ libkl/libkl.dylib || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
 
-libkl/libkl.a: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen
-	+cd libkl && $(MAKE) SLEEF_DIR=../sleef/build
+libkl/libkl.a: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen sleef.h
+	cd libkl && $(MAKE) SLEEF_DIR=../sleef/build
+
+sleef.h: libsleef.dyn.gen
+	ls sleef.h 2>/dev/null || (ln -s $(shell pwd)/sleef/build/include/sleef.h $(shell pwd)/sleef.h)
 
 libsleef.dyn.gen:
 	+(ls libsleef.so || ls libsleef.dylib) 2>/dev/null || (cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=1 && $(MAKE) && cp lib/* ../.. && cd ../.. && touch libsleef.dyn.gen)
+
 libsleef.a:
 	+ls libsleef.a 2>/dev/null || (cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..)
 

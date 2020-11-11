@@ -1728,12 +1728,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
     } else if constexpr((blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && (blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
         // If geometric,
         const size_t nd = mr.size();
-        thread_local blz::DV<FT> mkltmpx, mkltmpy, tmpmulx, tmpmuly, miv;
-        if(mkltmpx.capacity() < nd) mkltmpx.resize(nd);
-        if(mkltmpy.capacity() < nd) mkltmpy.resize(nd);
+        thread_local blz::DV<FT> tmpmuly, tmpmulx;
         if(tmpmulx.capacity() < nd) tmpmulx.resize(nd);
         if(tmpmuly.capacity() < nd) tmpmuly.resize(nd);
-        if(miv.capacity() < nd) miv.resize(nd);
 
         auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, auto nsharedmult)
             -> FT
@@ -1791,16 +1788,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         assert(!std::isnan(shincl));
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
-        auto __isc = [&](auto x) ALWAYS_INLINE {return x - std::log(x);};
-        auto get_inc_sis = [smallest_pv](auto x, auto y) ALWAYS_INLINE {
-            //return std::log(x + y) - FT(.5) * std::log(x * y) + dist::SIS_OFFSET<FT>;;
-            //==
-            //return std::log(x + y) - std::log(x * y) + std::log(2) - std::log(2);
-            //==
-            //return std::log(x + y) - std::log(std::max(smallest_prior, x * y));
-            //==
-            return std::log((x + y) / std::max(smallest_pv, FT(x * y)));
-        };
         auto get_inc_rsis = [](auto x, auto y) ALWAYS_INLINE {
             const auto ix = FT(1.) / x, iy = FT(1.) / y, isq = std::sqrt(ix * iy);
             return FT(.25) * (x * iy + y * ix) - std::log((x + y) * isq) + dist::RSIS_OFFSET<FT>;
@@ -1832,118 +1819,60 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 if(msr == JSM) ret = std::sqrt(ret);
             }
             break;
+
+            // All of these use libkl kernels for fast comparisons after an initial layout
             case SRULRT: case SRLRT:
             case LLR:
-            case UWLLR: {
-                const auto bothsum = lhsum + rhsum;
-                const auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
-                const auto emptymean = lambda * lhinc + m1l * rhinc;
-                const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
-                                        + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
-                auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
-                assert(wr.size() == wc.size());
-                auto sharedz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
-                    [&](auto,auto x, auto y) {
-                        *lhp++ = x; *rhp++ = y;
-                    },
-                    // x only
-                    [&](auto,auto x) {
-                        *lhp++ = x; *rhp++ = FT(0);
-                    },
-                    [&](auto,auto y) {
-                        *lhp++ = FT(0); *rhp++ = y;
-                    });
-                const size_t nnz_either = lhp - tmpmulx.data();
-                ret = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lambda, lhinc, rhinc);
-                //DBG_ONLY(std::fprintf(stderr, "ret before: %g. empty: %g->%g [%g,%g,%g]\n", ret, emptycontrib * sharedz, ret + emptycontrib * sharedz, pv, lhinc, rhinc);)
-                ret += emptycontrib * sharedz;
-#ifndef NDEBUG
-                FT oret = perform_core(wr, wc, FT(0),
-                   [&](auto xval, auto yval) ALWAYS_INLINE {
-                        auto xv = xval + lhinc, yv = yval + rhinc;
-                        auto meanv = lambda * xv + m1l * yv, mi = FT(1.) / meanv;
-                        auto xvl = std::log(xv * mi), yvl = std::log(yv * mi);
-                        return lambda * xv * xvl + m1l * yv * yvl;
-                    },
-                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {
-                        auto xv = xval + lhinc;
-                        auto meanv = lambda * xv + m1l * rhinc, mi = FT(1) / meanv;
-                        auto xvl = std::log(xv * mi), yvl = std::log(rhinc * mi);
-                        return lambda * xv * xvl + m1l * rhinc * yvl;
-                    },
-                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {
-                        auto yv = yval + rhinc;
-                        auto meanv = lambda * lhinc + m1l * (yval + rhinc), mi = FT(1) / meanv;
-                        auto xvl = std::log(lhinc * mi), yvl = std::log(yv * mi);
-                        return lambda * lhinc * xvl + m1l * yv * yvl;
-                    },
-                    emptycontrib);
-                 assert(std::abs(oret - ret) < 1e-5 || !std::fprintf(stderr, "oret: %g. ret: %g\n", oret, ret));
-#endif
-                //std::cerr << "ret: " << ret << '\n';
-                if(msr == LLR || msr == SRLRT) ret *= bothsum;
-                ret = std::max(ret, FT(0)); // ensure non-negativity
-                if(msr == SRULRT || msr == SRLRT)
-                    ret = std::sqrt(std::max(FT(0), ret));
-            }
-            break;
-            case ITAKURA_SAITO:
-            {
-                ret = perform_core(wr, wc, -FT(nd),
-                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
-                        return __isc((xval + lhinc) / (yval + rhinc));
-                    },
-                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return __isc((xval + lhinc) * rhrsi);},
-                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhinc / (yval + rhinc));},
-                    __isc(rhsum * lhrsi));
-            }
-            break;
-            case REVERSE_ITAKURA_SAITO:
-                ret = perform_core(wr, wc, -FT(nd),
-                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
-                        return __isc((yval + rhinc) / (xval + lhinc));
-                    },
-                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return __isc(rhinc / (xval + lhinc));},
-                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return __isc(lhrsi * (yval + rhinc));},
-                    __isc(lhsum * rhrsi));
-            break;
+            case UWLLR:
+            case ITAKURA_SAITO: case SIS: case REVERSE_ITAKURA_SAITO:
             case REVERSE_POISSON: case REVERSE_MKL:
             case POISSON:
             case MKL:
             {
-                {
-                    auto &lhv(mkltmpx);
-                    auto &rhv(mkltmpy);
-                    auto lhp = mkltmpx.data(), rhp = mkltmpy.data();
-                    size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
-                                [&](auto, auto x, auto y) {*lhp++ = x; *rhp++ = y;},
-                                [&](auto, auto x) {        *lhp++ = x; *rhp++ = FT(0);},
-                                [&](auto, auto y) {        *lhp++ = FT(0); *rhp++ = y;});
-                    assert(lhp - mkltmpx.data() == rhp - mkltmpy.data());
-                    FT klc, zc;
-                    if(msr == MKL || msr == POISSON) {
-                        klc = libkl::kl_reduce_aligned(lhv.data(), rhv.data(), nd - sharednz, lhinc, rhinc);
-                        zc = sharednz * lhinc * (lhl - rhl);
-                    } else {
-                        klc = libkl::kl_reduce_aligned(rhv.data(), lhv.data(), nd - sharednz, rhinc, lhinc);
-                        zc = sharednz * rhinc * (rhl - lhl);
-                    }
-                    ret = klc + zc;
-                    if(ret < 0) {
-                        std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
-                                     pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
-                    }
-#ifndef NDEBUG
-                    FT retmanual = perform_core(wr, wc, 0.,
-                        /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {return (xval + lhinc) * std::log((xval + lhinc) / (yval + rhinc));},
-                        /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * std::log((xval + lhinc) / rhinc);},
-                        /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * std::log(lhinc / (yval + rhinc));},
-                        lhinc * (lhl - rhl));
-                    std::fprintf(stderr, "pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
-                                 pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
-                    assert(std::abs(ret - retmanual) <= std::abs(std::max(ret, retmanual)) * 1e-5 || !std::fprintf(stderr, "simd: %g. manual: %g. diff: %0.20g\n", ret, retmanual, ret - retmanual));
-#endif
+                auto &lhv(tmpmulx);
+                auto &rhv(tmpmuly);
+                auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
+                const size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
+                            [&](auto, auto x, auto y) {*lhp++ = x; *rhp++ = y;},
+                            [&](auto, auto x) {        *lhp++ = x; *rhp++ = FT(0);},
+                            [&](auto, auto y) {        *lhp++ = FT(0); *rhp++ = y;});
+                const size_t nnz_either = lhp - tmpmulx.data();
+                assert(lhp - tmpmulx.data() == rhp - tmpmuly.data());
+                FT klc, zc;
+                if(msr == MKL || msr == POISSON) {
+                    klc = libkl::kl_reduce_aligned(lhv.data(), rhv.data(), nnz_either, lhinc, rhinc);
+                    zc = sharednz * lhinc * (lhl - rhl);
+                } else if(msr == REVERSE_MKL || msr == REVERSE_POISSON) {
+                    klc = libkl::kl_reduce_aligned(rhv.data(), lhv.data(), nnz_either, rhinc, lhinc);
+                    zc = sharednz * rhinc * (rhl - lhl);
+                } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
+                    auto bothsum = lhsum + rhsum;
+                    const auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
+                    const auto emptymean = lambda * lhinc + m1l * rhinc; 
+                    const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
+                                            + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
+                    klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lambda, lhinc, rhinc);
+                    zc = emptycontrib * sharedz;
+                } else if(msr == ITAKURA_SAITO) {
+                    klc = libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
+                    zc = sharednz * (lhinc / rhinc - std::log(lhinc / rhinc));
+                } else if(msr == REVERSE_ITAKURA_SAITO) {
+                    klc = libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
+                    zc = sharednz * (rhinc / lhinc - std::log(rhinc / lhinc));
+                } else if(msr == SIS) {
+                    klc = libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
+                    zc = sharednz * FT(.5) * std::log(lhinc / rhinc + rhinc / lhinc + FT(2));
                 }
+                ret = klc + zc;
+                if(ret < 0) {
+                    std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
+                                 pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
+                }
+                if(msr == LLR || msr == SRLRT) {
+                    ret *= (lhsum + rhsum);
+                }
+                ret = std::max(ret, FT(0));
+                if(msr == SRULRT || msr == SRLRT) ret = std::sqrt(ret);
                 if(std::isnan(ret))
                     ret = std::numeric_limits<FT>::max();
             }
@@ -1993,16 +1922,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 ret = std::sqrt(tmp) * M_SQRT1_2;
                 break;
             }
-            case SIS:
-                ret = std::max(perform_core(wr, wc, FT(0),
-                    /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
-                        return get_inc_sis(xval + lhinc, yval + rhinc);
-                    },
-                    /* xonly */    [&](auto xval) ALWAYS_INLINE  {return get_inc_sis(xval + lhinc, rhinc);},
-                    /* yonly */    [&](auto yval) ALWAYS_INLINE  {return get_inc_sis(lhinc, yval + rhinc);},
-                    get_inc_sis(lhinc, rhinc))
-                , FT(0));
-                break;
             case RSIS:
                 ret = std::max(
                         perform_core(wr, wc, FT(0),
