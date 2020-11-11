@@ -10,7 +10,7 @@
 #include <set>
 #include <x86intrin.h>
 #include "sleef.h"
-#include "libkl/libkl.h"
+#include "libkl/libkl.ho.h"
 
 
 namespace minicore {

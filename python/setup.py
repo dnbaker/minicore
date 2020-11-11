@@ -12,14 +12,6 @@ sleefdir = environ.get("SLEEF_DIR", "../sleef/build")
 SLEEFLIB = sleefdir + "/lib/libsleef.a"
 LIBSIMDSAMPLINGDIR = "../libsimdsampling/"
 LIBSIMDSAMPLINGLIB = "../libsimdsampling/libsimdsampling.a"
-LIBKLPATH = "../libkl"
-LIBKLLIB = LIBKLPATH + "/" + "libkl.a"
-
-if not path.isdir(LIBKLPATH) and not environ.get("LIBKLPATH", None):
-    raise RuntimeError("Specify libkl path via LIBKLPATH")
-
-if not path.isfile(LIBKLLIB):
-    check_call(f"cd {LIBKLPATH} && make", shell=True)
 
 if not path.isfile(SLEEFLIB):
     check_call(f"cd {sleefdir} && cmake .. -DBUILD_SHARED_LIBS=0 && make", shell=True)
@@ -104,7 +96,7 @@ ext_modules = [
         include_dirs=include_dirs,
         language='c++',
         extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"],
-        extra_objects=[SLEEFLIB, LIBSIMDSAMPLINGLIB, LIBKLLIB]
+        extra_objects=[SLEEFLIB, LIBSIMDSAMPLINGLIB]
     ),
 ]
 

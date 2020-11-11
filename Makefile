@@ -103,10 +103,10 @@ libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampl
 %: src/tests/%.o $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
 
-src/tests/%.o: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
+src/tests/%.o: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
 
-%.dbgo: %.cpp $(HEADERS) $(STATIC_LIBS)  libkl/libkl.so
+%.dbgo: %.cpp $(HEADERS) $(STATIC_LIBS) 
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1
 %dbg: src/tests/%.dbgo $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1
@@ -118,16 +118,16 @@ printlibs:
 #graphrun: src/graphtest.cpp $(wildcard include/minicore/*.h)
 #	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
-%: src/%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
+%: src/%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-%: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
+%: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
+mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
-mtx%: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
+mtx%: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
 mtx%dbg: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
@@ -142,10 +142,10 @@ alphaest: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 dae: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB $(STATIC_LIBS)
 
-jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS) libkl/libkl.so
+jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
-jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS) libkl/libkl.so
+jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
 
