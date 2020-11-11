@@ -10,7 +10,7 @@ endif
 LIBKL?=./libkl
 LIBPATHS+=$(LIBKL)
 
-LINKS+=libkl/libkl.a -lz
+LINKS+=-lz -lkl
 
 
 ifdef HDFPATH
@@ -27,8 +27,19 @@ CXXFLAGS+=-DBLAZE_USE_SLEEF=1
 
 ifdef SLEEF_DIR
 INCLUDE_PATHS+= $(SLEEF_DIR)/include
+LIBPATHS+=$(SLEEF_DIR)/lib
 else
 INCLUDE_PATHS+=sleef/build/include
+LIBPATHS+=sleef/build/lib
+endif
+
+LINKS+= -lsleef
+
+ifdef TBBDIR
+INCLUDE_PATHS+= $(TBBDIR)/include
+LIBPATHS+= $(TBBDIR)/lib
+CXXFLAGS += -DUSE_TBB
+LINKS += -ltbb
 endif
 
 ifdef CBLASFILE
@@ -44,7 +55,7 @@ STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function -Wdeprecated -Wno-deprecated-declarations \
     -Wno-deprecated-copy # Because of Boost.Fusion
 OPT?=O3
-LDFLAGS+=$(LIBS) -lz $(LINKS)
+LDFLAGS+=$(LIBS) $(LINKS)
 EXTRA?=
 DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(BLAS_LINKING_FLAGS) \
@@ -63,12 +74,6 @@ ifdef LZMA_ARCHIVE
 CXXFLAGS += $(LZMA_ARCHIVE) -llzma -DHAVE_LZMA
 endif
 
-ifdef TBBDIR
-INCLUDE_PATHS+= $(TBBDIR)/include
-LIBPATHS+= $(TBBDIR)/lib
-CXXFLAGS += -DUSE_TBB
-LINKS += -ltbb
-endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
       jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg \
@@ -76,6 +81,7 @@ TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskm
 
 all: $(EX)
 
+LIBPATHS+=libkl
 
 tests: $(TESTS)
 print_tests:
@@ -89,11 +95,10 @@ CXXFLAGS += $(EXTRA)
 CXXFLAGS += $(LDFLAGS)
 
 HEADERS=$(shell find include -name '*.h')
-STATIC_LIBS=libsimdsampling/libsimdsampling.a libsleef.a  libkl/libkl.a
+STATIC_LIBS=libsimdsampling/libsimdsampling.a
 
-libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.a
+libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.dyn.gen
 	ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
-
 
 %: src/tests/%.o $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
@@ -102,9 +107,9 @@ src/tests/%.o: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
 
 %.dbgo: %.cpp $(HEADERS) $(STATIC_LIBS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS) -DNDEBUG -O1
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1
 %dbg: src/tests/%.dbgo $(HEADERS) $(STATIC_LIBS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS) -DNDEBUG -O1
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1
 
 printlibs:
 	echo $(LIBPATHS)
@@ -113,10 +118,10 @@ printlibs:
 #graphrun: src/graphtest.cpp $(wildcard include/minicore/*.h)
 #	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
-%: src/%.cpp $(HEADERS) $(STATIC_LIBS)
+%: src/%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-%: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS)
+%: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
 mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)  libkl/libkl.a
@@ -182,9 +187,14 @@ osm2dimacspg: src/utils/osm2dimacs.cpp $(STATIC_LIBS)
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
+libkl/libkl.so: libkl/libkl.c libkl/libkl.h libsleef.a
+	+ls $@ libkl/libkl.dylib || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
+
 libkl/libkl.a: libkl/libkl.c libkl/libkl.h libsleef.a
 	+cd libkl && $(MAKE) SLEEF_DIR=../sleef/build
 
+libsleef.dyn.gen:
+	+(ls libsleef.so || ls libsleef.dylib) 2>/dev/null || (cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=1 && $(MAKE) && cp lib/* ../.. && cd ../.. && touch libsleef.dyn.gen)
 libsleef.a:
 	+ls libsleef.a 2>/dev/null || (cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..)
 
