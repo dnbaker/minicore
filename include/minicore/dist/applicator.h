@@ -1852,7 +1852,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
                                             + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
                     klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lambda, lhinc, rhinc);
-                    zc = emptycontrib * sharedz;
+                    zc = emptycontrib * sharednz;
                 } else if(msr == ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = sharednz * (lhinc / rhinc - std::log(lhinc / rhinc));
