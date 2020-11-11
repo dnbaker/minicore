@@ -5,7 +5,7 @@
 #include "minicore/util/oracle.h"
 #include "minicore/optim/kcenter.h"
 #include "discreture/include/discreture.hpp"
-#include "libsimdsampling/argminmax.h"
+#include "libsimdsampling/argminmax.ho.h"
 #include <atomic>
 
 /*

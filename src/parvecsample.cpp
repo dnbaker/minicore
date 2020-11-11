@@ -1,6 +1,6 @@
 #define BLAZE_USE_SLEEF 1
 #include "minicore/util/macros.h"
-#include "libsimdsampling/simdsampling.h"
+#include "libsimdsampling/simdsampling.ho.h"
 #include "sleef.h"
 #include "blaze/Math.h"
 #include "aesctr/wy.h"

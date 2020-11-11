@@ -4,7 +4,7 @@
 #include "minicore/util/div.h"
 #include "minicore/util/blaze_adaptor.h"
 #include "minicore/util/fpq.h"
-#include "libsimdsampling/argminmax.h"
+#include "libsimdsampling/argminmax.ho.h"
 
 namespace minicore {
 namespace coresets {
