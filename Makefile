@@ -103,10 +103,10 @@ libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampl
 %: src/tests/%.o $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
 
-src/tests/%.o: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
+src/tests/%.o: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
 
-%.dbgo: %.cpp $(HEADERS) $(STATIC_LIBS)
+%.dbgo: %.cpp $(HEADERS) $(STATIC_LIBS)  libkl/libkl.so
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1
 %dbg: src/tests/%.dbgo $(HEADERS) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1
@@ -124,10 +124,10 @@ printlibs:
 %: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)  libkl/libkl.a
+mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
-mtx%: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)  libkl/libkl.a
+mtx%: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.so
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
 mtx%dbg: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
@@ -142,10 +142,10 @@ alphaest: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 dae: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB $(STATIC_LIBS)
 
-jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
+jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS) libkl/libkl.so
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
-jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
+jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS) libkl/libkl.so
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
 
@@ -187,10 +187,10 @@ osm2dimacspg: src/utils/osm2dimacs.cpp $(STATIC_LIBS)
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
-libkl/libkl.so: libkl/libkl.c libkl/libkl.h libsleef.a
+libkl/libkl.so: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen
 	+ls $@ libkl/libkl.dylib || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
 
-libkl/libkl.a: libkl/libkl.c libkl/libkl.h libsleef.a
+libkl/libkl.a: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen
 	+cd libkl && $(MAKE) SLEEF_DIR=../sleef/build
 
 libsleef.dyn.gen:
