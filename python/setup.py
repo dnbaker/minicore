@@ -1,6 +1,6 @@
 from setuptools import setup, Extension, find_packages, distutils
 import sys
-from os import environ, path
+from os import environ, path, makedirs
 from setuptools.command.build_ext import build_ext
 from glob import glob
 from subprocess import check_output, check_call
@@ -12,6 +12,8 @@ sleefdir = environ.get("SLEEF_DIR", "../sleef/build")
 SLEEFLIB = sleefdir + "/lib/libsleef.a"
 
 if not path.isfile(SLEEFLIB):
+    if not path.isdir(sleefdir):
+        makedirs(sleefdir)
     check_call(f"cd {sleefdir} && cmake .. -DBUILD_SHARED_LIBS=0 && make", shell=True)
 else:
     print("SLEEFLIB " + SLEEFLIB + " found as expected", file=sys.stderr)
