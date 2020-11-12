@@ -1862,7 +1862,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 } else if(msr == SIS) {
                     klc = libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = sharednz * FT(.5) * std::log(lhinc / rhinc + rhinc / lhinc + FT(2));
-                }
+                } else __builtin_unreachable();
                 ret = klc + zc;
                 if(ret < 0) {
                     std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",

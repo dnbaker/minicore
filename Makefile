@@ -97,7 +97,7 @@ CXXFLAGS += $(EXTRA)
 CXXFLAGS += $(LDFLAGS)
 
 HEADERS=$(shell find include -name '*.h')
-STATIC_LIBS=
+STATIC_LIBS=libsleef.a
 
 #libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.dyn.gen
 #ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
