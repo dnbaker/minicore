@@ -59,10 +59,7 @@ auto project_array(const Hasher<FT> &hasher, const SparseMatrixWrapper &smw, boo
     );
     auto rvb = rv.request();
     blaze::CustomMatrix<FT, blaze::unaligned, blaze::unpadded> cm((FT *)rvb.ptr, nr, nh);
-    if(round)
-        smw.perform([&](const auto &x){cm = hasher.hash(x);});
-    else
-        smw.perform([&](const auto &x){cm = hasher.project(x);});
+    smw.perform([&](const auto &x){if(round) cm = hasher.hash(x); else cm = hasher.project(x);});
     return rv;
 }
 

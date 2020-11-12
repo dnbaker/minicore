@@ -1788,44 +1788,20 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         assert(!std::isnan(shincl));
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         auto wc = ctr * rhrsi; //
-        auto get_inc_rsis = [](auto x, auto y) ALWAYS_INLINE {
-            const auto ix = FT(1.) / x, iy = FT(1.) / y, isq = std::sqrt(ix * iy);
-            return FT(.25) * (x * iy + y * ix) - std::log((x + y) * isq) + dist::RSIS_OFFSET<FT>;
-        };
         static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
         switch(msr) {
             case L1: ret = l1Dist(mr, ctr); break;
             case L2: ret = l2Dist(mr, ctr); break;
             case SQRL2: ret = sqrDist(mr, ctr); break;
             case TVD: ret = l1Dist(mr / mrsum, ctr / ctrsum);break;
-            case JSM: case JSD: {
-                ret = 0.;
-                auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
-                assert(wr.size() == wc.size());
-                auto sharedz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
-                    [&](auto,auto x, auto y) {
-                        *lhp++ = x; *rhp++ = y;
-                    },
-                    // x only
-                    [&](auto,auto x) {
-                        *lhp++ = x; *rhp++ = FT(0);
-                    },
-                    [&](auto,auto y) {
-                        *lhp++ = FT(0); *rhp++ = y;
-                    });
-                ret = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd - sharedz, lhinc, rhinc);
-                ret += ((lhincl + rhincl - shincl) * sharedz) * .5;
-                ret = std::max(ret, FT(0));
-                if(msr == JSM) ret = std::sqrt(ret);
-            }
-            break;
 
             // All of these use libkl kernels for fast comparisons after an initial layout
+            case JSM: case JSD:
             case SRULRT: case SRLRT:
             case LLR:
             case UWLLR:
             case ITAKURA_SAITO: case SIS: case REVERSE_ITAKURA_SAITO:
-            case REVERSE_POISSON: case REVERSE_MKL:
+            case REVERSE_POISSON: case REVERSE_MKL: case RSIS:
             case POISSON:
             case MKL:
             {
@@ -1842,6 +1818,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 if(msr == MKL || msr == POISSON) {
                     klc = libkl::kl_reduce_aligned(lhv.data(), rhv.data(), nnz_either, lhinc, rhinc);
                     zc = sharednz * lhinc * (lhl - rhl);
+                } else if(msr == JSD || msr == JSM ) {
+                    klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd - sharedz, lhinc, rhinc);
+                    zc = ((lhincl + rhincl - shincl) * sharedz) * .5;
                 } else if(msr == REVERSE_MKL || msr == REVERSE_POISSON) {
                     klc = libkl::kl_reduce_aligned(rhv.data(), lhv.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * rhinc * (rhl - lhl);
@@ -1855,13 +1834,19 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     zc = emptycontrib * sharednz;
                 } else if(msr == ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
-                    zc = sharednz * (lhinc / rhinc - std::log(lhinc / rhinc));
+                    zc = sharednz * (lhinc / rhinc - std::log(lhinc / rhinc)) - nd;
+                    //fprintf(stderr, "Is values: klc %g, zc %g\n", klc, zc);
                 } else if(msr == REVERSE_ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
-                    zc = sharednz * (rhinc / lhinc - std::log(rhinc / lhinc));
-                } else if(msr == SIS) {
-                    klc = libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
-                    zc = sharednz * FT(.5) * std::log(lhinc / rhinc + rhinc / lhinc + FT(2));
+                    zc = sharednz * (rhinc / lhinc - std::log(rhinc / lhinc)) - nd;
+                } else if(msr == SIS || msr == RSIS) {
+                    const FT lhiv = msr == SIS ? lhinc: rhinc;
+                    const FT rhiv = msr == SIS ? rhinc: lhinc;
+                    klc = msr == SIS ?
+                            libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc)
+                          : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
+                    zc = sharednz * FT(.5) * std::log((lhinc / rhinc + rhinc / lhinc + FT(2)) * .25);
+                    //fprintf(stderr, "klc: %0.20g, zc: %0.20g\n", klc, zc);
                 } else __builtin_unreachable();
                 ret = klc + zc;
                 if(ret < 0) {
@@ -1872,9 +1857,12 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     ret *= (lhsum + rhsum);
                 }
                 ret = std::max(ret, FT(0));
-                if(msr == SRULRT || msr == SRLRT) ret = std::sqrt(ret);
-                if(std::isnan(ret))
+                if(msr == SRULRT || msr == SRLRT || msr == JSM) ret = std::sqrt(ret);
+                if(ret == std::numeric_limits<FT>::infinity()) {
                     ret = std::numeric_limits<FT>::max();
+                } else if(ret == -std::numeric_limits<FT>::infinity()) {
+                    ret = 0.;
+                }
             }
             break;
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
@@ -1922,18 +1910,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 ret = std::sqrt(tmp) * M_SQRT1_2;
                 break;
             }
-            case RSIS:
-                ret = std::max(
-                        perform_core(wr, wc, FT(0),
-                            /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
-                                return get_inc_rsis(xval + lhinc, yval + rhinc);
-                            },
-                            /* xonly */    [&](auto xval) ALWAYS_INLINE  {return get_inc_rsis(xval + lhinc, rhinc);},
-                            /* yonly */    [&](auto yval) ALWAYS_INLINE  {return get_inc_rsis(lhinc, yval + rhinc);},
-                            get_inc_rsis(lhinc, rhinc)
-                        )
-                    , FT(0));
-                break;
             case COSINE_DISTANCE: case COSINE_SIMILARITY:
                 ret = 0.;
                 merge::for_each_if_shared(
