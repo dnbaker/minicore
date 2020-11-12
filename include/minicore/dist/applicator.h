@@ -1819,8 +1819,8 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     klc = libkl::kl_reduce_aligned(lhv.data(), rhv.data(), nnz_either, lhinc, rhinc);
                     zc = sharednz * lhinc * (lhl - rhl);
                 } else if(msr == JSD || msr == JSM ) {
-                    klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd - sharedz, lhinc, rhinc);
-                    zc = ((lhincl + rhincl - shincl) * sharedz) * .5;
+                    klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
+                    zc = ((lhincl + rhincl - shincl) * sharednz) * .5;
                 } else if(msr == REVERSE_MKL || msr == REVERSE_POISSON) {
                     klc = libkl::kl_reduce_aligned(rhv.data(), lhv.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * rhinc * (rhl - lhl);
@@ -1840,8 +1840,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     klc = libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * (rhinc / lhinc - std::log(rhinc / lhinc)) - nd;
                 } else if(msr == SIS || msr == RSIS) {
-                    const FT lhiv = msr == SIS ? lhinc: rhinc;
-                    const FT rhiv = msr == SIS ? rhinc: lhinc;
                     klc = msr == SIS ?
                             libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc)
                           : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
