@@ -30,7 +30,9 @@ INCLUDE_PATHS+= $(SLEEF_DIR)/include
 LIBPATHS+=$(SLEEF_DIR)/lib
 else
 INCLUDE_PATHS+=sleef/build/include
+INCLUDE_PATHS+=sleef/dynbuild/include
 LIBPATHS+=sleef/build/lib
+LIBPATHS+=sleef/dynbuild/lib
 endif
 
 LINKS+= -lsleef
