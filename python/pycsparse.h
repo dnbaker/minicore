@@ -6,6 +6,24 @@
 
 #define ENABLE_CONST_FUNCS 1
 
+#define ENABLE_NONCONST_FUNCS 0
+
+#ifndef ENABLE_8BITINT_DATA
+#define ENABLE_8BITINT_DATA 1
+#endif
+#ifndef ENABLE_16BITINT_DATA
+#define ENABLE_16BITINT_DATA 1
+#endif
+#ifndef ENABLE_64BITINT_DATA
+#define ENABLE_64BITINT_DATA 0
+#endif
+#ifndef ENABLE_8BITINT_INDICES
+#define ENABLE_8BITINT_INDICES 0
+#endif
+#ifndef ENABLE_16BITINT_INDICES
+#define ENABLE_16BITINT_INDICES 1
+#endif
+
 struct PyCSparseMatrix {
     void *datap_;
     void *indicesp_;
@@ -54,7 +72,9 @@ struct PyCSparseMatrix {
 #if ENABLE_16BITINT_DATA
             case 'h': case 'H': _perform<uint16_t, Func>(func); break;
 #endif
+#if ENABLE_64BITINT_DATA
             case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
+#endif
             case 'i': case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float,    Func>(func); break;
             case 'd': _perform<double,   Func>(func); break;
@@ -62,6 +82,8 @@ struct PyCSparseMatrix {
         }
     }
 #endif
+
+#if ENABLE_NONCONST_FUNCS
     template<typename Func> void perform(const Func &func) {
         switch(data_t_.front()) {
 #if ENABLE_8BITINT_DATA
@@ -70,13 +92,17 @@ struct PyCSparseMatrix {
 #if ENABLE_16BITINT_DATA
             case 'h': case 'H': _perform<uint16_t, Func>(func); break;
 #endif
+#if ENABLE_64BITINT_DATA
             case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
+#endif
             case 'i': case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float, Func>(func); break;
             case 'd': _perform<double, Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
         }
     }
+#endif
+
 #define PERF3(c, c2, IPtr, Indices) \
                 case c: case c2: {auto smat = util::make_csparse_matrix((DataT *)datap_, (Indices *)indicesp_, (IPtr *)indptrp_, nr_, nc_, nnz_); func(smat);} break
 
@@ -91,23 +117,34 @@ struct PyCSparseMatrix {
 #if ENABLE_CONST_FUNCS
     template<typename DataT, typename Func> void _perform(const Func &func) const {
         switch(indices_t_[0]) {
+#if ENABLE_8BITINT_INDICES
             PERF2('B', 'b', uint8_t);
+#endif
+#if ENABLE_16BITINT_INDICES
             PERF2('H', 'h', uint16_t);
+#endif
             PERF2('I', 'i', uint32_t);
             //PERF2('L', 'l', uint64_t);
             default: throw std::invalid_argument(std::string("Unsupported type for indices: ") + indices_t_);
         }
     }
 #endif
+
+#if ENABLE_NONCONST_FUNCS
     template<typename DataT, typename Func> void _perform(const Func &func) {
         switch(indices_t_.front()) {
+#if ENABLE_8BITINT_INDICES
             PERF2('B', 'b', uint8_t);
+#endif
+#if ENABLE_16BITINT_INDICES
             PERF2('H', 'h', uint16_t);
+#endif
             PERF2('I', 'i', uint32_t);
             //PERF2('L', 'l', uint64_t);
             default: throw std::invalid_argument(std::string("Unsupported type for indices: ") + indices_t_);
         }
     }
+#endif
     size_t rows() const {return nr_;}
     size_t columns() const {return nc_;}
     size_t nnz() const {return nnz_;}

@@ -166,7 +166,6 @@ void set_centroids_hard(const Mat &mat,
 {
     MINOCORE_VALIDATE(dist::is_valid_measure(measure));
     const CentroidPol pol = msr2pol(measure);
-    DBG_ONLY(std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));)
     if(dist::is_bregman(measure)) {
         assert(FULL_WEIGHTED_MEAN == pol || JSM_MEDIAN == pol);
     }
@@ -504,6 +503,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
 
             OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
+                assert(asn[i] < k);
                 OMP_ATOMIC
                 ++center_counts[asn[i]];
             }
@@ -582,13 +582,17 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
         OMP_PFOR
         for(size_t i = 0; i < mbsize; ++i) {
             const auto ind = sampled_indices[i];
+            IT oldasn = asn[ind];
             IT bestind = -1;
             FT bv = std::numeric_limits<FT>::max();
             for(size_t j = 0; j < k; ++j) {
                 auto nv = compute_point_cost(ind, j);
-                if(std::isnan(nv)) throw std::invalid_argument(std::string("nan between ") + std::to_string(ind) + " and " + std::to_string(j));
+                //if(std::isnan(nv)) throw std::invalid_argument(std::string("nan between ") + std::to_string(ind) + " and " + std::to_string(j));
                 if(nv < bv)
                     bv = nv, bestind = j;
+            }
+            if(bestind == (IT(-1))) {
+                bestind = oldasn;
             }
             //sampled_costs[i] = bv;
             const FT w = weights ? (*weights)[ind]: static_cast<FT>(1);
@@ -613,6 +617,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             const auto asnsz = assigned[i].size();
             if(!asnsz) continue;
             clustering::set_center(centers[i], mat, asnptr, asnsz, weights);
+            //std::cerr << trans(centers[i]) << '\n';
             VERBOSE_ONLY(std::cerr << "##center with sum " << sum(centers[i]) << " and index "  << i << ": " << centers[i] << '\n';)
             centersums[i] = sum(centers[i]);
             VERBOSE_ONLY(std::fprintf(stderr, "center sum: %g. csums: %g\n", centersums[i], sum(centers[i]));)
@@ -620,7 +625,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
         // Set the new centers
         //cost = newcost;
     }
-    centers = std::move(savectrs);
+    centers = savectrs;
     cost = bestcost;
 #ifndef NDEBUG
     std::fprintf(stderr, "Completing clustering after %zu rounds. Initial cost %0.12g. Final cost %0.12g.\n", iternum, initcost, cost);

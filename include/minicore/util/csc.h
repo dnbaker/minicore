@@ -1168,7 +1168,7 @@ blz::SM<FT, SO> mtx2sparse(std::string path, bool perform_transpose=false) {
 template<typename MT, bool SO>
 std::pair<std::vector<size_t>, std::vector<size_t>>
 erase_empty(blaze::Matrix<MT, SO> &mat) {
-    std::pair<std::vector<size_t>, std::vector<size_t>> ret = 0;
+    std::pair<std::vector<size_t>, std::vector<size_t>> ret;
     std::fprintf(stderr, "Before resizing, %zu/%zu\n", (*mat).rows(), (*mat).columns());
     size_t orn = (*mat).rows(), ocn = (*mat).columns();
     auto rs = blaze::evaluate(blaze::sum<blaze::rowwise>(*mat));

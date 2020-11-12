@@ -15,9 +15,10 @@ int main() {
     blz::CompressedVector<FT> cv5 = {1., 1., 1., 1.,};
     blz::DV<FT> data({10, 4, 6, 13});
     blz::DV<uint64_t> indices{0, 2, 3, 5};
-    util::CSparseVector<FT, uint64_t> csv(data.data(), indices.data(), 4, 10);
+    util::CSparseVector<FT, uint64_t> csv(data.data(), indices.data(), 4, 12);
+    cv1.resize(12);
+    cv4.resize(12);
     for(const auto &pair: csv) {
-        std::fprintf(stderr, "%zu/%g\n", pair.index(), pair.value());
         assert(cv1[pair.index()] == pair.value());
     }
     const size_t nd = cv1.size();
@@ -31,13 +32,13 @@ int main() {
     FT s1 = sum(cv1);
     int anyfail = 0.;
     for(const auto msr: minicore::distance::detail::USABLE_MEASURES) {
-        if(msr == distance::SYMMETRIC_ITAKURA_SAITO) {
+        if(msr == distance::REVERSE_SYMMETRIC_ITAKURA_SAITO) {
             break;
         }
-        for(const auto pval: {0., 1., 50., 1e-5}) {
-            std::fprintf(stderr, "Msr %d/%s with prior %g: %s. \n", (int)msr, prob2str(msr), pval, prob2desc(msr));
+        for(const auto pval: {0., 1., 50., 1e-2}) {
             psum = pval * nd;
             prior[0] = pval;
+            std::fprintf(stderr, "Msr %d/%s with prior %g: %s. psum: %g \n", (int)msr, prob2str(msr), pval, prob2desc(msr), psum);
             try {
             auto v = cmp::msr_with_prior(msr, cv1, cv1, prior, psum, s1, s1);
             if(msr == minicore::distance::COSINE_SIMILARITY) {
@@ -47,7 +48,7 @@ int main() {
                 continue;
             }
             if(v != 0) {
-                std::fprintf(stderr, "FAILURE (both blaze): %g != 0.\n", v);
+                std::fprintf(stderr, "[%s] FAILURE (both blaze): %g != 0.\n", prob2str(msr), v);
                 if(v > 5e-9) {
                     assert(v == 0.);
                 }
@@ -58,6 +59,7 @@ int main() {
                 assert(std::isnan(v));
                 ++anyfail;
             }
+            //fprintf(stderr, "Testing nonnegativity\n");
             if(auto v = cmp::msr_with_prior(msr, cv1, cv4, prior, psum, sum(cv1), sum(cv4)); v <= 0) {
                 assert(v > 0);
             }

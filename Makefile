@@ -7,11 +7,18 @@ INCLUDE_PATHS += $(BOOST_DIR)
 endif
 
 
+LIBKL?=./libkl
+LIBPATHS+=$(LIBKL)
+
+LINKS+=-lz
+
+
 ifdef HDFPATH
 INCLUDE_PATHS+= $(HDFPATH)/include
 LIBPATHS+= $(HDFPATH)/lib
 LINKS+=-lhdf5  -lhdf5_hl  -lhdf5_hl_cpp -lhdf5_cpp
 endif
+
 
 
 # Handle SLEEF
@@ -20,8 +27,21 @@ CXXFLAGS+=-DBLAZE_USE_SLEEF=1
 
 ifdef SLEEF_DIR
 INCLUDE_PATHS+= $(SLEEF_DIR)/include
+LIBPATHS+=$(SLEEF_DIR)/lib
 else
 INCLUDE_PATHS+=sleef/build/include
+INCLUDE_PATHS+=sleef/dynbuild/include
+LIBPATHS+=sleef/build/lib
+LIBPATHS+=sleef/dynbuild/lib
+endif
+
+LINKS+= -lsleef
+
+ifdef TBBDIR
+INCLUDE_PATHS+= $(TBBDIR)/include
+LIBPATHS+= $(TBBDIR)/lib
+CXXFLAGS += -DUSE_TBB
+LINKS += -ltbb
 endif
 
 ifdef CBLASFILE
@@ -37,7 +57,7 @@ STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function -Wdeprecated -Wno-deprecated-declarations \
     -Wno-deprecated-copy # Because of Boost.Fusion
 OPT?=O3
-LDFLAGS+=$(LIBS) -lz $(LINKS)
+LDFLAGS+=$(LIBS) $(LINKS)
 EXTRA?=
 DEFINES+= #-DBLAZE_RANDOM_NUMBER_GENERATOR='wy::WyHash<uint64_t, 2>'
 CXXFLAGS+=-$(OPT) -std=$(STD) -march=native $(WARNINGS) $(INCLUDE) $(DEFINES) $(BLAS_LINKING_FLAGS) \
@@ -56,12 +76,6 @@ ifdef LZMA_ARCHIVE
 CXXFLAGS += $(LZMA_ARCHIVE) -llzma -DHAVE_LZMA
 endif
 
-ifdef TBBDIR
-INCLUDE_PATHS+= $(TBBDIR)/include
-LIBPATHS+= $(TBBDIR)/lib
-CXXFLAGS += -DUSE_TBB
-LINKS += -ltbb
-endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
       jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg \
@@ -69,6 +83,7 @@ TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskm
 
 all: $(EX)
 
+LIBPATHS+=libkl
 
 tests: $(TESTS)
 print_tests:
@@ -82,19 +97,21 @@ CXXFLAGS += $(EXTRA)
 CXXFLAGS += $(LDFLAGS)
 
 HEADERS=$(shell find include -name '*.h')
-STATIC_LIBS=libsimdsampling/libsimdsampling.a libsleef.a
+STATIC_LIBS=libsleef.a
 
-libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.a
-	ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
+#libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.dyn.gen
+#ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
 
-%dbg: src/%.cpp $(HEADERS) $(STATIC_LIBS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -lz $(LDFLAGS) $(STATIC_LIBS) -O1
-
-%dbg: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS) -O1
-
-%: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS)
+%: src/tests/%.o $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
+
+src/tests/%.o: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
+
+%.dbgo: %.cpp $(HEADERS) $(STATIC_LIBS)  libsleef.dyn.gen
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1
+%dbg: src/tests/%.dbgo $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1
 
 printlibs:
 	echo $(LIBPATHS)
@@ -103,74 +120,86 @@ printlibs:
 #graphrun: src/graphtest.cpp $(wildcard include/minicore/*.h)
 #	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
-%: src/%.cpp $(HEADERS) $(STATIC_LIBS)
+%: src/%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-%: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS)
+%: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
-mtx%: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+mtx%: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address
 
-mtx%dbg: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+mtx%dbg: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(STATIC_LIBS)  # -fsanitize=undefined -fsanitize=address
 
-mtx%dbg: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS)
+mtx%dbg: src/utils/mtx%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS) $(STATIC_LIBS)
 
-alphaest: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
+alphaest: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
 
-dae: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
+dae: src/utils/alphaest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -DDENSESUB $(STATIC_LIBS)
 
-jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
+jsdkmeanstest: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
-jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS)
+jsdkmeanstestdbg: src/tests/jsdkmeanstest.cpp $(wildcard include/minicore/*.h) $(STATIC_LIBS) libsleef.dyn.gen 
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 -lz $(LDFLAGS) $(STATIC_LIBS)
 
 
 HDFLAGS=-L$(HDFPATH)/lib -I$(HDFPATH)/include -lhdf5_cpp -lhdf5 -lhdf5_hl -lhdf5_hl_cpp
-hdf2dm: src/utils/hdf2dm.cpp $(wildcard include/minicore/*.h)
+hdf2dm: src/utils/hdf2dm.cpp $(wildcard include/minicore/*.h) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(HDFLAGS)
 
-mpi%: src/%.cpp $(wildcard include/minicore/*.h)
+mpi%: src/%.cpp $(wildcard include/minicore/*.h) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -Ofast -DUSE_BOOST_PARALLEL=1
 
-%pg: src/%.cpp $(wildcard include/minicore/*.h)
+%pg: src/%.cpp $(wildcard include/minicore/*.h) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -pg -o $@
 
-%pgf: src/%.cpp $(wildcard include/minicore/*.h)
+%pgf: src/%.cpp $(wildcard include/minicore/*.h) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -pg $(OMP_STR) -o $@
 
-%f: src/%.cpp $(wildcard include/minicore/*.h)
+%f: src/%.cpp $(wildcard include/minicore/*.h) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< $(OMP_STR) -o $@
 
 
-osm2dimacsdbg: src/utils/osm2dimacs.cpp
+osm2dimacsdbg: src/utils/osm2dimacs.cpp $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@
 
-osm2dimacs: src/utils/osm2dimacs.cpp
+osm2dimacs: src/utils/osm2dimacs.cpp $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lz -lbz2 -lexpat -o $@ -O3 $(OMP_STR) -DNDEBUG
 
-osm2dimacspgf: src/utils/osm2dimacs.cpp
+osm2dimacspgf: src/utils/osm2dimacs.cpp $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg -DNDEBUG $(OMP_STR)
 
-osm2dimacspg: src/utils/osm2dimacs.cpp
+osm2dimacspg: src/utils/osm2dimacs.cpp $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) \
         $(OSINC) -pthread \
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
+
+libkl/libkl.so: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen sleef.h
+	ls $@ libkl/libkl.dylib || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
+
+libkl/libkl.a: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen sleef.h
+	cd libkl && $(MAKE) SLEEF_DIR=../sleef/build
+
+sleef.h: libsleef.dyn.gen
+	ls sleef.h 2>/dev/null || (ln -s $(shell pwd)/sleef/build/include/sleef.h $(shell pwd)/sleef.h)
+
+libsleef.dyn.gen:
+	+(ls libsleef.so || ls libsleef.dylib) 2>/dev/null || (cd sleef && mkdir -p dynbuild && cd dynbuild && $(CMAKE) .. -DBUILD_SHARED_LIBS=1 && $(MAKE) && cp lib/* ../.. && cd ../.. && touch libsleef.dyn.gen)
 
 libsleef.a:
 	+ls libsleef.a 2>/dev/null || (cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..)
@@ -179,8 +208,6 @@ libsleef.a:
 soft: solvetestdbg solvetest solvesoft solvesoftdbg
 ssoft: solvesoft solvesoftdbg
 hsoft: solvetest solvetestdbg
-
-
 
 
 clean:
