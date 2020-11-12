@@ -10,7 +10,7 @@ endif
 LIBKL?=./libkl
 LIBPATHS+=$(LIBKL)
 
-LINKS+=-lz -lkl
+LINKS+=-lz
 
 
 ifdef HDFPATH
