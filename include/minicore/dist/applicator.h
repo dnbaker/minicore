@@ -1790,11 +1790,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         auto wc = ctr * rhrsi; //
         static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
         switch(msr) {
-            case L2: case SQRL2:
-                ret = sqrDist(mr, ctr); if(msr == L2) ret = std::sqrt(ret);
-            break;
 
             // All of these use libkl kernels for fast comparisons after an initial layout
+            case L2: case SQRL2:
             case TVD:
             case L1:
             case BHATTACHARYYA_METRIC:
@@ -1809,6 +1807,10 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 if(msr == HELLINGER) {
                     ret = libkl::helld_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::pow(std::sqrt(lhinc) - std::sqrt(rhinc), 2.) * sharednz;
                     ret = std::sqrt(ret) * M_SQRT1_2;
+                    break;
+                } else if(msr == L2 || msr == SQRL2) {
+                    ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0..);
+                    if(msr == L2) ret = std::sqrt(ret);
                     break;
                 } else if(msr == L1) {
                     ret = libkl::tvd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., pv, pv) * 2.;
