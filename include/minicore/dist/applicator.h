@@ -1797,6 +1797,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
 
             // All of these use libkl kernels for fast comparisons after an initial layout
             case BHATTACHARYYA_METRIC:
+            case HELLINGER:
             case BHATTACHARYYA_DISTANCE: {
                 auto &lhv(tmpmulx);
                 auto &rhv(tmpmuly);
@@ -1806,7 +1807,12 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                             [&](auto, auto x) {        *lhp++ = x; *rhp++ = FT(0);},
                             [&](auto, auto y) {        *lhp++ = FT(0); *rhp++ = y;});
                 const size_t nnz_either = lhp - tmpmulx.data();
-                ret = libkl::bhattd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::sqrt(lhinc * rhinc);
+                if(msr == HELLINGER) {
+                    ret = libkl::helld_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::pow(std::sqrt(lhinc) - std::sqrt(rhinc), 2.) * sharednz;
+                    ret = std::sqrt(ret) * M_SQRT1_2;
+                    break;
+                }
+                ret = libkl::bhattd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::sqrt(lhinc * rhinc) * sharednz;
                 if(msr == BHATTACHARYYA_METRIC) ret = std::sqrt(std::max(1. - ret, 0.));
                 else ret = -std::log(ret);
                 break;
@@ -1880,31 +1886,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 }
             }
             break;
-            case HELLINGER: {
-                if constexpr(blaze::IsSparseVector_v<MatrixRowT> && blaze::IsSparseVector_v<CtrT>) {
-                    if(prior_sum == 0.) {ret = hellinger(mr * (FT(1) / lhsum),  ctr * (FT(1) /  rhsum)); break;}
-                    // else, continue
-                }
-                const FT empty = std::sqrt(lhinc) - std::sqrt(rhinc);
-                const auto sqr = std::sqrt(rhinc);
-                const auto sql = std::sqrt(lhinc);
-                const FT tmp = perform_core(wr, wc, 0.,
-                    [&](auto xval, auto yval) ALWAYS_INLINE {
-                        auto ret = std::sqrt(xval + lhinc) - std::sqrt(yval + rhinc);
-                        return ret * ret;
-                    },
-                    [&](auto xval) ALWAYS_INLINE {
-                        auto ret = std::sqrt(xval + lhinc) - sqr;
-                        return ret * ret;
-                    },
-                    [&](auto yval) ALWAYS_INLINE {
-                        auto ret = sql - std::sqrt(yval + rhinc);
-                        return ret * ret;
-                    },
-                    empty * empty);
-                ret = std::sqrt(tmp) * M_SQRT1_2;
-                break;
-            }
             case COSINE_DISTANCE: case COSINE_SIMILARITY:
                 ret = 0.;
                 merge::for_each_if_shared(
