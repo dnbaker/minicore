@@ -1809,7 +1809,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     ret = std::sqrt(ret) * M_SQRT1_2;
                     break;
                 } else if(msr == L2 || msr == SQRL2) {
-                    ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0..);
+                    ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0.);
                     if(msr == L2) ret = std::sqrt(ret);
                     break;
                 } else if(msr == L1) {
