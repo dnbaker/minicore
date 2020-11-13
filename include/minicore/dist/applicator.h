@@ -1796,6 +1796,23 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case TVD: ret = l1Dist(mr / mrsum, ctr / ctrsum);break;
 
             // All of these use libkl kernels for fast comparisons after an initial layout
+            case BHATTACHARYYA_METRIC:
+            case BHATTACHARYYA_DISTANCE: {
+                auto &lhv(tmpmulx);
+                auto &rhv(tmpmuly);
+                auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
+                const size_t sharednz = merge::for_each_by_case(nd, mr.begin(), mr.end(), ctr.begin(), ctr.end(),
+                            [&](auto, auto x, auto y) {*lhp++ = x; *rhp++ = y;},
+                            [&](auto, auto x) {        *lhp++ = x; *rhp++ = FT(0);},
+                            [&](auto, auto y) {        *lhp++ = FT(0); *rhp++ = y;});
+                const size_t nnz_either = lhp - tmpmulx.data();
+                ret = libkl::bhattd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::sqrt(lhinc * rhinc);
+                if(msr == BHATTACHARYYA_METRIC) ret = std::sqrt(std::max(1. - ret, 0.));
+                else ret = -std::log(ret);
+                break;
+            }
+
+
             case JSM: case JSD:
             case SRULRT: case SRLRT:
             case LLR:
@@ -1827,7 +1844,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
                     auto bothsum = lhsum + rhsum;
                     const auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
-                    const auto emptymean = lambda * lhinc + m1l * rhinc; 
+                    const auto emptymean = lambda * lhinc + m1l * rhinc;
                     const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
                                             + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
                     klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lambda, lhinc, rhinc);
@@ -1845,7 +1862,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                           : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * FT(.5) * std::log((lhinc / rhinc + rhinc / lhinc + FT(2)) * .25);
                     //fprintf(stderr, "klc: %0.20g, zc: %0.20g\n", klc, zc);
-                } else __builtin_unreachable();
+                }
                 ret = klc + zc;
                 if(ret < 0) {
                     std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
@@ -1863,26 +1880,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 }
             }
             break;
-            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
-            {
-                const FT tmp = perform_core(wr, wc, 0.,
-                    [&](auto xval, auto yval) ALWAYS_INLINE {
-                        return std::sqrt((xval + lhinc) * (yval + rhinc));
-                    },
-                    [&](auto xval) ALWAYS_INLINE {
-                        return std::sqrt(rhinc * (xval + lhinc));
-                    },
-                    [&](auto yval) ALWAYS_INLINE {
-                        return std::sqrt(lhinc * (yval + rhinc));
-                    },
-                    std::sqrt(lhinc * rhinc));
-                if(msr == BHATTACHARYYA_METRIC)
-                    ret = std::sqrt(std::max(FT(1.) - tmp, FT(0)));
-                else {
-                    ret = std::max(tmp <= 0 ? FT(0): -std::log(tmp), FT(0));
-                }
-                break;
-            }
             case HELLINGER: {
                 if constexpr(blaze::IsSparseVector_v<MatrixRowT> && blaze::IsSparseVector_v<CtrT>) {
                     if(prior_sum == 0.) {ret = hellinger(mr * (FT(1) / lhsum),  ctr * (FT(1) /  rhsum)); break;}
