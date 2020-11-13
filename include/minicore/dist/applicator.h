@@ -1790,17 +1790,16 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         auto wc = ctr * rhrsi; //
         static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
         switch(msr) {
-            case L1: ret = l1Dist(mr, ctr); break;
-            case L2: ret = l2Dist(mr, ctr); break;
-            case SQRL2: ret = sqrDist(mr, ctr); break;
-            case TVD: ret = l1Dist(mr / mrsum, ctr / ctrsum);break;
+            case L2: case SQRL2:
+                ret = sqrDist(mr, ctr); if(msr == L2) ret = std::sqrt(ret);
+            break;
 
             // All of these use libkl kernels for fast comparisons after an initial layout
+            case TVD:
+            case L1:
             case BHATTACHARYYA_METRIC:
             case HELLINGER:
             case BHATTACHARYYA_DISTANCE: {
-                auto &lhv(tmpmulx);
-                auto &rhv(tmpmuly);
                 auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
                 const size_t sharednz = merge::for_each_by_case(nd, mr.begin(), mr.end(), ctr.begin(), ctr.end(),
                             [&](auto, auto x, auto y) {*lhp++ = x; *rhp++ = y;},
@@ -1811,8 +1810,14 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     ret = libkl::helld_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::pow(std::sqrt(lhinc) - std::sqrt(rhinc), 2.) * sharednz;
                     ret = std::sqrt(ret) * M_SQRT1_2;
                     break;
+                } else if(msr == L1) {
+                    ret = libkl::tvd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., pv, pv) * 2.;
+                } else if(msr == TVD) {
+                    ret = libkl::tvd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::abs(lhinc - rhinc) * sharednz * .5;
+                    break;
                 }
                 ret = libkl::bhattd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::sqrt(lhinc * rhinc) * sharednz;
+                if(FT(1.) - ret < FT(1e-8)) ret = 1.;
                 if(msr == BHATTACHARYYA_METRIC) ret = std::sqrt(std::max(1. - ret, 0.));
                 else ret = -std::log(ret);
                 break;
@@ -1868,7 +1873,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                           : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * FT(.5) * std::log((lhinc / rhinc + rhinc / lhinc + FT(2)) * .25);
                     //fprintf(stderr, "klc: %0.20g, zc: %0.20g\n", klc, zc);
-                }
+                } else __builtin_unreachable();
                 ret = klc + zc;
                 if(ret < 0) {
                     std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
