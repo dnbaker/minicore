@@ -75,7 +75,7 @@ struct PyCSparseMatrix {
 #if ENABLE_64BITINT_DATA
             case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
 #endif
-            case 'i': case 'I': _perform<unsigned, Func>(func); break;
+            //case 'i': case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float,    Func>(func); break;
             case 'd': _perform<double,   Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
@@ -95,7 +95,7 @@ struct PyCSparseMatrix {
 #if ENABLE_64BITINT_DATA
             case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
 #endif
-            case 'i': case 'I': _perform<unsigned, Func>(func); break;
+            //case 'i': case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float, Func>(func); break;
             case 'd': _perform<double, Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);

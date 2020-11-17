@@ -597,7 +597,6 @@ void set_centroids_full_mean(const Mat &mat,
     assert(!nfails);
 #endif
     if(const size_t ne = sa.size()) {
-        std::fprintf(stderr, "make sa. sa size: %zu\n", sa.size());
         char buf[256];
         const auto pv = prior.size() ? FT(prior[0]): FT(0);
         std::sprintf(buf, "Restarting centers with no support for set_centroids_full_mean: %s as measure with prior of size %zu (%g)\n",

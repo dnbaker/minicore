@@ -252,10 +252,8 @@ py::object __py_cluster_from_centers(const Matrix &smw,
         auto cv = blz::make_cv((type *)weightinfo.ptr, costs.size());\
         return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, &cv, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed); \
         } break
-        CASE_MCR('I', unsigned);
         CASE_MCR('f', float);
         CASE_MCR('d', double);
-        CASE_MCR('i', unsigned int);
         default: throw std::invalid_argument(std::string("Invalid weights value type: ") + weightinfo.format);
 #undef CASE_MCR
     }
