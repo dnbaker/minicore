@@ -43,6 +43,3 @@
 [submodule "libkl"]
 	path = libkl
 	url = https://github.com/dnbaker/libkl
-[submodule "CascadeMinHash/aesctr"]
-	path = CascadeMinHash/aesctr
-	url = https://github.com/dnbaker/aesctr
