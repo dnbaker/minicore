@@ -1820,10 +1820,12 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     break;
                 } else __builtin_unreachable();
                 ret = klc;
+#ifndef NDEBUG
                 if(ret < 0) {
                     std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
                                  pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc);
                 }
+#endif
                 if(msr == LLR || msr == SRLRT) {
                     ret *= (lhsum + rhsum);
                 }
@@ -1838,28 +1840,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         }
         return ret;
     } else if constexpr((blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && (blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
-        // If geometric,
-
-        auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, auto nsharedmult)
-            -> FT
-        {
-           const size_t sharednz = merge::for_each_by_case(nd,
-                                   src.begin(), src.end(), ctr.begin(), ctr.end(),
-                                   [&](auto, auto x, auto y) ALWAYS_INLINE {
-                                       VERBOSE_ONLY(std::fprintf(stderr, "contribution of %0.12g and %0.12g is %0.12g\n", x, y, sharedfunc(x, y));)
-                                       init += sharedfunc(x, y);
-                                   },
-                                   [&](auto, auto x) ALWAYS_INLINE {init += lhofunc(x);},
-                                   [&](auto, auto y) ALWAYS_INLINE {init += rhofunc(y);});
-           init += sharednz * nsharedmult;
-            return init;
-        };
-        /* Perform core now takes:
-        // 1. Initialization
-        // 2-4. Functions for sharednz, lhnz, rhnz
-        // 5. Function for number of shared zeros
-        // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
-        */
         FT ret;
         assert((std::abs(mrsum - sum(mr)) < 1e-10 && std::abs(ctrsum - sum(ctr)) < 1e-10)
                || !std::fprintf(stderr, "[%s] Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", __PRETTY_FUNCTION__, sum(mr), sum(ctr), mrsum, ctrsum));
@@ -1963,7 +1943,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                             libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc)
                           : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * FT(.5) * std::log((lhinc / rhinc + rhinc / lhinc + FT(2)) * .25);
-                    //fprintf(stderr, "klc: %0.20g, zc: %0.20g\n", klc, zc);
+                    fprintf(stderr, "klc: %0.20g, zc: %0.20g\n", klc, zc);
                 } else if(msr == PROBABILITY_COSINE_DISTANCE || msr == PROBABILITY_COSINE_SIMILARITY) {
                     klc = dot(tmpmulx + lhinc, tmpmuly + rhinc) + sharednz * (lhinc * rhinc);
                     FT div = std::sqrt(sqrNorm(tmpmulx + lhinc) + sharednz * lhinc * lhinc) * std::sqrt(sqrNorm(tmpmuly + rhinc) + sharednz * rhinc * rhinc);
