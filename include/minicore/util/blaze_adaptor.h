@@ -453,6 +453,22 @@ template<typename VT, typename VT2, bool SO>\
 INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, !SO> &rhs) {\
     return norm##Norm(*rhs - trans(*lhs));\
 }\
+template<typename VT, typename VT2, bool SO>\
+INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, !SO> &rhs) {\
+    return norm##Norm(*rhs - trans(*lhs));\
+}\
+template<typename VT, typename VT2, bool SO>\
+INLINE auto norm##Dist(const blaze::SparseVector<VT, SO> &lhs, const blaze::DenseVector<VT2, SO> &rhs) {\
+    return norm##Norm(*rhs - *lhs);\
+}\
+template<typename VT, typename VT2, bool SO>\
+INLINE auto norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, SO> &rhs) {\
+    return norm##Norm(*rhs - *lhs);\
+}\
+template<typename VT, typename VT2, bool SO>\
+INLINE auto norm##Dist(const blaze::DenseVector<VT, SO> &lhs, const blaze::SparseVector<VT2, !SO> &rhs) {\
+    return norm##Norm(*rhs - trans(*lhs));\
+}
 
 DECL_DIST(l1)
 DECL_DIST(l2)

@@ -42,7 +42,7 @@ int main() {
             try {
             auto v = cmp::msr_with_prior(msr, cv1, cv1, prior, psum, s1, s1);
             if(msr == minicore::distance::COSINE_SIMILARITY) {
-                if(v != 1.) assert(v == 1.);
+                if(v != 1.) assert(std::abs(v -= 1.) < 1e-15 || !std::fprintf(stderr, "v: %0.20g\n", v));
                 continue;
             } else if(pval == 0. && msr == minicore::distance::MKL) {
                 continue;
