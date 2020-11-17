@@ -1943,7 +1943,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                             libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc)
                           : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * FT(.5) * std::log((lhinc / rhinc + rhinc / lhinc + FT(2)) * .25);
-                    fprintf(stderr, "klc: %0.20g, zc: %0.20g\n", klc, zc);
                 } else if(msr == PROBABILITY_COSINE_DISTANCE || msr == PROBABILITY_COSINE_SIMILARITY) {
                     klc = dot(tmpmulx + lhinc, tmpmuly + rhinc) + sharednz * (lhinc * rhinc);
                     FT div = std::sqrt(sqrNorm(tmpmulx + lhinc) + sharednz * lhinc * lhinc) * std::sqrt(sqrNorm(tmpmuly + rhinc) + sharednz * rhinc * rhinc);
@@ -1954,8 +1953,10 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 } else __builtin_unreachable();
                 ret = klc + zc;
                 if(ret < 0) {
+#ifndef NDEBUG
                     std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
                                  pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
+#endif
                 }
                 if(msr == LLR || msr == SRLRT) {
                     ret *= (lhsum + rhsum);
