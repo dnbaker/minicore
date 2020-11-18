@@ -1,7 +1,7 @@
 #include "include/minicore/clustering/solve.h"
 #include "blaze/util/Serialization.h"
 
-        
+
 namespace clust = minicore::clustering;
 using namespace minicore;
 
@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
     std::ios_base::sync_with_stdio(false);
     int nthreads = 1;
     unsigned int k = 10;
-    
+
     //FLOAT_TYPE temp = 1.;
     dist::DissimilarityMeasure msr = dist::MKL;
     blz::DV<FLOAT_TYPE> prior{FLOAT_TYPE(1)};
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
     ++vit;
     assert(vit->value() == 5.);
     assert(vit->index() == 5);
-    
+
     for(int c;(c = getopt(argc, argv, "o:M:z:m:p:P:k:TEh?")) >= 0;) {switch(c) {
         //case 'T': transpose = false; break;
         case 'm': msr = (dist::DissimilarityMeasure)std::atoi(optarg); break;
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
         //case 'E': skip_empty = true; break;
         case 'o': outprefix = optarg; break;
         case '?':
-        case 'h':dist::print_measures();  
+        case 'h':dist::print_measures();
                 std::fprintf(stderr, "Usage: %s <flags> \n-z: load blaze matrix from path\n-P: set prior (1.)\n-T set temp [1.]\n-p set num threads\n-m Set measure (MKL, 5)\n-k: set k [10]\t-T transpose mtx file\t-M parse mtx file from argument\n", *argv);
                 return EXIT_FAILURE;
     }}
@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
         return cmp::msr_with_prior(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
     });
     std::cerr << complete_hardcost;
-    //assert(blaze::min<blaze::rowwise>(complete_hardcost) == 
+    //assert(blaze::min<blaze::rowwise>(complete_hardcost) ==
     ocenters = centers;
     assert(rowsums.size() == x.rows());
     assert(centersums.size() == centers.size());

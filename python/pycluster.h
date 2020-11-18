@@ -188,10 +188,8 @@ py::object __py_cluster_from_centers(const Matrix &smw,
     if(py::isinstance<py::int_>(centers)) {
         return func1(smw, centers.cast<int>(), beta, msr, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
     }
-    if(beta < 0) beta = 1. / smw.columns();
     blz::DV<double> prior{double(beta)};
     const dist::DissimilarityMeasure measure = assure_dm(msr);
-    std::fprintf(stderr, "Beginning pycluster (v2)\n");
     std::vector<blz::CompressedVector<double, blz::rowVector>> dvecs;
     if(py::isinstance<py::array>(centers)) {
         auto cbuf = py::cast<py::array>(centers).request();
@@ -213,7 +211,43 @@ py::object __py_cluster_from_centers(const Matrix &smw,
                 emp(cv);
             }
         }
-    } else throw std::invalid_argument("Centers must be a 2d numpy array or a list of numpy arrays");
+    }
+#if 0
+else if(hasattr(centers, "indices") && hasattr(centers, "indptr") && hashattr(center, "data")) {
+        auto shape = py::cast<py::seq>(center.attr("shape"));
+        Py_ssize_t nr = shape[0].cast<Py_ssize_t>();
+        Py_ssize_t nc = shape[1].cast<Py_ssize_t>();
+        py::array idx = centers.attr("indices");
+        py::array data = centers.attr("data");
+        py::array indptr = centers.attr("indptr");
+        auto idxi = idx.request(), datai = data.request(), indptri = indptr.request();
+        const bool id64 = idxi.itemsize == 64;
+        for(int i = 0; i < nr; ++i) {
+            size_t start, end;
+            if(indptri.itemsize == 4) start = ((uint32_t *)indptri.ptr)[i], end = ((uint32_t *)indptri.ptr)[i + 1];
+            else if(indptri.itemsize == 8)  start = ((uint64_t *)indptri.ptr)[i], end = ((uint64_t *)indptri.ptr)[i + 1];
+            else throw std::invalid_argument("Expected indices of 32-bit or 64-bit integers");
+            auto nnz = end - start;
+            auto &v = dvecs.emplace_back(nc);
+            v.reserve(nnz);
+            for(size_t i = start; i < end; ++i) {
+                int32_t iv;
+                double value;
+                if(id64) iv = ((uint64_t *)indi.ptr)[i];
+                else iv = ((uint32_t *)indi.ptr)[i];
+                switch(datai.format[0]) {
+                    case 'f': value = (float *)datai.ptr[i]; break;
+                    case 'I': case 'i': value = (int32_t *)datai.ptr[i]; break;
+                    case 'l': case 'L': value = (int64_t *)datai.ptr[i]; break;
+                    case 'd': value = (double *)datai.ptr[i]; break;
+                    default: __builtin_unreachable();
+                }
+                v.append(iv, value);
+            }
+        }
+    }
+#endif
+    else throw std::invalid_argument("Centers must be a 2d numpy array or a list of numpy arrays");
     const unsigned long long k = dvecs.size();
     blz::DV<uint32_t> asn(smw.rows());
     if(k > 0xFFFFFFFFull) throw std::invalid_argument("k must be < 4.3 billion to fit into a uint32_t");

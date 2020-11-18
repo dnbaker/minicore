@@ -53,7 +53,6 @@ void eps_l1(blaze::Vector<VT, TF> &vector, double radius, double eps=1e-10) {
         if(current <= theta) upper = theta;
                         else lower = theta;
     }
-    
 }
 
 } // namespace minicore
