@@ -1,5 +1,5 @@
-#include "pyfgc.h"
 #include "smw.h"
+#include "pycsparse.h"
 
 template<typename FT, template<typename> class Hasher>
 auto project_array(const Hasher<FT> &hasher, const py::object &obj, bool round=false) {
@@ -45,6 +45,50 @@ auto project_array(const Hasher<FT> &hasher, const py::object &obj, bool round=f
 }
 
 template<typename FT, template<typename> class Hasher>
+auto project_array(const Hasher<FT> &hasher, const PyCSparseMatrix &smw, bool round=false) -> py::object {
+    const ssize_t nh = hasher.nh();
+    const ssize_t nr = smw.rows();
+    py::array_t<FT> rv(
+        py::buffer_info(nullptr, sizeof(FT), py::format_descriptor<FT>::format(),
+                        2,
+                        std::vector<Py_ssize_t>{nr, nh}, // shape
+                        // strides
+                        std::vector<Py_ssize_t>{Py_ssize_t(sizeof(FT) * nh),
+                                                Py_ssize_t(sizeof(FT))}
+        )
+    );
+    auto rvinf = rv.request();
+    const bool iptr_is_32 = std::tolower(smw.indptr_t_[0]) == 'i';
+    const bool idx_is_32 = std::tolower(smw.indices_t_[0]) == 'i';
+    for(ssize_t i = 0; i < smw.rows(); ++i) {
+        ssize_t start, stop;
+        if(iptr_is_32) {
+            start = ((uint32_t *)smw.indptr_)[i];
+            stop = ((uint32_t *)smw.indptr_)[i + 1];
+        } else {
+            start = ((uint64_t *)smw.indptr_)[i];
+            stop = ((uint64_t *)smw.indptr_)[i + 1];
+        }
+        switch(smw.data_t_[0]) {
+            case 'd':
+                if(idx_is_32) hasher.project((double *)smw.datap_ + start, (uint32_t *)smw.indicesp_ + start, stop - start, ((FT *)rvinf)[i * nh]);
+                else          hasher.project((double *)smw.datap_ + start, (uint64_t *)smw.indicesp_ + start, stop - start, ((FT *)rvinf)[i * nh]);
+            break;
+            case 'f':
+                if(idx_is_32) hasher.project((float *)smw.datap_ + start, (uint32_t *)smw.indicesp_ + start, stop - start, ((FT *)rvinf)[i * nh]);
+                else          hasher.project((float *)smw.datap_ + start, (uint64_t *)smw.indicesp_ + start, stop - start, ((FT *)rvinf)[i * nh]);
+            break;
+        }
+        if(round) {
+            auto view = blz::make_cv((FT *)rvinf.ptr, nr * nh);
+            view = floor(view);
+        }
+    }
+    return rv;
+}
+
+#if 0
+template<typename FT, template<typename> class Hasher>
 auto project_array(const Hasher<FT> &hasher, const SparseMatrixWrapper &smw, bool round=false) -> py::object {
     const ssize_t nh = hasher.nh();
     const ssize_t nr = smw.rows();
@@ -62,10 +106,11 @@ auto project_array(const Hasher<FT> &hasher, const SparseMatrixWrapper &smw, boo
     smw.perform([&](const auto &x){if(round) cm = hasher.hash(x); else cm = hasher.project(x);});
     return rv;
 }
+#endif
 
 #define SETTINGS_GETTER(type, ftype) def("settings", [](const type<ftype> &hasher) -> LSHasherSettings {return hasher.settings_;}, "Get settings struct from hasher")
-#define SMW_HASH_DEC(type, ftype) def("hash", [](const type<ftype> &hasher, const SparseMatrixWrapper &smw) {return project_array(hasher, smw, true);}) \
-                                 .def("project", [](const type<ftype> &hasher, const SparseMatrixWrapper &smw) {return project_array(hasher, smw, false);})
+#define SMW_HASH_DEC(type, ftype) def("hash", [](const type<ftype> &hasher, const PyCSparseMatrix &smw) {return project_array(hasher, smw, true);}) \
+                                 .def("project", [](const type<ftype> &hasher, const PyCSparseMatrix &smw) {return project_array(hasher, smw, false);})
 
 void init_hashers(py::module &m) {
 #if 0
@@ -194,3 +239,7 @@ void init_hashers(py::module &m) {
 
 #undef SETTINGS_GETTER
 #undef SMW_HASH_DEC
+PYBIND11_MODULE(minilsh, m) {
+    init_hashers(m);
+    m.doc() = "Python bindings for FGC, which allows for calling coreset/clustering code from numpy and converting results back to numpy arrays";
+}

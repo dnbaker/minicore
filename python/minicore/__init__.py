@@ -1,8 +1,8 @@
-import pyfgc
-from pyfgc import *
+import pyminicore
+from pyminicore import *
 from . import constants
 from .constants import CSR as csr_tuple, KMCRSV
-from pyfgc import SparseMatrixWrapper as smw
+from pyminicore import SparseMatrixWrapper as smw
 
 
 def spctrlist2mat(centertups, nc):

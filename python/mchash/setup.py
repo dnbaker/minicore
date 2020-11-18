@@ -64,8 +64,8 @@ extra_compile_args = ['-march=native', '-DNDEBUG',
                       '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                       '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',
-                      '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
-                      "-DBLAZE_USE_SLEEF=1", "-pipe",
+                      '-lz', '-fopenmp', "-lgomp",
+                      "-pipe",
                       '-Wno-deprecated-declarations', '-O3']
 
 if 'BOOST_DIR' in environ:
@@ -76,24 +76,20 @@ include_dirs=[
     # Path to pybind11 headers
     get_pybind_include(),
     get_pybind_include(user=True),
-   "../",
-   "../include",
-   sleefdir + "/include",
-   "../include/minicore",
-   "../blaze",
-   "../pybind11/include"
+   "../../",
+   "../../include",
+   "../../include/minicore",
+   "../../blaze",
+   "../../pybind11/include"
 ]
 
 ext_modules = [
     Extension(
-        'pyminicore',
-         glob('*.cpp') + [
-         "../include/minicore/util/boost/zlib.cpp", "../include/minicore/util/boost/gzip.cpp"
-         ],
+        'pyhashers',
+        ['pyhashers.cpp']
         include_dirs=include_dirs,
         language='c++',
-        extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"],
-        extra_objects=[SLEEFLIB]
+        extra_compile_args=extra_compile_args,
     ),
 ]
 
@@ -166,7 +162,7 @@ class BuildExt(build_ext):
         build_ext.build_extensions(self)
 
 setup(
-    name='minicore',
+    name='minilsh',
     version=__version__,
     author='Daniel Baker',
     author_email='dnb@cs.jhu.edu',
