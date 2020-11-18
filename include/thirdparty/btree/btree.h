@@ -1415,7 +1415,7 @@ public:
 	}
 	// Returns a count of the number of times the key appears in the btree.
 	size_type count_multi(const key_type& key) const {
-		return distance(lower_bound(key), upper_bound(key));
+		return std::distance(lower_bound(key), upper_bound(key));
 	}
 
 	// Clear the btree, deleting all of the values it contains.
@@ -2268,7 +2268,7 @@ typename btree<P>::iterator btree<P>::erase(const_iterator iter) {
 
 template <typename P>
 int btree<P>::erase(const_iterator begin, const_iterator end) {
-	int count = distance(begin, end);
+	int count = std::distance(begin, end);
 	for (int i = 0; i < count; i++) {
 		begin = erase(begin);
 	}
