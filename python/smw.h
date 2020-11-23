@@ -315,9 +315,7 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
         if(gamma_beta < 0.) {
             gamma_beta = 1. / smw.columns();
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
-        } else if(gamma_beta == 0.) {
-            std::fprintf(stderr, "Note: beta prior set to 0; this may yield nans in some cases\n");
-        }
+        } 
         const void *wptr = nullptr;
         int kind = -1;
         const auto mmsr = assure_dm(msr);

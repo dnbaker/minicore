@@ -84,19 +84,6 @@ struct CSCMatrixView {
             : mat_(mat), start_(start), stop_(stop)
         {
         }
-#if 0
-        void sort_if_not_const() {
-            if constexpr(!std::is_const_v<IndicesType> && !std::is_const_v<DataType>) {
-                nonstd::span<DataType> dspan(mat_.data_ + start_, mat_.data_ + stop_);
-                nonstd::span<IndicesType> ispan(mat_.indices_ + start_, mat_.indices_ + stop_);
-                auto zip = Zip(ispan, dspan);
-                DBG_ONLY(std::fprintf(stderr, "Sorting since not const\n");)
-                shared::sort(zip.begin(), zip.end());
-                assert(std::is_sorted(ispan.begin(), ispan.end()));
-                DBG_ONLY(std::fprintf(stderr, "Sorted. First two: %u, %u\n", int(ispan[0]), int(ispan[ispan.size() > 1 ? 1u: 0u]));)
-            }
-        }
-#endif
         size_t nnz() const {return stop_ - start_;}
         size_t size() const {return mat_.columns();}
         template<bool is_const>
@@ -207,7 +194,7 @@ struct CSparseVector {
     IT *indices_;
     size_t n_, dim_;
 
-    std::unique_ptr<VT> sum_;
+    //std::unique_ptr<VT> sum_;
 
     CSparseVector(VT *data, IT *indices, size_t n, size_t dim): data_(data), indices_(indices), n_(n), dim_(dim)
     {
@@ -772,6 +759,138 @@ struct CSparseMatrix {
     const auto &operator*() const {return *this;}
     using ElementType = VT;
 };
+
+using blaze::unchecked;
+
+template<typename VT, typename IT, typename IPtr, bool TF, typename OIT=IT, typename WeightT=blz::DV<VT>, bool rowwise=true>
+void l1_median(CSparseMatrix<VT, IT, IPtr> &mat, blaze::DenseVector<VT, TF> &ret, OIT *asnptr=static_cast<OIT *>(nullptr), size_t asnsz=0, WeightT *weightc=static_cast<WeightT *>(nullptr)) {
+    if constexpr(rowwise) {
+        const size_t nc = mat.columns(), nr = mat.rows();
+        shared::flat_hash_map<IT, std::vector<VT>> nzfeatures;
+        nzfeatures.reserve(mat.columns());
+        const size_t nrows = asnsz ? asnsz: mat.rows();
+        if(weightc) throw NotImplementedError("Not implemented");
+        for(size_t i = 0; i < nrows; ++i) {
+            auto rownum = asnsz ? OIT(asnptr[i]): OIT(i);
+            auto r = row(mat, rownum, unchecked);
+            auto nnz = nonZeros(r);
+            if(!nnz) continue;
+            for(size_t i = 0; i < r.nnz_; ++i) {
+                auto idx = r.indices_[i];
+                auto val = r.data_[i];
+                auto it = nzfeatures.find(idx);
+                if(it == nzfeatures.end()) {
+                    {
+                        it = nzfeatures.emplace(it, {val}).first;
+                    }
+                } else {
+                    it->second.push_back(val);
+                }
+            }
+        }
+        const size_t nfeat = nzfeatures.size();
+        (*ret).resize(nfeat);
+        *ret = 0;
+        const bool nr_is_odd = nrows & 1;
+        for(auto &pair: nzfeatures) {
+            auto it = &pair.second;
+            auto i = pair.first;
+            auto ibeg = it->begin(), iend = it->end();
+            shared::sort(ibeg, iend);
+            size_t nel = it->size();
+            if(nel > nrows / 2) {
+                if(it->front() > 0.) {
+                    if(nr_is_odd) {
+                        auto mid = ibeg + nrows / 2 - (nrows - nel);
+                        (*ret)[i] = *mid;
+                    } else {
+                        auto midm1 = ibeg + nrows / 2 - (nrows - nel), mid = midm1 + 1;
+                        (*ret)[i] = .5 * (*mid + *midm1);
+                    }
+                } else if(it->back() < 0.) {
+                    if(nr_is_odd) {
+                        (*ret)[i] = *(iend - nrows / 2 + (nrows - nel));
+                    } else {
+                        auto midm1 = iend - nrows / 2 + (nrows - nel), mid = midm1 + 1;
+                        (*ret)[i] = .5 * (*mid + *midm1);
+                    }
+                } else {
+                    it->resize(nrows, VT(0));
+                    shared::sort(it->begin(), it->end());
+                    if(nr_is_odd) (*ret)[i] = (*it)[nrows / 2];
+                    else (*ret)[i] = .5 * ((*it)[nrows / 2] + (*it)[nrows / 2 + 1]);
+                }
+            } // else the value is 0
+        }
+    } else {
+        throw std::runtime_error("Not implemented");
+    }
+}
+
+template<typename VT, typename IT, typename IPtr, bool TF, typename OIT, typename WeightT=blz::DV<VT>, bool rowwise=true, typename RSums>
+void tvd_median(CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<VT, TF> &ret, OIT *asnptr=static_cast<OIT *>(nullptr), size_t asnsz=0, WeightT *weightc=static_cast<WeightT *>(nullptr), const RSums &rsums=RSums()) {
+    if constexpr(rowwise) {
+        const size_t nc = mat.columns(), nr = mat.rows();
+        shared::flat_hash_map<IT, std::vector<VT>> nzfeatures;
+        nzfeatures.reserve(mat.columns());
+        const size_t nrows = asnsz ? asnsz: mat.rows();
+        if(weightc) throw NotImplementedError("Not implemented");
+        for(size_t i = 0; i < nrows; ++i) {
+            auto rownum = asnsz ? OIT(asnptr[i]): OIT(i);
+            auto r = row(mat, rownum, unchecked);
+            auto nnz = nonZeros(r);
+            if(!nnz) continue;
+            auto invmul = rsums[rownum];
+            for(size_t i = 0; i < r.nnz_; ++i) {
+                auto idx = r.indices_[i];
+                auto val = r.data_[i] * invmul;
+                auto it = nzfeatures.find(idx);
+                if(it == nzfeatures.end()) {
+                    it = nzfeatures.emplace(it, {val}).first;
+                } else {
+                    it->second.push_back(val);
+                }
+            }
+        }
+        const size_t nfeat = nzfeatures.size();
+        (*ret).reset();
+        (*ret).reserve(nfeat);
+        const bool nr_is_odd = nrows & 1;
+        for(auto &pair: nzfeatures) {
+            auto it = &pair.second;
+            auto i = pair.first;
+            auto ibeg = it->begin(), iend = it->end();
+            shared::sort(ibeg, iend);
+            size_t nel = it->size();
+            if(nel > nrows / 2) {
+                if(it->front() > 0.) {
+                    if(nr_is_odd) {
+                        auto mid = ibeg + nrows / 2 - (nrows - nel);
+                        (*ret).append(i, *mid);
+                    } else {
+                        auto midm1 = ibeg + nrows / 2 - (nrows - nel), mid = midm1 + 1;
+                        (*ret).append(i, .5 * (*mid + *midm1));
+                    }
+                } else if(it->back() < 0.) {
+                    if(nr_is_odd) {
+                        auto mid = iend - nrows / 2 + (nrows - nel);
+                        (*ret).append(i, *mid);
+                    } else {
+                        auto midm1 = ibeg - nrows / 2 + (nrows - nel), mid = midm1 + 1;
+                        (*ret).append(i, (.5) * (*mid + *midm1));
+                    }
+                } else {
+                    it->resize(nrows, VT(0));
+                    shared::sort(it->begin(), it->end());
+                    if(nr_is_odd) (*ret).append(i, (*it)[nrows / 2]);
+                    else          (*ret).append(i, .5 * (*it)[nrows / 2 - 1] + (*it)[nrows / 2]);
+                }
+            } // else the value is 0
+        }
+    } else {
+        throw std::runtime_error("Not implemented");
+    }
+}
 
 template<typename VT, typename IT, typename IPtrT>
 inline CSparseMatrix<VT, IT, IPtrT> make_csparse_matrix(VT *__restrict__ data, IT *__restrict__ indices, IPtrT *__restrict__ indptr, size_t nr, size_t nc, size_t nnz) {

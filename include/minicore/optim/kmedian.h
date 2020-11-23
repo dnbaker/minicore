@@ -186,6 +186,7 @@ void l1_unweighted_median(const blz::Matrix<MT, SO> &_data, const Rows &rs, blz:
 
 
 
+#if 0
 template<typename DataT, typename IndicesT, typename IndPtrT, typename VT2, bool TF2, typename IT=uint32_t, typename WT>
 static inline void l1_median(const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &data, blz::Vector<VT2, TF2> &ret, const IT *indices=(const IT *)nullptr, size_t nasn=0, const WT *weights=static_cast<WT *>(nullptr)) {
     const size_t nc = data.columns();
@@ -260,6 +261,8 @@ static inline void l1_median(const util::CSparseMatrix<DataT, IndicesT, IndPtrT>
         }
     }
 }
+
+#endif
 template<typename MT, bool SO, typename VT2, bool TF2, typename IT=uint32_t, typename WT>
 static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<VT2, TF2> &ret, const WT &weights) {
     const size_t nc = (*data).columns();
@@ -341,6 +344,10 @@ void l1_median(const blaze::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret, IT *
     }
 } 
 
+template<typename MT, bool SO, typename VT, bool TF, typename IT=uint64_t, typename WeightT=blz::DV<double>, typename RSums>
+void tvd_median(const blaze::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret, IT *asp, size_t nasn=0, const WeightT *weights=static_cast<WeightT *>(nullptr), const RSums &rsums=RSums()) {
+    return l1_median(*data % blaze::expand(1. / rsums, (*data).columns()), ret, asp, nasn, weights);
+}
 
 
 } // namespace coresets

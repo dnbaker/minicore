@@ -208,7 +208,6 @@ int main(int argc, char *argv[]) {
     auto t2 = std::chrono::high_resolution_clock::now();
     std::fprintf(stderr, "Wall time for clustering: %gms\n", std::chrono::duration<FLOAT_TYPE, std::milli>(t2 - t1).count());
 #if 0
-    std::fprintf(stderr, "Now performing minibatch clustering\n");
     size_t mbsize = 500;
     if(char *s = std::getenv("MBSIZE")) {
         mbsize = std::strtoull(s, nullptr, 10);

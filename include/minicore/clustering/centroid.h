@@ -32,7 +32,6 @@ static constexpr const char *cp2str(CentroidPol pol) {
 
 template<typename CtrT, typename VT, bool TF>
 void set_center(CtrT &lhs, const blaze::Vector<VT, TF> &rhs) {
-    //std::fprintf(stderr, "Assigning from rhs of size %zu to lhs of size %zu and capacity %zu\n", (*rhs).size(), lhs.size(), lhs.capacity());
     if(lhs.size() != (*rhs).size()) {
         lhs.resize((*rhs).size());
     }
@@ -40,7 +39,6 @@ void set_center(CtrT &lhs, const blaze::Vector<VT, TF> &rhs) {
         lhs.reserve((*rhs).size());
     }
     lhs = *rhs;
-    //std::fprintf(stderr, "Setting center. sums of both: %g/%g\n", sum(lhs), sum(*rhs));
 }
 
 template<typename CtrT, typename VT, typename IT>
@@ -76,12 +74,18 @@ void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &
 }
 
 template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT>
-void set_center_l2(CtrT &center, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asp, size_t nasn, WeightT *weights, double eps) {
+void set_center_l2(CtrT &center, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asp, size_t nasn, WeightT *weights, double eps=0.) {
     util::geomedian(mat, center, asp, nasn, weights, eps);
 }
 
+
+template<typename VT, typename Alloc, typename IT>
+decltype(auto) elements(const std::vector<VT, Alloc> &w, IT *asp, size_t nasn) {
+    return elements(blz::make_cv(&w[0], w.size()), asp, nasn);
+}
+
 template<typename CtrT, typename MT, typename IT, typename WeightT>
-void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, IT *asp, size_t nasn, WeightT *weights, double eps) {
+void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, IT *asp, size_t nasn, WeightT *weights, double eps=0.) {
     auto rowsel = rows(mat, asp, nasn);
     VERBOSE_ONLY(std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << center << '\n';)
     if(weights)
@@ -91,23 +95,16 @@ void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, 
     VERBOSE_ONLY(std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';)
 }
 
-template<typename VT, typename Alloc, typename IT>
-decltype(auto) elements(const std::vector<VT, Alloc> &w, IT *asp, size_t nasn) {
-    return elements(blz::make_cv(&w[0], w.size()), asp, nasn);
-}
 
 template<typename CtrT, typename MT, bool SO, typename IT, typename WeightT=blz::DV<blz::ElementType_t<MT>>>
 void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nasn, WeightT *w = static_cast<WeightT*>(nullptr)) {
     auto rowsel = rows(*mat, asp, nasn);
-    //std::fprintf(stderr, "%zu asn\n", nasn);
     if(w) {
         auto elsel = elements(*w, asp, nasn);
         auto weighted_rows = rowsel % blaze::expand(elsel, (*mat).columns());
         // weighted sum over total weight -> weighted mean
         ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
-        //std::fprintf(stderr, "Setting to weighted columnwise mean\n");
     } else {
-        //std::fprintf(stderr, "Setting to columnwise mean\n");
         ctr = blaze::mean<blaze::columnwise>(rowsel);
     }
 }
@@ -151,7 +148,6 @@ struct CentroidPolicy {
         using FT = blz::ElementType_t<VT>;
         PREC_REQ(measure != static_cast<dist::DissimilarityMeasure>(-1), "Must define dissimilarity measure");
         if(measure == dist::TOTAL_VARIATION_DISTANCE) {
-            PRETTY_SAY << "TVD: performing " << (wc ? static_cast<const char *>("weighted"): static_cast<const char *>("unweighted")) << "L1 median on *normalized* categorical distributions.\n";
             if(wc)
                 coresets::l1_median(r, ret, wc->data());
             else
@@ -162,7 +158,6 @@ struct CentroidPolicy {
                                blz::CompressedMatrix<FT, blz::StorageOrder_v<Range> >,
                                blz::DynamicMatrix<FT, blz::StorageOrder_v<Range> >
             > cm = r % blz::expand(trans(rs), r.columns());
-            PRETTY_SAY << "L1: performing " << (wc ? static_cast<const char *>("weighted"): static_cast<const char *>("unweighted")) << "L1 median on *unnormalized* categorical distributions, IE absolute count data.\n";
             if(wc)
                 coresets::l1_median(cm, ret, wc->data());
             else
@@ -234,24 +229,20 @@ struct CentroidPolicy {
         for(unsigned i = 0; i < centers.size(); ++i) {
             auto aip = assignv[i].data();
             auto ain = assignv[i].size();
-            std::fprintf(stderr, "Setting center %u with %zu support\n", i, ain);
             auto r(blz::rows(mat, aip, ain));
             auto &c(centers[i]);
-            std::fprintf(stderr, "max row index: %u\n", *std::max_element(aip, aip + ain));
 
             if(weight_cv) {
                 c = blaze::sum<blaze::columnwise>(
                     blz::rows(mat, aip, ain)
                     % blaze::expand(blaze::elements(trans(**weight_cv), aip, ain), mat.columns()));
             } else {
-                std::fprintf(stderr, "Performing unweighted sum of %zu rows\n", ain);
                 c = blaze::sum<blaze::columnwise>(blz::rows(mat, aip, ain));
             }
 
             assert(rs.size() == mat.rows());
             if constexpr(blaze::IsSparseMatrix_v<Matrix>) {
                 if(pd) {
-                    std::fprintf(stderr, "Sparse prior handling\n");
                     if(weight_cv) {
                         c += pv * sum(blz::elements(rs * **weight_cv, aip, ain));
                     } else {
@@ -275,17 +266,14 @@ struct CentroidPolicy {
                     div = sum(blz::elements(rs, aip, ain));
             } else {
                 if(weight_cv) {
-                    std::fprintf(stderr, "weighted, nonLLR\n");
                     div = sum(**weight_cv);
                 } else {
-                    std::fprintf(stderr, "unweighted, nonLLR\n");
                     div = ain;
                 }
             }
             auto oldnorm = blaze::l2Norm(c);
             c *= (1. / div);
             auto newnorm = blaze::l2Norm(c);
-            std::fprintf(stderr, "norm before %g, after %g\n", oldnorm, newnorm);
             assert(min(c) >= 0 || !std::fprintf(stderr, "min center loc: %g\n", min(c)));
         }
     }
@@ -389,9 +377,6 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
     while(!sa.empty()) {
         // Compute partial sum
-#ifndef NDEBUG
-        std::fprintf(stderr, "reseeding %zu centers\n", sa.size());
-#endif
         if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
         FT *pd = probup->data(), *pe = pd + probup->size();
         auto cb = costs.begin(), ce = costs.end();
@@ -481,9 +466,6 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
     while(!sa.empty()) {
         // Compute partial sum
-#ifndef NDEBUG
-        std::fprintf(stderr, "reseeding %zu centers\n", sa.size());
-#endif
         if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
         FT *pd = probup->data(), *pe = pd + probup->size();
         if(weights) {
@@ -578,7 +560,6 @@ void set_centroids_full_mean(const Mat &mat,
     for(size_t i = 0; i < np; ++i) {
         assigned[asn[i]].push_back(i);
     }
-    std::fprintf(stderr, "mean distance: %g. max distance: %g\n", blz::mean(costs), blz::max(costs));
 #ifndef NDEBUG
     for(unsigned i = 0; i < k; ++i) std::fprintf(stderr, "Center %u has %zu assigned points\n", i, assigned[i].size());
 #endif
@@ -708,7 +689,7 @@ void set_centroids_full_mean(const Mat &mat,
     WeightsT *weights, FT temp, SumT &ctrsums)
 {
     assert(ctrsums.size() == ctrs.size());
-    std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
+    //std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
 
     const unsigned k = ctrs.size();
     blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);

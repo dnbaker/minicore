@@ -75,7 +75,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     const SampleFmt fmt = use_exponential_skips ? USE_EXPONENTIAL_SKIPS: NEITHER;
     int d0s = 0;
     for(size_t center_idx = 1;center_idx < k;) {
-        std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\r\n", center_idx, size_t(k), centers[center_idx - 1]);
+        DBG_ONLY(std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\r\n", center_idx, size_t(k), centers[center_idx - 1]);)
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
         auto cd = centers.data();
@@ -279,13 +279,13 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
     };
 
     while(centers.size() < k) {
-        std::fprintf(stderr, "Center %zu/%zu\r\n", centers.size(), k);
+        DBG_ONLY(std::fprintf(stderr, "Center %zu/%zu\r\n", centers.size(), k);)
         auto x = div.mod(IT(rng()));
         double xdist = mindist(x);
         auto xdi = 1. / xdist;
         auto baseseed = IT(rng());
         const double max64inv = 1. / std::numeric_limits<uint64_t>::max();
-        auto lfunc = [&](unsigned j) {
+        auto lfunc = [&](unsigned j) ALWAYS_INLINE {
             if(centers.find(j) != centers.end()) return;
             uint64_t local_seed = baseseed + j;
             wy::wyhash64_stateless(&local_seed);

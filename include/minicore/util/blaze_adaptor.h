@@ -653,34 +653,18 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
         if(weights) {
             auto &cvr = *cv;
             OMP_PFOR
-            for(size_t i = 0; i < _mat.rows(); ++i)
+            for(size_t i = 0; i < _mat.rows(); ++i) {
                 costs[i] = cvr[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - *dv);
+                if(std::isnan(costs[i])) costs[i] = 1e-80;
+            }
         } else {
-#if 1
             OMP_PFOR
             for(size_t i = 0; i < _mat.rows(); ++i) {
-#if 0
-                const auto r = row(_mat, i, blaze::unchecked) - *dv;
-                std::cerr << "row #" << i << " is " << r << '\n';
-                std::cerr << "cost before is: " << costs[i] << '\n';
-                std::cerr << "Row: " << row(_mat, i) << '\n';
-                std::cerr << "center: " << *dv << '\n';
-                costs[i] = blz::sqrt(blz::sum(r * r));
-                std::cerr << "cost after is " << costs[i] << '\n';
-                if(std::isnan(costs[i])) {
-                    std::cerr << "cost after is NAN: " << costs[i] << '\n';
-                    std::cerr << r << '\n';
-                    std::cerr << "r squared should be " << (r * r) << '\n';
-                }
-#else
                 using res_t = std::decay_t<decltype(blz::l2Norm(row(_mat, i, blz::unchecked) - *dv))>;
                 costs[i] = std::max(blz::l2Norm(row(_mat, i, blz::unchecked) - *dv),
                                     static_cast<res_t>(1e-80));
-#endif
+                if(std::isnan(costs[i])) costs[i] = 1e-80;
             }
-#else
-            costs = sqrt(sum<rowwise>(blz::pow(_mat - blaze::expand(*dv, (*mat).rows()), 2))); // pow2 seems broken
-#endif
         }
         FT current_cost = sum(costs);
         FT dist;
@@ -691,8 +675,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
         }
         ++iternum;
         costs = 1. / costs;
-        costs *= 1. / blaze::sum(costs);
-        *dv = trans(costs) * *mat;
+        *dv = trans(costs / blaze::sum(costs)) * *mat;
         prevcost = current_cost;
     }
     return *dv;
