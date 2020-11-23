@@ -109,7 +109,7 @@ public:
     const LSHasherSettings settings_;
     using ElementType = FT;
     static constexpr bool StorageOrder = SO;
-    static constexpr const FT rngnorm = 1.0/(1ull<<52);
+    static constexpr const FT rngnorm = 0x1.p-52;
     JSDLSHasher(LSHasherSettings settings, const double r, uint64_t seed=0): settings_(settings) {
         unsigned nd = settings.dim_, nh = settings.nhashes();
         if(seed == 0) seed = nd * nh + r;
@@ -127,6 +127,23 @@ public:
     }
     JSDLSHasher(unsigned dim, unsigned k, unsigned l, const double r, uint64_t seed=0): JSDLSHasher(LSHasherSettings{dim, k, l}, r, seed)
     {}
+    template<typename IT, typename OFT>
+    FT project(OFT *data, IT *indices, size_t nelem, int hashid) const {
+        auto hashr = row(randproj_, hashid);
+        FT ret = 0;
+        #pragma GCC unroll 8
+        for(size_t i = 0; i < nelem; ++i) {
+            ret = std::fma(hashr[indices[i]], std::sqrt(data[i]), ret);
+        }
+        return ret + boffsets_[hashid];
+    }
+    template<typename IT, typename OFT, typename RetFT>
+    void project(OFT *data, IT *indices, size_t nelem, RetFT *ret) const {
+        OMP_PFOR
+        for(size_t i = 0; i < randproj_.rows(); ++i) {
+            ret[i] = project(data, indices, nelem, i);
+        }
+    }
     template<typename VT>
     decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
         //std::fprintf(stderr, "Regular input size: %zu. my rows/col:%zu/%zu\n", (*input).size(), randproj_.rows(), randproj_.columns());
@@ -191,18 +208,41 @@ public:
         if(seed == 0) seed = nd * nh  + w + 1. / w;
         std::mt19937_64 mt(seed);
         randproj_ = blaze::abs(blaze::generate(nh, nd, [&](size_t, size_t){return gen(mt);}) * (1. / w));
-        if constexpr(use_offsets)
-            boffsets_ = blaze::generate(nh, [&](size_t){return FT(mt() / 2) / mt.max();}) - 0.5;
+        if constexpr(use_offsets) {
+            boffsets_ = blaze::generate(nh, [&](size_t){return FT(mt() / 2) / mt.max();}) + .5;
+        }
         assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow, I suppose
     }
     template<typename VT>
     decltype(auto) project(const blaze::Vector<VT, SO> &input) const {
-        if constexpr(use_offsets) return randproj_ * (*input) + 1. + boffsets_;
+        if constexpr(use_offsets) return randproj_ * (*input) + boffsets_;
         else                      return randproj_ * (*input);
+    }
+    template<typename IT, typename OFT>
+    FT project(OFT *data, IT *indices, size_t nelem, int hashid) const {
+        auto hashr = row(randproj_, hashid);
+        FT ret = 0;
+        #pragma GCC unroll 8
+        for(size_t i = 0; i < nelem; ++i) {
+            if constexpr(use_offsets) {
+                ret = std::fma(hashr[indices[i]], data[i], ret);
+            } else {
+                ret = std::fma(hashr[indices[i]], data[i], ret);
+            }
+        }
+        if(boffsets_.size()) ret += boffsets_[hashid];
+        return ret;
+    }
+    template<typename IT, typename OFT, typename RetFT>
+    void project(OFT *data, IT *indices, size_t nelem, RetFT *ret) const {
+        OMP_PFOR
+        for(size_t i = 0; i < randproj_.rows(); ++i) {
+            ret[i] = project(data, indices, nelem, i);
+        }
     }
     template<typename VT>
     decltype(auto) project(const blaze::Vector<VT, !SO> &input) const {
-        if constexpr(use_offsets) return randproj_ * trans(*input) + 1. + boffsets_;
+        if constexpr(use_offsets) return randproj_ * trans(*input) + boffsets_;
         else                      return randproj_ * trans(*input);
     }
     template<typename MT>
@@ -319,6 +359,23 @@ public:
             return (wy::WyHash<uint64_t>(i ^ wyseed)() >> 12) * (1. / (1ull << 52));
         }) - 0.5;
         assert(settings_.k_ * settings_.l_ == randproj_.rows()); // In case of overflow, I suppose
+    }
+    template<typename IT, typename OFT>
+    FT project(OFT *data, IT *indices, size_t nelem, int hashid) const {
+        auto hashr = row(randproj_, hashid);
+        FT ret = 0;
+        #pragma GCC unroll 8
+        for(size_t i = 0; i < nelem; ++i) {
+            ret += std::sqrt(hashr[indices[i]] * data[i] + 1.);
+        }
+        return ret + boffsets_[hashid];
+    }
+    template<typename IT, typename OFT, typename RetFT>
+    void project(OFT *data, IT *indices, size_t nelem, RetFT *ret) const {
+        OMP_PFOR
+        for(size_t i = 0; i < randproj_.rows(); ++i) {
+            ret[i] = project(data, indices, nelem, i);
+        }
     }
     template<typename VT>
     decltype(auto) project(const blaze::Vector<VT, SO> &input) const {

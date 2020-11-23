@@ -16,6 +16,11 @@ using blz::rowMajor;
 using blz::columnMajor;
 using blz::unchecked;
 
+using coresets::l1_median;
+using util::l1_median;
+using coresets::tvd_median;
+using util::tvd_median;
+
 /*
  * set_centroids_* and assign_points_* functions form the E/M steps
  * for EM optimization of clustering
@@ -179,11 +184,9 @@ void set_centroids_hard(const Mat &mat,
         case GEO_MEDIAN:
             set_centroids_l2<FT>(mat, asn, costs, centers, weights);
             break;
-#if 0
         case TVD_MEDIAN:
-            set_centroids_tvd<FT>(mat, asn, costs, centers, weights);
+            set_centroids_tvd<FT>(mat, asn, costs, centers, weights, rowsums);
             break;
-#endif
         default:
             constexpr const char *msg = "Cannot optimize without a valid centroid policy.";
             std::cerr << msg;
@@ -391,6 +394,7 @@ void set_centroids_soft(const Mat &mat,
     costs = blaze::generate(mat.rows(), centers.size(), compute_cost);
 }
 
+
 template<typename Matrix, // MatrixType
          typename FT=DefaultFT<Matrix>,
          typename CtrT=blz::DynamicVector<FT, rowVector>, // Vector Type
@@ -415,16 +419,9 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                                        uint64_t seed=0)
 {
     if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
-#if 0
-    auto compute_cost = [&costs,w=weights]() -> FT {
-        if(w) return blz::dot(costs, *w);
-        else  return blz::sum(costs);
-    };
-#endif
     switch(measure) {
         default:
-        case L1: case TVD: throw std::invalid_argument("measure cannot be used in minibatch mode");
-
+        case L2: case L1: case TVD:
         case JSD: case JSM: case COSINE_DISTANCE:
         case SQRL2: case POISSON: case MKL: case REVERSE_ITAKURA_SAITO: case ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO:
@@ -519,7 +516,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                 for(const auto fidx: foundindices) {
                     // set new centers
                     auto &ctr = centers[fidx];
-                    const auto rngv = rng();
+                    size_t id;
                     if(weights) {
                         if constexpr(blaze::IsVector_v<WeightT>) {
                             *wc = costs * *weights;
@@ -528,10 +525,11 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                         } else {
                             *wc = costs * blz::make_cv(weights->data(), np);
                         }
-                        clustering::set_center(ctr, row(mat, reservoir_simd::sample(wc->data(), np, rngv)));
+                        id = reservoir_simd::sample(wc->data(), np, rng());
                     } else {
-                        clustering::set_center(ctr, row(mat, reservoir_simd::sample(costs.data(), np, rngv)));
+                        id = reservoir_simd::sample(costs.data(), np, rng());
                     }
+                    clustering::set_center(ctr, row(mat, id, blz::unchecked));
                     centersums[fidx] = sum(ctr);
                 }
                 OMP_PFOR
@@ -616,7 +614,15 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             auto asnptr = assigned[i].data();
             const auto asnsz = assigned[i].size();
             if(!asnsz) continue;
-            clustering::set_center(centers[i], mat, asnptr, asnsz, weights);
+            if(measure == distance::L2) {
+                clustering::set_center_l2(centers[i], mat, asnptr, asnsz, weights);
+            } else if(measure == distance::L1) {
+                l1_median(mat, centers[i], asnptr, asnsz, weights);
+            } else if(measure == distance::TVD) {
+                tvd_median(mat, centers[i], asnptr, asnsz, weights, rowsums);
+            } else {
+                clustering::set_center(centers[i], mat, asnptr, asnsz, weights);
+            }
             //std::cerr << trans(centers[i]) << '\n';
             VERBOSE_ONLY(std::cerr << "##center with sum " << sum(centers[i]) << " and index "  << i << ": " << centers[i] << '\n';)
             centersums[i] = sum(centers[i]);

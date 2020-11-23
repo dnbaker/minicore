@@ -1,6 +1,7 @@
 #ifndef MINOCORE_CLUSTERING_CENTROID_H__
 #define MINOCORE_CLUSTERING_CENTROID_H__
 #include "minicore/util/blaze_adaptor.h"
+#include "minicore/util/csc.h"
 #include "minicore/dist.h"
 #include "minicore/optim/kmedian.h"
 
@@ -32,7 +33,6 @@ static constexpr const char *cp2str(CentroidPol pol) {
 
 template<typename CtrT, typename VT, bool TF>
 void set_center(CtrT &lhs, const blaze::Vector<VT, TF> &rhs) {
-    //std::fprintf(stderr, "Assigning from rhs of size %zu to lhs of size %zu and capacity %zu\n", (*rhs).size(), lhs.size(), lhs.capacity());
     if(lhs.size() != (*rhs).size()) {
         lhs.resize((*rhs).size());
     }
@@ -40,7 +40,6 @@ void set_center(CtrT &lhs, const blaze::Vector<VT, TF> &rhs) {
         lhs.reserve((*rhs).size());
     }
     lhs = *rhs;
-    //std::fprintf(stderr, "Setting center. sums of both: %g/%g\n", sum(lhs), sum(*rhs));
 }
 
 template<typename CtrT, typename VT, typename IT>
@@ -76,12 +75,18 @@ void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &
 }
 
 template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT>
-void set_center_l2(CtrT &center, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asp, size_t nasn, WeightT *weights, double eps) {
+void set_center_l2(CtrT &center, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asp, size_t nasn, WeightT *weights, double eps=0.) {
     util::geomedian(mat, center, asp, nasn, weights, eps);
 }
 
+
+template<typename VT, typename Alloc, typename IT>
+decltype(auto) elements(const std::vector<VT, Alloc> &w, IT *asp, size_t nasn) {
+    return elements(blz::make_cv(&w[0], w.size()), asp, nasn);
+}
+
 template<typename CtrT, typename MT, typename IT, typename WeightT>
-void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, IT *asp, size_t nasn, WeightT *weights, double eps) {
+void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, IT *asp, size_t nasn, WeightT *weights, double eps=0.) {
     auto rowsel = rows(mat, asp, nasn);
     VERBOSE_ONLY(std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << center << '\n';)
     if(weights)
@@ -91,23 +96,16 @@ void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, 
     VERBOSE_ONLY(std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';)
 }
 
-template<typename VT, typename Alloc, typename IT>
-decltype(auto) elements(const std::vector<VT, Alloc> &w, IT *asp, size_t nasn) {
-    return elements(blz::make_cv(&w[0], w.size()), asp, nasn);
-}
 
 template<typename CtrT, typename MT, bool SO, typename IT, typename WeightT=blz::DV<blz::ElementType_t<MT>>>
 void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nasn, WeightT *w = static_cast<WeightT*>(nullptr)) {
     auto rowsel = rows(*mat, asp, nasn);
-    //std::fprintf(stderr, "%zu asn\n", nasn);
     if(w) {
         auto elsel = elements(*w, asp, nasn);
         auto weighted_rows = rowsel % blaze::expand(elsel, (*mat).columns());
         // weighted sum over total weight -> weighted mean
         ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
-        //std::fprintf(stderr, "Setting to weighted columnwise mean\n");
     } else {
-        //std::fprintf(stderr, "Setting to columnwise mean\n");
         ctr = blaze::mean<blaze::columnwise>(rowsel);
     }
 }
@@ -142,6 +140,9 @@ static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) 
     }
 }
 
+using util::l1_median;
+using coresets::l1_median;
+
 struct CentroidPolicy {
     template<typename VT, bool TF, typename Range, typename VT2=VT, typename RowSums>
     static void perform_average(blaze::DenseVector<VT, TF> &ret, const Range &r, const RowSums &rs,
@@ -151,7 +152,6 @@ struct CentroidPolicy {
         using FT = blz::ElementType_t<VT>;
         PREC_REQ(measure != static_cast<dist::DissimilarityMeasure>(-1), "Must define dissimilarity measure");
         if(measure == dist::TOTAL_VARIATION_DISTANCE) {
-            PRETTY_SAY << "TVD: performing " << (wc ? static_cast<const char *>("weighted"): static_cast<const char *>("unweighted")) << "L1 median on *normalized* categorical distributions.\n";
             if(wc)
                 coresets::l1_median(r, ret, wc->data());
             else
@@ -162,7 +162,6 @@ struct CentroidPolicy {
                                blz::CompressedMatrix<FT, blz::StorageOrder_v<Range> >,
                                blz::DynamicMatrix<FT, blz::StorageOrder_v<Range> >
             > cm = r % blz::expand(trans(rs), r.columns());
-            PRETTY_SAY << "L1: performing " << (wc ? static_cast<const char *>("weighted"): static_cast<const char *>("unweighted")) << "L1 median on *unnormalized* categorical distributions, IE absolute count data.\n";
             if(wc)
                 coresets::l1_median(cm, ret, wc->data());
             else
@@ -234,24 +233,20 @@ struct CentroidPolicy {
         for(unsigned i = 0; i < centers.size(); ++i) {
             auto aip = assignv[i].data();
             auto ain = assignv[i].size();
-            std::fprintf(stderr, "Setting center %u with %zu support\n", i, ain);
             auto r(blz::rows(mat, aip, ain));
             auto &c(centers[i]);
-            std::fprintf(stderr, "max row index: %u\n", *std::max_element(aip, aip + ain));
 
             if(weight_cv) {
                 c = blaze::sum<blaze::columnwise>(
                     blz::rows(mat, aip, ain)
                     % blaze::expand(blaze::elements(trans(**weight_cv), aip, ain), mat.columns()));
             } else {
-                std::fprintf(stderr, "Performing unweighted sum of %zu rows\n", ain);
                 c = blaze::sum<blaze::columnwise>(blz::rows(mat, aip, ain));
             }
 
             assert(rs.size() == mat.rows());
             if constexpr(blaze::IsSparseMatrix_v<Matrix>) {
                 if(pd) {
-                    std::fprintf(stderr, "Sparse prior handling\n");
                     if(weight_cv) {
                         c += pv * sum(blz::elements(rs * **weight_cv, aip, ain));
                     } else {
@@ -275,17 +270,14 @@ struct CentroidPolicy {
                     div = sum(blz::elements(rs, aip, ain));
             } else {
                 if(weight_cv) {
-                    std::fprintf(stderr, "weighted, nonLLR\n");
                     div = sum(**weight_cv);
                 } else {
-                    std::fprintf(stderr, "unweighted, nonLLR\n");
                     div = ain;
                 }
             }
             auto oldnorm = blaze::l2Norm(c);
             c *= (1. / div);
             auto newnorm = blaze::l2Norm(c);
-            std::fprintf(stderr, "norm before %g, after %g\n", oldnorm, newnorm);
             assert(min(c) >= 0 || !std::fprintf(stderr, "min center loc: %g\n", min(c)));
         }
     }
@@ -373,12 +365,12 @@ struct CentroidPolicy {
     }
 }; // CentroidPolicy
 
+
 template<typename FT=double, typename Mat, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
 void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, WeightsT *weights) {
     const unsigned k = ctrs.size();
     using asn_t = std::decay_t<decltype(asn[0])>;
     std::vector<std::vector<asn_t>> assigned(ctrs.size());
-    std::unique_ptr<blz::DV<FT>> probup;
     assert(costs.size() == asn.size());
     for(size_t i = 0; i < costs.size(); ++i) {
         assert(asn[i] < assigned.size());
@@ -388,18 +380,6 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     wy::WyRand<asn_t, 4> rng(costs.size());
     for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
     while(!sa.empty()) {
-        // Compute partial sum
-#ifndef NDEBUG
-        std::fprintf(stderr, "reseeding %zu centers\n", sa.size());
-#endif
-        if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
-        FT *pd = probup->data(), *pe = pd + probup->size();
-        auto cb = costs.begin(), ce = costs.end();
-        if(weights) {
-            std::partial_sum(cb, ce, pd, [ds=&costs[0],&weights](auto x, const auto &y) {
-                return x + y * ((*weights)[&y - ds]);
-            });
-        } else std::partial_sum(cb, ce, pd);
         std::vector<uint32_t> idxleft;
         for(unsigned i = 0; i < k; ++i)
             if(std::find(sa.begin(), sa.end(), i) == sa.end())
@@ -421,9 +401,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         }
         // Use D2 sampling to re-seed
         for(const auto idx: sa) {
-            std::uniform_real_distribution<double> dist;
-            std::ptrdiff_t found = std::lower_bound(pd, pe, dist(rng) * pe[-1]) - pd;
-            assert(found < (std::ptrdiff_t)(pe - pd));
+            std::ptrdiff_t found = reservoir_simd::sample(costs.data(), costs.size(), rng());
             set_center(ctrs[idx], row(mat, found));
             for(size_t i = 0; i < mat.rows(); ++i) {
                 const auto c = l1Dist(ctrs[idx], row(mat, i, unchecked));
@@ -452,11 +430,83 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
                 if constexpr(blaze::IsMatrix_v<Mat>) {
                     auto rowsel = rows(mat, asp, nasn);
                     if(weights)
-                        coresets::l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
+                        l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
                     else
-                        coresets::l1_median(rowsel, ctrs[i]);
-                } else coresets::l1_median(mat, ctrs[i], asp, nasn, weights);
+                        l1_median(rowsel, ctrs[i]);
+                } else l1_median(mat, ctrs[i], asp, nasn, weights);
             } break;
+        }
+    }
+}
+
+using util::tvd_median;
+using coresets::tvd_median;
+
+template<typename FT=double, typename Mat, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t, typename RowSums>
+void set_centroids_tvd(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, WeightsT *weights, const RowSums &rsums) {
+    const unsigned k = ctrs.size();
+    using asn_t = std::decay_t<decltype(asn[0])>;
+    std::vector<std::vector<asn_t>> assigned(ctrs.size());
+    assert(costs.size() == asn.size());
+    for(size_t i = 0; i < costs.size(); ++i) {
+        assert(asn[i] < assigned.size());
+        blz::push_back(assigned[asn[i]], i);
+    }
+    blaze::SmallArray<asn_t, 16> sa;
+    wy::WyRand<asn_t, 4> rng(costs.size());
+    for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
+    while(!sa.empty()) {
+        std::vector<uint32_t> idxleft;
+        for(unsigned i = 0; i < k; ++i)
+            if(std::find(sa.begin(), sa.end(), i) == sa.end())
+                blz::push_back(idxleft, i);
+        // Re-calculate for centers that have been removed
+        for(auto idx: sa) {
+            for(auto assigned_id: assigned[idx]) {
+                auto ilit = idxleft.begin();
+                auto myr = row(mat, assigned_id);
+                auto fcost = l1Dist(ctrs[*ilit++], myr);
+                asn_t bestid = 0;
+                for(;ilit != idxleft.end();++ilit) {
+                    auto ncost = l1Dist(ctrs[*ilit], myr);
+                    if(ncost < fcost) bestid = *ilit, fcost = ncost;
+                }
+                costs[assigned_id] = fcost;
+                asn[assigned_id] = bestid;
+            }
+        }
+        // Use D2 sampling to re-seed
+        for(const auto idx: sa) {
+            std::ptrdiff_t found = reservoir_simd::sample(costs.data(), costs.size(), rng());
+            assert(found < (std::ptrdiff_t)(costs.size()));
+            set_center(ctrs[idx], row(mat, found));
+            for(size_t i = 0; i < mat.rows(); ++i) {
+                const auto c = l1Dist(ctrs[idx], row(mat, i, unchecked));
+                if(c < costs[i]) {
+                    asn[i] = idx;
+                    costs[i] = c;
+                }
+            }
+        }
+        for(auto &subasn: assigned) subasn.clear();
+        // Check for orphans again
+        sa.clear();
+        for(size_t i = 0; i < costs.size(); ++i) {
+            blz::push_back(assigned[asn[i]], i);
+        }
+        for(const auto &subasn: assigned) if(subasn.empty()) sa.pushBack(&subasn - assigned.data());
+    }
+    OMP_PFOR
+    for(unsigned i = 0; i < k; ++i) {
+        const auto &asnv = assigned[i];
+        const auto asp = asnv.data();
+        const auto nasn = asnv.size();
+        MINOCORE_VALIDATE(nasn != 0);
+        switch(nasn) {
+            case 1: set_center(ctrs[i], row(mat, asnv[0])); break;
+            default:
+                tvd_median(mat, ctrs[i], asp, nasn, weights, rsums);
+            break;
         }
     }
 }
@@ -472,7 +522,6 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     std::vector<std::vector<asn_t>> assigned(ctrs.size());
     const size_t np = costs.size();
     const unsigned k = ctrs.size();
-    std::unique_ptr<blz::DV<FT>> probup;
     for(size_t i = 0; i < np; ++i) {
         blz::push_back(assigned[asn[i]], i);
     }
@@ -481,18 +530,6 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
     while(!sa.empty()) {
         // Compute partial sum
-#ifndef NDEBUG
-        std::fprintf(stderr, "reseeding %zu centers\n", sa.size());
-#endif
-        if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
-        FT *pd = probup->data(), *pe = pd + probup->size();
-        if(weights) {
-            ::std::partial_sum(costs.begin(), costs.end(), pd, [&weights,ds=&costs[0]](auto x, const auto &y) {
-                return x + y * ((*weights)[&y - ds]);
-            });
-        } else {
-            std::partial_sum(costs.begin(), costs.end(), pd);
-        }
         std::vector<uint32_t> idxleft;
         for(unsigned int i = 0; i < k; ++i)
             if(std::find(sa.begin(), sa.end(), i) == sa.end())
@@ -514,9 +551,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         }
         // Use D2 sampling to re-seed
         for(const auto idx: sa) {
-            std::uniform_real_distribution<double> dist;
-            std::ptrdiff_t found = std::lower_bound(pd, pe, dist(rng) * pe[-1]) - pd;
-            assert(found < (std::ptrdiff_t)(pe - pd));
+            std::ptrdiff_t found = reservoir_simd::sample(costs.data(), costs.size(), rng());
             set_center(ctrs[idx], row(mat, found));
             OMP_PFOR
             for(size_t i = 0; i < mat.rows(); ++i) {
@@ -578,7 +613,6 @@ void set_centroids_full_mean(const Mat &mat,
     for(size_t i = 0; i < np; ++i) {
         assigned[asn[i]].push_back(i);
     }
-    std::fprintf(stderr, "mean distance: %g. max distance: %g\n", blz::mean(costs), blz::max(costs));
 #ifndef NDEBUG
     for(unsigned i = 0; i < k; ++i) std::fprintf(stderr, "Center %u has %zu assigned points\n", i, assigned[i].size());
 #endif
@@ -597,7 +631,6 @@ void set_centroids_full_mean(const Mat &mat,
     assert(!nfails);
 #endif
     if(const size_t ne = sa.size()) {
-        std::fprintf(stderr, "make sa. sa size: %zu\n", sa.size());
         char buf[256];
         const auto pv = prior.size() ? FT(prior[0]): FT(0);
         std::sprintf(buf, "Restarting centers with no support for set_centroids_full_mean: %s as measure with prior of size %zu (%g)\n",
@@ -709,7 +742,7 @@ void set_centroids_full_mean(const Mat &mat,
     WeightsT *weights, FT temp, SumT &ctrsums)
 {
     assert(ctrsums.size() == ctrs.size());
-    std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
+    //std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
 
     const unsigned k = ctrs.size();
     blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);

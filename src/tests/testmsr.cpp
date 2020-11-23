@@ -42,7 +42,7 @@ int main() {
             try {
             auto v = cmp::msr_with_prior(msr, cv1, cv1, prior, psum, s1, s1);
             if(msr == minicore::distance::COSINE_SIMILARITY) {
-                if(v != 1.) assert(v == 1.);
+                if(v != 1.) assert(std::abs(v -= 1.) < 1e-15 || !std::fprintf(stderr, "v: %0.20g\n", v));
                 continue;
             } else if(pval == 0. && msr == minicore::distance::MKL) {
                 continue;
@@ -60,9 +60,11 @@ int main() {
                 ++anyfail;
             }
             //fprintf(stderr, "Testing nonnegativity\n");
-            if(auto v = cmp::msr_with_prior(msr, cv1, cv4, prior, psum, sum(cv1), sum(cv4)); v <= 0) {
-                assert(v > 0);
+            auto vdiff = cmp::msr_with_prior(msr, cv1, cv4, prior, psum, sum(cv1), sum(cv4));
+            if(vdiff <= 0) {
+                assert(vdiff > 0);
             }
+                if(pval == 1. && msr == minicore::distance::MKL) std::fprintf(stderr, "MKL value should be 0.539179777847523: %g\n", vdiff);
             } catch(const exception::TODOError &ex) {
                 // don't care
             }

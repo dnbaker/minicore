@@ -122,6 +122,7 @@ public:
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
             }
         } else if constexpr(measure == COSINE_DISTANCE || measure == PROBABILITY_COSINE_DISTANCE) {
+            static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
             if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
                 m = blaze::acos(m) * PI_INV;
             } else if constexpr(dm::is_distance_matrix_v<MatType>) {
@@ -1702,100 +1703,78 @@ template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT
 FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
 {
     static_assert(std::is_floating_point_v<FT>, "FT must be floating-point");
-    if constexpr(!(blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && !(blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
-        std::fprintf(stderr, "Using non-specialized form\n");
-        const auto div = 1. / (mrsum + prior_sum);
-        auto pv = prior[0];
-        auto subr = (mr + pv) * div;
-        auto subc = (ctr + pv) / (ctrsum + prior_sum);
-        auto logr = blz::neginf2zero(blz::log(subr));
-        auto logc = blz::neginf2zero(blz::log(subc));
-        switch(msr) {
-            default: throw TODOError(std::string("Not yet done: ") + dist::msr2str(msr) + "/" + std::to_string((int)msr));
-            case JSM: case JSD: {
-                auto mn = FT(.5) * (subr + subc);
-                auto lmn = blaze::neginf2zero(log(mn));
-                auto ret = FT(.5) * (blz::dot(mr, logr - lmn) + blz::dot(ctr, logc - lmn));
-                if(msr == JSM) ret = std::sqrt(ret);
-                return ret;
-            }
-            case MKL: return blz::dot(mr, logr - logc);
-            case L1: return blz::l1Dist(ctr, mr);
-            case L2: return blz::l2Dist(ctr, mr);
-            case SQRL2: return blz::sqrDist(ctr, mr);
-            case COSINE_DISTANCE: return cmp::cosine_distance(ctr, mr); // TODO: cache norms for each line
-        }
-    } else if constexpr((blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && (blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
-        // If geometric,
-        const size_t nd = mr.size();
-        thread_local blz::DV<FT> tmpmuly, tmpmulx;
-        if(tmpmulx.capacity() < nd) tmpmulx.resize(nd);
-        if(tmpmuly.capacity() < nd) tmpmuly.resize(nd);
-
-        auto perform_core = [&](auto &src, auto &ctr, auto init, const auto &sharedfunc, const auto &lhofunc, const auto &rhofunc, auto nsharedmult)
-            -> FT
-        {
-           const size_t sharednz = merge::for_each_by_case(nd,
-                                   src.begin(), src.end(), ctr.begin(), ctr.end(),
-                                   [&](auto, auto x, auto y) ALWAYS_INLINE {
-                                       VERBOSE_ONLY(std::fprintf(stderr, "contribution of %0.12g and %0.12g is %0.12g\n", x, y, sharedfunc(x, y));)
-                                       init += sharedfunc(x, y);
-                                   },
-                                   [&](auto, auto x) ALWAYS_INLINE {init += lhofunc(x);},
-                                   [&](auto, auto y) ALWAYS_INLINE {init += rhofunc(y);});
-           init += sharednz * nsharedmult;
-            return init;
-        };
-        /* Perform core now takes:
-        // 1. Initialization
-        // 2-4. Functions for sharednz, lhnz, rhnz
-        // 5. Function for number of shared zeros
-        // This template allows us to concisely describe all of the exponential family models + convex combinations thereof we support
-        */
-        FT ret;
-        assert((std::abs(mrsum - sum(mr)) < 1e-10 && std::abs(ctrsum - sum(ctr)) < 1e-10)
-               || !std::fprintf(stderr, "[%s] Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", __PRETTY_FUNCTION__, sum(mr), sum(ctr), mrsum, ctrsum));
+    const size_t nd = mr.size();
+    thread_local blz::DV<FT> tmpmuly, tmpmulx;
+    if(tmpmulx.capacity() < nd) tmpmulx.resize(nd);
+    if(tmpmuly.capacity() < nd) tmpmuly.resize(nd);
+    FT lhsum = mrsum + prior_sum;
+    FT rhsum = ctrsum + prior_sum;
+    static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
 #ifndef SMALLEST_PRIOR
 #define SMALLEST_PRIOR 7.0069e-42f
 #endif
-        // Not the smallest values expressible, but we need to leave space at the bottom of precision
-        // for these numbers to be divided by lhsum and rhsum, respectively
-        //std::fprintf(stderr, "sums: %g/%g\n", lhsum, rhsum);
-        FT lhsum = mrsum + prior_sum;
-        FT rhsum = ctrsum + prior_sum;
-        FT smallest_pv = FT(SMALLEST_PRIOR) * (std::max(lhsum, rhsum));
-        const FT pv = std::max(FT(prior[0]), smallest_pv);
-        prior_sum = pv * nd;
-        lhsum = mrsum + prior_sum;
-        rhsum = ctrsum + prior_sum;
-        const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
-        //std::fprintf(stderr, "mrsum: %g. prior_sum: %g. ctrsum: %g. lhsum : %g. rhsum: %g\n", mrsum, prior_sum, ctrsum, lhsum, rhsum);
-        const FT lhinc = pv && lhsum ? FT(pv * lhrsi): FT(0),
-                 rhinc = pv && rhsum ? FT(pv * rhrsi): FT(0);
-        assert(!std::isnan(lhinc));
-        assert(!std::isnan(rhinc));
-        //assert(!std::isinf(lhinc));
-        //assert(!std::isinf(rhinc));
-        const FT rhl = std::log(rhinc),
-                 lhl = std::log(lhinc),
-                 rhincl = rhinc ? rhl * rhinc: FT(0.),
-                 lhincl = lhinc ? lhl * lhinc: FT(0.),
-                 shl = std::log((lhinc + rhinc) * FT(.5)),
-                 shincl = rhinc + lhinc > 0. ? (lhinc + rhinc) * shl: 0.;
-        assert(!std::isnan(rhincl));
-        assert(!std::isnan(lhincl));
-        assert(!std::isnan(shl));
-        assert(!std::isnan(shincl));
-        auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
-        auto wc = ctr * rhrsi; //
-        static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
+    FT smallest_pv = FT(SMALLEST_PRIOR) * (lhsum + rhsum);
+    const FT pv = std::max(FT(prior[0]), smallest_pv);
+    prior_sum = pv * nd;
+    lhsum = mrsum + prior_sum;
+    rhsum = ctrsum + prior_sum;
+    const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
+    const FT lhinc = pv && lhsum ? FT(pv * lhrsi): FT(0),
+             rhinc = pv && rhsum ? FT(pv * rhrsi): FT(0);
+    assert(!std::isnan(lhinc));
+    assert(!std::isnan(rhinc));
+    const FT rhl = std::log(rhinc),
+             lhl = std::log(lhinc),
+             rhincl = rhinc ? rhl * rhinc: FT(0.),
+             lhincl = lhinc ? lhl * lhinc: FT(0.),
+             shl = std::log((lhinc + rhinc) * FT(.5)),
+             shincl = rhinc + lhinc > 0. ? (lhinc + rhinc) * shl: 0.;
+    assert(!std::isnan(rhincl));
+    assert(!std::isnan(lhincl));
+    assert(!std::isnan(shl));
+    assert(!std::isnan(shincl));
+    if constexpr(!(blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && !(blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
+        FT ret;
         switch(msr) {
-            case L1: ret = l1Dist(mr, ctr); break;
-            case L2: ret = l2Dist(mr, ctr); break;
-            case SQRL2: ret = sqrDist(mr, ctr); break;
-            case TVD: ret = l1Dist(mr / mrsum, ctr / ctrsum);break;
-
             // All of these use libkl kernels for fast comparisons after an initial layout
+            case HELLINGER:
+            {
+                ret = libkl::helld_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
+                ret = std::sqrt(ret) * M_SQRT1_2;
+                break;
+            }
+            case L2: case SQRL2:
+            {
+                ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
+                if(msr == L2) ret = std::sqrt(ret);
+                break;
+            }
+            case L1:
+            {
+                ret = libkl::tvd_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., pv, pv) * 2.;
+                break;
+            }
+            case COSINE_DISTANCE: case COSINE_SIMILARITY:
+            {
+                FT klc = dot(mr + pv, ctr + pv);
+                FT div = std::sqrt(sqrNorm(mr + pv)) * std::sqrt(sqrNorm(ctr + pv));
+                ret = klc / div;
+                ret = std::max(std::min(ret, FT(1.)), FT(0));
+                if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
+                break;
+            }
+            case TVD: {
+                ret = libkl::tvd_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
+                break;
+            }
+            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: {
+                ret = libkl::bhattd_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
+                if(FT(1.) - ret < FT(1e-8)) ret = 1.;
+                if(msr == BHATTACHARYYA_METRIC) ret = std::sqrt(std::max(1. - ret, 0.));
+                else ret = -std::log(ret);
+                break;
+            }
+            case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
             case JSM: case JSD:
             case SRULRT: case SRLRT:
             case LLR:
@@ -1805,8 +1784,128 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case POISSON:
             case MKL:
             {
-                auto &lhv(tmpmulx);
-                auto &rhv(tmpmuly);
+                if(tmpmulx.size() != nd) tmpmulx.resize(nd);
+                if(tmpmuly.size() != nd) tmpmuly.resize(nd);
+                tmpmulx = mr * lhrsi, tmpmuly = ctr * rhrsi;
+                FT klc;
+                if(msr == MKL || msr == POISSON) {
+                    klc = libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
+                } else if(msr == JSD || msr == JSM ) {
+                    klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
+                } else if(msr == REVERSE_MKL || msr == REVERSE_POISSON) {
+                    klc = libkl::kl_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
+                } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
+                    auto bothsum = lhsum + rhsum;
+                    const auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
+                    const auto emptymean = lambda * lhinc + m1l * rhinc;
+                    const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
+                                            + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
+                    klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lambda, lhinc, rhinc);
+                } else if(msr == ITAKURA_SAITO) {
+                    klc = libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
+                    //fprintf(stderr, "Is values: klc %g, zc %g\n", klc, zc);
+                } else if(msr == REVERSE_ITAKURA_SAITO) {
+                    klc = libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
+                } else if(msr == SIS || msr == RSIS) {
+                    klc = msr == SIS ?
+                            libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
+                          : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
+                    //fprintf(stderr, "klc: %0.20g, zc: %0.20g\n", klc, zc);
+                } else if(msr == PROBABILITY_COSINE_DISTANCE || msr == PROBABILITY_COSINE_SIMILARITY) {
+                    klc = dot(tmpmulx + lhinc, tmpmuly + rhinc);
+                    FT div = std::sqrt(sqrNorm(tmpmulx + lhinc)) * std::sqrt(sqrNorm(tmpmuly + rhinc));
+                    ret = klc / div;
+                    ret = std::max(std::min(ret, FT(1.)), FT(0));
+                    if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
+                    break;
+                } else __builtin_unreachable();
+                ret = klc;
+#ifndef NDEBUG
+                if(ret < 0) {
+                    std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
+                                 pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc);
+                }
+#endif
+                if(msr == LLR || msr == SRLRT) {
+                    ret *= (lhsum + rhsum);
+                }
+                ret = std::max(ret, FT(0));
+                if(msr == SRULRT || msr == SRLRT || msr == JSM) ret = std::sqrt(ret);
+                if(ret == std::numeric_limits<FT>::infinity()) {
+                    ret = std::numeric_limits<FT>::max();
+                } else if(ret == -std::numeric_limits<FT>::infinity()) {
+                    ret = 0.;
+                }
+            }
+        }
+        return ret;
+    } else if constexpr((blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && (blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
+        FT ret;
+        assert((std::abs(mrsum - sum(mr)) < 1e-10 && std::abs(ctrsum - sum(ctr)) < 1e-10)
+               || !std::fprintf(stderr, "[%s] Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", __PRETTY_FUNCTION__, sum(mr), sum(ctr), mrsum, ctrsum));
+        // Not the smallest values expressible, but we need to leave space at the bottom of precision
+        // for these numbers to be divided by lhsum and rhsum, respectively
+        //std::fprintf(stderr, "sums: %g/%g\n", lhsum, rhsum);
+        //std::fprintf(stderr, "mrsum: %g. prior_sum: %g. ctrsum: %g. lhsum : %g. rhsum: %g\n", mrsum, prior_sum, ctrsum, lhsum, rhsum);
+        //assert(!std::isinf(lhinc));
+        //assert(!std::isinf(rhinc));
+        auto wc = ctr * rhrsi; //
+        auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
+        switch(msr) {
+
+            // All of these use libkl kernels for fast comparisons after an initial layout
+            case COSINE_DISTANCE: case COSINE_SIMILARITY:
+            case L2: case SQRL2:
+            case TVD:
+            case L1:
+            case BHATTACHARYYA_METRIC:
+            case HELLINGER:
+            case BHATTACHARYYA_DISTANCE: {
+                auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
+                const size_t sharednz = merge::for_each_by_case(nd, mr.begin(), mr.end(), ctr.begin(), ctr.end(),
+                            [&](auto, auto x, auto y) {*lhp++ = x; *rhp++ = y;},
+                            [&](auto, auto x) {        *lhp++ = x; *rhp++ = FT(0);},
+                            [&](auto, auto y) {        *lhp++ = FT(0); *rhp++ = y;});
+                const size_t nnz_either = lhp - tmpmulx.data();
+                if(msr == HELLINGER) {
+                    ret = libkl::helld_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::pow(std::sqrt(lhinc) - std::sqrt(rhinc), 2.) * sharednz;
+                    ret = std::sqrt(ret) * M_SQRT1_2;
+                    break;
+                } else if(msr == L2 || msr == SQRL2) {
+                    ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0.);
+                    if(msr == L2) ret = std::sqrt(ret);
+                    break;
+                } else if(msr == L1) {
+                    ret = libkl::tvd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., pv, pv) * 2.;
+                } else if(msr == COSINE_DISTANCE || msr == COSINE_SIMILARITY) {
+                    FT klc = dot(tmpmulx + pv, tmpmuly + pv) + sharednz * (pv * pv);
+                    FT div = std::sqrt(sqrNorm(tmpmulx + pv) + sharednz * pv * pv) * std::sqrt(sqrNorm(tmpmuly + pv) + sharednz * pv * pv);
+                    ret = klc / div;
+                    ret = std::max(std::min(ret, FT(1.)), FT(0));
+                    if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
+                    break;
+                } else if(msr == TVD) {
+                    ret = libkl::tvd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::abs(lhinc - rhinc) * sharednz * .5;
+                    break;
+                } else __builtin_unreachable();
+                ret = libkl::bhattd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::sqrt(lhinc * rhinc) * sharednz;
+                if(FT(1.) - ret < FT(1e-8)) ret = 1.;
+                if(msr == BHATTACHARYYA_METRIC) ret = std::sqrt(std::max(1. - ret, 0.));
+                else ret = -std::log(ret);
+                break;
+            }
+
+
+            case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
+            case JSM: case JSD:
+            case SRULRT: case SRLRT:
+            case LLR:
+            case UWLLR:
+            case ITAKURA_SAITO: case SIS: case REVERSE_ITAKURA_SAITO:
+            case REVERSE_POISSON: case REVERSE_MKL: case RSIS:
+            case POISSON:
+            case MKL:
+            {
                 auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
                 const size_t sharednz = merge::for_each_by_case(nd, wr.begin(), wr.end(), wc.begin(), wc.end(),
                             [&](auto, auto x, auto y) {*lhp++ = x; *rhp++ = y;},
@@ -1816,18 +1915,18 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 assert(lhp - tmpmulx.data() == rhp - tmpmuly.data());
                 FT klc, zc;
                 if(msr == MKL || msr == POISSON) {
-                    klc = libkl::kl_reduce_aligned(lhv.data(), rhv.data(), nnz_either, lhinc, rhinc);
+                    klc = libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = sharednz * lhinc * (lhl - rhl);
                 } else if(msr == JSD || msr == JSM ) {
                     klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = ((lhincl + rhincl - shincl) * sharednz) * .5;
                 } else if(msr == REVERSE_MKL || msr == REVERSE_POISSON) {
-                    klc = libkl::kl_reduce_aligned(rhv.data(), lhv.data(), nnz_either, rhinc, lhinc);
+                    klc = libkl::kl_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * rhinc * (rhl - lhl);
                 } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
                     auto bothsum = lhsum + rhsum;
                     const auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
-                    const auto emptymean = lambda * lhinc + m1l * rhinc; 
+                    const auto emptymean = lambda * lhinc + m1l * rhinc;
                     const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
                                             + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
                     klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lambda, lhinc, rhinc);
@@ -1844,12 +1943,20 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                             libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc)
                           : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * FT(.5) * std::log((lhinc / rhinc + rhinc / lhinc + FT(2)) * .25);
-                    //fprintf(stderr, "klc: %0.20g, zc: %0.20g\n", klc, zc);
+                } else if(msr == PROBABILITY_COSINE_DISTANCE || msr == PROBABILITY_COSINE_SIMILARITY) {
+                    klc = dot(tmpmulx + lhinc, tmpmuly + rhinc) + sharednz * (lhinc * rhinc);
+                    FT div = std::sqrt(sqrNorm(tmpmulx + lhinc) + sharednz * lhinc * lhinc) * std::sqrt(sqrNorm(tmpmuly + rhinc) + sharednz * rhinc * rhinc);
+                    ret = klc / div;
+                    ret = std::max(std::min(ret, FT(1.)), FT(0));
+                    if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
+                    break;
                 } else __builtin_unreachable();
                 ret = klc + zc;
                 if(ret < 0) {
+#ifndef NDEBUG
                     std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
                                  pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
+#endif
                 }
                 if(msr == LLR || msr == SRLRT) {
                     ret *= (lhsum + rhsum);
@@ -1863,72 +1970,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 }
             }
             break;
-            case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
-            {
-                const FT tmp = perform_core(wr, wc, 0.,
-                    [&](auto xval, auto yval) ALWAYS_INLINE {
-                        return std::sqrt((xval + lhinc) * (yval + rhinc));
-                    },
-                    [&](auto xval) ALWAYS_INLINE {
-                        return std::sqrt(rhinc * (xval + lhinc));
-                    },
-                    [&](auto yval) ALWAYS_INLINE {
-                        return std::sqrt(lhinc * (yval + rhinc));
-                    },
-                    std::sqrt(lhinc * rhinc));
-                if(msr == BHATTACHARYYA_METRIC)
-                    ret = std::sqrt(std::max(FT(1.) - tmp, FT(0)));
-                else {
-                    ret = std::max(tmp <= 0 ? FT(0): -std::log(tmp), FT(0));
-                }
-                break;
-            }
-            case HELLINGER: {
-                if constexpr(blaze::IsSparseVector_v<MatrixRowT> && blaze::IsSparseVector_v<CtrT>) {
-                    if(prior_sum == 0.) {ret = hellinger(mr * (FT(1) / lhsum),  ctr * (FT(1) /  rhsum)); break;}
-                    // else, continue
-                }
-                const FT empty = std::sqrt(lhinc) - std::sqrt(rhinc);
-                const auto sqr = std::sqrt(rhinc);
-                const auto sql = std::sqrt(lhinc);
-                const FT tmp = perform_core(wr, wc, 0.,
-                    [&](auto xval, auto yval) ALWAYS_INLINE {
-                        auto ret = std::sqrt(xval + lhinc) - std::sqrt(yval + rhinc);
-                        return ret * ret;
-                    },
-                    [&](auto xval) ALWAYS_INLINE {
-                        auto ret = std::sqrt(xval + lhinc) - sqr;
-                        return ret * ret;
-                    },
-                    [&](auto yval) ALWAYS_INLINE {
-                        auto ret = sql - std::sqrt(yval + rhinc);
-                        return ret * ret;
-                    },
-                    empty * empty);
-                ret = std::sqrt(tmp) * M_SQRT1_2;
-                break;
-            }
-            case COSINE_DISTANCE: case COSINE_SIMILARITY:
-                ret = 0.;
-                merge::for_each_if_shared(
-                    nd, mr.begin(), mr.end(), ctr.begin(), ctr.end(),
-                    [&ret](auto, auto xval, auto yval) {ret += xval * yval;});
-                ret /= l2Norm(mr) * l2Norm(ctr);
-                ret = std::max(std::min(ret, FT(1.)), FT(0.));
-                if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
-                break;
-            case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
-                ret = perform_core(wr, wc, FT(0),
-                            /* shared */   [&](auto xval, auto yval) ALWAYS_INLINE {
-                                return (xval + lhinc) * (yval + rhinc);
-                            },
-                            /* xonly */    [&](auto xval) ALWAYS_INLINE  {return (xval + lhinc) * rhinc;},
-                            /* yonly */    [&](auto yval) ALWAYS_INLINE  {return lhinc * (yval + rhinc);},
-                            lhinc * rhinc
-                        );
-               ret = std::max(std::min(ret, FT(1.)), FT(0.));
-               if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
-                break;
             default: ret = 0.; throw TODOError("unexpected msr; not yet supported");
         }
         return ret;

@@ -193,9 +193,9 @@ std::pair<std::vector<uint64_t>, std::vector<double>> m2greedysel(util::CSparseM
     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
     const FT prior_sum = pc[0] * matrix.columns();
     blz::DV<FT> rsums = util::sum<blaze::rowwise>(matrix);
-    auto oracle = [&](size_t x, size_t y) {                                                    
+    auto oracle = [&](size_t x, size_t y) {
         return cmp::msr_with_prior(opts.dis, row(matrix, y, blz::unchecked), row(matrix, x, blz::unchecked), pc, prior_sum, rsums[y], rsums[x]);
-    }; 
+    };
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     if(opts.outlier_fraction) {
         return coresets::kcenter_greedy_2approx_outliers_costs<decltype(oracle), double, uint64_t>(
@@ -213,9 +213,9 @@ auto m2d2(const util::CSparseMatrix<VT, IndicesT, IndPtrT> &matrix, const SumOpt
     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
     const FT prior_sum = pc[0] * matrix.columns();
     blz::DV<FT> rsums = util::sum<blaze::rowwise>(matrix);
-    auto oracle = [&](size_t x, size_t y) {                                                    
+    auto oracle = [&](size_t x, size_t y) {
         return cmp::msr_with_prior(opts.dis, row(matrix, y, blz::unchecked), row(matrix, x, blz::unchecked), pc, prior_sum, rsums[y], rsums[x]);
-    }; 
+    };
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     auto [centers, asn, costs] = coresets::kmeanspp(oracle, rng, matrix.rows(), opts.k, weights, opts.use_exponential_skips);
     auto csum = blz::sum(costs);

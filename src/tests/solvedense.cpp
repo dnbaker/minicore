@@ -21,7 +21,7 @@ int main(int argc, char *argv[]) {
     if(const char *s = std::getenv("NUMITER")) {
         NUMITER = std::atoi(s) > 0 ? std::atoi(s): 1;
     }
-    blz::SM<FLOAT_TYPE> x;
+    blz::DM<FLOAT_TYPE> x;
     const bool with_replacement = std::getenv("WITHREPS");
     //const bool use_importance_sampling = std::getenv("USE_IMPORTANCE_SAMPLING");
     std::srand(0);
@@ -41,6 +41,7 @@ int main(int argc, char *argv[]) {
         case 'p': nthreads = std::atoi(optarg); break;
         case 'k': k = std::atoi(optarg); break;
         case 'E': skip_empty = true; break;
+#if 0
         case 'C': {
             x = minicore::util::csc2sparse<FLOAT_TYPE>(optarg, skip_empty); break;
         }
@@ -69,6 +70,7 @@ int main(int argc, char *argv[]) {
             loaded_blaze = true;
             break;
         }
+#endif
         case '?':
         case 'h':dist::print_measures();
                 std::fprintf(stderr, "Usage: %s <flags> \n-z: load blaze matrix from path\n-P: set prior (1.)\n-T set temp [1.]\n-p set num threads\n-m Set measure (MKL, 5)\n-k: set k [10]\t-T transpose mtx file\t-M parse mtx file from argument\n", *argv);
@@ -173,6 +175,7 @@ int main(int argc, char *argv[]) {
     if(!loaded_blaze) clust::perform_hard_clustering(x, msr, prior, centers, asn, hardcosts);
     auto t2 = std::chrono::high_resolution_clock::now();
     std::fprintf(stderr, "Wall time for clustering: %gms\n", std::chrono::duration<FLOAT_TYPE, std::milli>(t2 - t1).count());
+    std::fprintf(stderr, "Now performing minibatch clustering\n");
     size_t mbsize = 500;
     if(char *s = std::getenv("MBSIZE")) {
         mbsize = std::strtoull(s, nullptr, 10);

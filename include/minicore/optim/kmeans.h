@@ -75,11 +75,10 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     const SampleFmt fmt = use_exponential_skips ? USE_EXPONENTIAL_SKIPS: NEITHER;
     int d0s = 0;
     for(size_t center_idx = 1;center_idx < k;) {
-        std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\r\n", center_idx, size_t(k), centers[center_idx - 1]);
+        DBG_ONLY(std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\r\n", center_idx, size_t(k), centers[center_idx - 1]);)
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
-        auto cd = centers.data();
-        auto ce = cd + center_idx;
+        auto cd = centers.data(), ce = cd + center_idx;
         IT newc;
         setnewc:
         if(weights) {
@@ -158,7 +157,6 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
 {
     blaze::DynamicVector<IT> assignments(np);
     blaze::DynamicVector<FT> costs(np, std::numeric_limits<FT>::max());
-    util::Timer t("get oracle costs");
     OMP_PFOR_DYN
     for(size_t i = 0; i < np; ++i) {
         auto it = sol.begin(), e = sol.end();
@@ -172,7 +170,7 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
         costs[i] = mincost;
         assignments[i] = minind;
     }
-    std::fprintf(stderr, "Centers have total cost %g\n", blz::sum(costs));
+    //std::fprintf(stderr, "Centers have total cost %g\n", blz::sum(costs));
     return std::make_pair(assignments, costs);
 }
 
@@ -279,13 +277,13 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
     };
 
     while(centers.size() < k) {
-        std::fprintf(stderr, "Center %zu/%zu\r\n", centers.size(), k);
+        DBG_ONLY(std::fprintf(stderr, "Center %zu/%zu\r\n", centers.size(), k);)
         auto x = div.mod(IT(rng()));
         double xdist = mindist(x);
         auto xdi = 1. / xdist;
         auto baseseed = IT(rng());
         const double max64inv = 1. / std::numeric_limits<uint64_t>::max();
-        auto lfunc = [&](unsigned j) {
+        auto lfunc = [&](unsigned j) ALWAYS_INLINE {
             if(centers.find(j) != centers.end()) return;
             uint64_t local_seed = baseseed + j;
             wy::wyhash64_stateless(&local_seed);
@@ -521,7 +519,7 @@ double lloyd_loop(std::vector<IT> &assignments, std::vector<CFT> &counts,
         std::fprintf(stderr, "new loss at %zu: %0.30g. old loss: %0.30g\n", iternum, newloss, oldloss);
         oldloss = newloss;
     }
-    std::fprintf(stderr, "Completed with final loss of %0.30g after %zu rounds\n", newloss, iternum);
+    //std::fprintf(stderr, "Completed with final loss of %0.30g after %zu rounds\n", newloss, iternum);
     return newloss;
 }
 

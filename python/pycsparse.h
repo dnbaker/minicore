@@ -1,6 +1,7 @@
 #ifndef PYCSPARSEMAT_H
 #define PYCSPARSEMAT_H
-#include "pyfgc.h"
+#include "pybind11/numpy.h"
+#include "pybind11/pytypes.h"
 #include "blaze/util/Serialization.h"
 #include "minicore/util/csc.h"
 
@@ -9,7 +10,7 @@
 #define ENABLE_NONCONST_FUNCS 0
 
 #ifndef ENABLE_8BITINT_DATA
-#define ENABLE_8BITINT_DATA 1
+#define ENABLE_8BITINT_DATA 0
 #endif
 #ifndef ENABLE_16BITINT_DATA
 #define ENABLE_16BITINT_DATA 1
@@ -23,6 +24,10 @@
 #ifndef ENABLE_16BITINT_INDICES
 #define ENABLE_16BITINT_INDICES 1
 #endif
+
+using namespace minicore;
+
+namespace py = pybind11;
 
 struct PyCSparseMatrix {
     void *datap_;
@@ -75,7 +80,7 @@ struct PyCSparseMatrix {
 #if ENABLE_64BITINT_DATA
             case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
 #endif
-            case 'i': case 'I': _perform<unsigned, Func>(func); break;
+            //case 'i': case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float,    Func>(func); break;
             case 'd': _perform<double,   Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
@@ -95,7 +100,7 @@ struct PyCSparseMatrix {
 #if ENABLE_64BITINT_DATA
             case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(func); break;
 #endif
-            case 'i': case 'I': _perform<unsigned, Func>(func); break;
+            //case 'i': case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float, Func>(func); break;
             case 'd': _perform<double, Func>(func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
