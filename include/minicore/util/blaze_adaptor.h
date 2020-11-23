@@ -646,10 +646,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
     if(weights)
         cv.reset(new CustomVector<WeightType, unaligned, unpadded, SO>(const_cast<WeightType *>(weights), _mat.rows()));
     for(;;) {
-#ifndef NDEBUG
-        std::fprintf(stderr, "Iteration %zu for matrix %zu/%zu and vector %zu with weights at %p\n",
-                     iternum + 1, (*mat).rows(), (*mat).columns(), (*dv).size(), (void *)weights);
-#endif
+        VERBOSE_ONLY(std::fprintf(stderr, "Iteration %zu for matrix %zu/%zu and vector %zu with weights at %p\n", iternum + 1, (*mat).rows(), (*mat).columns(), (*dv).size(), (void *)weights);)
         if(weights) {
             auto &cvr = *cv;
             OMP_PFOR
@@ -697,6 +694,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType
         for(size_t i = 0; i < _mat.rows(); ++i) {
             using res_t = std::decay_t<decltype(weights[0] * blz::l2Norm(row(_mat, 0) - *dv))>;
             costs[i] = std::max(weights[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - *dv), res_t(1e-80));
+            if(std::isnan(costs[i])) costs[i] = 1e-80;
         }
         FT current_cost = sum(costs);
         FT dist;
@@ -708,8 +706,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType
         }
         ++iternum;
         costs = 1. / costs;
-        costs *= 1. / blaze::sum(costs);
-        *dv = trans(costs) * *mat;
+        *dv = trans(costs / blaze::sum(costs)) * *mat;
         prevcost = current_cost;
     }
     return *dv;

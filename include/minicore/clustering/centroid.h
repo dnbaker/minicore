@@ -361,12 +361,12 @@ struct CentroidPolicy {
     }
 }; // CentroidPolicy
 
+
 template<typename FT=double, typename Mat, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t>
 void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, WeightsT *weights) {
     const unsigned k = ctrs.size();
     using asn_t = std::decay_t<decltype(asn[0])>;
     std::vector<std::vector<asn_t>> assigned(ctrs.size());
-    std::unique_ptr<blz::DV<FT>> probup;
     assert(costs.size() == asn.size());
     for(size_t i = 0; i < costs.size(); ++i) {
         assert(asn[i] < assigned.size());
@@ -376,15 +376,6 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     wy::WyRand<asn_t, 4> rng(costs.size());
     for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
     while(!sa.empty()) {
-        // Compute partial sum
-        if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
-        FT *pd = probup->data(), *pe = pd + probup->size();
-        auto cb = costs.begin(), ce = costs.end();
-        if(weights) {
-            std::partial_sum(cb, ce, pd, [ds=&costs[0],&weights](auto x, const auto &y) {
-                return x + y * ((*weights)[&y - ds]);
-            });
-        } else std::partial_sum(cb, ce, pd);
         std::vector<uint32_t> idxleft;
         for(unsigned i = 0; i < k; ++i)
             if(std::find(sa.begin(), sa.end(), i) == sa.end())
@@ -406,9 +397,7 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         }
         // Use D2 sampling to re-seed
         for(const auto idx: sa) {
-            std::uniform_real_distribution<double> dist;
-            std::ptrdiff_t found = std::lower_bound(pd, pe, dist(rng) * pe[-1]) - pd;
-            assert(found < (std::ptrdiff_t)(pe - pd));
+            std::ptrdiff_t found = reservoir_simd::sample(costs.data(), costs.size(), rng());
             set_center(ctrs[idx], row(mat, found));
             for(size_t i = 0; i < mat.rows(); ++i) {
                 const auto c = l1Dist(ctrs[idx], row(mat, i, unchecked));
@@ -446,6 +435,78 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     }
 }
 
+using util::tvd_median;
+using coresets::tvd_median;
+
+template<typename FT=double, typename Mat, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t, typename RowSums>
+void set_centroids_tvd(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, WeightsT *weights, const RowSums &rsums) {
+    const unsigned k = ctrs.size();
+    using asn_t = std::decay_t<decltype(asn[0])>;
+    std::vector<std::vector<asn_t>> assigned(ctrs.size());
+    assert(costs.size() == asn.size());
+    for(size_t i = 0; i < costs.size(); ++i) {
+        assert(asn[i] < assigned.size());
+        blz::push_back(assigned[asn[i]], i);
+    }
+    blaze::SmallArray<asn_t, 16> sa;
+    wy::WyRand<asn_t, 4> rng(costs.size());
+    for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
+    while(!sa.empty()) {
+        std::vector<uint32_t> idxleft;
+        for(unsigned i = 0; i < k; ++i)
+            if(std::find(sa.begin(), sa.end(), i) == sa.end())
+                blz::push_back(idxleft, i);
+        // Re-calculate for centers that have been removed
+        for(auto idx: sa) {
+            for(auto assigned_id: assigned[idx]) {
+                auto ilit = idxleft.begin();
+                auto myr = row(mat, assigned_id);
+                auto fcost = l1Dist(ctrs[*ilit++], myr);
+                asn_t bestid = 0;
+                for(;ilit != idxleft.end();++ilit) {
+                    auto ncost = l1Dist(ctrs[*ilit], myr);
+                    if(ncost < fcost) bestid = *ilit, fcost = ncost;
+                }
+                costs[assigned_id] = fcost;
+                asn[assigned_id] = bestid;
+            }
+        }
+        // Use D2 sampling to re-seed
+        for(const auto idx: sa) {
+            std::ptrdiff_t found = reservoir_simd::sample(costs.data(), costs.size(), rng());
+            assert(found < (std::ptrdiff_t)(costs.size()));
+            set_center(ctrs[idx], row(mat, found));
+            for(size_t i = 0; i < mat.rows(); ++i) {
+                const auto c = l1Dist(ctrs[idx], row(mat, i, unchecked));
+                if(c < costs[i]) {
+                    asn[i] = idx;
+                    costs[i] = c;
+                }
+            }
+        }
+        for(auto &subasn: assigned) subasn.clear();
+        // Check for orphans again
+        sa.clear();
+        for(size_t i = 0; i < costs.size(); ++i) {
+            blz::push_back(assigned[asn[i]], i);
+        }
+        for(const auto &subasn: assigned) if(subasn.empty()) sa.pushBack(&subasn - assigned.data());
+    }
+    OMP_PFOR
+    for(unsigned i = 0; i < k; ++i) {
+        const auto &asnv = assigned[i];
+        const auto asp = asnv.data();
+        const auto nasn = asnv.size();
+        MINOCORE_VALIDATE(nasn != 0);
+        switch(nasn) {
+            case 1: set_center(ctrs[i], row(mat, asnv[0])); break;
+            default:
+                tvd_median(mat, ctrs[i], asp, nasn, weights, rsums);
+            break;
+        }
+    }
+}
+
 template<typename...Args>
 void set_centroids_tvd(Args &&...args) {
     throw std::invalid_argument("TVD clustering not supported explicitly; instead, normalize your count vectors and perform the clustering with L1");
@@ -457,7 +518,6 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     std::vector<std::vector<asn_t>> assigned(ctrs.size());
     const size_t np = costs.size();
     const unsigned k = ctrs.size();
-    std::unique_ptr<blz::DV<FT>> probup;
     for(size_t i = 0; i < np; ++i) {
         blz::push_back(assigned[asn[i]], i);
     }
@@ -466,15 +526,6 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
     while(!sa.empty()) {
         // Compute partial sum
-        if(!probup) probup.reset(new blz::DV<FT>(mat.rows()));
-        FT *pd = probup->data(), *pe = pd + probup->size();
-        if(weights) {
-            ::std::partial_sum(costs.begin(), costs.end(), pd, [&weights,ds=&costs[0]](auto x, const auto &y) {
-                return x + y * ((*weights)[&y - ds]);
-            });
-        } else {
-            std::partial_sum(costs.begin(), costs.end(), pd);
-        }
         std::vector<uint32_t> idxleft;
         for(unsigned int i = 0; i < k; ++i)
             if(std::find(sa.begin(), sa.end(), i) == sa.end())
@@ -496,9 +547,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         }
         // Use D2 sampling to re-seed
         for(const auto idx: sa) {
-            std::uniform_real_distribution<double> dist;
-            std::ptrdiff_t found = std::lower_bound(pd, pe, dist(rng) * pe[-1]) - pd;
-            assert(found < (std::ptrdiff_t)(pe - pd));
+            std::ptrdiff_t found = reservoir_simd::sample(costs.data(), costs.size(), rng());
             set_center(ctrs[idx], row(mat, found));
             OMP_PFOR
             for(size_t i = 0; i < mat.rows(); ++i) {

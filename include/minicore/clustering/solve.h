@@ -179,11 +179,9 @@ void set_centroids_hard(const Mat &mat,
         case GEO_MEDIAN:
             set_centroids_l2<FT>(mat, asn, costs, centers, weights);
             break;
-#if 0
         case TVD_MEDIAN:
-            set_centroids_tvd<FT>(mat, asn, costs, centers, weights);
+            set_centroids_tvd<FT>(mat, asn, costs, centers, weights, rowsums);
             break;
-#endif
         default:
             constexpr const char *msg = "Cannot optimize without a valid centroid policy.";
             std::cerr << msg;
