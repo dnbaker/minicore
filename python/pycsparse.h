@@ -21,7 +21,7 @@
 #define ENABLE_8BITINT_INDICES 0
 #endif
 #ifndef ENABLE_16BITINT_INDICES
-#define ENABLE_16BITINT_INDICES 0
+#define ENABLE_16BITINT_INDICES 1
 #endif
 
 struct PyCSparseMatrix {
