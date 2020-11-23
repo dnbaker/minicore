@@ -16,6 +16,11 @@ using blz::rowMajor;
 using blz::columnMajor;
 using blz::unchecked;
 
+using coresets::l1_median;
+using util::l1_median;
+using coresets::tvd_median;
+using util::tvd_median;
+
 /*
  * set_centroids_* and assign_points_* functions form the E/M steps
  * for EM optimization of clustering
@@ -389,10 +394,6 @@ void set_centroids_soft(const Mat &mat,
     costs = blaze::generate(mat.rows(), centers.size(), compute_cost);
 }
 
-using coresets::l1_median;
-using util::l1_median;
-using coresets::tvd_median;
-using util::tvd_median;
 
 template<typename Matrix, // MatrixType
          typename FT=DefaultFT<Matrix>,
@@ -418,17 +419,9 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                                        uint64_t seed=0)
 {
     if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
-#if 0
-    auto compute_cost = [&costs,w=weights]() -> FT {
-        if(w) return blz::dot(costs, *w);
-        else  return blz::sum(costs);
-    };
-#endif
     switch(measure) {
         default:
-        case TVD: throw std::invalid_argument("measure cannot be used in minibatch mode");
-
-        case L2: case L1:
+        case L2: case L1: case TVD:
         case JSD: case JSM: case COSINE_DISTANCE:
         case SQRL2: case POISSON: case MKL: case REVERSE_ITAKURA_SAITO: case ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO:

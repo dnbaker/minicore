@@ -1,6 +1,7 @@
 #ifndef MINOCORE_CLUSTERING_CENTROID_H__
 #define MINOCORE_CLUSTERING_CENTROID_H__
 #include "minicore/util/blaze_adaptor.h"
+#include "minicore/util/csc.h"
 #include "minicore/dist.h"
 #include "minicore/optim/kmedian.h"
 
@@ -138,6 +139,9 @@ static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) 
 
     }
 }
+
+using util::l1_median;
+using coresets::l1_median;
 
 struct CentroidPolicy {
     template<typename VT, bool TF, typename Range, typename VT2=VT, typename RowSums>
