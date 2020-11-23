@@ -2,7 +2,7 @@
 #include "blaze/util/Serialization.h"
 //#include "src/tests/solvetestdata.cpp"
 
-        
+
 namespace clust = minicore::clustering;
 using namespace minicore;
 
@@ -54,13 +54,13 @@ int main(int argc, char *argv[]) {
             try {
                 arch >> x;
                 std::fprintf(stderr, "Shape of loaded blaze matrix: %zu/%zu\n", x.rows(), x.columns());
-            } catch(const std::runtime_error &ex) {                                                     
+            } catch(const std::runtime_error &ex) {
                 blaze::CompressedMatrix<OTHER_FLOAT_TYPE> cm;
                 try {
                 arch >> cm;
                 x = cm;
                 } catch(...) {
-                    std::fprintf(stderr, "Could not get x from arch using >>. Error msg: %s\n", ex.what()); 
+                    std::fprintf(stderr, "Could not get x from arch using >>. Error msg: %s\n", ex.what());
                     throw;
                 }
             } catch(const std::exception &ex) {
@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
         }
 #endif
         case '?':
-        case 'h':dist::print_measures();  
+        case 'h':dist::print_measures();
                 std::fprintf(stderr, "Usage: %s <flags> \n-z: load blaze matrix from path\n-P: set prior (1.)\n-T set temp [1.]\n-p set num threads\n-m Set measure (MKL, 5)\n-k: set k [10]\t-T transpose mtx file\t-M parse mtx file from argument\n", *argv);
                 return EXIT_FAILURE;
     }}
@@ -91,7 +91,7 @@ int main(int argc, char *argv[]) {
     OMP_ONLY(omp_set_num_threads(nthreads);)
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv) {
         dist::print_measures();
-        std::exit(1); 
+        std::exit(1);
     }
     const size_t nr = x.rows(), nc = x.columns();
     std::fprintf(stderr, "prior: %g\n", prior[0]);
@@ -133,7 +133,7 @@ int main(int argc, char *argv[]) {
         complete_hardcost = blaze::generate(nr, k, [&](auto r, auto col) {
             return cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
         });
-        //assert(blaze::min<blaze::rowwise>(complete_hardcost) == 
+        //assert(blaze::min<blaze::rowwise>(complete_hardcost) ==
     } else {
         while(ids.size() < k) {
             auto rid = std::rand() % x.rows();

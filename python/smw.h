@@ -27,12 +27,10 @@ private:
         if(use_float) {
             matrix_ = csc2sparse<float>(CSCMatrixView<IndPtrT, IndicesT, Data>(indptr, indices, data, nnz, nfeat, nitems), skip_empty);
             auto &m(getfloat());
-            std::fprintf(stderr, "[%s] Produced float matrix of %zu/%zu with %zu nonzeros\n", __PRETTY_FUNCTION__, m.rows(), m.columns(), blaze::nonZeros(m));
             std::cerr << m;
         } else {
             matrix_ = csc2sparse<double>(CSCMatrixView<IndPtrT, IndicesT, Data>(indptr, indices, data, nnz, nfeat, nitems), skip_empty);
             auto &m(getdouble());
-            std::fprintf(stderr, "[%s] Produced double matrix of %zu/%zu with %zu nonzeros\n", __PRETTY_FUNCTION__, m.rows(), m.columns(), blaze::nonZeros(m));
             std::cerr << m;
         }
     }
@@ -97,18 +95,14 @@ public:
 #define __DISPATCH(T1, T2, T3) do { \
         if(use_float) {\
             if(databuf.readonly || indbuf.readonly) {\
-                DBG_ONLY(std::fprintf(stderr, "Read only floats\n");) \
                 matrix_ = csc2sparse<float>(CSCMatrixView<T1, const T2, const T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<const T2 *>(const_cast<const void *>(indicesptr)), reinterpret_cast<const T3 *>(const_cast<const void *>(datptr)), nnz, ydim, xdim), skip_empty); \
             } else { \
-                DBG_ONLY(std::fprintf(stderr, "Const reading of floats\n");) \
                 matrix_ = csc2sparse<float>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<T2 *>(indicesptr), reinterpret_cast<T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
             }\
         } else { \
             if(databuf.readonly || indbuf.readonly) {\
-                DBG_ONLY(std::fprintf(stderr, "Read only reading of doubles\n");) \
                 matrix_ = csc2sparse<double>(CSCMatrixView<T1, const T2, const T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<const T2 *>(const_cast<const void *>(indicesptr)), reinterpret_cast<const T3 *>(const_cast<const void *>(datptr)), nnz, ydim, xdim), skip_empty); \
             } else { \
-                DBG_ONLY(std::fprintf(stderr, "Const reading of doubles\n");) \
                 matrix_ = csc2sparse<double>(CSCMatrixView<T1, T2, T3>(reinterpret_cast<T1 *>(indptrptr), reinterpret_cast<T2 *>(indicesptr), reinterpret_cast<T3 *>(datptr), nnz, ydim, xdim), skip_empty); \
             }\
         }\
@@ -190,7 +184,7 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
     int kind = -1;
     const auto mmsr = assure_dm(msr);
     const size_t nr = smw.rows();
-    std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
+    //std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
     if(py::isinstance<py::array>(weights)) {
         auto arr = py::cast<py::array>(weights);
         auto info = arr.request();
@@ -201,7 +195,6 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
         }
         wptr = info.ptr;
     }
-    std::fprintf(stderr, "ki: %d\n", int(k));
     if(seed == 0) {
         seed = std::mt19937_64(std::rand())();
     }
@@ -212,13 +205,10 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
     int retasnbits;
     if(k <= 256) {
         retasnbits = 8;
-        std::fprintf(stderr, "uint8 labels\n");
     } else if(k <= 63356) {
         retasnbits = 16;
-        std::fprintf(stderr, "uint16 labels\n");
     } else if(k <= 0xFFFFFFFF) {
         retasnbits = 32;
-        std::fprintf(stderr, "uint32 labels\n");
     } else {
         retasnbits = 64;
         std::fprintf(stderr, "uint64 labels. >4 billion centers, are you crazy?\n");
@@ -250,15 +240,6 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
             : kind == 'B' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const uint8_t *)wptr)
             : repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const int *)wptr);
         auto &[lidx, lasn, lcosts] = sol;
-        for(size_t i = 0; i < lidx.size(); ++i) {
-            std::fprintf(stderr, "selected point %u for center %zu\n", lidx[i], i);
-            if(lidx[i] > nr) std::fprintf(stderr, "Warning: 'center' id is > # centers\n");
-        }
-        for(size_t i = 0; i < lasn.size(); ++i) {
-            if(lasn[i] > nr) {
-                std::fprintf(stderr, "asn %zu is %u (> nr)\n", i, unsigned(lasn[i]));
-            }
-        }
         assert(lidx.size() == ki);
         assert(lasn.size() == smw.rows());
         switch(retasnbits) {
@@ -315,12 +296,11 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
         if(gamma_beta < 0.) {
             gamma_beta = 1. / smw.columns();
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
-        } 
+        }
         const void *wptr = nullptr;
         int kind = -1;
         const auto mmsr = assure_dm(msr);
         const size_t nr = smw.rows();
-        std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
         if(py::isinstance<py::array>(weights)) {
             auto arr = py::cast<py::array>(weights);
             auto info = arr.request();
@@ -365,10 +345,6 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
                 : kind == 'f' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr)
                 : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const double *)wptr);
             auto &[lidx, lasn, lcosts] = sol;
-            for(size_t i = 0; i < lidx.size(); ++i) {
-                std::fprintf(stderr, "selected point %u for center %zu\n", lidx[i], i);
-                //if(lidx[i] > nr) std::fprintf(stderr, "Warning: 'center' id is > # centers\n");
-            }
             switch(retasnbits) {
                 case 8: {
                     auto raptr = (uint8_t *)retai.ptr;

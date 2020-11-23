@@ -86,8 +86,8 @@ include_dirs=[
 
 ext_modules = [
     Extension(
-        'pyfgc',
-        glob('*.cpp') + [
+        'pyminicore',
+         glob('*.cpp') + [
          "../include/minicore/util/boost/zlib.cpp", "../include/minicore/util/boost/gzip.cpp"
          ],
         include_dirs=include_dirs,

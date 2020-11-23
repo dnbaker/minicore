@@ -16,7 +16,51 @@ void init_pycsparse(py::module &m) {
     .def("__str__", [](const PyCSparseMatrix &x) {return std::string("CSparseMatrix, ") + std::to_string(x.rows()) + "x" + std::to_string(x.columns()) + ", " + std::to_string(x.nnz());})
     .def("columns", [](const PyCSparseMatrix &x) {return x.columns();})
     .def("rows", [](const PyCSparseMatrix &x) {return x.rows();})
-    .def("nnz", [](const PyCSparseMatrix &x) {return x.nnz();});
+    .def("nnz", [](const PyCSparseMatrix &x) {return x.nnz();})
+    .def("rowsel", [](const PyCSparseMatrix &x, py::array idxsel) {
+        auto inf = idxsel.request();
+        const bool idx_is_4byte = inf.itemsize == 4;
+
+        const bool ip_is_64 = std::tolower(x.indptr_t_[0]) == 'l';
+        std::vector<double> vals;
+        std::vector<uint64_t> idx;
+        py::array_t<uint64_t> retip(inf.size + 1);
+        auto retipptr = (uint64_t *)retip.request().ptr;
+        retipptr[0] = 0;
+        for(Py_ssize_t i = 0; i < inf.size; ++i) {
+            int64_t ind;
+            if(idx_is_4byte) ind = ((uint32_t *)inf.ptr)[i];
+            else             ind = ((uint64_t *)inf.ptr)[i];
+            size_t start, stop;
+            if(ip_is_64) {
+                start = ((uint64_t *)x.indptrp_)[ind];
+                stop = ((uint64_t *)x.indptrp_)[ind + 1];
+            } else {
+                start = ((uint32_t *)x.indptrp_)[ind];
+                stop = ((uint32_t *)x.indptrp_)[ind + 1];
+            }
+            size_t lastnnz = retipptr[i];
+            retipptr[i + 1] = stop - start + retipptr[i];
+            vals.resize(retipptr[i + 1]);
+            idx.resize(retipptr[i + 1]);
+            if(std::tolower(x.indices_t_[0]) == 'i') {
+                std::copy((uint32_t *)x.indicesp_ + start, (uint32_t *)x.indicesp_ + stop, idx.data() + lastnnz);
+            } else {
+                std::copy((uint64_t *)x.indicesp_ + start, (uint64_t *)x.indicesp_ + stop, idx.data() + lastnnz);
+            }
+            switch(std::tolower(x.data_t_[0])) {
+                case 'f': std::copy((float *)x.datap_ + start, (float *)x.datap_ + stop, vals.data() + lastnnz); break;
+                case 'd': std::copy((double *)x.datap_ + start, (double *)x.datap_ + stop, vals.data() + lastnnz); break;
+                case 'L': case 'l': std::copy((uint64_t *)x.datap_ + start, (uint64_t *)x.datap_ + stop, vals.data() + lastnnz); break;
+                case 'I': case 'i': std::copy((uint32_t *)x.datap_ + start, (uint32_t *)x.datap_ + stop, vals.data() + lastnnz); break;
+            }
+        }
+        py::array_t<double> retv(vals.size());
+        std::copy(vals.begin(), vals.end(), (double *)retv.request().ptr);
+        py::array_t<uint64_t> reti(idx.size());
+        std::copy(idx.begin(), idx.end(), (uint64_t *)reti.request().ptr);
+        return py::make_tuple(retv, reti, retip, py::make_tuple(py::int_(inf.size), py::int_(x.columns())));
+    });
 
      m.def("kmeanspp", [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {
         return run_kmpp_noso(smw, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, so.kmc2_rounds, std::max(int(so.extra_sample_tries) - 1, 0),

@@ -1,6 +1,7 @@
 #ifndef PYCSPARSEMAT_H
 #define PYCSPARSEMAT_H
-#include "pyfgc.h"
+#include "pybind11/numpy.h"
+#include "pybind11/pytypes.h"
 #include "blaze/util/Serialization.h"
 #include "minicore/util/csc.h"
 
@@ -23,6 +24,10 @@
 #ifndef ENABLE_16BITINT_INDICES
 #define ENABLE_16BITINT_INDICES 1
 #endif
+
+using namespace minicore;
+
+namespace py = pybind11;
 
 struct PyCSparseMatrix {
     void *datap_;

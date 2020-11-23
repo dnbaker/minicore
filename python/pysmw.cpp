@@ -338,7 +338,7 @@ void init_smw(py::module &m) {
             obj.prior = (dist::Prior)x;
         }
     });
-    static constexpr const char *kmeans_doc = 
+    static constexpr const char *kmeans_doc =
         "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
        "\nSet nkmc to > 0 to use kmc2 instead of full D2 sampling, which is faster but may yield a slightly lower-quality result.\n"
         "One can accelerate sampling via SIMD (default) or exponential skips via use_exponential_skips=True\n";
