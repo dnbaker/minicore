@@ -762,11 +762,11 @@ struct CSparseMatrix {
 
 using blaze::unchecked;
 
-template<typename VT, typename IT, typename IPtr, bool TF, typename OIT=IT, typename WeightT=blz::DV<VT>, bool rowwise=true>
-void l1_median(CSparseMatrix<VT, IT, IPtr> &mat, blaze::DenseVector<VT, TF> &ret, OIT *asnptr=static_cast<OIT *>(nullptr), size_t asnsz=0, WeightT *weightc=static_cast<WeightT *>(nullptr)) {
+template<typename VT, typename ORVT, typename IT, typename IPtr, bool TF, typename OIT=IT, typename WeightT=blz::DV<VT>, bool rowwise=true>
+void l1_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::Vector<ORVT, TF> &ret, OIT *asnptr=static_cast<OIT *>(nullptr), size_t asnsz=0, WeightT *weightc=static_cast<WeightT *>(nullptr)) {
     if constexpr(rowwise) {
-        const size_t nc = mat.columns(), nr = mat.rows();
-        shared::flat_hash_map<IT, std::vector<VT>> nzfeatures;
+        using RVT = blaze::ElementType_t<ORVT>;
+        shared::flat_hash_map<IT, std::vector<RVT>> nzfeatures;
         nzfeatures.reserve(mat.columns());
         const size_t nrows = asnsz ? asnsz: mat.rows();
         if(weightc) throw NotImplementedError("Not implemented");
@@ -775,13 +775,13 @@ void l1_median(CSparseMatrix<VT, IT, IPtr> &mat, blaze::DenseVector<VT, TF> &ret
             auto r = row(mat, rownum, unchecked);
             auto nnz = nonZeros(r);
             if(!nnz) continue;
-            for(size_t i = 0; i < r.nnz_; ++i) {
+            for(size_t i = 0; i < r.n_; ++i) {
                 auto idx = r.indices_[i];
                 auto val = r.data_[i];
                 auto it = nzfeatures.find(idx);
                 if(it == nzfeatures.end()) {
                     {
-                        it = nzfeatures.emplace(it, {val}).first;
+                        it = nzfeatures.emplace(idx, std::vector<RVT>{RVT(val)}).first;
                     }
                 } else {
                     it->second.push_back(val);
@@ -789,8 +789,8 @@ void l1_median(CSparseMatrix<VT, IT, IPtr> &mat, blaze::DenseVector<VT, TF> &ret
             }
         }
         const size_t nfeat = nzfeatures.size();
+        (*ret).reset();
         (*ret).resize(nfeat);
-        *ret = 0;
         const bool nr_is_odd = nrows & 1;
         for(auto &pair: nzfeatures) {
             auto it = &pair.second;
@@ -815,7 +815,7 @@ void l1_median(CSparseMatrix<VT, IT, IPtr> &mat, blaze::DenseVector<VT, TF> &ret
                         (*ret)[i] = .5 * (*mid + *midm1);
                     }
                 } else {
-                    it->resize(nrows, VT(0));
+                    it->resize(nrows, RVT(0));
                     shared::sort(it->begin(), it->end());
                     if(nr_is_odd) (*ret)[i] = (*it)[nrows / 2];
                     else (*ret)[i] = .5 * ((*it)[nrows / 2] + (*it)[nrows / 2 + 1]);
@@ -827,11 +827,11 @@ void l1_median(CSparseMatrix<VT, IT, IPtr> &mat, blaze::DenseVector<VT, TF> &ret
     }
 }
 
-template<typename VT, typename IT, typename IPtr, bool TF, typename OIT, typename WeightT=blz::DV<VT>, bool rowwise=true, typename RSums>
-void tvd_median(CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<VT, TF> &ret, OIT *asnptr=static_cast<OIT *>(nullptr), size_t asnsz=0, WeightT *weightc=static_cast<WeightT *>(nullptr), const RSums &rsums=RSums()) {
+template<typename VT, typename ORVT, typename IT, typename IPtr, bool TF, typename OIT, typename WeightT=blz::DV<VT>, bool rowwise=true, typename RSums>
+void tvd_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<ORVT, TF> &ret, OIT *asnptr=static_cast<OIT *>(nullptr), size_t asnsz=0, WeightT *weightc=static_cast<WeightT *>(nullptr), const RSums &rsums=RSums()) {
     if constexpr(rowwise) {
-        const size_t nc = mat.columns(), nr = mat.rows();
-        shared::flat_hash_map<IT, std::vector<VT>> nzfeatures;
+        using RVT = blaze::ElementType_t<ORVT>;
+        shared::flat_hash_map<IT, std::vector<RVT>> nzfeatures;
         nzfeatures.reserve(mat.columns());
         const size_t nrows = asnsz ? asnsz: mat.rows();
         if(weightc) throw NotImplementedError("Not implemented");
@@ -840,13 +840,13 @@ void tvd_median(CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<VT, TF> &r
             auto r = row(mat, rownum, unchecked);
             auto nnz = nonZeros(r);
             if(!nnz) continue;
-            auto invmul = rsums[rownum];
-            for(size_t i = 0; i < r.nnz_; ++i) {
+            const auto invmul = 1. / rsums[rownum];
+            for(size_t i = 0; i < r.n_; ++i) {
                 auto idx = r.indices_[i];
-                auto val = r.data_[i] * invmul;
+                auto val = RVT(r.data_[i]) * invmul;
                 auto it = nzfeatures.find(idx);
                 if(it == nzfeatures.end()) {
-                    it = nzfeatures.emplace(it, {val}).first;
+                    it = nzfeatures.emplace(idx, std::vector<RVT>{val}).first;
                 } else {
                     it->second.push_back(val);
                 }
@@ -880,10 +880,10 @@ void tvd_median(CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<VT, TF> &r
                         (*ret).append(i, (.5) * (*mid + *midm1));
                     }
                 } else {
-                    it->resize(nrows, VT(0));
+                    it->resize(nrows, RVT(0));
                     shared::sort(it->begin(), it->end());
                     if(nr_is_odd) (*ret).append(i, (*it)[nrows / 2]);
-                    else          (*ret).append(i, .5 * (*it)[nrows / 2 - 1] + (*it)[nrows / 2]);
+                    else          (*ret).append(i, .5 * ((*it)[nrows / 2 - 1] + (*it)[nrows / 2]));
                 }
             } // else the value is 0
         }

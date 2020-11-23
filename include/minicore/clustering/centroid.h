@@ -426,10 +426,10 @@ void set_centroids_l1(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
                 if constexpr(blaze::IsMatrix_v<Mat>) {
                     auto rowsel = rows(mat, asp, nasn);
                     if(weights)
-                        coresets::l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
+                        l1_median(rowsel, ctrs[i], elements(*weights, asp, nasn));
                     else
-                        coresets::l1_median(rowsel, ctrs[i]);
-                } else coresets::l1_median(mat, ctrs[i], asp, nasn, weights);
+                        l1_median(rowsel, ctrs[i]);
+                } else l1_median(mat, ctrs[i], asp, nasn, weights);
             } break;
         }
     }

@@ -523,7 +523,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                 for(const auto fidx: foundindices) {
                     // set new centers
                     auto &ctr = centers[fidx];
-                    const FT *ptr;
+                    size_t id;
                     if(weights) {
                         if constexpr(blaze::IsVector_v<WeightT>) {
                             *wc = costs * *weights;
@@ -532,11 +532,11 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                         } else {
                             *wc = costs * blz::make_cv(weights->data(), np);
                         }
-                        ptr = wc->data();
+                        id = reservoir_simd::sample(wc->data(), np, rng());
                     } else {
-                        ptr = costs.data();
+                        id = reservoir_simd::sample(costs.data(), np, rng());
                     }
-                    clustering::set_center(ctr, row(mat, reservoir_simd::sample(ptr, np, rng()), blz::unchecked));
+                    clustering::set_center(ctr, row(mat, id, blz::unchecked));
                     centersums[fidx] = sum(ctr);
                 }
                 OMP_PFOR
