@@ -9,7 +9,7 @@ while the more involved clustering code is also exposed.
 
 # Clustering
 For clustering Bregman divergences (squared distance, Itakura-Saito, and KL-divergence, for instance), kmeans++ sampling (via `kmeanspp`) provides accurate fast initial
-centers, while `cluster_from_centers` performs EM from an initial set of points.
+centers, while `cluster` performs EM from an initial set of points.
 
 Since we're using the blaze linear algebra library, we need to create a sparse matrix for clustering from CSR format.
 
@@ -56,7 +56,7 @@ lspprounds = 2 # Perform %i rounds of localsearch++. Yields a higher quality set
 
 ctr_rows = mc.rowsel(centers)
 
-res = mc.cluster_from_centers(mcmat, ctr_rows, betaprior=beta, msr=measure,
+res = mc.cluster(mcmat, ctr_rows, betaprior=beta, msr=measure,
                               weights=weights, lspprounds=lspprounds, seed=seed)
 
 

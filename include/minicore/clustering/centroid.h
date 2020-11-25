@@ -597,6 +597,7 @@ void set_centroids_full_mean(const Mat &mat,
     const PriorT &prior, AsnT &asn, CostsT &costs, CtrsT &ctrs,
     WeightsT *weights, SumT &ctrsums, const SumT &rowsums)
 {
+    static_assert(std::is_floating_point_v<std::decay_t<decltype(ctrsums[0])>>, "SumT must be floating-point");
     assert(rowsums.size() == (*mat).rows());
     assert(ctrsums.size() == ctrs.size());
     DBG_ONLY(std::fprintf(stderr, "[%s] Calling set_centroids_full_mean with weights = %p\n", __PRETTY_FUNCTION__, (void *)weights);)
@@ -622,8 +623,8 @@ void set_centroids_full_mean(const Mat &mat,
 #ifndef NDEBUG
     int nfails = 0;
     for(size_t i = 0; i < k; ++i) {
-        const auto manual_sum = std::accumulate(ctrs[i].begin(), ctrs[i].end(), 0., [](double x, auto &pair) {return x + pair.value();});
-        std::fprintf(stderr, "csum[%zu] (cached) %g, but calcualted: %g (via blaze) vs manual %g\n", i, ctrsums[i], sum(ctrs[i]), manual_sum);
+        //const auto manual_sum = std::accumulate(ctrs[i].begin(), ctrs[i].end(), 0., [](double x, auto &pair) {return x + pair.value();});
+        //std::fprintf(stderr, "csum[%zu] (cached) %g, but calcualted: %g (via blaze) vs manual %g\n", i, ctrsums[i], sum(ctrs[i]), manual_sum);
         if(std::abs(ctrsums[i] - sum(ctrs[i])) > 1e-5) {
             ++nfails;
         }
@@ -652,15 +653,6 @@ void set_centroids_full_mean(const Mat &mat,
             else {
                 assert(restartpol == RESTART_D2);
                 r = reservoir_simd::sample(costs.data(), costs.size(), rng());
-#if 0
-                do {
-                    std::fprintf(stderr, "Restarting with point %ld\n", r);
-                    if(++i == 5) {
-                        r = reservoir_simd::argmax(costs, true);
-                        std::fprintf(stderr, "Center restarting took too many tries\n");
-                    }
-                } while(!costs[r]);
-#endif
                 assert(costs[r] > 0. || min(costs) == 0.);
             }
             rs.push_back(r);
@@ -746,62 +738,92 @@ void set_centroids_full_mean(const Mat &mat,
 
     const unsigned k = ctrs.size();
     blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
+    auto softmaxcosts = evaluate(softmax<rowwise>(costs * -temp));
+    //std::cerr << softmaxcosts << '\n';
+    //std::fprintf(stderr, "costs are of dim %zu/%zu\n", softmaxcosts.rows(), softmaxcosts.columns());
     OMP_PFOR
-    for(unsigned i = 0; i < ctrs.size(); ++i) ctrs[i].reset(); // set to 0
-    // Currently, this locks each center uniquely
-    // This is not ideal, but it's hard to handle this atomically
-    // TODO: provide a better parallelization method, either
-    // 1. reduction
-    // 2. more fine-grained locking strategies (though would fail for low-dimension data)
-#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
-    auto locks = std::make_unique<std::mutex[]>(k);
-    #pragma omp parallel for
-#endif
-    for(uint64_t i = 0; i < costs.rows(); ++i) {
-        const auto r = row(costs, i, unchecked);
-        const auto mr = row(mat, i, unchecked);
-        const FT w = weights ? weights->operator[](i): FT(1);
-        assert(asn.size() == r.size());
-        asn = softmax(r * -temp);
-#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION && defined(_OPENMP)
-#define WSUMINC(ind) do {OMP_ATOMIC wsums[ind] += w; } while(0)
-#define GETLOCK(ind) std::lock_guard<std::mutex> lock(locks[ind])
-#define __MT 0
-#else
-#define WSUMINC(ind) do {wsums[ind] += w;} while(0)
-#define GETLOCK(ind)
-#define __MT 1
-#endif
+    for(size_t i = 0; i < softmaxcosts.rows(); ++i) {
+        auto r(row(softmaxcosts, i, unchecked));
+        if(isnan(r)) {
+            auto bestind = reservoir_simd::argmin(r.data(), r.size(), /*mt=*/false);
+            blaze::SmallArray<uint32_t, 8> sa;
+            for(unsigned i = 0; i < r.size(); ++i) if(r[i] == r[bestind]) sa.pushBack(i);
+            FT per = 1. / sa.size();
+            r = 0.;
+            for(const auto ind: sa) r[ind] = per;
+        }
+    }
+    //std::fprintf(stderr, "Now setting centers\n");
+    if(weights) {
+        auto wsums = evaluate(1. / ((*weights) * trans(softmaxcosts)));
+        for(size_t i = 0; i < ctrs.size(); ++i) {
+            if constexpr(blaze::TransposeFlag_v<WeightsT> != blaze::TransposeFlag_v<decltype(column(softmaxcosts, i))>) {
+                ctrs[i] = (sum<columnwise>(mat % expand(column(softmaxcosts, i) * trans(*weights), mat.columns())) * wsums[i]);
+            } else {
+                ctrs[i] = sum<columnwise>(mat % expand(column(softmaxcosts, i) * *weights, mat.columns())) * wsums[i];
+            }
+        }
+    } else {
+        auto wsums = evaluate(1. / sum<columnwise>(softmaxcosts));
+        //for(size_t i = 0; i < wsums.size(); ++i) std::fprintf(stderr, "%zu: %0.20g\n", i, wsums[i]);
+        for(size_t i = 0; i < ctrs.size(); ++i) {
+            auto expmat = expand(column(softmaxcosts, i), mat.columns());
+            ctrs[i] = (sum<columnwise>(mat % expmat) * wsums[i]);
+            assert(ctrs[i].size() == mat.columns());
+        }
+    }
+    OMP_PFOR
+    for(size_t i = 0; i < ctrs.size(); ++i) ctrsums[i] = sum(ctrs[i]);
+    DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
+}
 
-#if VERBOSE_AF
-        std::cerr << "assignments are " << asn << " from costs " << r << '\n';
-#endif
-        if(isnan(asn)) {
-            auto bestind = reservoir_simd::argmin(r, __MT);
-            asn.reset();
-            asn[bestind] = 1.;
-            WSUMINC(bestind);
-            GETLOCK(bestind);
-            ctrs[bestind] += mr * w;
-        } else {
-            for(unsigned j = 0; j < k; ++j) {
-                const auto aiv = asn[j];
-                if(aiv == 0.) continue;
-                WSUMINC(j);
-                GETLOCK(j);
-                ctrs[j] += mr * (aiv * w);
+template<typename FT=double, typename VT, typename IT, typename IPtrT, typename PriorT, typename CostsT, typename CtrsT, typename WeightsT, typename SumT>
+void set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
+    const dist::DissimilarityMeasure,
+    const PriorT &, CostsT &costs, CtrsT &ctrs,
+    WeightsT *weights, FT temp, SumT &ctrsums)
+{
+    assert(ctrsums.size() == ctrs.size());
+    //std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
+
+    const unsigned k = ctrs.size();
+    blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
+    auto softmaxcosts = evaluate(softmax<rowwise>(costs * -temp));
+    OMP_PFOR
+    for(size_t i = 0; i < softmaxcosts.rows(); ++i) {
+        auto r(row(softmaxcosts, i, unchecked));
+        if(isnan(r)) {
+            auto bestind = reservoir_simd::argmin(r.data(), r.size());
+            blaze::SmallArray<uint32_t, 8> sa;
+            for(unsigned i = 0; i < r.size(); ++i) if(r[i] == r[bestind]) sa.pushBack(i);
+            FT per = 1. / sa.size();
+            r = 0.;
+            for(const auto ind: sa) r[ind] = per;
+        }
+    }
+    std::vector<blz::DV<FT>> tmprows(ctrs.size(), blz::DV<FT>(mat.columns(), 0.));
+    blz::DV<FT, columnVector> winv;
+    if(weights) {
+        winv = 1. / ((*weights) * trans(softmaxcosts));
+    } else {
+        winv = 1. / sum<columnwise>(softmaxcosts);
+    }
+    OMP_PFOR
+    for(size_t j = 0; j < mat.rows(); ++j) {
+        auto r = row(mat, j, unchecked);
+        auto smr = row(softmaxcosts, j, unchecked);
+        for(size_t i = 0; i < r.n_; ++i) {
+            auto data = r.data_[i];
+            auto datamul = evaluate(data * smr);
+            for(size_t m = 0; m < ctrs.size(); ++m) {
+                OMP_ATOMIC
+                tmprows[m][r.indices_[i]] += datamul[m];
             }
         }
     }
-#undef GETLOCK
-#undef WSUMINC
-#undef __MT
-    DBG_ONLY(std::fprintf(stderr, "About to set centers in parallel.\n");)
-    OMP_PFOR
-    for(unsigned j = 0; j < k; ++j) {
-        ctrs[j] /= wsums[j];
-        ctrsums[j] = sum(ctrs[j]);
-    }
+    for(size_t i = 0; i < tmprows.size(); ++i) tmprows[i] *= winv[i];
+    std::copy(tmprows.begin(), tmprows.end(), ctrs.begin());
+    //for(const auto &ctr: ctrs) std::cerr << ctr << '\n';
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
 }
 

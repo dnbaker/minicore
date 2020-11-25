@@ -334,7 +334,7 @@ struct ProdCSparseVector {
     const size_t dim_;
     const double prod_;
 
-    ProdCSparseVector(const CSparseVector<VT, IT> &ovec, VT prod): data_(ovec.data_), indices_(ovec.indices_), n_(ovec.n_), dim_(ovec.dim_), prod_(prod) {
+    ProdCSparseVector(const CSparseVector<VT, IT> &ovec, double prod): data_(ovec.data_), indices_(ovec.indices_), n_(ovec.n_), dim_(ovec.dim_), prod_(prod) {
     }
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
@@ -371,7 +371,9 @@ struct ProdCSparseVector {
         ColType &col_;
         size_t index_;
         size_t index() const {return col_.indices_[index_];}
-        double value() const {return col_.data_[index_] * col_.prod_;}
+        double value() const {
+            return col_.data_[index_] * col_.prod_;
+        }
         public:
 
         bool operator==(const ProdCSparseVectorIteratorBase &o) const {

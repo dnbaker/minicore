@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
     for(const auto v: asn) ++counts[v];
     for(unsigned i = 0; i < k; ++i) {
         std::fprintf(stderr, "Center %d with sum %g has %u supporting, with total cost of assigned points %g\n", i, blz::sum(centers[i]), counts[i],
-                     blz::sum(blz::generate(nr, [&](auto id) { return asn[id] == i ? hardcosts[id]: 0.;})));
+                     blz::sum(blz::generate(nr, [&](auto id) { return uint32_t(asn[id]) == i ? hardcosts[id]: 0.;})));
     }
     assert(min(asn) == 0);
     assert(max(asn) == centers.size() - 1);

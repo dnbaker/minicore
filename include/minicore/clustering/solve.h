@@ -392,6 +392,7 @@ void set_centroids_soft(const Mat &mat,
         return cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
     };
     costs = blaze::generate(mat.rows(), centers.size(), compute_cost);
+    std::cerr << "Costs: " << costs << '\n';
 }
 
 

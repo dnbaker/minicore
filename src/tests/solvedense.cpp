@@ -1,3 +1,4 @@
+#undef NDEBUG
 #include "include/minicore/clustering/solve.h"
 #include "blaze/util/Serialization.h"
 //#include "src/tests/solvetestdata.cpp"
