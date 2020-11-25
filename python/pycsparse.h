@@ -51,8 +51,34 @@ struct PyCSparseMatrix {
     PyCSparseMatrix(): datap_(nullptr), indicesp_(nullptr), indptrp_(nullptr), nr_(0), nc_(0), nnz_(0) {}
     PyCSparseMatrix(const PyCSparseMatrix &) = default;
     PyCSparseMatrix(PyCSparseMatrix &&) = default;
-    PyCSparseMatrix &operator=(const PyCSparseMatrix &) = default;
+    PyCSparseMatrix _&operator=(const PyCSparseMatrix &) = default;
     PyCSparseMatrix &operator=(PyCSparseMatrix &&) = default;
+    static std::string standardize_dtype(std::string x) {
+        static const shared::flat_hash_map<std::string, std::string> map {
+        {"<f8", "d"},
+        {"f8", "d"},
+        {"<f4", "f"},
+        {"f4", "f"},
+        {"<u4", "I"},
+        {"u4", "I"},
+        {"<i4", "I"},
+        {"i4", "I"},
+        {"<u8", "L"},
+        {"u8", "L"},
+        {"<i8", "L"},
+        {"i8", "L"},
+        {"<u2", "H"},
+        {"u2", "H"},
+        {"<i2", "H"},
+        {"i2", "H"},
+        {"<u1", "B"},
+        {"u1", "B"},
+        {"<i1", "B"},
+        {"i1", "B"}
+        };
+        if(auto it = map.find(x); it != map.end()) x = it->second;
+        return x;
+    }
     PyCSparseMatrix(py::object obj): PyCSparseMatrix(py::cast<py::array>(obj.attr("data")), py::cast<py::array>(obj.attr("indices")), py::cast<py::array>(obj.attr("indptr")), py::int_(py::cast<py::sequence>(obj.attr("shape"))[0]).cast<Py_ssize_t>(),
                                                     py::int_(py::cast<py::sequence>(obj.attr("shape"))[1]).cast<Py_ssize_t>(), obj.attr("nnz").cast<Py_ssize_t>()) {}
     PyCSparseMatrix(py::array data, py::array indices, py::array indptr, Py_ssize_t nr, Py_ssize_t nc, Py_ssize_t nnz): nr_(nr), nc_(nc), nnz_(nnz)
@@ -63,9 +89,9 @@ struct PyCSparseMatrix {
         datap_ = datainf.ptr;
         indicesp_ = indicesinf.ptr;
         indptrp_ = indptrinf.ptr;
-        data_t_ = datainf.format;
-        indices_t_ = indicesinf.format;
-        indptr_t_ = indptrinf.format;
+        data_t_ = standardize_dtype(datainf.format);
+        indices_t_ = standardize_dtype(indicesinf.format);
+        indptr_t_ = standardize_dtype(indptrinf.format);
     }
     // Specialize for Data Types
 #if ENABLE_CONST_FUNCS
