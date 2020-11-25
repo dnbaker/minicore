@@ -4,6 +4,7 @@ from . import constants
 from .constants import CSR as csr_tuple, KMCRSV
 from pyminicore import SparseMatrixWrapper as smw
 
+cluster_from_centers = pyminicore.cluster
 
 def spctrlist2mat(centertups, nc):
     import scipy.sparse as sp

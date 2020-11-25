@@ -1,6 +1,7 @@
 #include "pycluster.h"
 
 #if BUILD_CSR_CLUSTERING
+#if 0
 py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
                  py::object msr, py::object weights, double eps,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
@@ -30,6 +31,7 @@ py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
     }
     throw std::invalid_argument("Weights were not float, double, or None.");
 }
+#endif
 
 #if 0
 py::object cluster1_csr(const PyCSparseMatrix &smw, py::int_ k, double beta,
@@ -44,7 +46,7 @@ py::object cluster1_csr(const PyCSparseMatrix &smw, py::int_ k, double beta,
 
 void init_clustering_csr(py::module &m) {
 #if BUILD_CSR_CLUSTERING
-    m.def("cluster_from_centers", [](const PyCSparseMatrix &smw, py::object centers, double beta,
+    m.def("cluster", [](const PyCSparseMatrix &smw, py::object centers, double beta,
                     py::object msr, py::object weights, double eps,
                     uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
                     Py_ssize_t reseed_count, bool with_rep) -> py::object
