@@ -53,8 +53,8 @@ void init_pycsparse(py::module &m) {
                 start = ((uint32_t *)x.indptrp_)[ind];
                 stop = ((uint32_t *)x.indptrp_)[ind + 1];
             } else {
-                start = ((uint16_t *)x.indptrp_)[id];
-                stop = ((uint16_t *)x.indptrp_)[id + 1];
+                start = ((uint16_t *)x.indptrp_)[ind];
+                stop = ((uint16_t *)x.indptrp_)[ind + 1];
             }
             size_t lastnnz = retipptr[i];
             retipptr[i + 1] = stop - start + retipptr[i];
@@ -84,9 +84,8 @@ void init_pycsparse(py::module &m) {
         return py::make_tuple(retv, reti, retip, py::make_tuple(py::int_(inf.size), py::int_(x.columns())));
     }).def_static("from_items", [](py::object data, py::object idx, py::object indptr, py::object shape) -> PyCSparseMatrix {
         auto da = py::cast<py::array>(data), ia = py::cast<py::array>(idx), ipa = py::cast<py::array>(indptr);
-        auto nitems = da.request().size;
-        auto sseq = py::cast<py::seq>(shape);
-        return PyCSparseMatrix(data, ia, ipa, sseq[0].cast<Py_ssize_t>(), sseq[1].cast<Py_ssize_>(), da.request().size);
+        auto sseq = py::cast<py::sequence>(shape);
+        return PyCSparseMatrix(data, ia, ipa, sseq[0].cast<Py_ssize_t>(), sseq[1].cast<Py_ssize_t>(), da.request().size);
     });
 
      m.def("kmeanspp", [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {

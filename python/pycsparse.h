@@ -51,7 +51,7 @@ struct PyCSparseMatrix {
     PyCSparseMatrix(): datap_(nullptr), indicesp_(nullptr), indptrp_(nullptr), nr_(0), nc_(0), nnz_(0) {}
     PyCSparseMatrix(const PyCSparseMatrix &) = default;
     PyCSparseMatrix(PyCSparseMatrix &&) = default;
-    PyCSparseMatrix _&operator=(const PyCSparseMatrix &) = default;
+    PyCSparseMatrix &operator=(const PyCSparseMatrix &) = default;
     PyCSparseMatrix &operator=(PyCSparseMatrix &&) = default;
     static std::string standardize_dtype(std::string x) {
         static const shared::flat_hash_map<std::string, std::string> map {
