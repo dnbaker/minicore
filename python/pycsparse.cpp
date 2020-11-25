@@ -20,7 +20,7 @@ void init_pycsparse(py::module &m) {
     .def("rowsel", [](const PyCSparseMatrix &x, py::array idxsel) {
         auto inf = idxsel.request();
         int idxsel_type = inf.itemsize == 8 ? 2: inf.itemsize == 4 ? 1: inf.itemsize == 2 ? 3 : inf.itemsize == 1 ? 0: -1;
-        if(idxsel_type < 0) throw std::runtime_error("idxseltype is not 1, 2, 4 or 8 bytes"):
+        if(idxsel_type < 0) throw std::runtime_error("idxseltype is not 1, 2, 4 or 8 bytes");
 
         int ip_fmt;
         switch(x.indptr_t_[0]) {
@@ -82,6 +82,11 @@ void init_pycsparse(py::module &m) {
         py::array_t<uint64_t> reti(idx.size());
         std::copy(idx.begin(), idx.end(), (uint64_t *)reti.request().ptr);
         return py::make_tuple(retv, reti, retip, py::make_tuple(py::int_(inf.size), py::int_(x.columns())));
+    }).def_static("from_items", [](py::object data, py::object idx, py::object indptr, py::object shape) -> PyCSparseMatrix {
+        auto da = py::cast<py::array>(data), ia = py::cast<py::array>(idx), ipa = py::cast<py::array>(indptr);
+        auto nitems = da.request().size;
+        auto sseq = py::cast<py::seq>(shape);
+        return PyCSparseMatrix(data, ia, ipa, sseq[0].cast<Py_ssize_t>(), sseq[1].cast<Py_ssize_>(), da.request().size);
     });
 
      m.def("kmeanspp", [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {
