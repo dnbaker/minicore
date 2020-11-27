@@ -92,6 +92,17 @@ int main(int argc, char *argv[]) {
     blz::DM<FLOAT_TYPE> complete_hardcosts = blaze::generate(nr, k, [&](auto row, auto col) {
         return cmp::msr_with_prior(msr, blaze::row(x, row), centers[col], prior, psum, rowsums[row], centersums[col]);
     });
+
+    std::cerr << "Calculate costs\n";
+    complete_hardcosts = blaze::generate(nr, k, [&](auto r, auto col) {
+        return cmp::msr_with_prior(msr, row(x, r), centers[col], prior, psum, rowsums[r], centersums[col]);
+    });
+    blz::DM<FLOAT_TYPE> complete_asns = blz::softmax<blz::rowwise>(complete_hardcosts);
+    OMP_PFOR
+    for(size_t i = 0; i < complete_asns.rows(); ++i) {
+        auto ar = row(complete_asns, i);
+        minicore::clustering::correct_softmax(row(complete_hardcosts, i), ar);
+    }
     blz::DV<FLOAT_TYPE> hardcosts = blaze::generate(nr, [&](auto id) {
         auto r = row(complete_hardcosts, id, blaze::unchecked);
         auto it = std::min_element(r.begin(), r.end());
@@ -104,19 +115,15 @@ int main(int argc, char *argv[]) {
     for(const auto v: asn) ++counts[v];
     for(int i = 0; i < k; ++i) {
         std::fprintf(stderr, "Center %d with sum %g has %u supporting, with total cost of assigned points %g\n", i, blz::sum(centers[i]), counts[i],
-                     blz::sum(blz::generate(nr, [&](auto id) { return asn[id] == i ? hardcosts[id]: 0.;})));
+                     blz::sum(blz::generate(nr, [&](auto id) { return int(asn[id]) == i ? double(hardcosts[id]): 0.;})));
     }
     //assert(min(asn) == 0);
     //assert(max(asn) == centers.size() - 1);
     // generate a coreset
     // recalculate now
-    std::cerr << "Calculate costs\n";
-    complete_hardcosts = blaze::generate(nr, k, [&](auto r, auto col) {
-        return cmp::msr_with_prior(msr, row(x, r), centers[col], prior, psum, rowsums[r], centersums[col]);
-    });
     std::cerr << "Perform clustering\n";
     auto t1 = std::chrono::high_resolution_clock::now();
-    clust::perform_soft_clustering(x, msr, prior, centers, complete_hardcosts, temp);
+    clust::perform_soft_clustering(x, msr, prior, centers, complete_hardcosts, complete_asns, temp);
     auto t2 = std::chrono::high_resolution_clock::now();
     std::fprintf(stderr, "Wall time for clustering: %gms\n", std::chrono::duration<FLOAT_TYPE, std::milli>(t2 - t1).count());
     auto centerdistmat = evaluate(blaze::generate(k, k, [&centers](auto x, auto y) {return blz::l1Norm(blz::abs(centers[x] - centers[y]));}));

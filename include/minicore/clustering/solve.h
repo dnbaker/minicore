@@ -64,11 +64,12 @@ template<typename FT, typename Mat, typename PriorT, typename CtrT,
          typename CostsT,
          typename WeightT,
          typename SumT>
-void set_centroids_soft(const Mat &mat,
+double set_centroids_soft(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
                         std::vector<CtrT> &centers,
                         CostsT &costs,
+                        CostsT &asns,
                         const WeightT *weights,
                         const FT temp,
                         SumT &centersums,
@@ -280,6 +281,7 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
                              const PriorT &prior,
                              std::vector<CtrT> &centers,
                              CostsT &costs,
+                             CostsT &asns,
                              FT temperature=1.,
                              const WeightT *weights=static_cast<WeightT *>(nullptr),
                              double eps=1e-40,
@@ -288,7 +290,6 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
     auto centers_cpy(centers);
     blz::DV<FT> centersums(centers.size());
     blz::DV<FT> rowsums((*mat).rows());
-    std::cerr << "Compute sums\n";
 #if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
     rowsums = blz::sum<blz::rowwise>(*mat);
     centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
@@ -300,36 +301,15 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
     for(size_t i = 0; i < centers_cpy.size(); ++i)
         centersums[i] = blz::sum(centers_cpy[i]);
 #endif
-    auto compute_cost = [&]() {
-        FT ret = 0.;
-#if !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
-        OMP_PRAGMA("omp parallel for reduction(+:ret)")
-#endif
-        for(size_t i = 0; i < costs.rows(); ++i) {
-            auto cr = row(costs, i, blaze::unchecked);
-            auto smeval = evaluate(softmax(cr * -temperature));
-            FT pointcost;
-            if(isnan(smeval)) {
-                auto maxind = std::min_element(cr.begin(), cr.end()) - cr.begin();
-                smeval.reset();
-                smeval[maxind] = 1.;
-                pointcost = cr[maxind];
-            } else {
-                pointcost = dot(smeval, cr);
-            }
-            if(weights) pointcost *= (*weights)[i];
-            ret += pointcost;
-        }
-        return ret;
-    };
-    auto cost = compute_cost();
-    const auto initcost = cost;
+    double cost = std::numeric_limits<double>::max();
+    double initcost = -1;
     std::fprintf(stderr, "initial cost: %0.20g\n", cost);
     size_t iternum = 0;
     for(;;) {
-        auto oldcost = cost;
-        set_centroids_soft<FT>(*mat, measure, prior, centers_cpy, costs, weights, temperature, centersums, rowsums);
-        cost = compute_cost();
+        double oldcost = cost;
+        cost = set_centroids_soft<FT>(*mat, measure, prior, centers_cpy, costs, asns, weights, temperature, centersums, rowsums);
+        if(initcost < 0) initcost = cost;
+        //cost = compute_cost();
         std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
         if(oldcost > cost) // Update centers only if an improvement
         {
@@ -356,11 +336,12 @@ template<typename FT, typename Mat, typename PriorT, typename CtrT,
          typename CostsT,
          typename WeightT,
          typename SumT>
-void set_centroids_soft(const Mat &mat,
+double set_centroids_soft(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
                         std::vector<CtrT> &centers,
                         CostsT &costs,
+                        CostsT &asns,
                         const WeightT *weights,
                         const FT temp,
                         SumT &centersums,
@@ -370,9 +351,10 @@ void set_centroids_soft(const Mat &mat,
     const CentroidPol pol = msr2pol(measure);
     assert(FULL_WEIGHTED_MEAN == pol || !dist::is_bregman(measure) || JSM_MEDIAN == pol); // sanity check
     DBG_ONLY(std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));)
+    double ret;
     switch(pol) {
         case JSM_MEDIAN:
-        case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(mat, measure, prior, costs, centers, weights, temp, centersums);
+        case FULL_WEIGHTED_MEAN: ret = set_centroids_full_mean<FT>(mat, measure, prior, costs, asns, centers, weights, temp, centersums);
             break;
         case GEO_MEDIAN: throw NotImplementedError("TODO: implement weighted geometric median from soft clustering. It's just a lot of work.");
         case L1_MEDIAN: throw NotImplementedError("TODO: implement weighted median from soft clustering. It's just a lot of work.");
@@ -382,17 +364,17 @@ void set_centroids_soft(const Mat &mat,
             throw std::runtime_error(msg);
         }
     }
-    const FT prior_sum =
+    const double prior_sum =
         prior.size() == 0 ? 0.
                           : prior.size() == 1
                           ? double(prior[0] * mat.columns())
                           : double(blz::sum(prior));
-    auto compute_cost = [&](auto id, auto cid) ALWAYS_INLINE {
+    costs = blaze::generate(mat.rows(), centers.size(), [&](auto id, auto cid) ALWAYS_INLINE {
         assert(cid < centers.size());
         return cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
-    };
-    costs = blaze::generate(mat.rows(), centers.size(), compute_cost);
+    });
     std::cerr << "Costs: " << costs << '\n';
+    return ret;
 }
 
 

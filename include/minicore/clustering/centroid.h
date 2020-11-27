@@ -727,104 +727,156 @@ void set_centroids_full_mean(const Mat &mat,
     }
 }
 
+template<typename Vector, typename AT, bool ATF>
+INLINE void correct_softmax(const Vector &costs, blaze::Vector<AT, ATF> &asn) {
+    using CT = std::common_type_t<blz::ElementType_t<Vector>, blz::ElementType_t<AT>>;
+    using FT = std::conditional_t<std::is_floating_point_v<CT>, CT, std::conditional_t<(sizeof(CT) <= 4), float, double>>;
+    if(isnan(*asn)) {
+        auto bestind = reservoir_simd::argmin(costs.data(), costs.size(), /*mt=*/false);
+        blaze::SmallArray<uint32_t, 8> sa;
+        for(unsigned i = 0; i < costs.size(); ++i) if(costs[i] == costs[bestind]) sa.pushBack(i);
+        FT per = 1. / sa.size();
+        (*asn).reset();
+        for(const auto ind: sa) (*asn)[ind] = per;
+    }
+}
+
 template<typename FT=double, typename Mat, typename PriorT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t, typename SumT>
-void set_centroids_full_mean(const Mat &mat,
-    const dist::DissimilarityMeasure,
-    const PriorT &, CostsT &costs, CtrsT &ctrs,
+double set_centroids_full_mean(const Mat &mat,
+    const dist::DissimilarityMeasure measure,
+    const PriorT &, CostsT &costs, CostsT &asns, CtrsT &ctrs,
     WeightsT *weights, FT temp, SumT &ctrsums)
 {
     assert(ctrsums.size() == ctrs.size());
     //std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
 
     const unsigned k = ctrs.size();
-    blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
-    auto softmaxcosts = evaluate(softmax<rowwise>(costs * -temp));
+    //blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
+    asns = softmax<rowwise>(costs * -temp);
     //std::cerr << softmaxcosts << '\n';
     //std::fprintf(stderr, "costs are of dim %zu/%zu\n", softmaxcosts.rows(), softmaxcosts.columns());
-    OMP_PFOR
-    for(size_t i = 0; i < softmaxcosts.rows(); ++i) {
-        auto r(row(softmaxcosts, i, unchecked));
-        if(isnan(r)) {
-            auto bestind = reservoir_simd::argmin(r.data(), r.size(), /*mt=*/false);
-            blaze::SmallArray<uint32_t, 8> sa;
-            for(unsigned i = 0; i < r.size(); ++i) if(r[i] == r[bestind]) sa.pushBack(i);
-            FT per = 1. / sa.size();
-            r = 0.;
-            for(const auto ind: sa) r[ind] = per;
-        }
+    double ret = 0.;
+    OMP_PRAGMA("omp parallel for reduction(+:ret)")
+    for(size_t i = 0; i < asns.rows(); ++i) {
+        auto cr = row(costs, i, unchecked);
+        auto r = row(asns, i, unchecked);
+        correct_softmax(cr, r);
+        ret += dot(cr, r) * (weights ? double((*weights)[i]): 1.);
     }
     //std::fprintf(stderr, "Now setting centers\n");
-    if(weights) {
-        auto wsums = evaluate(1. / ((*weights) * trans(softmaxcosts)));
+    if(measure == distance::L2 || measure == distance::L1) {
+        OMP_PFOR
         for(size_t i = 0; i < ctrs.size(); ++i) {
-            if constexpr(blaze::TransposeFlag_v<WeightsT> != blaze::TransposeFlag_v<decltype(column(softmaxcosts, i))>) {
-                ctrs[i] = (sum<columnwise>(mat % expand(column(softmaxcosts, i) * trans(*weights), mat.columns())) * wsums[i]);
+            blz::DV<FT, blz::columnVector> colweights;
+            if(!weights) {
+                colweights = column(asns, i, unchecked);
+            } else if constexpr(blz::TransposeFlag_v<WeightsT> == blz::columnVector) {
+                colweights = *weights * column(asns, i, unchecked);
             } else {
-                ctrs[i] = sum<columnwise>(mat % expand(column(softmaxcosts, i) * *weights, mat.columns())) * wsums[i];
+                colweights = trans(*weights) * column(asns, i, unchecked);
+            }
+            if(measure == distance::L2) {
+                if constexpr(blaze::IsMatrix_v<Mat>) {
+                    geomedian(mat, ctrs[i], colweights.data());
+                } else {
+                    geomedian(mat, ctrs[i], (uint64_t *)nullptr, 0, &colweights);
+                }
+            } else {
+                l1_median(mat, ctrs[i], (uint64_t *)nullptr, 0, &colweights);
             }
         }
     } else {
-        auto wsums = evaluate(1. / sum<columnwise>(softmaxcosts));
-        //for(size_t i = 0; i < wsums.size(); ++i) std::fprintf(stderr, "%zu: %0.20g\n", i, wsums[i]);
-        for(size_t i = 0; i < ctrs.size(); ++i) {
-            auto expmat = expand(column(softmaxcosts, i), mat.columns());
-            ctrs[i] = (sum<columnwise>(mat % expmat) * wsums[i]);
-            assert(ctrs[i].size() == mat.columns());
+        if(weights) {
+            auto wsums = evaluate(1. / ((*weights) * trans(asns)));
+            for(size_t i = 0; i < ctrs.size(); ++i) {
+                if constexpr(blaze::TransposeFlag_v<WeightsT> != blaze::TransposeFlag_v<decltype(column(asns, i))>) {
+                    ctrs[i] = (blz::sum<blz::columnwise>(mat % expand(column(asns, i) * trans(*weights), mat.columns())) * wsums[i]);
+                } else {
+                    ctrs[i] = blz::sum<blz::columnwise>(mat % expand(column(asns, i) * *weights, mat.columns())) * wsums[i];
+                }
+            }
+        } else {
+            auto wsums = evaluate(1. / blz::sum<blz::columnwise>(asns));
+            for(size_t i = 0; i < ctrs.size(); ++i) {
+                auto expmat = expand(column(asns, i), mat.columns());
+                ctrs[i] = (blz::sum<blz::columnwise>(mat % expmat) * wsums[i]);
+                assert(ctrs[i].size() == mat.columns());
+            }
         }
     }
     OMP_PFOR
     for(size_t i = 0; i < ctrs.size(); ++i) ctrsums[i] = sum(ctrs[i]);
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
+    return ret;
 }
 
 template<typename FT=double, typename VT, typename IT, typename IPtrT, typename PriorT, typename CostsT, typename CtrsT, typename WeightsT, typename SumT>
-void set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
-    const dist::DissimilarityMeasure,
-    const PriorT &, CostsT &costs, CtrsT &ctrs,
+double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
+    const dist::DissimilarityMeasure measure,
+    const PriorT &, CostsT &costs, CostsT &asns, CtrsT &ctrs,
     WeightsT *weights, FT temp, SumT &ctrsums)
 {
     assert(ctrsums.size() == ctrs.size());
     //std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
 
     const unsigned k = ctrs.size();
-    blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
-    auto softmaxcosts = evaluate(softmax<rowwise>(costs * -temp));
-    OMP_PFOR
-    for(size_t i = 0; i < softmaxcosts.rows(); ++i) {
-        auto r(row(softmaxcosts, i, unchecked));
-        if(isnan(r)) {
-            auto bestind = reservoir_simd::argmin(r.data(), r.size());
-            blaze::SmallArray<uint32_t, 8> sa;
-            for(unsigned i = 0; i < r.size(); ++i) if(r[i] == r[bestind]) sa.pushBack(i);
-            FT per = 1. / sa.size();
-            r = 0.;
-            for(const auto ind: sa) r[ind] = per;
-        }
+    //blz::DV<FT, blz::rowVector> asn(k, 0.);
+    asns = softmax<rowwise>(costs * -temp);
+    double ret = 0.;
+    OMP_PRAGMA("omp parallel for reduction(+:ret)")
+    for(size_t i = 0; i < asns.rows(); ++i) {
+        auto r(row(asns, i, unchecked));
+        auto cr(row(costs, i, unchecked));
+        correct_softmax(cr, r);
+        sum += dot(cr, r) * (weights ? double((*weights)[i]): 1.);
     }
     std::vector<blz::DV<FT>> tmprows(ctrs.size(), blz::DV<FT>(mat.columns(), 0.));
-    blz::DV<FT, columnVector> winv;
-    if(weights) {
-        winv = 1. / ((*weights) * trans(softmaxcosts));
+    if(measure == distance::L2 || measure == distance::L1) {
+        OMP_PFOR
+        for(size_t i = 0; i < ctrs.size(); ++i) {
+            blz::DV<FT, blz::columnVector> colweights;
+            if(!weights) {
+                colweights = column(asns, i, unchecked);
+            } else if constexpr(blz::TransposeFlag_v<WeightsT> == blz::columnVector) {
+                colweights = *weights * column(asns, i, unchecked);
+            } else {
+                colweights = trans(*weights) * column(asns, i, unchecked);
+            }
+            if(measure == distance::L2)
+                geomedian(mat, tmprows[i], nullptr, 0, &colweights);
+            else
+                l1_median(mat, tmprows[i], nullptr, 0, &colweights);
+            ctrs[i] = tmprows[i];
+        }
     } else {
-        winv = 1. / sum<columnwise>(softmaxcosts);
-    }
-    OMP_PFOR
-    for(size_t j = 0; j < mat.rows(); ++j) {
-        auto r = row(mat, j, unchecked);
-        auto smr = row(softmaxcosts, j, unchecked);
-        for(size_t i = 0; i < r.n_; ++i) {
-            auto data = r.data_[i];
-            auto datamul = evaluate(data * smr);
-            for(size_t m = 0; m < ctrs.size(); ++m) {
-                OMP_ATOMIC
-                tmprows[m][r.indices_[i]] += datamul[m];
+        blz::DV<FT, columnVector> winv;
+        if(weights) {
+            winv = 1. / ((*weights) * trans(asns));
+        } else {
+            winv = 1. / sum<columnwise>(asns);
+        }
+        OMP_PFOR
+        for(size_t j = 0; j < mat.rows(); ++j) {
+            auto r = row(mat, j, unchecked);
+            auto smr = row(asns, j, unchecked);
+            for(size_t i = 0; i < r.n_; ++i) {
+                auto data = r.data_[i];
+                auto datamul = evaluate(data * smr);
+                SK_UNROLL_4
+                for(size_t m = 0; m < ctrs.size(); ++m) {
+                    OMP_ATOMIC
+                    tmprows[m][r.indices_[i]] += datamul[m];
+                }
             }
         }
+        OMP_PFOR
+        for(size_t i = 0; i < tmprows.size(); ++i) ctrs[i] = tmprows[i] * winv[i];
     }
-    for(size_t i = 0; i < tmprows.size(); ++i) tmprows[i] *= winv[i];
-    std::copy(tmprows.begin(), tmprows.end(), ctrs.begin());
+    OMP_PFOR
+    for(size_t i = 0; i < ctrs.size(); ++i) ctrsums[i] = sum(ctrs[i]);
     //for(const auto &ctr: ctrs) std::cerr << ctr << '\n';
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
+    return ret;
 }
 
 } } // namespace minicore::clustering
