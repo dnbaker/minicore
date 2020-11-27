@@ -845,7 +845,7 @@ void tvd_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<ORVT
             const auto invmul = 1. / rsums[rownum];
             for(size_t i = 0; i < r.n_; ++i) {
                 auto idx = r.indices_[i];
-                auto val = RVT(r.data_[i]) * invmul;
+                const RVT val = RVT(r.data_[i]) * invmul;
                 auto it = nzfeatures.find(idx);
                 if(it == nzfeatures.end()) {
                     it = nzfeatures.emplace(idx, std::vector<RVT>{val}).first;

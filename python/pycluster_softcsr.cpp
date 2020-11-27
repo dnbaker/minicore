@@ -2,25 +2,16 @@
 
 #if BUILD_CSR_CLUSTERING
 
-#if 0
-py::object cluster1_csr(const PyCSparseMatrix &smw, py::int_ k, double beta,
-                 py::object msr, py::object weights, double eps,
-                 int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
-{
-    return func1(smw, k, beta, msr, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
-}
 #endif
 
-#endif
-
-void init_clustering_csr(py::module &m) {
+void init_clustering_soft_csr(py::module &m) {
 #if BUILD_CSR_CLUSTERING
-    m.def("cluster", [](const PyCSparseMatrix &smw, py::object centers, double beta,
+    m.def("scluster", [](const PyCSparseMatrix &smw, py::object centers, double beta,
                     py::object msr, py::object weights, double eps,
                     uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                    Py_ssize_t reseed_count, bool with_rep) -> py::object
+                    Py_ssize_t reseed_count, bool with_rep, double temp, int use_mmap, std::string saveprefix) -> py::object
     {
-        return __py_cluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter, kmcrounds, ntimes, lspprounds, seed, mbsize, ncheckins, reseed_count, with_rep);
+        return __py_softcluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter, kmcrounds, ntimes, lspprounds, seed, mbsize, ncheckins, reseed_count, with_rep);
     },
     py::arg("smw"),
     py::arg("centers"),
@@ -36,7 +27,10 @@ void init_clustering_csr(py::module &m) {
     py::arg("mbsize") = Py_ssize_t(-1),
     py::arg("ncheckins") = Py_ssize_t(-1),
     py::arg("reseed_count") = Py_ssize_t(5),
-    py::arg("with_rep") = false
+    py::arg("with_rep") = false,
+    py::arg("temp") = 1.,
+    py::arg("use_mmap") = false,
+    py::arg("use_mmap") = false,
     );
 
 #endif

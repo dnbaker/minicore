@@ -18,6 +18,7 @@ void init_omp_helpers(py::module &m);
 void init_clustering(py::module &m);
 void init_d2s(py::module &m);
 void init_clustering_csr(py::module &m);
+void init_clustering_soft_csr(py::module &m);
 
 
 // Direct CSR mode (no copying) saves memory, but takes a long time to compile
