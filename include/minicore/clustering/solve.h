@@ -351,19 +351,7 @@ double set_centroids_soft(const Mat &mat,
     const CentroidPol pol = msr2pol(measure);
     assert(FULL_WEIGHTED_MEAN == pol || !dist::is_bregman(measure) || JSM_MEDIAN == pol); // sanity check
     DBG_ONLY(std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));)
-    double ret;
-    switch(pol) {
-        case JSM_MEDIAN:
-        case FULL_WEIGHTED_MEAN: ret = set_centroids_full_mean<FT>(mat, measure, prior, costs, asns, centers, weights, temp, centersums);
-            break;
-        case GEO_MEDIAN: throw NotImplementedError("TODO: implement weighted geometric median from soft clustering. It's just a lot of work.");
-        case L1_MEDIAN: throw NotImplementedError("TODO: implement weighted median from soft clustering. It's just a lot of work.");
-        default: {
-            const std::string msg("Cannot optimize without a valid centroid policy for soft clustering.");
-            std::fputs(msg.data(), stderr);
-            throw std::runtime_error(msg);
-        }
-    }
+    double ret = set_centroids_full_mean<FT>(mat, measure, prior, costs, asns, centers, weights, temp, centersums);
     const double prior_sum =
         prior.size() == 0 ? 0.
                           : prior.size() == 1

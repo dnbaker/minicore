@@ -4,7 +4,7 @@
 
 #if 1
 template<typename Matrix, typename WFT, typename CtrT, typename AsnT=blz::DV<uint32_t>, typename CostsT=blz::DV<double>>
-py::dict cpp_softcluster_from_centers(const Matrix &mat, unsigned int k, double beta,
+py::dict cpp_softcluster(const Matrix &mat, unsigned int k, double beta,
                dist::DissimilarityMeasure measure,
                std::vector<CtrT> &ctrs,
                AsnT &asn, CostsT &costs,
@@ -51,7 +51,7 @@ py::dict cpp_softcluster_from_centers(const Matrix &mat, unsigned int k, double 
 }
 
 template<typename Matrix, typename WFT, typename CtrT, typename AsnT=blz::DV<uint32_t>, typename CostsT=blz::DV<double>>
-py::dict cpp_pycluster_from_centers_base(const Matrix &mat, unsigned int k, double beta,
+py::dict cpp_pycluster_base(const Matrix &mat, unsigned int k, double beta,
                dist::DissimilarityMeasure measure,
                std::vector<CtrT> &ctrs,
                AsnT &asn, CostsT &costs,
@@ -65,7 +65,7 @@ py::dict cpp_pycluster_from_centers_base(const Matrix &mat, unsigned int k, doub
                Py_ssize_t seed)
 {
     py::dict ret;
-    mat.perform([&](auto &x) {ret = cpp_pycluster_from_centers(x, k, beta, measure, ctrs, asn, costs, weights, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);});
+    mat.perform([&](auto &x) {ret = cpp_pycluster(x, k, beta, measure, ctrs, asn, costs, weights, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);});
     return ret;
 }
 
@@ -105,7 +105,7 @@ py::dict cpp_pycluster(const Matrix &mat, unsigned int k, double beta,
     for(unsigned i = 0; i < k; ++i) {
         assign(centers[i], row(mat, idx[i]));
     }
-    return cpp_pycluster_from_centers(mat, k, beta, measure, centers, asn, costs, weights, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
+    return cpp_pycluster(mat, k, beta, measure, centers, asn, costs, weights, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
 }
 
 template<typename Matrix, typename WFT>
@@ -131,7 +131,7 @@ py::dict pycluster(const Matrix &smw, int k, double beta,
 }
 
 template<typename Matrix>
-py::object __py_cluster_from_centers(const Matrix &smw,
+py::object __py_cluster(const Matrix &smw,
                     py::object centers, double beta,
                     py::object msr, py::object weights, double eps,
                     uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
@@ -229,14 +229,14 @@ else if(hasattr(centers, "indices") && hasattr(centers, "indptr") && hashattr(ce
         });
     });
     if(weights.is_none()) {
-        return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
+        return cpp_pycluster_base(smw, k, beta, measure, dvecs, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
     }
     auto weightinfo = py::cast<py::array>(weights).request();
     if(weightinfo.format.size() != 1) throw std::invalid_argument("Weights must be 0 or contain a fundamental type");
     switch(weightinfo.format[0]) {
 #define CASE_MCR(x, type) case x: {\
         auto cv = blz::make_cv((type *)weightinfo.ptr, costs.size());\
-        return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, &cv, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed); \
+        return cpp_pycluster_base(smw, k, beta, measure, dvecs, asn, costs, &cv, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed); \
         } break
         CASE_MCR('f', float);
         CASE_MCR('d', double);

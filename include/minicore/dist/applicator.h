@@ -1719,12 +1719,14 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
     lhsum = mrsum + prior_sum;
     rhsum = ctrsum + prior_sum;
     const FT lhrsi = FT(1.) / lhsum, rhrsi = FT(1.) / rhsum;
-    const FT lhinc = pv && lhsum ? FT(pv * lhrsi): FT(0),
-             rhinc = pv && rhsum ? FT(pv * rhrsi): FT(0);
+    FT lhinc = pv && lhsum ? FT(pv * lhrsi): FT(0),
+       rhinc = pv && rhsum ? FT(pv * rhrsi): FT(0);
+    if(std::isnan(lhinc)) lhinc = 0.;
+    if(std::isnan(rhinc)) rhinc = 0.;
     assert(!std::isnan(lhinc));
     assert(!std::isnan(rhinc));
-    const FT rhl = std::log(rhinc),
-             lhl = std::log(lhinc),
+    const FT rhl = rhinc ? std::log(rhinc): FT(0.),
+             lhl = lhinc ? std::log(lhinc): FT(0.),
              rhincl = rhinc ? rhl * rhinc: FT(0.),
              lhincl = lhinc ? lhl * lhinc: FT(0.),
              shl = std::log((lhinc + rhinc) * FT(.5)),

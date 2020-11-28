@@ -765,7 +765,7 @@ double set_centroids_full_mean(const Mat &mat,
     }
     //std::fprintf(stderr, "Now setting centers\n");
     if(measure == distance::L2 || measure == distance::L1) {
-        OMP_PFOR
+        //OMP_PFOR
         for(size_t i = 0; i < ctrs.size(); ++i) {
             blz::DV<FT, blz::columnVector> colweights;
             if(!weights) {
@@ -832,7 +832,7 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
     }
     std::vector<blz::DV<FT>> tmprows(ctrs.size(), blz::DV<FT>(mat.columns(), 0.));
     if(measure == distance::L2 || measure == distance::L1) {
-        OMP_PFOR
+        //OMP_PFOR
         for(size_t i = 0; i < ctrs.size(); ++i) {
             blz::DV<FT, blz::columnVector> colweights;
             if(!weights) {

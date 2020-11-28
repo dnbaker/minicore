@@ -9,9 +9,9 @@ void init_clustering_soft_csr(py::module &m) {
     m.def("scluster", [](const PyCSparseMatrix &smw, py::object centers, double beta,
                     py::object msr, py::object weights, double eps,
                     uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                    Py_ssize_t reseed_count, bool with_rep, double temp, int use_mmap, std::string saveprefix) -> py::object
+                    Py_ssize_t reseed_count, bool with_rep, double temp, Py_ssize_t mmap_mem_threshold, std::string saveprefix) -> py::object
     {
-        return __py_softcluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter, kmcrounds, ntimes, lspprounds, seed, mbsize, ncheckins, reseed_count, with_rep);
+        return __py_softcluster(smw, centers, beta, msr, weights, eps, kmeansmaxiter, kmcrounds, ntimes, lspprounds, seed, mbsize, ncheckins, reseed_count, with_rep);
     },
     py::arg("smw"),
     py::arg("centers"),
@@ -29,8 +29,8 @@ void init_clustering_soft_csr(py::module &m) {
     py::arg("reseed_count") = Py_ssize_t(5),
     py::arg("with_rep") = false,
     py::arg("temp") = 1.,
-    py::arg("use_mmap") = false,
-    py::arg("use_mmap") = false,
+    py::arg("mmap_t") = -1,
+    py::arg("saveprefix") = "",
     );
 
 #endif
