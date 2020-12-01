@@ -358,11 +358,9 @@ double set_centroids_soft(const Mat &mat,
                         const SumT &rowsums)
 {
     MINOCORE_VALIDATE(dist::is_valid_measure(measure));
-#ifndef NDEBUG
     const CentroidPol pol = msr2pol(measure);
     assert(FULL_WEIGHTED_MEAN == pol || !dist::is_bregman(measure) || JSM_MEDIAN == pol); // sanity check
-    DBG_ONLY(std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));)
-#endif
+    std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));
     double ret = set_centroids_full_mean<FT>(mat, measure, prior, costs, asns, centers, weights, temp, centersums);
     std::fprintf(stderr, "cost: %g for %d/%s\n", ret, (int)measure, msr2str(measure));
     const double prior_sum =

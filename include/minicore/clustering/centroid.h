@@ -785,14 +785,16 @@ double set_centroids_full_mean(const Mat &mat,
                 l1_median(mat, ctrs[i], (uint64_t *)nullptr, 0, &colweights);
             }
         }
-    } else {
+    } else { // full weighted mean (Bregman)
         if(weights) {
+            std::fprintf(stderr, "weights: %p\n", (void *)weights);
             blz::DV<FT, rowVector> wsums;
             if constexpr(blz::TransposeFlag_v<WeightsT> == blz::columnVector) {
                 wsums = 1. / sum<columnwise>(asns % expand(trans(*weights), asns.columns()));
             } else {
                 wsums = 1. / sum<columnwise>(asns % expand(*weights, asns.columns()));
             }
+            std::cerr << wsums << '\n';
             for(size_t i = 0; i < k; ++i) {
                 if constexpr(blaze::TransposeFlag_v<WeightsT> != blaze::TransposeFlag_v<decltype(column(asns, i))>) {
                     ctrs[i] = (blz::sum<blz::columnwise>(mat % expand(column(asns, i) * trans(*weights), mat.columns())) * wsums[i]);
@@ -801,10 +803,9 @@ double set_centroids_full_mean(const Mat &mat,
                 }
             }
         } else {
-            blz::DV<FT> wsums;
-            if constexpr(blz::TransposeFlag_v<WeightsT> == blz::columnVector) {
-                wsums = 1. / sum<columnwise>(asns);
-            }
+            std::fprintf(stderr, "weights unset\n");
+            blz::DV<FT> wsums = trans(1. / sum<columnwise>(asns));
+            std::cerr << wsums << '\n';
             for(size_t i = 0; i < k; ++i) {
                 auto expmat = expand(column(asns, i), mat.columns());
                 ctrs[i] = (blz::sum<blz::columnwise>(mat % expmat) * wsums[i]);
@@ -839,6 +840,7 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
         const double w = weights ? double((*weights)[i]): 1.;
         ret += dot(cr, r) * w;
     }
+    std::fprintf(stderr, "Computed cost: %g\n", ret);
     std::vector<blz::DV<FT>> tmprows(ctrs.size(), blz::DV<FT>(mat.columns(), 0.));
     if(measure == distance::L2 || measure == distance::L1) {
         //OMP_PFOR
