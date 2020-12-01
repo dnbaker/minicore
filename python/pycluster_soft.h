@@ -63,8 +63,9 @@ py::dict py_scluster(const Matrix &smw,
         std::string cpath = savepref + ".costs." + (use_float ? ".f32": ".f64") + ".npy";
         std::string apath = savepref + ".asns." + (use_float ? ".f32": ".f64") + ".npy";
         auto mmfn = py::module::import("numpy").attr("memmap");
-        costs = mmfn(py::str(cpath), shape, py::dtype(use_float ? "f": "d"));
-        asns = mmfn(py::str(cpath), shape, py::dtype(use_float ? "f": "d"));
+        auto dt = py::dtype(use_float ? "f": "d");
+        costs = mmfn(py::str(cpath), shape, dt);
+        asns = mmfn(py::str(apath), shape, dt);
     } else {
         if(use_float) costs = py::array_t<float>({smw.rows(), smw.columns()}), asns = py::array_t<float>({smw.rows(), smw.columns()});
         else costs = py::array_t<double>({smw.rows(), smw.columns()}), asns = py::array_t<double>({smw.rows(), smw.columns()});

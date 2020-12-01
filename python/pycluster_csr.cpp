@@ -24,7 +24,8 @@ void init_clustering_csr(py::module &m) {
                     Py_ssize_t reseed_count, bool with_rep) -> py::object
     {
         return __py_cluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter,
-                //kmcrounds, ntimes, lspprounds, seed,
+                //kmcrounds, ntimes, lspprounds,
+                seed,
                 mbsize, ncheckins, reseed_count, with_rep);
     },
     py::arg("smw"),
