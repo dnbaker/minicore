@@ -880,10 +880,21 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
             for(size_t i = 0; i < r.n_; ++i) {
                 auto data = r.data_[i];
                 auto datamul = evaluate(data * smr);
-                SK_UNROLL_4
-                for(size_t m = 0; m < ctrs.size(); ++m) {
+                auto idx = r.indices_[i];
+                size_t m;
+                for(m = 0; m <= ctrs.size() - 4; m += 4) {
                     OMP_ATOMIC
-                    tmprows[m][r.indices_[i]] += datamul[m];
+                    tmprows[m][idx] += datamul[m];
+                    OMP_ATOMIC
+                    tmprows[m + 1][idx] += datamul[m + 1];
+                    OMP_ATOMIC
+                    tmprows[m + 2][idx] += datamul[m + 2];
+                    OMP_ATOMIC
+                    tmprows[m + 3][idx] += datamul[m + 3];
+                }
+                for(; m < ctrs.size(); ++m) {
+                    OMP_ATOMIC
+                    tmprows[m][idx] += datamul[m];
                 }
             }
         }

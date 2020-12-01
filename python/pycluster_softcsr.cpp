@@ -5,7 +5,7 @@ void init_clustering_soft_csr(py::module &m) {
     m.def("scluster", [](const PyCSparseMatrix &smw, py::object centers,
                     py::object measure, double beta, double temp,
                     uint64_t kmeansmaxiter, Py_ssize_t mbsize, Py_ssize_t mbn,
-                    std::string savepref, bool use_float, py::object weights) -> py::object
+                    py::object savepref, bool use_float, py::object weights) -> py::object
     {
         void *wptr = nullptr;
         std::string wfmt = "f";
@@ -14,7 +14,7 @@ void init_clustering_soft_csr(py::module &m) {
             wfmt = standardize_dtype(inf.format);
             wptr = inf.ptr;
         }
-        return py_scluster(smw, centers, assure_dm(measure), beta, temp, kmeansmaxiter, mbsize, mbn, savepref, use_float, wptr);
+        return py_scluster(smw, centers, assure_dm(measure), beta, temp, kmeansmaxiter, mbsize, mbn, savepref.cast<std::string>(), use_float, wptr);
     },
     py::arg("smw"),
     py::arg("centers"),

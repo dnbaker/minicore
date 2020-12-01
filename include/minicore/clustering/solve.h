@@ -113,7 +113,7 @@ auto perform_hard_clustering(const MT &mat, // TODO: consider replacing blaze::M
 #endif
     const auto initcost = compute_cost();
     FT cost = initcost;
-    std::fprintf(stderr, "initial cost: %0.12g\n", cost);
+    std::fprintf(stderr, "[%s] initial cost: %0.12g\n", __PRETTY_FUNCTION__, cost);
     size_t iternum = 0;
     auto centers_cpy = centers;
     for(;;) {
@@ -287,6 +287,7 @@ auto perform_soft_clustering(const MT &mat,
                              const WeightT *weights=static_cast<WeightT *>(nullptr),
                              double eps=0.)
 {
+    std::fprintf(stderr, "Starting [%s]\n", __PRETTY_FUNCTION__);
     using CFT = FT;
     auto centers_cpy(centers);
     blz::DV<CFT> centersums(centers.size());
@@ -310,7 +311,7 @@ auto perform_soft_clustering(const MT &mat,
         cost = set_centroids_soft<CFT>(mat, measure, prior, centers_cpy, costs, asns, weights, temperature, centersums, rowsums);
         if(initcost < 0) {
             initcost = cost;
-            std::fprintf(stderr, "initial cost: %0.20g\n", cost);
+            std::fprintf(stderr, "[%s] initial cost: %0.12g\n", __PRETTY_FUNCTION__, cost);
         }
         //cost = compute_cost();
         std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
@@ -363,6 +364,7 @@ double set_centroids_soft(const Mat &mat,
     DBG_ONLY(std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));)
 #endif
     double ret = set_centroids_full_mean<FT>(mat, measure, prior, costs, asns, centers, weights, temp, centersums);
+    std::fprintf(stderr, "cost: %g for %d/%s\n", ret, (int)measure, msr2str(measure));
     const double prior_sum =
         prior.size() == 0 ? 0.
                           : prior.size() == 1
