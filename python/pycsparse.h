@@ -4,6 +4,7 @@
 #include "pybind11/pytypes.h"
 #include "blaze/util/Serialization.h"
 #include "minicore/util/csc.h"
+#include "pyhelpers.h"
 
 #define ENABLE_CONST_FUNCS 1
 

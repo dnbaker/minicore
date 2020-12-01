@@ -470,14 +470,69 @@ ProdCSparseVector<VT, IT> operator/(const CSparseVector<VT, IT> &lhs, OVT rhs) {
 }
 
 template<typename VT1, typename IT1, typename VT2, bool TF>
+auto l2Dist(const ProdCSparseVector<VT1, IT1> &lhs, const blaze::DenseVector<VT2, TF> &rhs) {
+    if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
+    auto &rr = *rhs;
+    using CT = std::common_type_t<VT1, blaze::ElementType_t<VT2>>;
+    CT ret = 0;
+    size_t si = 0, di = 0;
+    for(;si != lhs.n_ || di != (*rhs).size(); ++di) {
+        if(si == lhs.n_) {
+            ret += sum(subvector(*rhs, di, (*rhs).size() - di));
+            break;
+        } else if(di == (*rhs).size()) {
+            ret += sum(blz::make_cv(&lhs.data_[si], lhs.n_ - si)) * lhs.prod_;
+            break;
+        } else {
+            ret += sum(abs(subvector(*rhs, di, si - di)));
+            di = si;
+            ret += abs_diff((*rhs)[di], lhs.data_[si]);
+            ++si;
+        }
+    }
+    return ret;
+}
+template<typename VT1, typename IT1, typename VT2, bool TF>
+auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::DenseVector<VT2, TF> &rhs) {
+    if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
+    using CT = std::common_type_t<VT1, blaze::ElementType_t<VT2>>;
+    CT ret = 0;
+    size_t si = 0, di = 0;
+    for(;si != lhs.n_ || di != (*rhs).size(); ++di) {
+        if(si == lhs.n_) {
+            ret += sum(subvector(*rhs, di, (*rhs).size() - di));
+            break;
+        } else if(di == (*rhs).size()) {
+            ret += sum(blz::make_cv(&lhs.data_[si], lhs.n_ - si));
+            break;
+        } else {
+            while(di < lhs.indices_[si]) {
+                ret += std::abs((*rhs)[di++]);
+            }
+            ret += abs_diff((*rhs)[di], lhs.data_[si]);
+            ++si;
+        }
+    }
+    return ret;
+}
+template<typename VT1, typename IT1, typename VT2, bool TF>
+auto l2Dist(const blaze::DenseVector<VT2, TF> &rhs,
+            const CSparseVector<VT1, IT1> &lhs)
+{
+    return l2Dist(lhs, rhs);
+}
+
+template<typename VT1, typename IT1, typename VT2, bool TF>
+auto l2Dist(const blaze::DenseVector<VT2, TF> &rhs,
+            const ProdCSparseVector<VT1, IT1> &lhs)
+{
+    return l2Dist(lhs, rhs);
+}
+
+
+template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, TF> &rhs) {
     if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
-#if 0
-    for(const auto &pair: lhs) {
-        std::fprintf(stderr, "%g:%zu\t", pair.value(), pair.index());
-        std::fputc('\n', stderr);
-    }
-#endif
     auto &rr = *rhs;
     using CT = std::common_type_t<VT1, blaze::ElementType_t<VT2>>;
     CT ret = 0;
@@ -488,6 +543,7 @@ auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, T
                                  [&ret](auto, auto lhv) {ret += lhv * lhv;});
     return ret;
 }
+
 template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l2Dist(const blaze::SparseVector<VT2, TF> &rhs, const CSparseVector<VT1, IT1> &lhs) {
     return l2Dist(lhs, rhs);
@@ -1068,7 +1124,10 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
         if(weights) {
             static constexpr bool TF = blaze::TransposeFlag_v<WeightT>;
             auto wgen = blaze::generate<TF>(npoints, [&](auto x) {return ptr ? double((*weights)[ptr[x]]): double((*weights)[x]);});
-            costs = blaze::max(wgen * blaze::generate<TF>(npoints, [&](auto x) {return l2Dist(center, row(mat, ptr ? index_t(ptr[x]): index_t(x), blz::unchecked));}), MINVAL);
+            costs = blaze::max(wgen * blaze::generate<TF>(npoints, [&](auto x) {
+                if(ptr) x = ptr[x];
+                return l2Dist(center, row(mat, x, blz::unchecked));
+            }), MINVAL);
         } else {
             costs = blaze::max(blaze::generate(npoints, [&](auto x) {return l2Dist(center, row(mat, ptr ? index_t(ptr[x]): index_t(x), blz::unchecked));}),
                                MINVAL);

@@ -17,10 +17,15 @@ void init_clustering_csr(py::module &m) {
 #if BUILD_CSR_CLUSTERING
     m.def("cluster", [](const PyCSparseMatrix &smw, py::object centers, double beta,
                     py::object msr, py::object weights, double eps,
-                    uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
+                    uint64_t kmeansmaxiter,
+                        //size_t kmcrounds, int ntimes, int lspprounds,
+                    uint64_t seed,
+                    Py_ssize_t mbsize, Py_ssize_t ncheckins,
                     Py_ssize_t reseed_count, bool with_rep) -> py::object
     {
-        return __py_cluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter, kmcrounds, ntimes, lspprounds, seed, mbsize, ncheckins, reseed_count, with_rep);
+        return __py_cluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter,
+                //kmcrounds, ntimes, lspprounds, seed,
+                mbsize, ncheckins, reseed_count, with_rep);
     },
     py::arg("smw"),
     py::arg("centers"),
@@ -29,9 +34,6 @@ void init_clustering_csr(py::module &m) {
     py::arg("weights") = py::none(),
     py::arg("eps") = 1e-10,
     py::arg("maxiter") = 1000,
-    py::arg("kmcrounds") = 10000,
-    py::arg("ntimes") = 1,
-    py::arg("lspprounds") = 1,
     py::arg("seed") = 0,
     py::arg("mbsize") = Py_ssize_t(-1),
     py::arg("ncheckins") = Py_ssize_t(-1),

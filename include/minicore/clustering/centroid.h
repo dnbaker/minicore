@@ -665,7 +665,7 @@ void set_centroids_full_mean(const Mat &mat,
             DBG_ONLY(std::fprintf(stderr, "for id %u, old ctrsum %g. new ctrsum: %g. sum of ctr: %g. sum of row: %g\n", int(id), double(oldctrsum), double(ctrsums[id]), sum(ctr), sum(row(mat, r)));)
         }
         costs = std::numeric_limits<FT>::max();
-        
+
         OMP_PFOR
         for(size_t i = 0; i < np; ++i) {
             unsigned bestid = 0;
@@ -827,7 +827,7 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
     assert(ctrsums.size() == ctrs.size());
     //std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
 
-    const unsigned k = ctrs.size();
+    //const unsigned k = ctrs.size();
     //blz::DV<FT, blz::rowVector> asn(k, 0.);
     asns = softmax<rowwise>(costs * -temp);
     double ret = 0.;
@@ -836,7 +836,8 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
         auto r(row(asns, i, unchecked));
         auto cr(row(costs, i, unchecked));
         correct_softmax(cr, r);
-        sum += dot(cr, r) * (weights ? double((*weights)[i]): 1.);
+        const double w = weights ? double((*weights)[i]): 1.;
+        ret += dot(cr, r) * w;
     }
     std::vector<blz::DV<FT>> tmprows(ctrs.size(), blz::DV<FT>(mat.columns(), 0.));
     if(measure == distance::L2 || measure == distance::L1) {
@@ -865,12 +866,12 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
         blz::DV<FT, columnVector> winv;
         if(weights) {
             if constexpr(blz::TransposeFlag_v<WeightsT> == rowVector) {
-                winv = 1. / (*weights * trans(asns));
+                winv = trans(1. / (*weights * asns));
             } else {
-                winv = 1. / (trans(*weights) * trans(asns));
+                winv = 1. / trans((trans(*weights) * asns));
             }
         } else {
-            winv = 1. / sum<columnwise>(asns);
+            winv = 1. / trans(sum<columnwise>(asns));
         }
         OMP_PFOR
         for(size_t j = 0; j < mat.rows(); ++j) {
@@ -889,9 +890,9 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
         OMP_PFOR
         for(size_t i = 0; i < tmprows.size(); ++i) {
             if constexpr(blz::TransposeFlag_v<std::decay_t<decltype(ctrs[0])>> == blaze::rowVector) {
-                ctrs[i] = tmprows[i] * winv[i];
-            } else {
                 ctrs[i] = trans(tmprows[i] * winv[i]);
+            } else {
+                ctrs[i] = tmprows[i] * winv[i];
             }
         }
     }

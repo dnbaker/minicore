@@ -7,7 +7,7 @@ using blz::rowMajor;
 using blz::rowVector;
 
 template<typename Matrix, typename CtrT, typename AsnT=blz::DV<uint32_t>, typename CostsT=blz::DV<double>>
-py::dict cpp_scluster(const Matrix &mat, int k, double beta,
+py::dict cpp_scluster(const Matrix &mat, int, double beta,
                dist::DissimilarityMeasure measure,
                std::vector<CtrT> &ctrs,
                CostsT &costs,
