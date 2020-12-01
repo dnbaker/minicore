@@ -6,9 +6,7 @@ PYBIND11_MODULE(pyminicore, m) {
     init_coreset(m);
     init_merge(m);
     init_centroid(m);
-    //init_hashers(m);
     init_omp_helpers(m);
-    //init_clustering(m);
     init_pycsparse(m);
     init_clustering_csr(m);
     init_clustering_soft_csr(m);
