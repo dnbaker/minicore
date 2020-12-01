@@ -825,7 +825,7 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
     WeightsT *weights, FT temp, SumT &ctrsums)
 {
     assert(ctrsums.size() == ctrs.size());
-    //std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
+    std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
 
     //const unsigned k = ctrs.size();
     //blz::DV<FT, blz::rowVector> asn(k, 0.);
@@ -873,16 +873,20 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
         } else {
             winv = 1. / trans(sum<columnwise>(asns));
         }
+        std::fprintf(stderr, "Calculated winv: \n");
+        std::cerr << trans(winv) << '\n';
         OMP_PFOR
         for(size_t j = 0; j < mat.rows(); ++j) {
             auto r = row(mat, j, unchecked);
             auto smr = row(asns, j, unchecked);
+            std::fprintf(stderr, "mat row %zu\n", j);
             for(size_t i = 0; i < r.n_; ++i) {
                 auto data = r.data_[i];
                 auto datamul = evaluate(data * smr);
                 auto idx = r.indices_[i];
-                size_t m;
-                for(m = 0; m <= ctrs.size() - 4; m += 4) {
+                size_t m = 0;
+#if 0
+                for(; m <= ctrs.size() - 4; m += 4) {
                     OMP_ATOMIC
                     tmprows[m][idx] += datamul[m];
                     OMP_ATOMIC
@@ -892,6 +896,7 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
                     OMP_ATOMIC
                     tmprows[m + 3][idx] += datamul[m + 3];
                 }
+#endif
                 for(; m < ctrs.size(); ++m) {
                     OMP_ATOMIC
                     tmprows[m][idx] += datamul[m];

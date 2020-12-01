@@ -3,8 +3,14 @@
 #include "pycluster.h"
 #include "pybind11/embed.h"
 
+namespace clust = minicore::clustering;
+
 using blz::rowMajor;
 using blz::rowVector;
+using blz::unchecked;
+using blz::rowwise;
+using minicore::util::sum;
+using blz::sum;
 
 template<typename Matrix, typename CtrT, typename AsnT=blz::DV<uint32_t>, typename CostsT=blz::DV<double>>
 py::dict cpp_scluster(const Matrix &mat, int, double beta,
@@ -22,12 +28,27 @@ py::dict cpp_scluster(const Matrix &mat, int, double beta,
     using FT = double;
     blz::DV<FT> prior{FT(beta)};
     std::tuple<double, double, size_t> clusterret;
+    blz::DV<FT> rsums = sum<rowwise>(mat);
+    const auto csums = blz::evaluate(blz::generate(ctrs.size(), [&](auto idx) {return blz::sum(ctrs[idx]);}));
+    const double psum = beta * mat.columns();
+    costs = blaze::generate(costs.rows(), costs.columns(), [&](auto r, auto c) {
+        return cmp::msr_with_prior<float>(measure, row(mat, r, unchecked), ctrs[c], prior, psum, rsums[r], csums[c]);
+    });
+    asn = blaze::softmax<blaze::rowwise>(costs);
+    OMP_PFOR
+    for(size_t i = 0; i < asn.rows(); ++i) {
+        auto r = row(asn, i, unchecked);
+        clust::correct_softmax(row(costs, i, unchecked), r);
+    }
+
     if(wdtype == 'f' || !weights) {
         std::fprintf(stderr, "[%s] Doing soft clustering for floats\n", __PRETTY_FUNCTION__);
         std::unique_ptr<blz::CustomVector<float, blz::unaligned, blz::unpadded, rowVector>> wview;
         if(weights) {
             std::fprintf(stderr, "Setting wview\n");
             wview.reset(new blz::CustomVector<float, blz::unaligned, blz::unpadded, rowVector>((float *)weights, mat.rows()));
+        } else {
+            assert(wview.get() == nullptr);
         }
         clusterret = minicore::clustering::perform_soft_clustering(mat, measure, prior, ctrs, costs, asn, temp, kmeansmaxiter, mbsize, mbn, wview.get());
     } else if(wdtype == 'd') {

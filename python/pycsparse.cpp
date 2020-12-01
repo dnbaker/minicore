@@ -150,5 +150,7 @@ void init_pycsparse(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("smw"), py::arg("sumopts"), py::arg("weights") = py::none());
+#else
+    std::fprintf(stderr, "[%s] PyCSparseMatrix bindings not created\n", __PRETTY_FUNCTION__);
 #endif
 }

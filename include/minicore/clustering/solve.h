@@ -315,7 +315,7 @@ auto perform_soft_clustering(const MT &mat,
         }
         //cost = compute_cost();
         std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
-        if(oldcost > cost) // Update centers only if an improvement
+        if(oldcost >= cost) // Update centers only if an improvement
         {
 #if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
             std::copy(centers_cpy.begin(), centers_cpy.end(), centers.begin());
@@ -331,7 +331,7 @@ auto perform_soft_clustering(const MT &mat,
             {
             }
         }
-        if(oldcost - cost < eps * initcost || ++iternum == maxiter) {
+        if(oldcost - cost <= eps * initcost || ++iternum == maxiter) {
             break;
         }
     }
