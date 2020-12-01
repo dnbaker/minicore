@@ -843,6 +843,7 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
     std::fprintf(stderr, "Computed cost: %g\n", ret);
     std::vector<blz::DV<FT>> tmprows(ctrs.size(), blz::DV<FT>(mat.columns(), 0.));
     if(measure == distance::L2 || measure == distance::L1) {
+        std::fprintf(stderr, "L1 or L2 centroid\n");
         //OMP_PFOR
         for(size_t i = 0; i < ctrs.size(); ++i) {
             blz::DV<FT, blz::columnVector> colweights;
@@ -853,11 +854,13 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
             } else {
                 colweights = trans(*weights) * column(asns, i, unchecked);
             }
+            std::fprintf(stderr, "Weights selected for row %zu/%zu\n", i + 1, ctrs.size());
             uint64_t *np = 0;
             if(measure == distance::L2)
                 geomedian(mat, tmprows[i], np, 0, &colweights);
             else
                 l1_median(mat, tmprows[i], np, 0, &colweights);
+            std::fprintf(stderr, "Centroid selected for row %zu/%zu\n", i + 1, ctrs.size());
             if constexpr(blz::TransposeFlag_v<std::decay_t<decltype(ctrs[0])>> == blaze::rowVector) {
                 ctrs[i] = trans(tmprows[i]);
             } else {
@@ -865,15 +868,19 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
             }
         }
     } else {
+        std::fprintf(stderr, "Start vector\n");
         blz::DV<FT, columnVector> winv;
         if(weights) {
+            std::fprintf(stderr, "weights!\n");
             if constexpr(blz::TransposeFlag_v<WeightsT> == rowVector) {
                 winv = trans(1. / (*weights * asns));
             } else {
                 winv = 1. / trans((trans(*weights) * asns));
             }
         } else {
+            std::fprintf(stderr, "no weights!\n");
             winv = 1. / trans(sum<columnwise>(asns));
+            std::cerr << winv << '\n';
         }
         std::fprintf(stderr, "Calculated winv: \n");
         std::cerr << trans(winv) << '\n';

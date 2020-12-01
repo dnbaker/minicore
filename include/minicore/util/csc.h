@@ -827,7 +827,7 @@ void l1_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::Vector<ORVT, TF> &
         shared::flat_hash_map<IT, std::vector<RVT>> nzfeatures;
         nzfeatures.reserve(mat.columns());
         const size_t nrows = asnsz ? asnsz: mat.rows();
-        if(weightc) throw NotImplementedError("Not implemented");
+        if(weightc) throw NotImplementedError("Not implemented: weighted L1 median for CSparseMatrix");
         for(size_t i = 0; i < nrows; ++i) {
             auto rownum = asnsz ? OIT(asnptr[i]): OIT(i);
             auto r = row(mat, rownum, unchecked);
@@ -1114,7 +1114,7 @@ constexpr inline size_t size(const CSparseVector<VT, IT> &x) {
 template<typename VT, typename IT, typename IPtrT, typename RetT, typename IT2=uint64_t, typename WeightT=blz::DV<VT>>
 void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr = static_cast<IT2 *>(nullptr), size_t nasn=0, WeightT *weights=static_cast<WeightT *>(nullptr), double eps=0.) {
     double prevcost = std::numeric_limits<double>::max();
-    //size_t iternum = 0;
+    size_t iternum = 0;
     assert(center.size() == mat.columns());
     const size_t npoints = ptr ? nasn: mat.rows();
     using index_t = std::common_type_t<IT2, size_t>;
@@ -1134,9 +1134,12 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
         }
         double current_cost = sum(costs);
         double dist = std::abs(prevcost - current_cost);
-        //++iternum;
         if(dist <= eps) break;
         if(std::isnan(dist)) throw std::range_error("distance is nan");
+        if(++iternum == 100000) {
+            std::fprintf(stderr, "Failed to terminate: %g\n", dist);
+            break;
+        }
         costs = current_cost / costs;
         blz::DV<double, blaze::TransposeFlag_v<RetT>> newcenter(mat.columns(), 0);
         OMP_PFOR
@@ -1151,13 +1154,6 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
         assign(center, newcenter);
     }
 }
-#if 0
-
-template<typename VT, typename IT, typename IPtrT, typename OVT, typename WeightType, typename IT=uint64_t *>
-auto geomedian(const Matrix<VT, IT, IPtrT> &mat, blaze::Vector<OVT, blz::columnVector> &dv, IT *asn=(IT *)nullptr, size_t nasn=0, WeightType *weights=(WeightType *)nullptr, double eps=0) {
-    geomedian(mat, *dv, asn, nasn,
-}
-#endif
 
 
 template<typename FT=float, typename IndPtrType, typename IndicesType, typename DataType>
