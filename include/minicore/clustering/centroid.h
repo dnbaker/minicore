@@ -766,7 +766,7 @@ double set_centroids_full_mean(const Mat &mat,
     //std::fprintf(stderr, "Now setting centers\n");
     if(measure == distance::L2 || measure == distance::L1) {
         //OMP_PFOR
-        for(size_t i = 0; i < ctrs.size(); ++i) {
+        for(size_t i = 0; i < k; ++i) {
             blz::DV<FT, blz::columnVector> colweights;
             if(!weights) {
                 colweights = column(asns, i, unchecked);
@@ -787,8 +787,13 @@ double set_centroids_full_mean(const Mat &mat,
         }
     } else {
         if(weights) {
-            auto wsums = evaluate(1. / ((*weights) * trans(asns)));
-            for(size_t i = 0; i < ctrs.size(); ++i) {
+            blz::DV<FT, rowVector> wsums;
+            if constexpr(blz::TransposeFlag_v<WeightsT> == blz::columnVector) {
+                wsums = 1. / sum<columnwise>(asns % expand(trans(*weights), asns.columns()));
+            } else {
+                wsums = 1. / sum<columnwise>(asns % expand(*weights, asns.columns()));
+            }
+            for(size_t i = 0; i < k; ++i) {
                 if constexpr(blaze::TransposeFlag_v<WeightsT> != blaze::TransposeFlag_v<decltype(column(asns, i))>) {
                     ctrs[i] = (blz::sum<blz::columnwise>(mat % expand(column(asns, i) * trans(*weights), mat.columns())) * wsums[i]);
                 } else {
@@ -796,8 +801,11 @@ double set_centroids_full_mean(const Mat &mat,
                 }
             }
         } else {
-            auto wsums = evaluate(1. / blz::sum<blz::columnwise>(asns));
-            for(size_t i = 0; i < ctrs.size(); ++i) {
+            blz::DV<FT> wsums;
+            if constexpr(blz::TransposeFlag_v<WeightsT> == blz::columnVector) {
+                wsums = 1. / sum<columnwise>(asns);
+            }
+            for(size_t i = 0; i < k; ++i) {
                 auto expmat = expand(column(asns, i), mat.columns());
                 ctrs[i] = (blz::sum<blz::columnwise>(mat % expmat) * wsums[i]);
                 assert(ctrs[i].size() == mat.columns());
@@ -805,7 +813,7 @@ double set_centroids_full_mean(const Mat &mat,
         }
     }
     OMP_PFOR
-    for(size_t i = 0; i < ctrs.size(); ++i) ctrsums[i] = sum(ctrs[i]);
+    for(size_t i = 0; i < k; ++i) ctrsums[i] = sum(ctrs[i]);
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
     return ret;
 }
@@ -842,16 +850,25 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
             } else {
                 colweights = trans(*weights) * column(asns, i, unchecked);
             }
+            uint64_t *np = 0;
             if(measure == distance::L2)
-                geomedian(mat, tmprows[i], nullptr, 0, &colweights);
+                geomedian(mat, tmprows[i], np, 0, &colweights);
             else
-                l1_median(mat, tmprows[i], nullptr, 0, &colweights);
-            ctrs[i] = tmprows[i];
+                l1_median(mat, tmprows[i], np, 0, &colweights);
+            if constexpr(blz::TransposeFlag_v<std::decay_t<decltype(ctrs[0])>> == blaze::rowVector) {
+                ctrs[i] = trans(tmprows[i]);
+            } else {
+                ctrs[i] = tmprows[i];
+            }
         }
     } else {
         blz::DV<FT, columnVector> winv;
         if(weights) {
-            winv = 1. / ((*weights) * trans(asns));
+            if constexpr(blz::TransposeFlag_v<WeightsT> == rowVector) {
+                winv = 1. / (*weights * trans(asns));
+            } else {
+                winv = 1. / (trans(*weights) * trans(asns));
+            }
         } else {
             winv = 1. / sum<columnwise>(asns);
         }
@@ -870,7 +887,13 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
             }
         }
         OMP_PFOR
-        for(size_t i = 0; i < tmprows.size(); ++i) ctrs[i] = tmprows[i] * winv[i];
+        for(size_t i = 0; i < tmprows.size(); ++i) {
+            if constexpr(blz::TransposeFlag_v<std::decay_t<decltype(ctrs[0])>> == blaze::rowVector) {
+                ctrs[i] = tmprows[i] * winv[i];
+            } else {
+                ctrs[i] = trans(tmprows[i] * winv[i]);
+            }
+        }
     }
     OMP_PFOR
     for(size_t i = 0; i < ctrs.size(); ++i) ctrsums[i] = sum(ctrs[i]);

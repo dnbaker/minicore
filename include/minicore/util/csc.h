@@ -1092,6 +1092,13 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
         assign(center, newcenter);
     }
 }
+#if 0
+
+template<typename VT, typename IT, typename IPtrT, typename OVT, typename WeightType, typename IT=uint64_t *>
+auto geomedian(const Matrix<VT, IT, IPtrT> &mat, blaze::Vector<OVT, blz::columnVector> &dv, IT *asn=(IT *)nullptr, size_t nasn=0, WeightType *weights=(WeightType *)nullptr, double eps=0) {
+    geomedian(mat, *dv, asn, nasn,
+}
+#endif
 
 
 template<typename FT=float, typename IndPtrType, typename IndicesType, typename DataType>

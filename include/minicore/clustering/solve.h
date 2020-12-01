@@ -268,47 +268,50 @@ void assign_points_hard(const Mat &mat,
 }
 
 template<typename MT, // MatrixType
-         typename FT=blaze::ElementType_t<MT>, // Type of result.
-                                               // Defaults to that of MT, but can be parametrized. (e.g., when MT is integral)
+         typename FT=std::conditional_t<(sizeof(ElementType_t<MT>) <= 4), float, double>,
          typename CtrT=blz::DynamicVector<FT, rowVector>, // Vector Type
          typename CostsT=blaze::DynamicMatrix<FT, rowMajor>, // Costs matrix, nsamples x ncomponents
          typename PriorT=blaze::DynamicVector<FT, rowVector>,
          typename WeightT=blz::DV<FT, rowVector>, // Vector Type
          typename=std::enable_if_t<std::is_floating_point_v<FT>>
         >
-auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
+auto perform_soft_clustering(const MT &mat,
                              const dist::DissimilarityMeasure measure,
                              const PriorT &prior,
                              std::vector<CtrT> &centers,
                              CostsT &costs,
                              CostsT &asns,
-                             FT temperature=1.,
+                             double temperature=1.,
+                             size_t maxiter=size_t(-1),
+                             int64_t mbsize=-1, int64_t mbn=10,
                              const WeightT *weights=static_cast<WeightT *>(nullptr),
-                             double eps=1e-40,
-                             size_t maxiter=size_t(-1))
+                             double eps=0.)
 {
+    using CFT = FT;
     auto centers_cpy(centers);
-    blz::DV<FT> centersums(centers.size());
-    blz::DV<FT> rowsums((*mat).rows());
+    blz::DV<CFT> centersums(centers.size());
+    blz::DV<CFT> rowsums((mat).rows());
 #if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
-    rowsums = blz::sum<blz::rowwise>(*mat);
+    rowsums = sum<rowwise>(mat);
     centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
 #else
     OMP_PFOR
     for(size_t i = 0; i < rowsums.size(); ++i)
-        rowsums[i] = blz::sum(row(*mat, i));
+        rowsums[i] = sum(row(mat, i));
     OMP_PFOR
     for(size_t i = 0; i < centers_cpy.size(); ++i)
         centersums[i] = blz::sum(centers_cpy[i]);
 #endif
     double cost = std::numeric_limits<double>::max();
     double initcost = -1;
-    std::fprintf(stderr, "initial cost: %0.20g\n", cost);
     size_t iternum = 0;
     for(;;) {
         double oldcost = cost;
-        cost = set_centroids_soft<FT>(*mat, measure, prior, centers_cpy, costs, asns, weights, temperature, centersums, rowsums);
-        if(initcost < 0) initcost = cost;
+        cost = set_centroids_soft<CFT>(mat, measure, prior, centers_cpy, costs, asns, weights, temperature, centersums, rowsums);
+        if(initcost < 0) {
+            initcost = cost;
+            std::fprintf(stderr, "initial cost: %0.20g\n", cost);
+        }
         //cost = compute_cost();
         std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
         if(oldcost > cost) // Update centers only if an improvement
@@ -320,6 +323,12 @@ auto perform_soft_clustering(const blaze::Matrix<MT, rowMajor> &mat,
             for(unsigned i = 0; i < centers.size(); ++i)
                 centers[i] = centers_cpy[i];
 #endif
+        }
+        if(mbsize > 0) {
+            throw std::runtime_error("Not yet completed: minibatch soft clustering");
+            for(int i = 0; i < mbn; ++i) // Perform mbn rounds of minibatch clustering between central
+            {
+            }
         }
         if(oldcost - cost < eps * initcost || ++iternum == maxiter) {
             break;
@@ -359,9 +368,9 @@ double set_centroids_soft(const Mat &mat,
                           : double(blz::sum(prior));
     costs = blaze::generate(mat.rows(), centers.size(), [&](auto id, auto cid) ALWAYS_INLINE {
         assert(cid < centers.size());
-        return cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        return cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
     });
-    std::cerr << "Costs: " << costs << '\n';
+    //std::cerr << "Costs: " << costs << '\n';
     return ret;
 }
 

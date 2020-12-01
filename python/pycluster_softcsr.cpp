@@ -1,36 +1,32 @@
-#include "pycluster.h"
-
-#if BUILD_CSR_CLUSTERING
-
-#endif
+#include "pycluster_soft.h"
 
 void init_clustering_soft_csr(py::module &m) {
 #if BUILD_CSR_CLUSTERING
-    m.def("scluster", [](const PyCSparseMatrix &smw, py::object centers, double beta,
-                    py::object msr, py::object weights, double eps,
-                    uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                    Py_ssize_t reseed_count, bool with_rep, double temp, Py_ssize_t mmap_mem_threshold, std::string saveprefix) -> py::object
+    m.def("scluster", [](const PyCSparseMatrix &smw, py::object centers,
+                    py::object measure, double beta, double temp,
+                    uint64_t kmeansmaxiter, Py_ssize_t mbsize, Py_ssize_t mbn,
+                    std::string savepref, bool use_float, py::object weights) -> py::object
     {
-        return __py_softcluster(smw, centers, beta, msr, weights, eps, kmeansmaxiter, kmcrounds, ntimes, lspprounds, seed, mbsize, ncheckins, reseed_count, with_rep);
+        void *wptr = nullptr;
+        std::string wfmt = "f";
+        if(!weights.is_none()) {
+            auto inf = py::cast<py::array>(weights).request();
+            wfmt = standardize_dtype(inf.format);
+            wptr = inf.ptr;
+        }
+        return py_scluster(smw, centers, assure_dm(measure), beta, temp, kmeansmaxiter, mbsize, mbn, savepref, use_float, wptr);
     },
     py::arg("smw"),
     py::arg("centers"),
-    py::arg("betaprior") = 0.,
     py::arg("msr") = 5,
-    py::arg("weights") = py::none(),
-    py::arg("eps") = 1e-10,
+    py::arg("prior") = 0.,
+    py::arg("temp") = 0.,
     py::arg("maxiter") = 1000,
-    py::arg("kmcrounds") = 10000,
-    py::arg("ntimes") = 1,
-    py::arg("lspprounds") = 1,
-    py::arg("seed") = 0,
     py::arg("mbsize") = Py_ssize_t(-1),
-    py::arg("ncheckins") = Py_ssize_t(-1),
-    py::arg("reseed_count") = Py_ssize_t(5),
-    py::arg("with_rep") = false,
-    py::arg("temp") = 1.,
-    py::arg("mmap_t") = -1,
-    py::arg("saveprefix") = "",
+    py::arg("mbn") = Py_ssize_t(-1),
+    py::arg("savepref") = "",
+    py::arg("use_float") = true,
+    py::arg("weights") = py::none()
     );
 
 #endif

@@ -94,8 +94,18 @@ ext_modules = [
         language='c++',
         extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"],
         extra_objects=[SLEEFLIB]
-    ),
+    )
 ]
+
+'''
+Extension(
+    'mm',
+    ['mmap.cpp'],
+    include_dirs=include_dirs,
+    language='c++',
+    extra_compile_args=extra_compile_args,
+)
+'''
 
 
 
