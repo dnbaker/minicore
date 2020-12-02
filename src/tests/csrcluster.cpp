@@ -147,14 +147,7 @@ int main(int argc, char *argv[]) {
     });
     std::vector<IndptrT> selected_points;
     while(centers.size() < k) {
-        size_t index;
-        if(use_simd_sample) {
-            index = reservoir_simd::sample(hardcosts.data(), nr, rng());
-        } else {
-            blz::DV<FLOAT_TYPE> tmp(hardcosts.size());
-            std::partial_sum(hardcosts.begin(), hardcosts.end(), tmp.begin());
-            index = std::lower_bound(tmp.begin(), tmp.end(), std::uniform_real_distribution<FLOAT_TYPE>()(rng) * hardcosts[hardcosts.size() - 1]) - tmp.begin();
-        }
+        size_t index = reservoir_simd::sample(hardcosts.data(), nr, rng());
         selected_points.push_back(index);
         std::fprintf(stderr, "Selected point %zu with cost %g\n", index, hardcosts[index]);
         const auto cid = centers.size();

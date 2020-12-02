@@ -13,53 +13,6 @@ py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
 py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
                  py::object msr, py::object weights, double eps,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter);
-template<typename VecT>
-void set_centers(VecT *vec, const py::buffer_info &bi) {
-    auto &v = *vec;
-    switch(bi.format.front()) {
-        case 'f':
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
-        break;
-        case 'L': case 'l': {
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((uint64_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
-        }
-        break;
-        case 'I': case 'i': {
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((int *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
-        }
-        break;
-        case 'B': case 'b': {
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((uint8_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
-        }
-        break;
-        case 'H': case 'h': {
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((uint16_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
-        }
-        break;
-        case 'd':
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
-        break;
-        default: throw std::invalid_argument(std::string("Invalid format string: ") + bi.format);
-    }
-}
 
 template<typename Matrix, typename WFT, typename CtrT, typename AsnT=blz::DV<uint32_t>, typename CostsT=blz::DV<double>>
 py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double beta,
@@ -178,76 +131,20 @@ py::dict pycluster(const Matrix &smw, int k, double beta,
     return retdict;
 }
 
+
 template<typename Matrix>
 py::object __py_cluster_from_centers(const Matrix &smw,
                     py::object centers, double beta,
                     py::object msr, py::object weights, double eps,
-                    uint64_t kmeansmaxiter, size_t kmcrounds, int ntimes, int lspprounds, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
+                    uint64_t kmeansmaxiter,
+                    //size_t kmcrounds, int ntimes, int lspprounds,
+                    uint64_t seed,
+                    Py_ssize_t mbsize, Py_ssize_t ncheckins,
                     Py_ssize_t reseed_count, bool with_rep)
 {
-    if(py::isinstance<py::int_>(centers)) {
-        return func1(smw, centers.cast<int>(), beta, msr, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
-    }
     blz::DV<double> prior{double(beta)};
     const dist::DissimilarityMeasure measure = assure_dm(msr);
-    std::vector<blz::CompressedVector<double, blz::rowVector>> dvecs;
-    if(py::isinstance<py::array>(centers)) {
-        auto cbuf = py::cast<py::array>(centers).request();
-        set_centers(&dvecs, cbuf);
-    } else if(py::isinstance<py::list>(centers)) {
-        for(auto item: centers) {
-            auto ca = py::cast<py::array>(item);
-            auto bi = ca.request();
-            const auto fmt = bi.format[0];
-            auto emp = [&](auto &x) {
-                dvecs.emplace_back();
-                dvecs.back() = trans(x);
-            };
-            if(fmt == 'd') {
-                auto cv = blz::make_cv((double *)bi.ptr, bi.size);
-                emp(cv);
-            } else {
-                auto cv = blz::make_cv((float *)bi.ptr, bi.size);
-                emp(cv);
-            }
-        }
-    }
-#if 0
-else if(hasattr(centers, "indices") && hasattr(centers, "indptr") && hashattr(center, "data")) {
-        auto shape = py::cast<py::seq>(center.attr("shape"));
-        Py_ssize_t nr = shape[0].cast<Py_ssize_t>();
-        Py_ssize_t nc = shape[1].cast<Py_ssize_t>();
-        py::array idx = centers.attr("indices");
-        py::array data = centers.attr("data");
-        py::array indptr = centers.attr("indptr");
-        auto idxi = idx.request(), datai = data.request(), indptri = indptr.request();
-        const bool id64 = idxi.itemsize == 64;
-        for(int i = 0; i < nr; ++i) {
-            size_t start, end;
-            if(indptri.itemsize == 4) start = ((uint32_t *)indptri.ptr)[i], end = ((uint32_t *)indptri.ptr)[i + 1];
-            else if(indptri.itemsize == 8)  start = ((uint64_t *)indptri.ptr)[i], end = ((uint64_t *)indptri.ptr)[i + 1];
-            else throw std::invalid_argument("Expected indices of 32-bit or 64-bit integers");
-            auto nnz = end - start;
-            auto &v = dvecs.emplace_back(nc);
-            v.reserve(nnz);
-            for(size_t i = start; i < end; ++i) {
-                int32_t iv;
-                double value;
-                if(id64) iv = ((uint64_t *)indi.ptr)[i];
-                else iv = ((uint32_t *)indi.ptr)[i];
-                switch(datai.format[0]) {
-                    case 'f': value = (float *)datai.ptr[i]; break;
-                    case 'I': case 'i': value = (int32_t *)datai.ptr[i]; break;
-                    case 'l': case 'L': value = (int64_t *)datai.ptr[i]; break;
-                    case 'd': value = (double *)datai.ptr[i]; break;
-                    default: __builtin_unreachable();
-                }
-                v.append(iv, value);
-            }
-        }
-    }
-#endif
-    else throw std::invalid_argument("Centers must be a 2d numpy array or a list of numpy arrays");
+    std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs = obj2dvec(centers);
     const unsigned long long k = dvecs.size();
     blz::DV<uint32_t> asn(smw.rows());
     if(k > 0xFFFFFFFFull) throw std::invalid_argument("k must be < 4.3 billion to fit into a uint32_t");

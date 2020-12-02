@@ -4,6 +4,7 @@
 #include "pybind11/pytypes.h"
 #include "blaze/util/Serialization.h"
 #include "minicore/util/csc.h"
+#include "pyhelpers.h"
 
 #define ENABLE_CONST_FUNCS 1
 
@@ -63,9 +64,9 @@ struct PyCSparseMatrix {
         datap_ = datainf.ptr;
         indicesp_ = indicesinf.ptr;
         indptrp_ = indptrinf.ptr;
-        data_t_ = datainf.format;
-        indices_t_ = indicesinf.format;
-        indptr_t_ = indptrinf.format;
+        data_t_ = standardize_dtype(datainf.format);
+        indices_t_ = standardize_dtype(indicesinf.format);
+        indptr_t_ = standardize_dtype(indptrinf.format);
     }
     // Specialize for Data Types
 #if ENABLE_CONST_FUNCS

@@ -2,32 +2,36 @@
 #include "minicore/dist/applicator.h"
 #include <cassert>
 
-#define FT double
+#define FT uint16_t
 using namespace minicore;
 using namespace minicore::distance::detail;
 
 
 int main() {
-    blz::CompressedVector<FT> cv1{{10., 0., 4., 6.}};
+    blz::CompressedVector<FT> cv1{{10, 0, 4, 6}};
     blz::CompressedVector<FT> cv2 = cv1 * 2;
     blz::CompressedVector<FT> cv3 = cv1;
-    blz::CompressedVector<FT> cv4 = {0., 0., 0., 1.,};
-    blz::CompressedVector<FT> cv5 = {1., 1., 1., 1.,};
+    blz::CompressedVector<FT> cv4 = {0, 0, 0, 1,};
+    blz::CompressedVector<FT> cv5 = {1, 1, 1, 1,};
     blz::DV<FT> data({10, 4, 6});
-    blz::DV<uint64_t> indices{0, 2, 3};
-    util::CSparseVector<FT, uint64_t> csv(data.data(), indices.data(), 3, 10);
+    blz::DV<uint16_t> indices{0, 2, 3};
+    util::CSparseVector<FT, uint16_t> csv(data.data(), indices.data(), 3, 10);
     for(const auto &pair: csv) {
-        std::fprintf(stderr, "%zu/%0.20g\n", pair.index(), pair.value());
+        std::fprintf(stderr, "%zu/%0.20g\n", pair.index(), double(pair.value()));
         assert(cv1[pair.index()] == pair.value());
     }
     const std::vector<blz::CompressedVector<FT> *> ptrs{&cv1, &cv2, &cv3, &cv4, &cv5};
     for(auto x: ptrs) {
         x->resize(10);
     }
-    blz::DV<FT> prior(1);
-    FT psum = prior[0] * cv1.size();
+    for(const auto &pair: csv) {
+        std::fprintf(stderr, "%zu/%0.20g\n", pair.index(), double(pair.value()));
+        assert(cv1[pair.index()] == pair.value());
+    }
+    blz::DV<double> prior(1);
+    double psum = prior[0] * cv1.size();
     prior[0] = 1.;
-    FT s1 = sum(cv1);
+    double s1 = sum(cv1);
     int anyfail = 0.;
     auto checkv = [&](auto v, auto dis) {
         if(v != 0) {
@@ -48,7 +52,9 @@ int main() {
             prior[0] = pval;
             try {
             auto v = cmp::msr_with_prior(msr, csv, csv, prior, psum, s1, s1);
-            assert(v == cmp::msr_with_prior(msr, cv1, csv, prior, psum, s1, s1));
+            auto v_2 = cmp::msr_with_prior(msr, cv1, csv, prior, psum, s1, s1);
+            std::fprintf(stderr, "v: %g. v_2: %g\n", v, v_2);
+            assert(v == v_2);
             if(pval == 0. && std::isnan(v)) v = 0.;
             checkv(v, msr);
             auto v2 = cmp::msr_with_prior(msr, csv, cv4, prior, psum, s1, sum(cv4));

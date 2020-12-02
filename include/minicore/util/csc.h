@@ -334,7 +334,7 @@ struct ProdCSparseVector {
     const size_t dim_;
     const double prod_;
 
-    ProdCSparseVector(const CSparseVector<VT, IT> &ovec, VT prod): data_(ovec.data_), indices_(ovec.indices_), n_(ovec.n_), dim_(ovec.dim_), prod_(prod) {
+    ProdCSparseVector(const CSparseVector<VT, IT> &ovec, double prod): data_(ovec.data_), indices_(ovec.indices_), n_(ovec.n_), dim_(ovec.dim_), prod_(prod) {
     }
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
@@ -371,7 +371,9 @@ struct ProdCSparseVector {
         ColType &col_;
         size_t index_;
         size_t index() const {return col_.indices_[index_];}
-        double value() const {return col_.data_[index_] * col_.prod_;}
+        double value() const {
+            return col_.data_[index_] * col_.prod_;
+        }
         public:
 
         bool operator==(const ProdCSparseVectorIteratorBase &o) const {
@@ -468,14 +470,69 @@ ProdCSparseVector<VT, IT> operator/(const CSparseVector<VT, IT> &lhs, OVT rhs) {
 }
 
 template<typename VT1, typename IT1, typename VT2, bool TF>
+auto l2Dist(const ProdCSparseVector<VT1, IT1> &lhs, const blaze::DenseVector<VT2, TF> &rhs) {
+    if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
+    auto &rr = *rhs;
+    using CT = std::common_type_t<VT1, blaze::ElementType_t<VT2>>;
+    CT ret = 0;
+    size_t si = 0, di = 0;
+    for(;si != lhs.n_ || di != (*rhs).size(); ++di) {
+        if(si == lhs.n_) {
+            ret += sum(subvector(*rhs, di, (*rhs).size() - di));
+            break;
+        } else if(di == (*rhs).size()) {
+            ret += sum(blz::make_cv(&lhs.data_[si], lhs.n_ - si)) * lhs.prod_;
+            break;
+        } else {
+            ret += sum(abs(subvector(*rhs, di, si - di)));
+            di = si;
+            ret += abs_diff((*rhs)[di], lhs.data_[si]);
+            ++si;
+        }
+    }
+    return ret;
+}
+template<typename VT1, typename IT1, typename VT2, bool TF>
+auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::DenseVector<VT2, TF> &rhs) {
+    if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
+    using CT = std::common_type_t<VT1, blaze::ElementType_t<VT2>>;
+    CT ret = 0;
+    size_t si = 0, di = 0;
+    for(;si != lhs.n_ || di != (*rhs).size(); ++di) {
+        if(si == lhs.n_) {
+            ret += sum(subvector(*rhs, di, (*rhs).size() - di));
+            break;
+        } else if(di == (*rhs).size()) {
+            ret += sum(blz::make_cv(&lhs.data_[si], lhs.n_ - si));
+            break;
+        } else {
+            while(di < lhs.indices_[si]) {
+                ret += std::abs((*rhs)[di++]);
+            }
+            ret += abs_diff((*rhs)[di], lhs.data_[si]);
+            ++si;
+        }
+    }
+    return ret;
+}
+template<typename VT1, typename IT1, typename VT2, bool TF>
+auto l2Dist(const blaze::DenseVector<VT2, TF> &rhs,
+            const CSparseVector<VT1, IT1> &lhs)
+{
+    return l2Dist(lhs, rhs);
+}
+
+template<typename VT1, typename IT1, typename VT2, bool TF>
+auto l2Dist(const blaze::DenseVector<VT2, TF> &rhs,
+            const ProdCSparseVector<VT1, IT1> &lhs)
+{
+    return l2Dist(lhs, rhs);
+}
+
+
+template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, TF> &rhs) {
     if(lhs.size() != (*rhs).size()) throw std::invalid_argument("lhs and rhs have mismatched sizes");
-#if 0
-    for(const auto &pair: lhs) {
-        std::fprintf(stderr, "%g:%zu\t", pair.value(), pair.index());
-        std::fputc('\n', stderr);
-    }
-#endif
     auto &rr = *rhs;
     using CT = std::common_type_t<VT1, blaze::ElementType_t<VT2>>;
     CT ret = 0;
@@ -486,6 +543,7 @@ auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::SparseVector<VT2, T
                                  [&ret](auto, auto lhv) {ret += lhv * lhv;});
     return ret;
 }
+
 template<typename VT1, typename IT1, typename VT2, bool TF>
 auto l2Dist(const blaze::SparseVector<VT2, TF> &rhs, const CSparseVector<VT1, IT1> &lhs) {
     return l2Dist(lhs, rhs);
@@ -769,7 +827,7 @@ void l1_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::Vector<ORVT, TF> &
         shared::flat_hash_map<IT, std::vector<RVT>> nzfeatures;
         nzfeatures.reserve(mat.columns());
         const size_t nrows = asnsz ? asnsz: mat.rows();
-        if(weightc) throw NotImplementedError("Not implemented");
+        if(weightc) throw NotImplementedError("Not implemented: weighted L1 median for CSparseMatrix");
         for(size_t i = 0; i < nrows; ++i) {
             auto rownum = asnsz ? OIT(asnptr[i]): OIT(i);
             auto r = row(mat, rownum, unchecked);
@@ -843,7 +901,7 @@ void tvd_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<ORVT
             const auto invmul = 1. / rsums[rownum];
             for(size_t i = 0; i < r.n_; ++i) {
                 auto idx = r.indices_[i];
-                auto val = RVT(r.data_[i]) * invmul;
+                const RVT val = RVT(r.data_[i]) * invmul;
                 auto it = nzfeatures.find(idx);
                 if(it == nzfeatures.end()) {
                     it = nzfeatures.emplace(idx, std::vector<RVT>{val}).first;
@@ -1056,28 +1114,38 @@ constexpr inline size_t size(const CSparseVector<VT, IT> &x) {
 template<typename VT, typename IT, typename IPtrT, typename RetT, typename IT2=uint64_t, typename WeightT=blz::DV<VT>>
 void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr = static_cast<IT2 *>(nullptr), size_t nasn=0, WeightT *weights=static_cast<WeightT *>(nullptr), double eps=0.) {
     double prevcost = std::numeric_limits<double>::max();
-    //size_t iternum = 0;
+    size_t iternum = 0;
     assert(center.size() == mat.columns());
     const size_t npoints = ptr ? nasn: mat.rows();
     using index_t = std::common_type_t<IT2, size_t>;
     blz::DV<double> costs(npoints);
     for(;;) {
         static constexpr double MINVAL = 1e-80; // For the case of exactly lying on a current center
-        auto gen = blaze::generate(npoints, [&](auto x) {return l2Dist(center, row(mat, ptr ? index_t(ptr[x]): index_t(x), blz::unchecked));});
         if(weights) {
-            costs = blaze::max((*weights) * gen, MINVAL);
+            static constexpr bool TF = blaze::TransposeFlag_v<WeightT>;
+            auto wgen = blaze::generate<TF>(npoints, [&](auto x) {return ptr ? double((*weights)[ptr[x]]): double((*weights)[x]);});
+            costs = blaze::max(wgen * blaze::generate<TF>(npoints, [&](auto x) {
+                if(ptr) x = ptr[x];
+                return l2Dist(center, row(mat, x, blz::unchecked));
+            }), MINVAL);
         } else {
-            costs = blaze::max(gen, MINVAL);
+            costs = blaze::max(blaze::generate(npoints, [&](auto x) {return l2Dist(center, row(mat, ptr ? index_t(ptr[x]): index_t(x), blz::unchecked));}),
+                               MINVAL);
         }
         double current_cost = sum(costs);
         double dist = std::abs(prevcost - current_cost);
-        //++iternum;
         if(dist <= eps) break;
         if(std::isnan(dist)) throw std::range_error("distance is nan");
+        if(++iternum == 100000) {
+            std::fprintf(stderr, "Failed to terminate: %g\n", dist);
+            break;
+        }
+        prevcost = current_cost;
         costs = current_cost / costs;
         blz::DV<double, blaze::TransposeFlag_v<RetT>> newcenter(mat.columns(), 0);
         OMP_PFOR
         for(size_t i = 0; i < npoints; ++i) {
+            SK_UNROLL_4
             for(const auto &pair: row(mat, ptr ? index_t(ptr[i]): index_t(i))) {
                 const auto inc = pair.value() * costs[i];
                 OMP_ATOMIC

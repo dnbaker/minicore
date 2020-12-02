@@ -19,40 +19,62 @@ void init_pycsparse(py::module &m) {
     .def("nnz", [](const PyCSparseMatrix &x) {return x.nnz();})
     .def("rowsel", [](const PyCSparseMatrix &x, py::array idxsel) {
         auto inf = idxsel.request();
-        const bool idx_is_4byte = inf.itemsize == 4;
+        int idxsel_type = inf.itemsize == 8 ? 2: inf.itemsize == 4 ? 1: inf.itemsize == 2 ? 3 : inf.itemsize == 1 ? 0: -1;
+        if(idxsel_type < 0) throw std::runtime_error("idxseltype is not 1, 2, 4 or 8 bytes");
 
-        const bool ip_is_64 = std::tolower(x.indptr_t_[0]) == 'l';
+        int ip_fmt;
+        switch(x.indptr_t_[0]) {
+            case 'l': case 'L': ip_fmt = 2; break;
+            case 'i': case 'I': ip_fmt = 1; break;
+            case 'h': case 'H': ip_fmt = 3; break;
+            default: throw std::invalid_argument("indptr_t not supported");
+        }
         std::vector<double> vals;
         std::vector<uint64_t> idx;
         py::array_t<uint64_t> retip(inf.size + 1);
         auto retipptr = (uint64_t *)retip.request().ptr;
         retipptr[0] = 0;
         for(Py_ssize_t i = 0; i < inf.size; ++i) {
-            int64_t ind;
-            if(idx_is_4byte) ind = ((uint32_t *)inf.ptr)[i];
-            else             ind = ((uint64_t *)inf.ptr)[i];
+            uint64_t ind;
+            if(idxsel_type == 1) {
+                ind = ((uint32_t *)inf.ptr)[i];
+            } else if(idxsel_type == 3) {
+                ind = ((uint16_t *)inf.ptr)[i];
+            } else if(idxsel_type == 2) {
+                ind = ((uint64_t *)inf.ptr)[i];
+            } else if(idxsel_type == 0) {
+                ind = ((uint8_t *)inf.ptr)[i];
+            } else throw std::runtime_error("idxsel_type invalid");
             size_t start, stop;
-            if(ip_is_64) {
+            if(ip_fmt == 2) {
                 start = ((uint64_t *)x.indptrp_)[ind];
                 stop = ((uint64_t *)x.indptrp_)[ind + 1];
-            } else {
+            } else if(ip_fmt == 1) {
                 start = ((uint32_t *)x.indptrp_)[ind];
                 stop = ((uint32_t *)x.indptrp_)[ind + 1];
+            } else {
+                start = ((uint16_t *)x.indptrp_)[ind];
+                stop = ((uint16_t *)x.indptrp_)[ind + 1];
             }
             size_t lastnnz = retipptr[i];
             retipptr[i + 1] = stop - start + retipptr[i];
             vals.resize(retipptr[i + 1]);
             idx.resize(retipptr[i + 1]);
-            if(std::tolower(x.indices_t_[0]) == 'i') {
-                std::copy((uint32_t *)x.indicesp_ + start, (uint32_t *)x.indicesp_ + stop, idx.data() + lastnnz);
-            } else {
-                std::copy((uint64_t *)x.indicesp_ + start, (uint64_t *)x.indicesp_ + stop, idx.data() + lastnnz);
+            switch(std::tolower(x.indices_t_[0])) {
+                case 'i': case 'I':
+                    std::copy((uint32_t *)x.indicesp_ + start, (uint32_t *)x.indicesp_ + stop, idx.data() + lastnnz); break;
+                case 'L': case 'l': case 'Q': case 'q':  std::copy((uint64_t *)x.indicesp_ + start, (uint64_t *)x.indicesp_ + stop, idx.data() + lastnnz); break;
+                case 'h': case 'H':  std::copy((uint16_t *)x.indicesp_ + start, (uint16_t *)x.indicesp_ + stop, idx.data() + lastnnz); break;
+                case 'b': case 'B':  std::copy((uint8_t *)x.indicesp_ + start, (uint8_t *)x.indicesp_ + stop, idx.data() + lastnnz); break;
+                default: throw std::runtime_error(x.indices_t_ + " is unknown dtype");
             }
             switch(std::tolower(x.data_t_[0])) {
                 case 'f': std::copy((float *)x.datap_ + start, (float *)x.datap_ + stop, vals.data() + lastnnz); break;
                 case 'd': std::copy((double *)x.datap_ + start, (double *)x.datap_ + stop, vals.data() + lastnnz); break;
                 case 'L': case 'l': std::copy((uint64_t *)x.datap_ + start, (uint64_t *)x.datap_ + stop, vals.data() + lastnnz); break;
                 case 'I': case 'i': std::copy((uint32_t *)x.datap_ + start, (uint32_t *)x.datap_ + stop, vals.data() + lastnnz); break;
+                case 'B': case 'b': std::copy((uint8_t *)x.datap_ + start, (uint8_t *)x.datap_ + stop, vals.data() + lastnnz); break;
+                case 'H': case 'h': std::copy((uint16_t *)x.datap_ + start, (uint16_t *)x.datap_ + stop, vals.data() + lastnnz); break;
             }
         }
         py::array_t<double> retv(vals.size());
@@ -60,6 +82,10 @@ void init_pycsparse(py::module &m) {
         py::array_t<uint64_t> reti(idx.size());
         std::copy(idx.begin(), idx.end(), (uint64_t *)reti.request().ptr);
         return py::make_tuple(retv, reti, retip, py::make_tuple(py::int_(inf.size), py::int_(x.columns())));
+    }).def_static("from_items", [](py::object data, py::object idx, py::object indptr, py::object shape) -> PyCSparseMatrix {
+        auto da = py::cast<py::array>(data), ia = py::cast<py::array>(idx), ipa = py::cast<py::array>(indptr);
+        auto sseq = py::cast<py::sequence>(shape);
+        return PyCSparseMatrix(data, ia, ipa, sseq[0].cast<Py_ssize_t>(), sseq[1].cast<Py_ssize_t>(), da.request().size);
     });
 
      m.def("kmeanspp", [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {
@@ -124,5 +150,7 @@ void init_pycsparse(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("smw"), py::arg("sumopts"), py::arg("weights") = py::none());
+#else
+    std::fprintf(stderr, "[%s] PyCSparseMatrix bindings not created\n", __PRETTY_FUNCTION__);
 #endif
 }

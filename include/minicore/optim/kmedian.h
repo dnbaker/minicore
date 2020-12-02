@@ -342,7 +342,7 @@ void l1_median(const blaze::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret, IT *
             l1_unweighted_median(rows(*data, asp, nasn), ret);
         }
     }
-} 
+}
 
 template<typename MT, bool SO, typename VT, bool TF, typename IT=uint64_t, typename WeightT=blz::DV<double>, typename RSums>
 void tvd_median(const blaze::Matrix<MT, SO> &data, blz::Vector<VT, TF> &ret, IT *asp, size_t nasn=0, const WeightT *weights=static_cast<WeightT *>(nullptr), const RSums &rsums=RSums()) {

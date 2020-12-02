@@ -29,24 +29,15 @@ void init_cmp(py::module &m) {
                 switch(dt) {
 #define CASE_F(char, type) \
                     case char: {\
-                        std::fprintf(stderr, "Making cv of type %c\n", char); \
                         blz::SV<float> sv(blz::make_cv((type *)inf.ptr, inf.size));\
                         const auto vsum = blz::sum(sv);\
-                        std::fprintf(stderr, "Made of type %c and sum %g\n", char, vsum); \
                         v = blz::generate(nr, [vsum,priorsum,ms,&matrix,&rsums,&sv,&priorc](auto x) {return cmp::msr_with_prior<MsrType>(ms, row(matrix, x), sv, priorc, priorsum, rsums[x], vsum);});\
                     } break;
                     CASE_F('f', float)
                     CASE_F('d', double)
-                    CASE_F('i', int)
-                    CASE_F('I', unsigned)
-                    CASE_F('h', int16_t)
-                    CASE_F('H', uint16_t)
-                    CASE_F('b', int16_t)
-                    CASE_F('B', uint16_t)
-                    CASE_F('l', int64_t)
-                    CASE_F('L', uint64_t)
+                    case 'i': CASE_F('I', unsigned)
 #undef CASE_F
-                    default: throw std::invalid_argument("dtypes supported: d, f, i, I, h, H, b, B, l, L");
+                    default: throw std::invalid_argument("dtypes supported: d, f, i, I");
                 }
             });
             return ret;
@@ -106,32 +97,28 @@ void init_cmp(py::module &m) {
         py::array ret(py::dtype("f"), std::vector<Py_ssize_t>{nr, nc});
         auto retinf = ret.request();
         blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)retinf.ptr, nr, nc, nc);
-        if(lhs.is_float()) {
+        const SparseMatrixWrapper *lhp = &lhs, *rhp = &rhs;
+        if(lhs.is_float() != rhs.is_float() && rhs.is_float()) {
+            std::swap(lhp, rhp);
+        }
+        if(lhs.is_float() && rhs.is_float()) {
             auto &lhr = lhs.getfloat();
-            if(rhs.is_float()) {
-                auto &rhr = rhs.getfloat();
-                cm = blaze::generate(nr, nc, [&](auto lhid, auto rhid) -> float {
-                    return cmp::msr_with_prior<float>(ms, blz::row(lhr, lhid, blz::unchecked), blz::row(rhr, rhid, unchecked), priorc, priorsum, lrsums[lhid], rrsums[rhid]);
-                });
-            } else {
-                auto &rhr = rhs.getdouble();
-                cm = blaze::generate(nr, nc, [&](auto lhid, auto rhid) -> float {
-                    return cmp::msr_with_prior<double>(ms, blz::row(lhr, lhid, blz::unchecked), blz::row(rhr, rhid, unchecked), priorc, priorsum, lrsums[lhid], rrsums[rhid]);
-                });
-            }
-        } else {
+            auto &rhr = rhs.getfloat();
+            cm = blaze::generate(nr, nc, [&](auto lhid, auto rhid) -> float {
+                return cmp::msr_with_prior<float>(ms, blz::row(lhr, lhid, blz::unchecked), blz::row(rhr, rhid, unchecked), priorc, priorsum, lrsums[lhid], rrsums[rhid]);
+            });
+        } else if(lhs.is_double() && rhs.is_double()) {
             auto &lhr = lhs.getdouble();
-            if(rhs.is_float()) {
-                auto &rhr = rhs.getfloat();
-                cm = blaze::generate(nr, nc, [&](auto lhid, auto rhid) -> float {
-                    return cmp::msr_with_prior<float>(ms, blz::row(lhr, lhid, blz::unchecked), blz::row(rhr, rhid, unchecked), priorc, priorsum, lrsums[lhid], rrsums[rhid]);
-                });
-            } else {
-                auto &rhr = rhs.getdouble();
-                cm = blaze::generate(nr, nc, [&](auto lhid, auto rhid) -> float {
-                    return cmp::msr_with_prior<double>(ms, blz::row(lhr, lhid, blz::unchecked), blz::row(rhr, rhid, unchecked), priorc, priorsum, lrsums[lhid], rrsums[rhid]);
-                });
-            }
+            auto &rhr = rhs.getdouble();
+            cm = blaze::generate(nr, nc, [&](auto lhid, auto rhid) -> float {
+                return cmp::msr_with_prior<double>(ms, blz::row(lhr, lhid, blz::unchecked), blz::row(rhr, rhid, unchecked), priorc, priorsum, lrsums[lhid], rrsums[rhid]);
+            });
+        } else {
+            auto &lhr = lhp->getfloat();
+            auto &rhr = rhp->getdouble();
+            cm = blaze::generate(nr, nc, [&](auto lhid, auto rhid) -> float {
+                return cmp::msr_with_prior<float>(ms, blz::row(lhr, lhid, blz::unchecked), blz::row(rhr, rhid, unchecked), priorc, priorsum, lrsums[lhid], rrsums[rhid]);
+            });
         }
         return ret;
     }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("betaprior") = 0.);
