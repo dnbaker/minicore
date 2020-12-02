@@ -1140,6 +1140,7 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
             std::fprintf(stderr, "Failed to terminate: %g\n", dist);
             break;
         }
+        prevcost = current_cost;
         costs = current_cost / costs;
         blz::DV<double, blaze::TransposeFlag_v<RetT>> newcenter(mat.columns(), 0);
         OMP_PFOR
