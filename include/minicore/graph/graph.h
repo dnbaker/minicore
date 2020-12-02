@@ -9,17 +9,6 @@
 
 namespace minicore {
 
-// May replace with robin_hood if they implement this.
-
-#if 0
-template<typename WeightType>
-struct EdgeWeight<WeightType>: boost::property<boost::edge_weight_t, WeightType> {
-    using super = boost::property<boost::edge_weight_t, WeightType>;
-    template<typename T>
-    EdgeWeight(T x): boost::property<boost::edge_weight_t, WeightType>(x) {}
-};
-#endif
-
 namespace graph {
 using namespace boost;
 
@@ -170,25 +159,8 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, boost::prop
         }
         return ret;
     }
-    template<typename Allocator=std::allocator<Vertex>>
-    auto toposort() const {
-        // TODO: consider doing it as
-#if 0
-        std::vector<Vertex, Allocator> ret(num_vertices());
-        auto rit = ret.rbegin();
-        // Or
-        // std::pair<std::unique_ptr<Vertex[], Deleter>, size_t> ret{static_cast<Vertex *>(std::malloc(num_vertices() * sizeof(Vertex))), num_vertices()};
-        // boost::topological_sort(*this, std::reverse_iterator<Vertex *>(ret.first.get() + ret.second));
-        boost::topological_sort(*this, rit);
-#else
-        std::vector<Vertex, Allocator> ret;
-        ret.reserve(num_vertices());
-        boost::topological_sort(*this, std::back_inserter(ret));
-        std::reverse(ret.begin(), ret.end());
-#endif
-        return ret;
-    }
 };
+
 template<typename EdgeProps=float, typename VtxProps=boost::no_property,
          typename GraphProps=boost::no_property>
 struct DirGraph: public Graph<directedS, EdgeProps, VtxProps, GraphProps> {
@@ -219,18 +191,5 @@ using graph::BidirGraph;
 using graph::UndirGraph;
 using graph::Graph;
 using graph::DirGraph;
-
-#ifndef NDEBUG
-template<typename Graph>
-inline void assert_connected__(const Graph &x, const char *filename, const char *func, int line) {
-    auto ccomp = std::make_unique<typename boost::graph_traits<Graph>::vertex_descriptor[]>(boost::num_vertices(x));
-    auto ncomp = boost::connected_components(x, ccomp.get());
-    assert(ncomp == 1 || !std::fprintf(stderr, "Failure: graph at %p [%s:%s:%d] is not connected (%u comp)\n", (void *)&x, filename, func, line, unsigned(ncomp)));
-}
-#define assert_connected(x) ::minicore::assert_connected__(x, __FILE__, __PRETTY_FUNCTION__, __LINE__)
-#else
-#define assert_connected(x)
-#endif
-
 
 } // minicore

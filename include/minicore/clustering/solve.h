@@ -401,64 +401,30 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                                        uint64_t seed=0)
 {
     if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
-    switch(measure) {
-        default:
-        case L2: case L1: case TVD:
-        case JSD: case JSM: case COSINE_DISTANCE:
-        case SQRL2: case POISSON: case MKL: case REVERSE_ITAKURA_SAITO: case ITAKURA_SAITO:
-        case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO:
-        case REVERSE_MKL: case REVERSE_POISSON:
-        case LLR: case UWLLR: case SRLRT: case SRULRT:
-        case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
-        case HELLINGER:  ; // Do nothing; this should work
-    }
-#if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
     const blz::DV<FT> rowsums = sum<blz::rowwise>(mat);
     blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
-#else
-    blz::DV<FT> rowsums((mat).rows());
-    blz::DV<FT> centersums(centers.size());
-    OMP_PFOR
-    for(size_t i = 0; i < rowsums.size(); ++i)
-        rowsums[i] = sum(row(mat, i, unchecked));
-    OMP_PFOR
-    for(size_t i = 0; i < centers.size(); ++i)
-        centersums[i] = blz::sum(centers[i]);
-#endif
-    FT prior_sum = prior.size() == 1 ? prior.size() * prior[0]: blz::sum(prior);
+    const FT prior_sum = prior.size() == 1 ? prior.size() * prior[0]: blz::sum(prior);
     size_t iternum = 0;
     double initcost = std::numeric_limits<double>::max(), cost = initcost, bestcost = cost;
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) ALWAYS_INLINE {
         FT ret = cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
-        if(ret < 0) {
-            if(unlikely(ret < -1e-5)) {
-                std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s for ids %u/%u. Check details!\n", ret, (int)measure, msr2str(measure),
-                             (unsigned)id, (unsigned)cid);
-                std::cerr << centers[cid] << '\n';
-                std::cerr << row(mat, id) << '\n';
-                std::abort();
-            }
+        if(ret < 0 || std::isnan(ret))
             ret = 0.;
-        } else if(std::isnan(ret)) ret = 0.;
+        else if(std::isinf(ret))
+            ret = std::numeric_limits<FT>::max(); // To make it finite
         return ret;
     };
     const size_t np = costs.size(), k = centers.size();
-    //shared::flat_hash_map<IT, IT> sa;
     auto perform_assign = [&]() {
         OMP_PFOR_DYN
         for(size_t i = 0; i < np; ++i) {
             FT mincost = std::numeric_limits<FT>::max();
             IT minind = -1;
-            for(size_t j = 0; j < k; ++j) {
-                const FT nc = compute_point_cost(i, j);
-                if(std::isnan(nc)) {
-                    std::cerr << i << ", " << j << '\n';
-                    throw std::invalid_argument("nan in distance calculation");
-                }
-                if(nc < mincost) mincost = nc, minind = j;
-            }
+            for(size_t j = 0; j < k; ++j)
+                if(const FT nc = compute_point_cost(i, j);nc < mincost)
+                    mincost = nc, minind = j;
             asn[i] = minind;
             costs[i] = mincost;
         }
@@ -466,11 +432,10 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
     wy::WyRand<std::make_unsigned_t<IT>> rng(seed);
     schism::Schismatic<std::make_unsigned_t<IT>> div((mat).rows());
     blz::DV<IT> sampled_indices(mbsize);
-    //blz::DV<FT> sampled_costs(mbsize);
     blz::DV<FT> center_wsums(k);
     std::vector<std::vector<IT>> assigned(k);
-    std::unique_ptr<blz::DV<FT>> wc;
-    if(weights) wc.reset(new blz::DV<FT>(np));
+    blz::DV<FT> wc;
+    if(weights) wc.resize(np)
     blz::DV<uint64_t> center_counts(k);
     for(;;) {
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
@@ -487,12 +452,9 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                 ++center_counts[asn[i]];
             }
             blaze::SmallArray<uint32_t, 8> foundindices;
-            for(size_t i = 0; i < center_counts.size(); ++i) {
-                //std::fprintf(stderr, "Center %zu has %" PRIu64 " items\n", i, center_counts[i]);
-                if(center_counts[i] <= reseed_after) { // If there are 0 or 1 points assigned to a center, restart it
+            for(size_t i = 0; i < center_counts.size(); ++i)
+                if(center_counts[i] <= reseed_after) // If there are few points assigned to a center, restart it
                     foundindices.pushBack(i);
-                }
-            }
             if(foundindices.size()) {
                 DBG_ONLY(std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());)
                 for(const auto fidx: foundindices) {
@@ -501,13 +463,13 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                     size_t id;
                     if(weights) {
                         if constexpr(blaze::IsVector_v<WeightT>) {
-                            *wc = costs * *weights;
+                            wc = costs * *weights;
                         } else if constexpr(std::is_floating_point_v<WeightT>) {
-                            *wc = costs * blz::make_cv(weights, np);
+                            wc = costs * blz::make_cv(weights, np);
                         } else {
-                            *wc = costs * blz::make_cv(weights->data(), np);
+                            wc = costs * blz::make_cv(weights->data(), np);
                         }
-                        id = reservoir_simd::sample(wc->data(), np, rng());
+                        id = reservoir_simd::sample(wc.data(), np, rng());
                     } else {
                         id = reservoir_simd::sample(costs.data(), np, rng());
                     }
@@ -517,10 +479,9 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                 OMP_PFOR
                 for(size_t i = 0; i < np; ++i) {
                     auto &ccost = costs[i];
-                    for(const auto fidx: foundindices) {
-                        auto newcost = compute_point_cost(i, fidx);
-                        if(newcost < ccost) ccost = newcost, asn[i] = fidx;
-                    }
+                    for(const auto fidx: foundindices)
+                        if(auto newcost = compute_point_cost(i, fidx);newcost < ccost)
+                             ccost = newcost, asn[i] = fidx;
                 }
             }
             if(weights) {
@@ -558,6 +519,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
         }
         center_wsums = 0.;
         for(auto &i: assigned) i.clear();
+        OMP_ONLY(auto locks = std::make_unique<std::mutex[]>(k);)
         // 2. Compute nearest centers + step sizes
         OMP_PFOR
         for(size_t i = 0; i < mbsize; ++i) {
@@ -565,21 +527,16 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             IT oldasn = asn[ind];
             IT bestind = -1;
             FT bv = std::numeric_limits<FT>::max();
-            for(size_t j = 0; j < k; ++j) {
-                auto nv = compute_point_cost(ind, j);
-                //if(std::isnan(nv)) throw std::invalid_argument(std::string("nan between ") + std::to_string(ind) + " and " + std::to_string(j));
-                if(nv < bv)
+            for(size_t j = 0; j < k; ++j)
+                if(auto nv = compute_point_cost(ind, j); nv < bv)
                     bv = nv, bestind = j;
-            }
-            if(bestind == (IT(-1))) {
+            if(bestind == (IT(-1)))
                 bestind = oldasn;
-            }
-            //sampled_costs[i] = bv;
             const FT w = weights ? (*weights)[ind]: static_cast<FT>(1);
             OMP_ATOMIC
             center_wsums[bestind] += w;
-            OMP_CRITICAL
             {
+                OMP_ONLY(std::lock_guard<std::mutex> lock(bestind);)
                 assigned[bestind].push_back(ind);
             }
         }
