@@ -32,6 +32,19 @@ struct ScopedSyntheticVertex {
 };
 } // namespace util
 
+template<typename Graph>
+inline void assert_connected__(const Graph &x, const char *filename, const char *func, int line) {
+    auto ccomp = std::make_unique<typename boost::graph_traits<Graph>::vertex_descriptor[]>(boost::num_vertices(x));
+    auto ncomp = boost::connected_components(x, ccomp.get());
+    assert(ncomp == 1 || !std::fprintf(stderr, "Failure: graph at %p [%s:%s:%d] is not connected (%u comp)\n", (void *)&x, filename, func, line, unsigned(ncomp)));
+}
+
+#ifndef NDEBUG
+#define assert_connected(x) ::minicore::assert_connected__(x, __FILE__, __PRETTY_FUNCTION__, __LINE__)
+#else
+#define assert_connected(...)
+#endif
+
 namespace thorup {
 using namespace boost;
 
