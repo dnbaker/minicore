@@ -149,16 +149,6 @@ struct Graph: boost::adjacency_list<vecS, vecS, DirectedS, VtxProps, boost::prop
         auto v = vertices();
         std::for_each(v.begin(), v.end(), f);
     }
-    auto try_toposort() const {
-        using Type = decltype(this->toposort());
-        std::unique_ptr<Type> ret;
-        try {
-            ret.reset(new Type(toposort()));
-        } catch(const boost::not_a_dag &ex) {
-            // No sweat
-        }
-        return ret;
-    }
 };
 
 template<typename EdgeProps=float, typename VtxProps=boost::no_property,

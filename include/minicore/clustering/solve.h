@@ -435,7 +435,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
     blz::DV<FT> center_wsums(k);
     std::vector<std::vector<IT>> assigned(k);
     blz::DV<FT> wc;
-    if(weights) wc.resize(np)
+    if(weights) wc.resize(np);
     blz::DV<uint64_t> center_counts(k);
     for(;;) {
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
@@ -536,7 +536,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             OMP_ATOMIC
             center_wsums[bestind] += w;
             {
-                OMP_ONLY(std::lock_guard<std::mutex> lock(bestind);)
+                OMP_ONLY(std::lock_guard<std::mutex> lock(locks[bestind]);)
                 assigned[bestind].push_back(ind);
             }
         }
