@@ -620,7 +620,6 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
         FT current_cost = weights ? double(dot(*cv, costs)): double(blz::sum(costs));
         FT dist;
         std::fprintf(stderr, "prev: %g. current_cost: %g. dist: %g\n", prevcost, current_cost, prevcost - current_cost);
-        if(weights) std::fprintf(stderr, "wsum: %g\n", sum(*cv));
         if((dist = prevcost - current_cost) <= eps) {
             prevcost = current_cost; break;
         }
