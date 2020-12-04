@@ -89,7 +89,8 @@ template<typename MT, // MatrixType
          typename WeightT=CtrT, // Vector Type
          typename=std::enable_if_t<std::is_floating_point_v<FT>>
         >
-auto perform_hard_clustering(const MT &mat, // TODO: consider replacing blaze::Matrix with template Mat for CSR matrices
+std::tuple<double, double, size_t>
+perform_hard_clustering(const MT &mat, // TODO: consider replacing blaze::Matrix with template Mat for CSR matrices
                              const dist::DissimilarityMeasure measure,
                              const PriorT &prior,
                              std::vector<CtrT> &centers,
@@ -114,6 +115,10 @@ auto perform_hard_clustering(const MT &mat, // TODO: consider replacing blaze::M
     const auto initcost = compute_cost();
     FT cost = initcost;
     std::fprintf(stderr, "[%s] initial cost: %0.12g\n", __PRETTY_FUNCTION__, cost);
+    if(cost == 0) {
+        std::fprintf(stderr, "Cost is 0 (unexpected), but the cost can't decrease. No optimization performed\n");
+        return {0., 0., 0};
+    }
     size_t iternum = 0;
     auto centers_cpy = centers;
     for(;;) {
@@ -150,7 +155,7 @@ auto perform_hard_clustering(const MT &mat, // TODO: consider replacing blaze::M
 #ifndef NDEBUG
     std::fprintf(stderr, "Completing clustering after %zu rounds. Initial cost %0.12g. Final cost %0.12g.\n", iternum, initcost, cost);
 #endif
-    return std::make_tuple(initcost, cost, iternum);
+    return {initcost, cost, iternum};
 }
 
 
@@ -249,6 +254,8 @@ void assign_points_hard(const Mat &mat,
             }
             ret = 0.;
         } else if(std::isnan(ret)) {
+            std::fprintf(stderr, "ret: %g\n", ret);
+            throw std::runtime_error("nan");
             ret = 0.;
         }
         return ret;
@@ -287,6 +294,7 @@ auto perform_soft_clustering(const MT &mat,
                              const WeightT *weights=static_cast<WeightT *>(nullptr),
                              double eps=0.)
 {
+    if(measure == L2) throw std::invalid_argument("Not yet supported: soft L2 clustering. Suggested: use L1 or squared L2 clustering in the meantime.");
     std::fprintf(stderr, "Starting [%s]\n", __PRETTY_FUNCTION__);
     using CFT = FT;
     auto centers_cpy(centers);

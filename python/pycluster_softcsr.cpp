@@ -14,13 +14,14 @@ void init_clustering_soft_csr(py::module &m) {
             wfmt = standardize_dtype(inf.format);
             wptr = inf.ptr;
         }
-        return py_scluster(smw, centers, assure_dm(measure), beta, temp, kmeansmaxiter, mbsize, mbn, savepref.cast<std::string>(), use_float, wptr);
+        std::string pref = static_cast<std::string>(py::cast<py::str>(savepref));
+        return py_scluster(smw, centers, assure_dm(measure), beta, temp, kmeansmaxiter, mbsize, mbn, pref, use_float, wptr);
     },
     py::arg("smw"),
     py::arg("centers"),
-    py::arg("msr") = 5,
+    py::arg("msr") = 2,
     py::arg("prior") = 0.,
-    py::arg("temp") = 0.,
+    py::arg("temp") = 1.,
     py::arg("maxiter") = 1000,
     py::arg("mbsize") = Py_ssize_t(-1),
     py::arg("mbn") = Py_ssize_t(-1),

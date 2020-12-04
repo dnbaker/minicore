@@ -172,21 +172,25 @@ py::object __py_cluster_from_centers(const Matrix &smw,
             asn[idx] = bestind;
             return bestcost;
         });
+        std::cerr << "Costs: "
+                  << costs << '\n';
     });
-    if(weights.is_none()) {
-        return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
+    int wk = -1;
+    py::buffer_info wbi;
+    if(!weights.is_none()) {
+        wbi = py::cast<py::array>(weights).request();
+        wk = standardize_dtype(wbi.format)[0];
     }
-    auto weightinfo = py::cast<py::array>(weights).request();
-    if(weightinfo.format.size() != 1) throw std::invalid_argument("Weights must be 0 or contain a fundamental type");
-    switch(weightinfo.format[0]) {
-#define CASE_MCR(x, type) case x: {\
-        auto cv = blz::make_cv((type *)weightinfo.ptr, costs.size());\
-        return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, &cv, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed); \
-        } break
-        CASE_MCR('f', float);
-        CASE_MCR('d', double);
-        default: throw std::invalid_argument(std::string("Invalid weights value type: ") + weightinfo.format);
-#undef CASE_MCR
+    using CT = decltype(blz::make_cv((float *)wbi.ptr, 1));
+    std::unique_ptr<CT> fcv;
+    if(wk == 'f') fcv.reset(new CT((float *)wbi.ptr, costs.size()));
+    // Only compile 2 versions: float + double ( not a separate version for unweighted)
+    switch(wk) {
+        case -1:
+        case 'f': return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, fcv.get(), eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
+        case 'd': {auto cv = blz::make_cv((double *)wbi.ptr, costs.size()); return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, &cv, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);}
+
+        default: throw std::invalid_argument(std::string("Invalid weights value type: ") + wbi.format);
     }
     throw std::invalid_argument("Weights were not float, double, or None.");
     return py::none();

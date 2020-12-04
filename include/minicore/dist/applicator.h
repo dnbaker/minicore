@@ -1875,6 +1875,13 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     break;
                 } else if(msr == L2 || msr == SQRL2) {
                     ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0.);
+                    if(ret < 0.) {
+                        std::fprintf(stderr, "negative sqrl2 distance: %g?\n", ret);
+                        ret = 0.;
+                    } else if(std::isnan(ret)) {
+                        for(size_t i = 0; i < nnz_either; ++i) std::fprintf(stderr, "vs[%zu] = %g/%g\n", i, tmpmulx[i], tmpmuly[i]);
+                        throw std::runtime_error("ret is nan somehow");
+                    }
                     if(msr == L2) ret = std::sqrt(ret);
                     break;
                 } else if(msr == L1) {
@@ -1920,7 +1927,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     klc = libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = sharednz * lhinc * (lhl - rhl);
                 } else if(msr == JSD || msr == JSM ) {
-                    //for(size_t i = 0; i < nnz_either; ++i) std::fprintf(stderr, "%zu:%g,%g\n", i, tmpmulx[i], tmpmuly[i]);
                     klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = ((lhincl + rhincl - shincl) * sharednz) * .5;
                 } else if(msr == REVERSE_MKL || msr == REVERSE_POISSON) {
@@ -1937,7 +1943,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 } else if(msr == ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = sharednz * (lhinc / rhinc - std::log(lhinc / rhinc)) - nd;
-                    //fprintf(stderr, "Is values: klc %g, zc %g\n", klc, zc);
                 } else if(msr == REVERSE_ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * (rhinc / lhinc - std::log(rhinc / lhinc)) - nd;

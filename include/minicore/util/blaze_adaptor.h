@@ -1,39 +1,7 @@
 #pragma once
 #if defined(__has_include) && __has_include("sleef.h")
   extern "C" {
-#if 0
-#  if INLINE_SLEEF
-#    include <limits.h>
-#    include <float.h>
-#    ifdef __GNUC__
-#      define SLEEF_ALWAYS_INLINE __attribute((always_inline)) inline
-#    else
-#      define SLEEF_ALWAYS_INLINE
-#    endif
-#    define SLEEF_INLINE inline
-#    define SLEEF_CONST __attribute__((const))
-#    ifdef __AVX512F__
-#      ifdef __AVX5124FMAPS__
-#        include "sleefinline_avx512f.h"
-#      else
-#        include "sleefinline_avx512fnofma.h"
-#      endif
-#    elif __AVX__
-#    include "sleefinline_avx.h"
-#    elif __SSE4__
-#    include "sleefinline_sse4.h"
-#    elif __SSE2__
-#    include "sleefinline_sse2.h"
-#    else
-#    include "sleefinline_purecfma_scalar.h"
-#    endif
-#  else
-#    error("hello")
-#    include "sleef.h"
-#  endif
-#else
-#   include "sleef.h"
-#endif
+    #include "sleef.h"
   }
 #endif
 #include "aesctr/wy.h"
@@ -643,38 +611,32 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
     assert((*dv).size() == (*mat).columns());
     DV<FT, SO> costs(_mat.rows());
     std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
-    if(weights)
+    if(weights) {
         cv.reset(new CustomVector<WeightType, unaligned, unpadded, SO>(const_cast<WeightType *>(weights), _mat.rows()));
+    }
     for(;;) {
         VERBOSE_ONLY(std::fprintf(stderr, "Iteration %zu for matrix %zu/%zu and vector %zu with weights at %p\n", iternum + 1, (*mat).rows(), (*mat).columns(), (*dv).size(), (void *)weights);)
-        if(weights) {
-            auto &cvr = *cv;
-            OMP_PFOR
-            for(size_t i = 0; i < _mat.rows(); ++i) {
-                costs[i] = cvr[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - *dv);
-                if(std::isnan(costs[i])) costs[i] = 1e-80;
-            }
-        } else {
-            OMP_PFOR
-            for(size_t i = 0; i < _mat.rows(); ++i) {
-                using res_t = std::decay_t<decltype(blz::l2Norm(row(_mat, i, blz::unchecked) - *dv))>;
-                costs[i] = std::max(blz::l2Norm(row(_mat, i, blz::unchecked) - *dv),
-                                    static_cast<res_t>(1e-80));
-                if(std::isnan(costs[i])) costs[i] = 1e-80;
-            }
-        }
-        FT current_cost = sum(costs);
+        costs = blz::max(blz::generate<SO>(_mat.rows(), [&](auto i) {return blz::l2Norm(row(_mat, i) - *dv);}), 1e-40);
+        FT current_cost = weights ? double(dot(*cv, costs)): double(blz::sum(costs));
         FT dist;
-        if((dist = std::abs(prevcost - current_cost)) <= eps) break;
+        std::fprintf(stderr, "prev: %g. current_cost: %g. dist: %g\n", prevcost, current_cost, prevcost - current_cost);
+        if(weights) std::fprintf(stderr, "wsum: %g\n", sum(*cv));
+        if((dist = prevcost - current_cost) <= eps) {
+            prevcost = current_cost; break;
+        }
         if(unlikely(std::isnan(dist))) {
             std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
             throw std::runtime_error("Optimization failed: nan");
         }
         ++iternum;
+        double denom;
         costs = 1. / costs;
-        *dv = trans(costs / blaze::sum(costs)) * *mat;
+        if(weights) costs *= *cv;
+        denom = sum(costs);
+        *dv = trans(costs / denom) * *mat;
         prevcost = current_cost;
     }
+    std::fprintf(stderr, "Final cost: %g\n", prevcost);
     return *dv;
 }
 // Solve geometric median for a set of points.
@@ -682,31 +644,32 @@ template<typename MT, bool SO, typename VT, typename WeightType, typename=std::e
 auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType &weights, double eps=0.)
 {
     if((*mat).rows() == 1) return *dv = row((*mat), 0);
-    const auto &_mat = *mat;
     using FT = typename std::decay_t<decltype(*mat)>::ElementType;
     FT prevcost = std::numeric_limits<FT>::max();
     size_t iternum = 0;
     assert((*dv).size() == (*mat).columns());
-    DV<FT, SO> costs(_mat.rows());
+    DV<FT, SO> costs((*mat).rows());
     std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
     for(;;) {
-        OMP_PFOR
-        for(size_t i = 0; i < _mat.rows(); ++i) {
-            using res_t = std::decay_t<decltype(weights[0] * blz::l2Norm(row(_mat, 0) - *dv))>;
-            costs[i] = std::max(weights[i] * blz::l2Norm(row(_mat, i, blaze::unchecked) - *dv), res_t(1e-80));
-            if(std::isnan(costs[i])) costs[i] = 1e-80;
+        costs = blaze::max(blaze::generate((*mat).rows(), [&](auto x) {return blz::l2Norm(row(*mat, x) - *dv);}), 1e-40);
+        FT current_cost = dot(costs, weights);
+        FT dist = prevcost - current_cost;
+        if(dist <= eps) {
+            break;
         }
-        FT current_cost = sum(costs);
-        FT dist;
-        if((dist = std::abs(prevcost - current_cost)) <= eps) break;
         if(unlikely(std::isnan(dist))) {
             std::fprintf(stderr, "[%s:%s:%d] dist is nan\n", __PRETTY_FUNCTION__, __FILE__, __LINE__);
             throw std::runtime_error("Optimization failed: nan");
             break;
         }
         ++iternum;
-        costs = 1. / costs;
-        *dv = trans(costs / blaze::sum(costs)) * *mat;
+        if constexpr(blz::TransposeFlag_v<WeightType> != SO) {
+            costs = trans(weights) / costs;
+        } else {
+            costs = weights / costs;
+        }
+        double denom = 1. / sum(costs);
+        *dv = trans(costs * denom) * *mat;
         prevcost = current_cost;
     }
     return *dv;
@@ -733,16 +696,6 @@ namespace std {
    struct tuple_element<N, blz::RowViewer<MatrixType>> {
        using type = std::decay_t<decltype(std::declval<blz::RowViewer<MatrixType>>().template get<N>())>;
    };
-#if 0
-   template<typename this_type> struct tuple_element<0,blz::ConstColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
-   template<typename this_type> struct tuple_element<0,blz::ColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
-   template<typename this_type> struct tuple_element<0,blz::ConstRowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
-   template<typename this_type> struct tuple_element<0,blz::RowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
-   template<typename this_type> struct tuple_element<1,blz::ConstColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
-   template<typename this_type> struct tuple_element<1,blz::ColumnViewer<this_type>> { using type = typename blz::column_iterator_t<this_type> &; };
-   template<typename this_type> struct tuple_element<1,blz::ConstRowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
-   template<typename this_type> struct tuple_element<1,blz::RowViewer<this_type>> { using type = typename blz::row_iterator_t<this_type> &; };
-#endif
 
    template<typename this_type> struct tuple_size<blz::RowViewer<this_type>> : public std::integral_constant<size_t,2> {};
    template<typename this_type> struct tuple_size<blz::ColumnViewer<this_type>>: public std::integral_constant<size_t,2> {};

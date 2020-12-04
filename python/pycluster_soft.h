@@ -78,6 +78,7 @@ py::dict py_scluster(const Matrix &smw,
                void *weights = (void *)nullptr,
                std::string wfmt="f")
 {
+    std::fprintf(stderr, "temp=%g, beta=%g\n", temp, beta);
     assert(beta > 0.);
     py::dict retdict;
     py::object asns = py::none(), costs = py::none();

@@ -61,15 +61,15 @@ void init_clustering(py::module &m) {
                     },
     py::arg("smw"),
     py::arg("centers"),
-    py::arg("betaprior") = 0.,
-    py::arg("msr") = 5,
+    py::arg("prior") = 0.,
+    py::arg("msr") = 2,
     py::arg("weights") = py::none(),
     py::arg("eps") = 1e-10,
-    py::arg("maxiter") = 1000,
+    py::arg("maxiter") = 100,
     py::arg("seed") = 0,
     py::arg("mbsize") = Py_ssize_t(-1),
     py::arg("ncheckins") = Py_ssize_t(-1),
     py::arg("reseed_count") = Py_ssize_t(5),
     py::arg("with_rep") = false,
-    "Clusters a SparseMatrixWrapper object using settings and the centers provided above; set betaprior to < 0 for it to be 1 / ncolumns(). Performs seeding, followed by EM or minibatch k-means");
+    "Clusters a SparseMatrixWrapper object using settings and the centers provided above; set prior to < 0 for it to be 1 / ncolumns(). Performs seeding, followed by EM or minibatch k-means");
 } // init_clustering
