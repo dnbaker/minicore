@@ -1113,6 +1113,7 @@ constexpr inline size_t size(const CSparseVector<VT, IT> &x) {
 
 template<typename VT, typename IT, typename IPtrT, typename RetT, typename IT2=uint64_t, typename WeightT=blz::DV<VT>>
 void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr = static_cast<IT2 *>(nullptr), size_t nasn=0, WeightT *weights=static_cast<WeightT *>(nullptr), double eps=0.) {
+    if(weights) throw NotImplementedError("No weighted geometric median supported");
     double prevcost = std::numeric_limits<double>::max();
     size_t iternum = 0;
     assert(center.size() == mat.columns());
@@ -1121,17 +1122,8 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
     blz::DV<double> costs(npoints);
     for(;;) {
         static constexpr double MINVAL = 1e-80; // For the case of exactly lying on a current center
-        if(weights) {
-            static constexpr bool TF = blaze::TransposeFlag_v<WeightT>;
-            auto wgen = blaze::generate<TF>(npoints, [&](auto x) {return ptr ? double((*weights)[ptr[x]]): double((*weights)[x]);});
-            costs = blaze::max(wgen * blaze::generate<TF>(npoints, [&](auto x) {
-                if(ptr) x = ptr[x];
-                return l2Dist(center, row(mat, x, blz::unchecked));
-            }), MINVAL);
-        } else {
-            costs = blaze::max(blaze::generate(npoints, [&](auto x) {return l2Dist(center, row(mat, ptr ? index_t(ptr[x]): index_t(x), blz::unchecked));}),
-                               MINVAL);
-        }
+        costs = blaze::max(blaze::generate(npoints, [&](auto x) {return l2Dist(center, row(mat, ptr ? index_t(ptr[x]): index_t(x), blz::unchecked));}),
+                           MINVAL);
         double current_cost = sum(costs);
         double dist = std::abs(prevcost - current_cost);
         if(dist <= eps) break;
@@ -1145,7 +1137,6 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
         blz::DV<double, blaze::TransposeFlag_v<RetT>> newcenter(mat.columns(), 0);
         OMP_PFOR
         for(size_t i = 0; i < npoints; ++i) {
-            SK_UNROLL_4
             for(const auto &pair: row(mat, ptr ? index_t(ptr[i]): index_t(i))) {
                 const auto inc = pair.value() * costs[i];
                 OMP_ATOMIC

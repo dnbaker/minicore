@@ -12,6 +12,7 @@
 #include <vector>
 #include "./shared.h"
 #include "./Inf2Zero.h"
+#include "exception.h"
 
 namespace blz {
 template<blaze::AlignmentFlag AF = blaze::unaligned, blaze::PaddingFlag PF=blaze::unpadded, typename FT, typename IT>
@@ -598,7 +599,6 @@ auto make_cv(FT *data, IT size) {
 }
 
 
-
 // Solve geometric median for a set of points.
 template<typename MT, bool SO, typename VT, typename WeightType>
 auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *const weights, double eps=0)
@@ -612,6 +612,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
     DV<FT, SO> costs(_mat.rows());
     std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
     if(weights) {
+        throw minicore::NotImplementedError("Weighted geomedian is not supported");
         cv.reset(new CustomVector<WeightType, unaligned, unpadded, SO>(const_cast<WeightType *>(weights), _mat.rows()));
     }
     for(;;) {

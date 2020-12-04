@@ -16,12 +16,6 @@ struct verbose_runtime_error: public std::runtime_error {
     }
 };
 
-struct TODOError: public verbose_runtime_error {
-    template<typename...A>
-    TODOError(A &&...a): verbose_runtime_error(std::forward<A>(a)...) {}
-    TODOError(): verbose_runtime_error("TODO: this") {}
-};
-
 class NotImplementedError: public verbose_runtime_error {
 public:
     template<typename... Args>
