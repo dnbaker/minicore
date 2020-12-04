@@ -294,7 +294,7 @@ auto perform_soft_clustering(const MT &mat,
                              const WeightT *weights=static_cast<WeightT *>(nullptr),
                              double eps=0.)
 {
-    //if(measure == L2) throw std::invalid_argument("Not yet supported: soft L2 clustering. Suggested: use L1 or squared L2 clustering in the meantime.");
+    if(measure == L2) throw std::invalid_argument("Not yet supported: soft L2 clustering. Suggested: use L1 or squared L2 clustering in the meantime.");
     std::fprintf(stderr, "Starting [%s]\n", __PRETTY_FUNCTION__);
     using CFT = FT;
     auto centers_cpy(centers);
