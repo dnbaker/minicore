@@ -294,51 +294,29 @@ auto perform_soft_clustering(const MT &mat,
                              const WeightT *weights=static_cast<WeightT *>(nullptr),
                              double eps=0.)
 {
-    if(measure == L2) throw std::invalid_argument("Not yet supported: soft L2 clustering. Suggested: use L1 or squared L2 clustering in the meantime.");
-    std::fprintf(stderr, "Starting [%s]\n", __PRETTY_FUNCTION__);
-    using CFT = FT;
     auto centers_cpy(centers);
-    blz::DV<CFT> centersums(centers.size());
-    blz::DV<CFT> rowsums((mat).rows());
-#if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
+    blz::DV<FT> centersums(centers.size());
+    blz::DV<FT> rowsums((mat).rows());
     rowsums = sum<rowwise>(mat);
     centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
-#else
-    OMP_PFOR
-    for(size_t i = 0; i < rowsums.size(); ++i)
-        rowsums[i] = sum(row(mat, i));
-    OMP_PFOR
-    for(size_t i = 0; i < centers_cpy.size(); ++i)
-        centersums[i] = blz::sum(centers_cpy[i]);
-#endif
     double cost = std::numeric_limits<double>::max();
     double initcost = -1;
     size_t iternum = 0;
     for(;;) {
         double oldcost = cost;
-        cost = set_centroids_soft<CFT>(mat, measure, prior, centers_cpy, costs, asns, weights, temperature, centersums, rowsums);
+        if(mbsize > 0) {
+            throw std::runtime_error("Not yet completed: minibatch soft clustering");
+            for(int i = 0; i < mbn; ++i); // Perform mbn rounds of minibatch clustering between central
+        } else {
+            cost = set_centroids_soft<FT>(mat, measure, prior, centers_cpy, costs, asns, weights, temperature, centersums, rowsums);
+        }
         if(initcost < 0) {
             initcost = cost;
             std::fprintf(stderr, "[%s] initial cost: %0.12g\n", __PRETTY_FUNCTION__, cost);
         }
-        //cost = compute_cost();
-        std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);
+        DBG_ONLY(std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);)
         if(oldcost >= cost) // Update centers only if an improvement
-        {
-#if BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
             std::copy(centers_cpy.begin(), centers_cpy.end(), centers.begin());
-#else
-            OMP_PFOR
-            for(unsigned i = 0; i < centers.size(); ++i)
-                centers[i] = centers_cpy[i];
-#endif
-        }
-        if(mbsize > 0) {
-            throw std::runtime_error("Not yet completed: minibatch soft clustering");
-            for(int i = 0; i < mbn; ++i) // Perform mbn rounds of minibatch clustering between central
-            {
-            }
-        }
         if(oldcost - cost <= eps * initcost || ++iternum == maxiter) {
             break;
         }

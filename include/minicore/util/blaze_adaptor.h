@@ -612,15 +612,21 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
     DV<FT, SO> costs(_mat.rows());
     std::unique_ptr<CustomVector<WeightType, unaligned, unpadded, SO>> cv;
     if(weights) {
-        throw minicore::NotImplementedError("Weighted geomedian is not supported");
+        //throw minicore::NotImplementedError("Weighted geomedian is not supported");
         cv.reset(new CustomVector<WeightType, unaligned, unpadded, SO>(const_cast<WeightType *>(weights), _mat.rows()));
     }
     for(;;) {
         VERBOSE_ONLY(std::fprintf(stderr, "Iteration %zu for matrix %zu/%zu and vector %zu with weights at %p\n", iternum + 1, (*mat).rows(), (*mat).columns(), (*dv).size(), (void *)weights);)
-        costs = blz::max(blz::generate<SO>(_mat.rows(), [&](auto i) {return blz::l2Norm(row(_mat, i) - *dv);}), 1e-40);
+        costs = blz::max(blz::generate<SO>(_mat.rows(), [&](auto i) {return blz::l2Norm(row(_mat, i) - *dv);}), 1e-30);
+        OMP_PFOR
+        for(size_t i = 0; i < costs.size(); ++i) {
+            if(std::isnan(costs[i])) {
+                costs[i] = 1e-30;
+                std::fprintf(stderr, "Warning: Cost %zu was nan, replacing.\n", i);
+            }
+        }
         FT current_cost = weights ? double(dot(*cv, costs)): double(blz::sum(costs));
         FT dist;
-        std::fprintf(stderr, "prev: %g. current_cost: %g. dist: %g\n", prevcost, current_cost, prevcost - current_cost);
         if((dist = prevcost - current_cost) <= eps) {
             prevcost = current_cost; break;
         }
@@ -630,13 +636,12 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
         }
         ++iternum;
         double denom;
-        costs = 1. / costs;
-        if(weights) costs *= *cv;
-        denom = sum(costs);
-        *dv = trans(costs / denom) * *mat;
+        if(weights) costs = *cv / costs;
+        else costs = 1. / costs;
+        costs /= sum(costs);
+        *dv = trans(costs) * *mat;
         prevcost = current_cost;
     }
-    std::fprintf(stderr, "Final cost: %g\n", prevcost);
     return *dv;
 }
 // Solve geometric median for a set of points.
@@ -710,4 +715,5 @@ namespace std {
    template<int I, typename Mat>
    decltype(auto) get(const blz::ConstColumnViewer<Mat> &x) {return x.get();}
 } // namespace std
+
 

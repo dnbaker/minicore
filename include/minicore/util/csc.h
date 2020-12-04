@@ -838,9 +838,7 @@ void l1_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::Vector<ORVT, TF> &
                 auto val = r.data_[i];
                 auto it = nzfeatures.find(idx);
                 if(it == nzfeatures.end()) {
-                    {
-                        it = nzfeatures.emplace(idx, std::vector<RVT>{RVT(val)}).first;
-                    }
+                    it = nzfeatures.emplace(idx, std::vector<RVT>{RVT(val)}).first;
                 } else {
                     it->second.push_back(val);
                 }
@@ -1113,7 +1111,7 @@ constexpr inline size_t size(const CSparseVector<VT, IT> &x) {
 
 template<typename VT, typename IT, typename IPtrT, typename RetT, typename IT2=uint64_t, typename WeightT=blz::DV<VT>>
 void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr = static_cast<IT2 *>(nullptr), size_t nasn=0, WeightT *weights=static_cast<WeightT *>(nullptr), double eps=0.) {
-    if(weights) throw NotImplementedError("No weighted geometric median supported");
+    //if(weights) throw NotImplementedError("No weighted geometric median supported");
     double prevcost = std::numeric_limits<double>::max();
     size_t iternum = 0;
     assert(center.size() == mat.columns());
@@ -1133,14 +1131,15 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
             break;
         }
         prevcost = current_cost;
-        costs = current_cost / costs;
+        if(weights) costs = *weights / costs;
+        else costs = 1. / costs;
+        costs /= sum(costs);
         blz::DV<double, blaze::TransposeFlag_v<RetT>> newcenter(mat.columns(), 0);
         OMP_PFOR
         for(size_t i = 0; i < npoints; ++i) {
             for(const auto &pair: row(mat, ptr ? index_t(ptr[i]): index_t(i))) {
-                const auto inc = pair.value() * costs[i];
                 OMP_ATOMIC
-                newcenter[pair.index()] += inc;
+                newcenter[pair.index()] += pair.value() * costs[i];
             }
         }
         assign(center, newcenter);
