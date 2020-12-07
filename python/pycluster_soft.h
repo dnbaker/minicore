@@ -11,6 +11,10 @@ using blz::unchecked;
 using blz::rowwise;
 using minicore::util::sum;
 using blz::sum;
+using blz::unpadded;
+using blz::unaligned;
+using blz::padded;
+using blz::aligned;
 
 template<typename Matrix, typename CtrT, typename AsnT=blz::DV<uint32_t>, typename CostsT=blz::DV<double>>
 py::dict cpp_scluster(const Matrix &mat, int, double beta,
@@ -40,22 +44,25 @@ py::dict cpp_scluster(const Matrix &mat, int, double beta,
         auto r = row(asn, i, unchecked);
         clust::correct_softmax(row(costs, i, unchecked), r);
     }
-
-    if(wdtype == 'f' || !weights) {
-        std::fprintf(stderr, "[%s] Doing soft clustering for floats\n", __PRETTY_FUNCTION__);
-        std::unique_ptr<blz::CustomVector<float, blz::unaligned, blz::unpadded, rowVector>> wview;
-        if(weights) {
-            std::fprintf(stderr, "Setting wview\n");
-            wview.reset(new blz::CustomVector<float, blz::unaligned, blz::unpadded, rowVector>((float *)weights, mat.rows()));
-        } else {
-            assert(wview.get() == nullptr);
-        }
-        clusterret = minicore::clustering::perform_soft_clustering(mat, measure, prior, ctrs, costs, asn, temp, kmeansmaxiter, mbsize, mbn, wview.get());
-    } else if(wdtype == 'd') {
-        std::fprintf(stderr, "[%s] Doing soft clustering for doubles\n", __PRETTY_FUNCTION__);
-        auto wview = blz::CustomVector<double, unaligned, unpadded, rowVector>((double *)weights, mat.rows());
-        clusterret = minicore::clustering::perform_soft_clustering(mat, measure, prior, ctrs, costs, asn, temp, kmeansmaxiter, mbsize, mbn, &wview);
-    } else throw std::runtime_error("weight dtype is not float or double");
+    blz::DV<double> cw;
+    std::unique_ptr<blz::CustomVector<double, unaligned, unpadded, rowVector>> wview;
+    if(weights && wdtype > 0) {
+        if(wdtype != 'd') {
+            cw.resize(costs.rows());
+            wview.reset(new blz::CustomVector<double, unaligned, unpadded, rowVector>(cw.data(), cw.size()));
+            switch(wdtype) {
+                case 'f': cw = blz::make_cv((float *)weights, costs.rows()); break;
+                case 'I': case 'i': cw = blz::make_cv((uint32_t *)weights, costs.rows()); break;
+                case 'L': case 'l': cw = blz::make_cv((uint64_t *)weights, costs.rows()); break;
+                case 'H': case 'h': cw = blz::make_cv((uint16_t *)weights, costs.rows()); break;
+                case 'B': case 'b': cw = blz::make_cv((uint8_t *)weights, costs.rows()); break;
+                default: throw std::invalid_argument("Required: float, double, or uint{8,16,32,64} weights");
+            }
+        } else wview.reset(new blz::CustomVector<double, unaligned, unpadded, rowVector>((double *)weights, costs.rows()));
+    }
+    // Only one version of perform_soft_clustering compiled (for double weights)
+    // This takes extra memory/time to copy the weights, but halves or thirds compile-time.
+    clusterret = minicore::clustering::perform_soft_clustering(mat, measure, prior, ctrs, costs, asn, temp, kmeansmaxiter, mbsize, mbn, wview.get());
     auto &[initcost, finalcost, numiter]  = clusterret;
     auto pyctrs = centers2pylist(ctrs);
     //auto pycosts = vec2fnp<decltype(costs), float> (costs);

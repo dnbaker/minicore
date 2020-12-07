@@ -831,9 +831,6 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
 {
     assert(ctrsums.size() == ctrs.size());
     DBG_ONLY(std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);)
-
-    //const unsigned k = ctrs.size();
-    //blz::DV<FT, blz::rowVector> asn(k, 0.);
     assert(min(costs) >= 0. || !std::fprintf(stderr, "mincost: %g\n", min(costs)));
     asns = softmax<rowwise>(costs * -temp);
     double ret = 0.;
@@ -845,10 +842,8 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
         const double w = weights ? double((*weights)[i]): 1.;
         ret += dot(cr, r) * w;
     }
-    DBG_ONLY(std::fprintf(stderr, "Computed cost: %g\n", ret);)
     std::vector<blz::DV<FT>> tmprows(ctrs.size(), blz::DV<FT>(mat.columns(), 0.));
     if(measure == distance::L2 || measure == distance::L1) {
-        std::fprintf(stderr, "L1 or L2 centroid\n");
         //OMP_PFOR
         for(size_t i = 0; i < ctrs.size(); ++i) {
             blz::DV<FT, blz::columnVector> colweights;
@@ -876,19 +871,14 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
         std::fprintf(stderr, "Start vector\n");
         blz::DV<FT, columnVector> winv;
         if(weights) {
-            std::fprintf(stderr, "weights!\n");
             if constexpr(blz::TransposeFlag_v<WeightsT> == rowVector) {
                 winv = trans(1. / (*weights * asns));
             } else {
                 winv = 1. / trans((trans(*weights) * asns));
             }
         } else {
-            std::fprintf(stderr, "no weights!\n");
             winv = 1. / trans(sum<columnwise>(asns));
-            //std::cerr << winv << '\n';
         }
-        //std::fprintf(stderr, "Calculated winv: \n");
-        //std::cerr << trans(winv) << '\n';
         OMP_PFOR
         for(size_t j = 0; j < mat.rows(); ++j) {
             auto r = row(mat, j, unchecked);

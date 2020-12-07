@@ -635,7 +635,6 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, WeightType *cons
             throw std::runtime_error("Optimization failed: nan");
         }
         ++iternum;
-        double denom;
         if(weights) costs = *cv / costs;
         else costs = 1. / costs;
         costs /= sum(costs);
