@@ -653,16 +653,11 @@ void set_centroids_full_mean(const Mat &mat,
             else {
                 assert(restartpol == RESTART_D2);
                 r = reservoir_simd::sample(costs.data(), costs.size(), rng());
-                assert(costs[r] > 0. || min(costs) == 0.);
             }
             rs.push_back(r);
-            assert(r < std::ptrdiff_t(mat.rows()));
             const auto id = sa[i];
-            auto &ctr = ctrs[id];
-            DBG_ONLY(auto oldctrsum = ctrsums[id];)
-            set_center(ctr, row(mat, r));
-            ctrsums[id] = sum(ctr);
-            DBG_ONLY(std::fprintf(stderr, "for id %u, old ctrsum %g. new ctrsum: %g. sum of ctr: %g. sum of row: %g\n", int(id), double(oldctrsum), double(ctrsums[id]), sum(ctr), sum(row(mat, r)));)
+            set_center(ctrs[id], row(mat, r));
+            ctrsums[id] = sum(ctrs[id]);
         }
         costs = std::numeric_limits<FT>::max();
 
@@ -760,9 +755,12 @@ double set_centroids_full_mean(const Mat &mat,
     for(size_t i = 0; i < asns.rows(); ++i) {
         auto cr = row(costs, i, unchecked);
         auto r = row(asns, i, unchecked);
+        //std::cerr << "costs: " << cr << '\n' << r << '\n';
         correct_softmax(cr, r);
         ret += dot(cr, r) * (weights ? double((*weights)[i]): 1.);
+        //std::cerr << "post corrected: " << cr << '\n' << r << '\n';
     }
+    //std::fprintf(stderr, "Sum of costs: %g\n", ret);
     //std::fprintf(stderr, "Now setting centers\n");
     if(measure == distance::L2 || measure == distance::L1) {
         //OMP_PFOR
@@ -776,12 +774,14 @@ double set_centroids_full_mean(const Mat &mat,
                 colweights = trans(*weights) * column(asns, i, unchecked);
             }
             if(measure == distance::L2) {
+                //std::fprintf(stderr, "l2 geomedian\n");
                 if constexpr(blaze::IsMatrix_v<Mat>) {
                     geomedian(mat, ctrs[i], colweights.data());
                 } else {
                     geomedian(mat, ctrs[i], (uint64_t *)nullptr, 0, &colweights);
                 }
             } else {
+                //std::fprintf(stderr, "l1median\n");
                 l1_median(mat, ctrs[i], (uint64_t *)nullptr, 0, &colweights);
             }
         }
@@ -803,7 +803,6 @@ double set_centroids_full_mean(const Mat &mat,
                 }
             }
         } else {
-            std::fprintf(stderr, "weights unset\n");
             blz::DV<FT> wsums = trans(1. / sum<columnwise>(asns));
             std::cerr << wsums << '\n';
             for(size_t i = 0; i < k; ++i) {
@@ -815,7 +814,7 @@ double set_centroids_full_mean(const Mat &mat,
     }
     OMP_PFOR
     for(size_t i = 0; i < k; ++i) ctrsums[i] = sum(ctrs[i]);
-    DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
+    DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g. Center sums: \n\n", temp);)
     return ret;
 }
 
@@ -826,10 +825,8 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
     WeightsT *weights, FT temp, SumT &ctrsums)
 {
     assert(ctrsums.size() == ctrs.size());
-    std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
-
-    //const unsigned k = ctrs.size();
-    //blz::DV<FT, blz::rowVector> asn(k, 0.);
+    DBG_ONLY(std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);)
+    assert(min(costs) >= 0. || !std::fprintf(stderr, "mincost: %g\n", min(costs)));
     asns = softmax<rowwise>(costs * -temp);
     double ret = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:ret)")
@@ -840,10 +837,8 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
         const double w = weights ? double((*weights)[i]): 1.;
         ret += dot(cr, r) * w;
     }
-    std::fprintf(stderr, "Computed cost: %g\n", ret);
     std::vector<blz::DV<FT>> tmprows(ctrs.size(), blz::DV<FT>(mat.columns(), 0.));
     if(measure == distance::L2 || measure == distance::L1) {
-        std::fprintf(stderr, "L1 or L2 centroid\n");
         //OMP_PFOR
         for(size_t i = 0; i < ctrs.size(); ++i) {
             blz::DV<FT, blz::columnVector> colweights;
@@ -871,19 +866,14 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
         std::fprintf(stderr, "Start vector\n");
         blz::DV<FT, columnVector> winv;
         if(weights) {
-            std::fprintf(stderr, "weights!\n");
             if constexpr(blz::TransposeFlag_v<WeightsT> == rowVector) {
                 winv = trans(1. / (*weights * asns));
             } else {
                 winv = 1. / trans((trans(*weights) * asns));
             }
         } else {
-            std::fprintf(stderr, "no weights!\n");
             winv = 1. / trans(sum<columnwise>(asns));
-            //std::cerr << winv << '\n';
         }
-        //std::fprintf(stderr, "Calculated winv: \n");
-        //std::cerr << trans(winv) << '\n';
         OMP_PFOR
         for(size_t j = 0; j < mat.rows(); ++j) {
             auto r = row(mat, j, unchecked);

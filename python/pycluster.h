@@ -7,13 +7,6 @@
 using blaze::unaligned;
 using blaze::unpadded;
 
-py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
-                 py::object msr, py::object weights, double eps,
-                 int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter);
-py::object func1(const PyCSparseMatrix &smw, py::int_ k, double beta,
-                 py::object msr, py::object weights, double eps,
-                 int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter);
-
 template<typename Matrix, typename WFT, typename CtrT, typename AsnT=blz::DV<uint32_t>, typename CostsT=blz::DV<double>>
 py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double beta,
                dist::DissimilarityMeasure measure,
@@ -173,23 +166,30 @@ py::object __py_cluster_from_centers(const Matrix &smw,
             return bestcost;
         });
     });
-    if(weights.is_none()) {
-        return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, (blz::DV<double> *)nullptr, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
+    int wk = -1;
+    blz::DV<double> bw;
+    std::unique_ptr<blaze::CustomVector<double, blz::unaligned, blz::unpadded>> dcv;
+    if(!weights.is_none()) {
+        double *bwptr = nullptr;
+        py::buffer_info wbi = py::cast<py::array>(weights).request();
+        wk = standardize_dtype(wbi.format)[0];
+        if(wk != 'd') {
+            bw.resize(costs.size());
+            bwptr = bw.data();
+        }
+        switch(wk) {
+            case 'd': bwptr = (double *)wbi.ptr; break;
+            case 'f': bw = blz::make_cv((float *)wbi.ptr, costs.size()); break;
+            case 'i': case 'I': bw = blz::make_cv((uint32_t *)wbi.ptr, costs.size()); break;
+            case 'l': case 'L': bw = blz::make_cv((uint64_t *)wbi.ptr, costs.size()); break;
+            case 'h': case 'H': bw = blz::make_cv((uint16_t *)wbi.ptr, costs.size()); break;
+            case 'B': case 'b': bw = blz::make_cv((uint8_t *)wbi.ptr, costs.size()); break;
+            default: throw std::invalid_argument(std::string("unexpected array kind ") + std::to_string(wk));
+        }
+        dcv.reset(new blaze::CustomVector<double, blz::unaligned, blz::unpadded>(bwptr, costs.size()));
     }
-    auto weightinfo = py::cast<py::array>(weights).request();
-    if(weightinfo.format.size() != 1) throw std::invalid_argument("Weights must be 0 or contain a fundamental type");
-    switch(weightinfo.format[0]) {
-#define CASE_MCR(x, type) case x: {\
-        auto cv = blz::make_cv((type *)weightinfo.ptr, costs.size());\
-        return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, &cv, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed); \
-        } break
-        CASE_MCR('f', float);
-        CASE_MCR('d', double);
-        default: throw std::invalid_argument(std::string("Invalid weights value type: ") + weightinfo.format);
-#undef CASE_MCR
-    }
-    throw std::invalid_argument("Weights were not float, double, or None.");
-    return py::none();
+    // Only compile 1 version: double weights, which can take a nullable weight container
+    return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, dcv.get(), eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
 }
 
 

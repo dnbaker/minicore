@@ -65,7 +65,7 @@ int main() {
                 assert(vdiff > 0);
             }
                 if(pval == 1. && msr == minicore::distance::MKL) std::fprintf(stderr, "MKL value should be 0.539179777847523: %g\n", vdiff);
-            } catch(const exception::TODOError &ex) {
+            } catch(const exception::NotImplementedError &ex) {
                 // don't care
             }
 #if 0

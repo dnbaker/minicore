@@ -61,7 +61,7 @@ int main() {
             assert(!std::isnan(v));
             assert(!std::isnan(v2) || pval == 0. || sum(cv4) == 0.);
             if(!std::isnan(v2)) assert(v2 > 0. || !std::fprintf(stderr, "v2: %0.20g\n", v2));
-            } catch(const exception::TODOError &ex) {
+            } catch(const exception::NotImplementedError &ex) {
                 // don't care
             }
         }

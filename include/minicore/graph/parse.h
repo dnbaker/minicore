@@ -40,14 +40,11 @@ Graph<DirectedS, float, VtxProps, GraphProps> parse_dimacs_unweighted(std::strin
     while(std::getline(ifs, line)) {
         const char *s = line.data();
         if(!std::isdigit(*s)) continue;
-        //boost::add_edge(id, id, 0., ret);
-        //std::fprintf(stderr, "added edge from %zu to %zu\n", size_t(id), size_t(id));
         for(;;) {
             auto newv = std::atoi(s) - 1;
             boost::add_edge(id, newv, static_cast<edge_property_type>(1.), ret);
             assert(unsigned(newv) < boost::num_vertices(ret));
             assert(id < boost::num_vertices(ret));
-
             if((s = std::strchr(s, ' ')) == nullptr || !std::isdigit(*++s)) break;
         }
         ++id;

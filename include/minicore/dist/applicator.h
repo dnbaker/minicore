@@ -186,10 +186,10 @@ public:
     FT cosine_similarity(size_t j, const OT &o) const {
         if constexpr(IS_SPARSE) {
             if(prior_data_) {
-                if(prior_data_->size() != 1) throw TODOError("Disuniform prior");
+                if(prior_data_->size() != 1) throw NotImplementedError("Disuniform prior");
                 const auto pv = (*prior_data_)[0];
                 if constexpr(blz::IsSparseVector_v<OT>) {
-                    throw TODOError("Sparse-within but not without");
+                    throw NotImplementedError("Sparse-within but not without");
                 } else {
                     auto v = blaze::dot(o + pv, weighted_row(j));
                     auto extra = blz::sum(o * pv);
@@ -239,7 +239,7 @@ public:
                     auto denom = std::sqrt(onorm + onormsub + suma2);
                     auto frac = num / (l2i * denom);
                     return frac;
-                } else TODOError("fast sparse pcosine with disuniform prior");
+                } else NotImplementedError("fast sparse pcosine with disuniform prior");
             }
         }
         return blaze::dot(o, row(j)) / blaze::l2Norm(o) * pl2norm_cache_->operator[](j);
@@ -993,7 +993,7 @@ public:
                 throw std::runtime_error(buf);
             }
             ret = -std::numeric_limits<FT>::max();
-            throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+            throw NotImplementedError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         } else {
             auto div = o / row(i);
             ret = blaze::sum(div - blaze::log(div)) - o.size();
@@ -1173,7 +1173,7 @@ public:
                         while(ind < r.size()) ret -= rsaimul * std::log((o[ind++] + pv) * orsai);
                     }
                 } else {
-                    throw TODOError("TODO: Special fast version for sparsity-preserving with non-uniform prior");
+                    throw NotImplementedError("TODO: Special fast version for sparsity-preserving with non-uniform prior");
                 }
             }
         } else {
@@ -1183,17 +1183,17 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     FT mkl(const OT &o, size_t i, const OT2 &olog) const {
-        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw NotImplementedError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return blaze::dot(o, olog - logrow(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT mkl(const OT &o, size_t i) const {
-        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw NotImplementedError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return blaze::dot(o, blaze::neginf2zero(blaze::log(o)) - logrow(i));
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     FT mkl(size_t i, const OT &, const OT2 &olog) const {
-        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && blaze::IsSparseVector_v<OT> && prior_data_) throw NotImplementedError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return blaze::dot(row(i), logrow(i) - olog);
     }
     template<typename...Args>
@@ -1203,7 +1203,7 @@ public:
     template<typename...Args>
     FT psm(Args &&...args) const { return jsm(std::forward<Args>(args)...);}
     FT bhattacharyya_sim(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) throw TODOError("TODO: complete special fast version of this supporting priors at no runtime cost.");
+        if(IS_SPARSE && prior_data_) throw NotImplementedError("TODO: complete special fast version of this supporting priors at no runtime cost.");
         return sqrdata_.rows() ? blaze::dot(sqrtrow(i), sqrtrow(j))
                                : blaze::sum(blaze::sqrt(row(i) * row(j)));
     }
@@ -1271,12 +1271,12 @@ public:
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
     FT llr(size_t, const OT &) const {
-        throw TODOError("llr is not implemented for this.");
+        throw NotImplementedError("llr is not implemented for this.");
         return 0.;
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>, typename OT2>
     FT llr(size_t, const OT &, const OT2 &) const {
-        throw TODOError("llr is not implemented for this.");
+        throw NotImplementedError("llr is not implemented for this.");
         return 0.;
     }
     template<typename OT, typename=std::enable_if_t<!std::is_integral_v<OT>>>
@@ -1687,7 +1687,7 @@ auto make_kmeanspp(const DissimilarityApplicator<MatrixType> &app, unsigned k, u
 
 template<typename MatrixType, typename WFT=blaze::ElementType_t<MatrixType>>
 auto make_kcenter(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr) {
-    throw TODOError("Not implemented");
+    throw NotImplementedError("Not implemented");
 }
 
 template<typename MatrixType, typename WFT=typename MatrixType::ElementType, typename IT=uint32_t>
@@ -1875,6 +1875,13 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     break;
                 } else if(msr == L2 || msr == SQRL2) {
                     ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0.);
+                    if(ret < 0.) {
+                        std::fprintf(stderr, "negative sqrl2 distance: %g?\n", ret);
+                        ret = 0.;
+                    } else if(std::isnan(ret)) {
+                        for(size_t i = 0; i < nnz_either; ++i) std::fprintf(stderr, "vs[%zu] = %g/%g\n", i, tmpmulx[i], tmpmuly[i]);
+                        throw std::runtime_error("ret is nan somehow");
+                    }
                     if(msr == L2) ret = std::sqrt(ret);
                     break;
                 } else if(msr == L1) {
@@ -1920,7 +1927,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     klc = libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = sharednz * lhinc * (lhl - rhl);
                 } else if(msr == JSD || msr == JSM ) {
-                    //for(size_t i = 0; i < nnz_either; ++i) std::fprintf(stderr, "%zu:%g,%g\n", i, tmpmulx[i], tmpmuly[i]);
                     klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = ((lhincl + rhincl - shincl) * sharednz) * .5;
                 } else if(msr == REVERSE_MKL || msr == REVERSE_POISSON) {
@@ -1937,7 +1943,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 } else if(msr == ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = sharednz * (lhinc / rhinc - std::log(lhinc / rhinc)) - nd;
-                    //fprintf(stderr, "Is values: klc %g, zc %g\n", klc, zc);
                 } else if(msr == REVERSE_ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * (rhinc / lhinc - std::log(rhinc / lhinc)) - nd;
@@ -1974,7 +1979,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 }
             }
             break;
-            default: ret = 0.; throw TODOError("unexpected msr; not yet supported");
+            default: ret = 0.; throw NotImplementedError("unexpected msr; not yet supported");
         }
         return ret;
     } else if constexpr(!blz::IsSparseVector_v<MatrixRowT>) {

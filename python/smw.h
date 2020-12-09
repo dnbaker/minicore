@@ -275,7 +275,7 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
         for(size_t i = 0; i < lidx.size(); ++i)
             rptr[i] = lidx[i];
     });
-    } catch(const TODOError &) {
+    } catch(const NotImplementedError &) {
         throw std::invalid_argument("Unsupported measure");
     } catch(const std::runtime_error &ex) {
         throw static_cast<std::exception>(ex);

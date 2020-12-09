@@ -113,7 +113,7 @@ kcenter_greedy_2approx_costs(Oracle &oracle, const size_t np, size_t k, RNG &rng
         newc = bestind;
 #ifndef NDEBUG
         FT bestcost = distances[bestind];
-        auto ind = std::max_element(distances.begin(), distances.end()) - distances.begin();
+        IT ind = std::max_element(distances.begin(), distances.end()) - distances.begin();
         assert(bestind == ind || distances[ind] == bestcost);
 #endif
         centers.push_back(newc);
