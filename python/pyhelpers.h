@@ -42,45 +42,20 @@ template<typename VecT>
 void set_centers(VecT *vec, const py::buffer_info &bi) {
     auto &v = *vec;
     switch(bi.format.front()) {
-        case 'f':
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
+        case 'L': case 'l':
+            for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint64_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
         break;
-        case 'L': case 'l': {
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((uint64_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
-        }
+        case 'I': case 'i':
+            for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint32_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
         break;
-        case 'I': case 'i': {
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((int *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
-        }
+        case 'B': case 'b':
+            for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint8_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
         break;
-        case 'B': case 'b': {
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((uint8_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
-        }
+        case 'H': case 'h': for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint16_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
         break;
-        case 'H': case 'h': {
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((uint16_t *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
-        }
+        case 'f': for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {v.emplace_back(trans(blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1])));}
         break;
-        case 'd':
-        for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {
-            auto cv = blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1]);
-            v.emplace_back(trans(cv));
-        }
+        case 'd': for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {v.emplace_back(trans(blz::make_cv((double *)bi.ptr + i * bi.shape[1], bi.shape[1])));}
         break;
         default: throw std::invalid_argument(std::string("Invalid format string: ") + bi.format);
     }
@@ -97,8 +72,7 @@ py::object centers2pylist(const std::vector<SMT, SAL> &ctrs) {
 template<typename T, typename DestT=float>
 auto vec2fnp(const T &x) {
     py::array_t<DestT> ret(x.size());
-    auto rbi = ret.request();
-    std::copy(std::begin(x), std::end(x), (DestT *)rbi.ptr);
+    std::copy(std::begin(x), std::end(x), (DestT *)ret.request().ptr);
     return ret;
 }
 
