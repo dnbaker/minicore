@@ -653,16 +653,11 @@ void set_centroids_full_mean(const Mat &mat,
             else {
                 assert(restartpol == RESTART_D2);
                 r = reservoir_simd::sample(costs.data(), costs.size(), rng());
-                assert(costs[r] > 0. || min(costs) == 0.);
             }
             rs.push_back(r);
-            assert(r < std::ptrdiff_t(mat.rows()));
             const auto id = sa[i];
-            auto &ctr = ctrs[id];
-            DBG_ONLY(auto oldctrsum = ctrsums[id];)
-            set_center(ctr, row(mat, r));
-            ctrsums[id] = sum(ctr);
-            //DBG_ONLY(std::fprintf(stderr, "for id %u, old ctrsum %g. new ctrsum: %g. sum of ctr: %g. sum of row: %g\n", int(id), double(oldctrsum), double(ctrsums[id]), sum(ctr), sum(row(mat, r)));)
+            set_center(ctrs[id], row(mat, r));
+            ctrsums[id] = sum(ctrs[id]);
         }
         costs = std::numeric_limits<FT>::max();
 
