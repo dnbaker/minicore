@@ -90,15 +90,15 @@ template<typename MT, // MatrixType
          typename=std::enable_if_t<std::is_floating_point_v<FT>>
         >
 std::tuple<double, double, size_t>
-perform_hard_clustering(const MT &mat, // TODO: consider replacing blaze::Matrix with template Mat for CSR matrices
-                             const dist::DissimilarityMeasure measure,
-                             const PriorT &prior,
-                             std::vector<CtrT> &centers,
-                             AsnT &asn,
-                             CostsT &costs,
-                             const WeightT *weights=static_cast<WeightT *>(nullptr),
-                             double eps=1e-10,
-                             size_t maxiter=size_t(-1))
+perform_hard_clustering(const MT &mat,
+                        const dist::DissimilarityMeasure measure,
+                        const PriorT &prior,
+                        std::vector<CtrT> &centers,
+                        AsnT &asn,
+                        CostsT &costs,
+                        const WeightT *weights=static_cast<WeightT *>(nullptr),
+                        double eps=1e-10,
+                        size_t maxiter=size_t(-1))
 {
     auto compute_cost = [&costs,w=weights]() -> FT {
         if(w) return blz::dot(costs, *w);
@@ -479,7 +479,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             } else {
                 cost = blz::sum(costs);
             }
-            std::fprintf(stderr, "Cost at iter %zu: %g\n", iternum, cost);
+            std::fprintf(stderr, "Cost at iter %zu (mbsize %zd): %g\n", iternum, mbsize, cost);
             if(iternum == 0) initcost = cost, bestcost = initcost;
             if(cost < bestcost) {
                 bestcost = cost;
