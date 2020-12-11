@@ -2,7 +2,7 @@
 
 
 py::ssize_t threadgetter() {
-    py::ssize_t ret;
+    py::ssize_t ret = 1;
 #ifdef _OPENMP
     #pragma omp parallel
     {

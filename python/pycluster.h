@@ -149,7 +149,7 @@ py::object __py_cluster_from_centers(const Matrix &smw,
             double bestcost;
             uint32_t bestind;
                 auto r = row(mat, idx);
-                const double rsum = sum(r);
+                const double rsum = rsums[idx];
                 bestind = 0;
                 auto c = cmp::msr_with_prior<ComputeT>(measure, r, dvecs[0], prior, psum, rsum, centersums[0]);
                 for(unsigned j = 1; j < k; ++j) {
