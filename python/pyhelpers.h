@@ -77,26 +77,36 @@ auto vec2fnp(const T &x) {
 }
 
 
-inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::object x) {
+template<typename Mat>
+inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::object x, const Mat &mat) {
     std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs;
-    if(py::isinstance<py::array>(x)) {
+    if(py::isinstance<py::array>(x) && py::cast<py::array>(x).request().ndim == 2) {
         auto cbuf = py::cast<py::array>(x).request();
         set_centers(&dvecs, cbuf);
-    } else if(py::isinstance<py::list>(x)) {
-        for(auto item: x) {
-            auto ca = py::cast<py::array>(item);
-            auto bi = ca.request();
-            const auto fmt = bi.format[0];
-            auto emp = [&](auto &x) {
-                dvecs.emplace_back();
-                dvecs.back() = trans(x);
-            };
-            if(fmt == 'd') {
-                auto cv = blz::make_cv((double *)bi.ptr, bi.size);
-                emp(cv);
-            } else {
-                auto cv = blz::make_cv((float *)bi.ptr, bi.size);
-                emp(cv);
+    } else if(py::isinstance<py::sequence>(x)) {
+        if(py::isinstance<py::int_>(py::cast<py::sequence>(x)[0])) {
+            const size_t nc = mat.columns();
+            for(auto item: py::cast<py::sequence>(x)) {
+                Py_ssize_t rownum = py::cast<py::int_>(item).cast<Py_ssize_t>();
+                auto &v = dvecs.emplace_back();
+                v.resize(nc);
+                auto r = row(mat, rownum);
+                v.reserve(nonZeros(r));
+                if constexpr(blaze::IsDenseMatrix_v<Mat>) {
+                    for(size_t i = 0; i < nc; ++i) {
+                        if(r[i] > 0.) v.append(i, r[i]);
+                    }
+                } else {
+                    for(const auto &pair: r) v.append(pair.index(), pair.value());
+                }
+            }
+        } else {
+            for(auto item: py::cast<py::sequence>(x)) {
+                auto ca = py::cast<py::array>(item);
+                auto bi = ca.request();
+                auto emp = [&](const auto &x) {dvecs.emplace_back() = trans(x);};
+                if(bi.format[0] == 'd') emp(blz::make_cv((double *)bi.ptr, bi.size));
+                else                    emp(blz::make_cv((float *)bi.ptr, bi.size));
             }
         }
     } else throw std::invalid_argument("centers must be a numpy array or list of numpy arrays");
