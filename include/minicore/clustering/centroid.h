@@ -60,16 +60,15 @@ void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &
     #pragma omp parallel for schedule(dynamic) reduction(+:wsum)
 #endif
     for(size_t i = 0; i < nasn; ++i) {
-        const double itemw = w ? double(*w)[asn[i]]: 1.;
         if(w) {
+            double itemw = (*w)[asn[i]];
             wsum += itemw;
             for(const auto &pair: row(mat, asn[i])) {
                 OMP_ATOMIC
                 mv[pair.index()] += pair.value() * itemw;
             }
         } else for(const auto &pair: row(mat, asn[i])) {
-            OMP_ATOMIC
-            mv[pair.index()] += pair.value();
+            OMP_ATOMIC mv[pair.index()] += pair.value();
         }
     }
     if(!wsum) wsum = nasn;
@@ -610,7 +609,7 @@ void set_centroids_full_mean(const Mat &mat,
     wy::WyRand<size_t, 4> rng(costs.size()); // Used for restarting orphaned centers
     const size_t np = costs.size(), k = ctrs.size();
     auto assigned = std::make_unique<std::vector<size_t>[]>(k);
-    OMP_ONLY(std::unique_ptr<std::mutex[]> locks(k);)
+    OMP_ONLY(std::unique_ptr<std::mutex[]> locks(new std::mutex[k]);)
     for(size_t i = 0; i < np; ++i) {
         OMP_ONLY(std::lock_guard<std::mutex> lock(locks(asn[i]));)
         assigned[asn[i]].push_back(i);
