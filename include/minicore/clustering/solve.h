@@ -107,11 +107,6 @@ perform_hard_clustering(const MT &mat,
     const blz::DV<FT> rowsums = sum<blz::rowwise>(mat);
     blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return sum(centers[x]);});
     assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
-#ifndef NDEBUG
-    for(size_t i = 0; i < centers.size(); ++i) {
-        assert(std::abs(sum(centers[i]) - centersums[i]) < 1e-10 || !std::fprintf(stderr, "%g, %g, %i\n", sum(centers[i]),  centersums[i], int(i)));
-    }
-#endif
     const auto initcost = compute_cost();
     FT cost = initcost;
     std::fprintf(stderr, "[%s] initial cost: %0.12g\n", __PRETTY_FUNCTION__, cost);
@@ -133,7 +128,6 @@ perform_hard_clustering(const MT &mat,
             std::cerr << "Warning: New cost " << newcost << " > original cost " << cost << ". Using prior iteration.\n;";
             centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
             assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums);
-            //DBG_ONLY(std::abort();)
             break;
         }
         std::copy(centers_cpy.begin(), centers_cpy.begin(), centers.begin());
@@ -145,9 +139,7 @@ perform_hard_clustering(const MT &mat,
             break;
         }
         if(++iternum == maxiter) {
-#ifndef NDEBUG
             std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
-#endif
             break;
         }
         cost = newcost;
@@ -548,7 +540,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             } else {
                 clustering::set_center(centers[i], mat, asnptr, asnsz, weights);
             }
-            //std::cerr << trans(centers[i]) << '\n';
+            //std::cerr << "Center[" << i << "] " << trans(centers[i]) << '\n';
             VERBOSE_ONLY(std::cerr << "##center with sum " << sum(centers[i]) << " and index "  << i << ": " << centers[i] << '\n';)
             centersums[i] = sum(centers[i]);
             VERBOSE_ONLY(std::fprintf(stderr, "center sum: %g. csums: %g\n", centersums[i], sum(centers[i]));)
