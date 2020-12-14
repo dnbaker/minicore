@@ -343,7 +343,6 @@ struct CoresetSampler {
         // From Training Gaussian Mixture Models at Scale via Coresets
         // http://www.jmlr.org/papers/volume18/15-506/15-506.pdf
         // Note: this can be expanded to general probability measures.
-        throw std::runtime_error("I'm not certain this is correct. Do not use this until I am.");
         std::vector<FT> weight_sums(ncenters), weighted_cost_sums(ncenters);
         std::vector<FT> sqcosts(ncenters);
         std::vector<IT> center_counts(ncenters);

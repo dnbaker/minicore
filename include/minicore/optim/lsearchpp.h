@@ -22,7 +22,9 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
     using value_type = std::decay_t<decltype(*std::begin(distances))>;
     std::uniform_real_distribution<value_type> dist;
     const unsigned k = ctrs.size();
-    blz::DM<value_type> ctrcostmat = blaze::generate(np, k, [&](auto x, auto y) {
+    diskmat::PolymorphicMat<value_type> diskctrcostmat(np, k);
+    auto &ctrcostmat = ~diskctrcostmat;
+    ctrcostmat = blaze::generate(np, k, [&](auto x, auto y) {
         return oracle(x, ctrs[y]);
     });
     DBG_ONLY(std::fprintf(stderr, "np: %zu\n", np);)
