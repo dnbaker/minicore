@@ -50,7 +50,7 @@ void init_cmp(py::module &m) {
             if(nc != Py_ssize_t(lhs.columns()))
                 throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
             std::fprintf(stderr, "Processing matrix of shape %zu/%zu\n", nc, ndr);
-            py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), nc});
+            py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), ndr});
             blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)ret.request().ptr, nr, ndr);
             lhs.perform([&](auto &matrix) {
                 using ET = typename std::decay_t<decltype(matrix)>::ElementType;
@@ -58,7 +58,6 @@ void init_cmp(py::module &m) {
 #define CASE_F(char, type) \
                         case char: {\
                             blaze::CustomMatrix<type, unaligned, unpadded> ocm(static_cast<type *>(inf.ptr), ndr, nc);\
-                            std::cerr << ocm << '\n';\
                             const auto cmsums = blz::evaluate(blz::sum<blz::rowwise>(ocm));\
                             blz::SM<float> sv = ocm;\
                             cm = blz::generate(nr, ndr, [&](auto x, auto y) -> float {\
@@ -163,7 +162,7 @@ void init_cmp(py::module &m) {
             if(nc != Py_ssize_t(lhs.columns()))
                 throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
             std::fprintf(stderr, "Processing matrix of shape %zu/%zu\n", nc, ndr);
-            py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), nc});
+            py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), ndr});
             blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)ret.request().ptr, nr, ndr);
             lhs.perform([&](auto &matrix) {
                 using ET = typename std::decay_t<decltype(matrix)>::ElementType;
@@ -171,7 +170,6 @@ void init_cmp(py::module &m) {
 #define CASE_F(char, type) \
                         case char: {\
                             blaze::CustomMatrix<type, unaligned, unpadded> ocm(static_cast<type *>(inf.ptr), ndr, nc);\
-                            std::cerr << ocm << '\n';\
                             const auto cmsums = blz::evaluate(blz::sum<blz::rowwise>(ocm));\
                             blz::SM<float> sv = ocm;\
                             cm = blz::generate(nr, ndr, [&](auto x, auto y) -> float {\
