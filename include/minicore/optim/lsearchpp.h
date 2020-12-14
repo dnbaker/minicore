@@ -45,14 +45,15 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
     value_type gain;
     value_type total_gain = 0.;
     for(size_t major_round = 0; major_round < nrounds; ++major_round) {
-        const long long signed int sel = reservoir_simd::sample(distances.data(), distances.size(), rng());
+        auto seed = rng();
+        long long unsigned int sel;
+        if(weights) {
+            blz::DV<value_type> dv = newcosts * *wv;
+            sel = reservoir_simd::sample(dv.data(), dv.size(), seed);
+        } else sel = reservoir_simd::sample(distances.data(), distances.size(), seed);
         DBG_ONLY(std::fprintf(stderr, "Selected %lld with cost %g (max cost: %g)\n", sel, distances[sel], blaze::max(dv));)
         assert(sel < static_cast<std::ptrdiff_t>(np));
-        if(weights) {
-            newcosts = blaze::generate(np, [&](auto x) {return oracle(sel, x);}) * (*wv);
-        } else {
-            newcosts = blaze::generate(np, [&](auto x) {return oracle(sel, x);});
-        }
+        newcosts = blaze::generate(np, [&](auto x) {return oracle(sel, x);});
         ctrcosts = 0.;
         gain = 0.;
         OMP_ONLY(_Pragma("omp parallel for reduction(+:gain)"))
