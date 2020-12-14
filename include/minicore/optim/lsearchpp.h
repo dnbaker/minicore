@@ -11,6 +11,7 @@
 #include "minicore/util/exception.h"
 #include "libsimdsampling/simdsampling.ho.h"
 #include "libsimdsampling/argminmax.ho.h"
+#include "diskmat/diskmat.h"
 
 namespace minicore {
 
