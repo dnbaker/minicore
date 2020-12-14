@@ -611,7 +611,7 @@ void set_centroids_full_mean(const Mat &mat,
     auto assigned = std::make_unique<std::vector<size_t>[]>(k);
     OMP_ONLY(std::unique_ptr<std::mutex[]> locks(new std::mutex[k]);)
     for(size_t i = 0; i < np; ++i) {
-        OMP_ONLY(std::lock_guard<std::mutex> lock(locks(asn[i]));)
+        OMP_ONLY(std::lock_guard<std::mutex> lock(locks[asn[i]]);)
         assigned[asn[i]].push_back(i);
     }
     for(unsigned i = 0; i < k; ++i)
