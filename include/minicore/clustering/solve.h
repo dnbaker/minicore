@@ -86,7 +86,7 @@ template<typename MT, // MatrixType
          typename CostsT,
          typename PriorT=blz::DynamicVector<FT, rowVector>,
          typename AsnT=blz::DynamicVector<uint32_t>,
-         typename WeightT=CtrT, // Vector Type
+         typename WeightT=blz::DynamicVector<FT>, // Vector Type
          typename=std::enable_if_t<std::is_floating_point_v<FT>>
         >
 std::tuple<double, double, size_t>
@@ -156,7 +156,7 @@ perform_hard_clustering(const MT &mat,
  * set_centroids_hard assumes that costs of points have been assigned
  *
  */
-template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT, typename SumT>
+template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=blz::DV<FT>, typename SumT>
 void set_centroids_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
@@ -175,7 +175,7 @@ void set_centroids_hard(const Mat &mat,
     const bool isnorm = msr_is_normalized(measure);
     switch(pol) {
         case JSM_MEDIAN:
-        case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(mat, measure, prior, asn, costs, centers, weights, ctrsums, rowsums);
+        case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(mat, measure, prior, asn, costs, centers, weights, ctrsums, rowsums, isnorm);
             break;
         case L1_MEDIAN:
             set_centroids_l1<FT>(mat, asn, costs, centers, weights);

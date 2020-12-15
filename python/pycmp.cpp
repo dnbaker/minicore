@@ -116,7 +116,7 @@ void init_cmp(py::module &m) {
                             blz::row(rhr, rhid, unchecked), \
                             blz::row(lhr, lhid, unchecked), \
                             priorc, priorsum,\
-                            rrsums[lrid], lrsums[lhid]);\
+                            rrsums[rhid], lrsums[lhid]);\
             });
             DO_GEN
         } else if(lhs.is_double() && rhs.is_double()) {

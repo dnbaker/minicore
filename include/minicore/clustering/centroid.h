@@ -43,6 +43,13 @@ void set_center(CtrT &lhs, const blaze::Vector<VT, TF> &rhs) {
 }
 
 template<typename CtrT, typename VT, typename IT>
+void set_center(CtrT &lhs, const util::ProdCSparseVector<VT, IT> &rhs) {
+    lhs.reserve(rhs.nnz());
+    if(lhs.size() != rhs.dim_) lhs.resize(rhs.dim_);
+    lhs.reset();
+    for(const auto &pair: rhs) lhs[pair.index()] = pair.value();
+}
+template<typename CtrT, typename VT, typename IT>
 void set_center(CtrT &lhs, const util::CSparseVector<VT, IT> &rhs) {
     lhs.reserve(rhs.nnz());
     if(lhs.size() != rhs.dim_) lhs.resize(rhs.dim_);
@@ -50,26 +57,27 @@ void set_center(CtrT &lhs, const util::CSparseVector<VT, IT> &rhs) {
     for(const auto &pair: rhs) lhs[pair.index()] = pair.value();
 }
 
-template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT=blz::DV<blz::ElementType_t<DataT>>>
-void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asn, size_t nasn, WeightT *w = static_cast<WeightT>(nullptr))
+template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT=blz::DV<blz::ElementType_t<DataT>>, typename RowSumsT=WeightT>
+void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asn, size_t nasn, WeightT *w = static_cast<WeightT>(nullptr), RowSumsT *rs=static_cast<RowSumsT *>(nullptr))
 {
     using VT = std::conditional_t<std::is_floating_point_v<DataT>, DataT, std::conditional_t<(sizeof(DataT) < 8), float, double>>;
     blz::DV<VT, blz::TransposeFlag_v<CtrT>> mv(mat.columns(), VT(0));
     double wsum = 0.;
 #ifdef _OPENMP
-    #pragma omp parallel for schedule(dynamic) reduction(+:wsum)
+    #pragma omp parallel for schedule(dynamic, 16) reduction(+:wsum)
 #endif
     for(size_t i = 0; i < nasn; ++i) {
+        auto r = row(mat, asn[i]);
         if(w) {
             double itemw = (*w)[asn[i]];
             wsum += itemw;
-            for(const auto &pair: row(mat, asn[i])) {
+            if(rs) itemw /= (*rs)[i];
+            SK_UNROLL_4
+            for(size_t i = 0; i < r.n_; ++i) {
                 OMP_ATOMIC
-                mv[pair.index()] += pair.value() * itemw;
+                mv[r.indices_[i]] += r.data_[i] * itemw;
             }
-        } else for(const auto &pair: row(mat, asn[i])) {
-            OMP_ATOMIC mv[pair.index()] += pair.value();
-        }
+        } else for(const auto &pair: r) OMP_ATOMIC mv[pair.index()] += pair.value();
     }
     if(!wsum) wsum = nasn;
     ctr = mv / wsum;
@@ -98,16 +106,25 @@ void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, 
 }
 
 
-template<typename CtrT, typename MT, bool SO, typename IT, typename WeightT=blz::DV<blz::ElementType_t<MT>>>
-void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nasn, WeightT *w = static_cast<WeightT*>(nullptr)) {
+template<typename CtrT, typename MT, bool SO, typename IT, typename WeightT=blz::DV<blz::ElementType_t<MT>>, typename RowSumsT=WeightT>
+void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nasn, WeightT *w = static_cast<WeightT*>(nullptr), RowSumsT *rs=static_cast<RowSumsT *>(nullptr)) {
     auto rowsel = rows(*mat, asp, nasn);
+    const size_t nc = (*mat).columns();
     if(w) {
         auto elsel = elements(*w, asp, nasn);
-        auto weighted_rows = rowsel % blaze::expand(elsel, (*mat).columns());
+        using ET = decltype(elsel);
         // weighted sum over total weight -> weighted mean
-        ctr = blaze::sum<blaze::columnwise>(weighted_rows) / blaze::sum(elsel);
+        const auto elsum = sum(elsel);
+        if(rs) {
+            ctr = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(elsel, nc) % blaze::expand(trans(elements(*rs, asp, nasn)), nc)) / elsum;
+        } else
+            ctr = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(elsel, nc)) / elsum;
     } else {
-        ctr = blaze::mean<blaze::columnwise>(rowsel);
+        if(rs) {
+            //auto roww = evaluate(1. / trans(elements(*rs, asp, nasn)));
+            ctr = blaze::mean<blaze::columnwise>(rowsel % blaze::expand(1. / trans(elements(*rs, asp, nasn)), nc));
+        } else
+            ctr = blaze::mean<blaze::columnwise>(rowsel);
     }
 }
 
@@ -596,7 +613,7 @@ template<typename FT=double, typename Mat, typename PriorT, typename AsnT, typen
 void set_centroids_full_mean(const Mat &mat,
     const dist::DissimilarityMeasure measure,
     const PriorT &prior, AsnT &asn, CostsT &costs, CtrsT &ctrs,
-    WeightsT *weights, SumT &ctrsums, const SumT &rowsums)
+    WeightsT *weights, SumT &ctrsums, const SumT &rowsums, bool is_norm)
 {
     static_assert(std::is_floating_point_v<std::decay_t<decltype(ctrsums[0])>>, "SumT must be floating-point");
     assert(rowsums.size() == (*mat).rows());
@@ -701,9 +718,15 @@ void set_centroids_full_mean(const Mat &mat,
         else if(nasn == 1) {
             auto mr = row(mat, *asp);
             assert(ctr.size() == mr.size());
-            set_center(ctr, mr);
+            if(is_norm) {
+                set_center(ctr, mr / rowsums[*asp]);
+            } else {
+                set_center(ctr, mr);
+            }
         } else {
-            set_center(ctr, mat, asp, nasn, weights);
+            if(is_norm)
+                set_center(ctr, mat, asp, nasn, weights, &rowsums);
+            else set_center(ctr, mat, asp, nasn, weights);
         }
     }
 }
