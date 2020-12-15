@@ -13,8 +13,9 @@ using minicore::util::row;
 using blaze::row;
 
 void init_cmp(py::module &m) {
-    m.def("cmp", [](const SparseMatrixWrapper &lhs, py::array arr, py::object msr, py::object betaprior) {
+    m.def("cmp", [](const SparseMatrixWrapper &lhs, py::array arr, py::object msr, py::object betaprior, py::object reverse) {
         auto inf = arr.request();
+        const bool revb = reverse.cast<bool>();
         const double priorv = betaprior.cast<double>(), priorsum = priorv * lhs.columns();
         if(inf.format.size() != 1) throw std::invalid_argument("Invalid dtype");
         const char dt = inf.format[0];
@@ -35,7 +36,10 @@ void init_cmp(py::module &m) {
                     case char: {\
                         blz::SV<float> sv(blz::make_cv((type *)inf.ptr, inf.size));\
                         const auto vsum = blz::sum(sv);\
-                        v = blz::generate(nr, [vsum,priorsum,ms,&matrix,&rsums,&sv,&priorc](auto x) {return cmp::msr_with_prior<MsrType>(ms, sv, row(matrix, x), priorc, priorsum, vsum, rsums[x]);});\
+                        v = blz::generate(nr, [vsum,priorsum,ms,&matrix,&rsums,&sv,&priorc,revb](auto x) {\
+                            return revb ? cmp::msr_with_prior<MsrType>(ms, row(matrix, x), sv, priorc, priorsum, rsums[x], vsum)\
+                                        : cmp::msr_with_prior<MsrType>(ms, sv, row(matrix, x), priorc, priorsum, vsum, rsums[x]);\
+                        });\
                     } break;
                     CASE_F('f', float)
                     CASE_F('d', double)
@@ -49,7 +53,6 @@ void init_cmp(py::module &m) {
             const Py_ssize_t nc = inf.shape[1], ndr = inf.shape[0];
             if(nc != Py_ssize_t(lhs.columns()))
                 throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
-            std::fprintf(stderr, "Processing matrix of shape %zu/%zu\n", nc, ndr);
             py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), ndr});
             blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)ret.request().ptr, nr, ndr);
             lhs.perform([&](auto &matrix) {
@@ -61,7 +64,11 @@ void init_cmp(py::module &m) {
                             const auto cmsums = blz::evaluate(blz::sum<blz::rowwise>(ocm));\
                             blz::SM<float> sv = ocm;\
                             cm = blz::generate(nr, ndr, [&](auto x, auto y) -> float {\
-                                return cmp::msr_with_prior<MsrType>(ms, \
+                                return revb ? cmp::msr_with_prior<MsrType>(ms, \
+                                        blz::row(matrix, x, unchecked), \
+                                        blz::row(sv, y, unchecked), \
+                                        priorc, priorsum, rsums[x], cmsums[y])\
+                            : cmp::msr_with_prior<MsrType>(ms, \
                                         blz::row(sv, y, unchecked), \
                                         blz::row(matrix, x, unchecked), \
                                         priorc, priorsum, cmsums[y], rsums[x]);\
@@ -89,7 +96,7 @@ void init_cmp(py::module &m) {
         }
         __builtin_unreachable();
         return py::array_t<float>();
-    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("prior") = 0.);
+    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("prior") = 0., py::arg("reverse") = false);
     m.def("cmp", [](const SparseMatrixWrapper &lhs, const SparseMatrixWrapper &rhs, py::object msr, py::object betaprior) {
         const double priorv = betaprior.cast<double>(), priorsum = priorv * lhs.columns();
         const auto ms = assure_dm(msr);
@@ -131,7 +138,8 @@ void init_cmp(py::module &m) {
 #undef DO_GEN
         return ret;
     }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("prior") = 0.);
-    m.def("cmp", [](const PyCSparseMatrix &lhs, py::array arr, py::object msr, py::object betaprior) {
+    m.def("cmp", [](const PyCSparseMatrix &lhs, py::array arr, py::object msr, py::object betaprior, py::object reverse) {
+        const bool revb = reverse.cast<bool>();
         auto inf = arr.request();
         const double priorv = betaprior.cast<double>(), priorsum = priorv * lhs.columns();
         if(inf.format.size() != 1) throw std::invalid_argument("Invalid dtype");
@@ -153,7 +161,10 @@ void init_cmp(py::module &m) {
                     case char: {\
                         blz::SV<float> sv(blz::make_cv((type *)inf.ptr, inf.size));\
                         const auto vsum = blz::sum(sv);\
-                        v = blz::generate(nr, [vsum,priorsum,ms,&matrix,&rsums,&sv,&priorc](auto x) {return cmp::msr_with_prior<MsrType>(ms, sv, row(matrix, x), priorc, priorsum, vsum, rsums[x]);});\
+                        v = blz::generate(nr, [vsum,priorsum,ms,&matrix,&rsums,&sv,&priorc,revb](auto x) {\
+                            return revb ? cmp::msr_with_prior<MsrType>(ms, row(matrix, x), sv, priorc, priorsum, rsums[x], vsum)\
+                                        : cmp::msr_with_prior<MsrType>(ms, sv, row(matrix, x), priorc, priorsum, vsum, rsums[x]);\
+                        });\
                     } break;
                     CASE_F('f', float)
                     CASE_F('d', double)
@@ -204,7 +215,7 @@ void init_cmp(py::module &m) {
         }
         __builtin_unreachable();
         return py::array_t<float>();
-    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("prior") = 0.);
+    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("prior") = 0., py::arg("reverse") = false);
     m.def("cmp", [](const PyCSparseMatrix &lhs, const PyCSparseMatrix &rhs, py::object msr, py::object betaprior) {
         if(lhs.data_t_ != rhs.data_t_ || lhs.indices_t_ != rhs.indices_t_ || lhs.indptr_t_ != rhs.indptr_t_) {
             std::string lmsg = std::string("lhs ") + lhs.data_t_ + "," + lhs.indices_t_ + "," + lhs.indptr_t_;

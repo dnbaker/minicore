@@ -510,7 +510,6 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             shared::sort(assigned[i].begin(), assigned[i].end());
         }
         // 3. Calculate new center
-        const bool isnorm = msr_is_normalized(measure);
         OMP_PFOR
         for(size_t i = 0; i < centers.size(); ++i) {
             //const FT eta = center_wsums[i];
