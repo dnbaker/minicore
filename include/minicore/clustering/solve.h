@@ -63,7 +63,7 @@ void set_centroids_hard(const Mat &mat,
 template<typename FT, typename Mat, typename PriorT, typename CtrT,
          typename CostsT,
          typename WeightT,
-         typename SumT>
+         typename SumT, typename RSumT>
 double set_centroids_soft(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
@@ -73,7 +73,7 @@ double set_centroids_soft(const Mat &mat,
                         const WeightT *weights,
                         const FT temp,
                         SumT &centersums,
-                        const SumT &rowsums);
+                        const RSumT &rowsums);
 
 template<typename MT>
 using DefaultFT = std::conditional_t<std::is_floating_point_v<blz::ElementType_t<MT>>,
@@ -172,10 +172,9 @@ void set_centroids_hard(const Mat &mat,
     if(dist::is_bregman(measure)) {
         assert(FULL_WEIGHTED_MEAN == pol || JSM_MEDIAN == pol);
     }
-    const bool isnorm = msr_is_normalized(measure);
     switch(pol) {
         case JSM_MEDIAN:
-        case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(mat, measure, prior, asn, costs, centers, weights, ctrsums, rowsums, isnorm);
+        case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(mat, measure, prior, asn, costs, centers, weights, ctrsums, rowsums);
             break;
         case L1_MEDIAN:
             set_centroids_l1<FT>(mat, asn, costs, centers, weights);
@@ -226,7 +225,7 @@ void assign_points_hard(const Mat &mat,
     // Compute distance function
     // Handles similarity measure, caching, and the use of a prior for exponential family models
     auto compute_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        FT ret = cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        FT ret = cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0) {
             if(unlikely(ret < -1e-5)) {
                 std::fprintf(stderr, "rowsum: %g. csum: %g. expected rsum: %g expected csum: %g\n", double(sum(row(mat, id))), double(sum(centers[cid])), rowsums[id], centersums[cid]);
@@ -315,7 +314,7 @@ auto perform_soft_clustering(const MT &mat,
 template<typename FT, typename Mat, typename PriorT, typename CtrT,
          typename CostsT,
          typename WeightT,
-         typename SumT>
+         typename SumT, typename RSumT>
 double set_centroids_soft(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
@@ -325,13 +324,13 @@ double set_centroids_soft(const Mat &mat,
                         const WeightT *weights,
                         const FT temp,
                         SumT &centersums,
-                        const SumT &rowsums)
+                        const RSumT &rowsums)
 {
     MINOCORE_VALIDATE(dist::is_valid_measure(measure));
     const CentroidPol pol = msr2pol(measure);
     assert(FULL_WEIGHTED_MEAN == pol || !dist::is_bregman(measure) || JSM_MEDIAN == pol); // sanity check
     std::fprintf(stderr, "Policy %d/%s for measure %d/%s\n", (int)pol, cp2str(pol), (int)measure, msr2str(measure));
-    double ret = set_centroids_full_mean<FT>(mat, measure, prior, costs, asns, centers, weights, temp, centersums);
+    double ret = set_centroids_full_mean(mat, measure, prior, costs, asns, centers, weights, temp, centersums, rowsums);
     std::fprintf(stderr, "cost: %g for %d/%s\n", ret, (int)measure, msr2str(measure));
     const double prior_sum =
         prior.size() == 0 ? 0.
@@ -370,16 +369,17 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                                        bool with_replacement=true,
                                        uint64_t seed=0)
 {
+    const bool isnorm = msr_is_normalized(measure);
     if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
-    const blz::DV<FT> rowsums = sum<blz::rowwise>(mat);
-    blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
-    const FT prior_sum = prior.size() == 1 ? prior.size() * prior[0]: blz::sum(prior);
+    const blz::DV<double> rowsums = sum<blz::rowwise>(mat);
+    blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
+    const double prior_sum = prior.size() == 1 ? prior.size() * prior[0]: blz::sum(prior);
     size_t iternum = 0;
     double initcost = std::numeric_limits<double>::max(), cost = initcost, bestcost = cost;
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        FT ret = cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        FT ret = cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0 || std::isnan(ret))
             ret = 0.;
         else if(std::isinf(ret))
@@ -402,7 +402,6 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
     wy::WyRand<std::make_unsigned_t<IT>> rng(seed);
     schism::Schismatic<std::make_unsigned_t<IT>> div((mat).rows());
     blz::DV<IT> sampled_indices(mbsize);
-    blz::DV<FT> center_wsums(k);
     std::vector<std::vector<IT>> assigned(k);
     blz::DV<FT> wc;
     if(weights) wc.resize(np);
@@ -443,7 +442,8 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                     } else {
                         id = reservoir_simd::sample(costs.data(), np, rng());
                     }
-                    clustering::set_center(ctr, row(mat, id, blz::unchecked));
+                    if(isnorm) clustering::set_center(ctr, row(mat, id, blz::unchecked) / rowsums[id]);
+                    else       clustering::set_center(ctr, row(mat, id, blz::unchecked));
                     centersums[fidx] = sum(ctr);
                 }
                 OMP_PFOR
@@ -487,36 +487,30 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             for(;selidx.size() < mbsize; selidx.insert(div.mod(rng())));
             std::copy(selidx.begin(), selidx.end(), sampled_indices.data());
         }
-        center_wsums = 0.;
         for(auto &i: assigned) i.clear();
         OMP_ONLY(auto locks = std::make_unique<std::mutex[]>(k);)
         // 2. Compute nearest centers + step sizes
         OMP_PFOR
         for(size_t i = 0; i < mbsize; ++i) {
             const auto ind = sampled_indices[i];
-            IT oldasn = asn[ind];
-            IT bestind = -1;
+            IT oldasn = asn[ind], bestind = -1;
             FT bv = std::numeric_limits<FT>::max();
             for(size_t j = 0; j < k; ++j)
                 if(auto nv = compute_point_cost(ind, j); nv < bv)
                     bv = nv, bestind = j;
             if(bestind == (IT(-1)))
                 bestind = oldasn;
-            const FT w = weights ? (*weights)[ind]: static_cast<FT>(1);
-            OMP_ATOMIC
-            center_wsums[bestind] += w;
             {
                 OMP_ONLY(std::lock_guard<std::mutex> lock(locks[bestind]);)
                 assigned[bestind].push_back(ind);
             }
         }
+        OMP_PFOR
         for(size_t i= 0; i < assigned.size(); ++i) {
-            if(!assigned[i].empty()) {
-                shared::sort(assigned[i].begin(), assigned[i].end());
-            }
+            shared::sort(assigned[i].begin(), assigned[i].end());
         }
-        center_wsums = 1. / center_wsums; // center-wsums now contains the eta (step size) for SGD
         // 3. Calculate new center
+        const bool isnorm = msr_is_normalized(measure);
         OMP_PFOR
         for(size_t i = 0; i < centers.size(); ++i) {
             //const FT eta = center_wsums[i];

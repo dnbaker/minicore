@@ -76,8 +76,11 @@ static constexpr inline bool msr_is_normalized(DissimilarityMeasure msr) {
         case IS: case SIS: case RSIS: case REVERSE_ITAKURA_SAITO: case TVD:
         case MKL: case REVERSE_MKL: case COSINE_DISTANCE: case COSINE_SIMILARITY:
         case HELLINGER: case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
-        case POISSON: case REVERSE_POISSON: case JSM: case JSD: case UWLLR: case SRULRT: return true;
-        case SRLRT: case LLR: case L1: case L2: case SQRL2:
+        case POISSON: case REVERSE_POISSON: case JSM: case JSD: case UWLLR: case SRULRT:
+            return true;
+
+        case LLR:
+        case SRLRT: case L1: case L2: case SQRL2:
         default:
         return false;
     }

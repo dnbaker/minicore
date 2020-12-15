@@ -299,7 +299,7 @@ static inline void weighted_median(const blz::Matrix<MT, SO> &data, blz::Vector<
         {
             return x.first < y;
         });
-        __assign(*ret, i, it->first == mid ? FT(.5 * (it->first + it[1].first)): FT(it[1].first));
+        (*ret)[i] = it->first == mid ? FT(.5 * (it->first + it[1].first)): FT(it[1].first);
     }
 }
 

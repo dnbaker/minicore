@@ -84,7 +84,7 @@ int main(int argc, char *argv[]) {
         if(nrows == 0) nrows = 500;
     }
     if(!x.rows() && !x.columns()) {
-        x = blz::generate(nrows, ncols, [](auto x, auto y) -> int {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); auto v = mt(); if(v % 8) return 0;return x * ((v >> 6) % 64);});
+        x = blz::generate(nrows, ncols, [](auto x, auto y) -> int {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); auto v = mt(); if(v & 7) return 0;return x * ((v >> 6) % 64);});
     }
     OMP_ONLY(omp_set_num_threads(nthreads);)
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv) {
@@ -103,7 +103,7 @@ int main(int argc, char *argv[]) {
     blz::DV<uint32_t> asn(nr);
     std::vector<uint64_t> ids;
     blz::DM<FLOAT_TYPE> complete_hardcost;
-    if(loaded_blaze == true) {
+    if(loaded_blaze) {
         auto fp = x.rows() <= 0xFFFFFFFFu ? size_t(std::rand() % x.rows()): size_t(((uint64_t(std::rand()) << 32) | std::rand()) % x.rows());
         ids = {fp};
         centers.emplace_back(row(x, fp));
@@ -133,6 +133,7 @@ int main(int argc, char *argv[]) {
         });
         //assert(blaze::min<blaze::rowwise>(complete_hardcost) ==
     } else {
+        std::srand(k);
         while(ids.size() < k) {
             auto rid = std::rand() % x.rows();
             if(std::find(ids.begin(), ids.end(), rid) == ids.end())
@@ -180,7 +181,7 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "mbsize: %zu\n", mbsize);
     auto mbcenters = ocenters;
     blz::DV<FLOAT_TYPE> weights(x.rows(), 1.);
-    int minreseed = 0;
+    int minreseed = 1;
     std::fprintf(stderr, "minibatch clustering with no weights, %s replacement, %s importance sampling\n",  with_replacement ? "with": "without", "without");
     clust::perform_hard_minibatch_clustering(x, msr, prior, mbcenters, asn, hardcosts, (std::vector<FLOAT_TYPE> *)nullptr, mbsize, NUMITER, 10, minreseed, /*with_replacement=*/with_replacement, /*seed=*/rng());
     auto mbuwcenters = ocenters;

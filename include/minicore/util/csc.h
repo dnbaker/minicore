@@ -409,10 +409,10 @@ struct ProdCSparseVector {
             return ret;
         }
         const ViewType &operator*() const {
-            return this;
+            return *this;
         }
         ViewType &operator*() {
-            return this;
+            return *this;
         }
         ViewType *operator->() {
             return this;
