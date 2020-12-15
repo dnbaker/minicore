@@ -68,7 +68,6 @@ struct PyCSparseMatrix {
         indices_t_ = standardize_dtype(indicesinf.format);
         indptr_t_ = standardize_dtype(indptrinf.format);
     }
-    // Specialize for Data Types
 #if ENABLE_CONST_FUNCS
     template<typename Func> void perform(const Func &func) const {
         switch(data_t_.front()) {
@@ -104,6 +103,46 @@ struct PyCSparseMatrix {
             //case 'i': case 'I': _perform<unsigned, Func>(func); break;
             case 'f': _perform<float, Func>(func); break;
             case 'd': _perform<double, Func>(func); break;
+            default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
+        }
+    }
+#endif
+
+#if ENABLE_CONST_FUNCS
+    template<typename Func> void perform(const PyCSparseMatrix &rhs, const Func &func) const {
+        switch(data_t_.front()) {
+#if ENABLE_8BITINT_DATA
+            case 'b': case 'B': _perform<uint8_t,  Func>(rhs, func); break;
+#endif
+#if ENABLE_16BITINT_DATA
+            case 'h': case 'H': _perform<uint16_t, Func>(rhs, func); break;
+#endif
+#if ENABLE_64BITINT_DATA
+            case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(rhs, func); break;
+#endif
+            //case 'i': case 'I': _perform<unsigned, Func>(func); break;
+            case 'f': _perform<float,    Func>(rhs, func); break;
+            case 'd': _perform<double,   Func>(rhs, func); break;
+            default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
+        }
+    }
+#endif
+
+#if ENABLE_NONCONST_FUNCS
+    template<typename Func> void perform(PyCSparseMatrix &rhs, const Func &func) {
+        switch(data_t_.front()) {
+#if ENABLE_8BITINT_DATA
+            case 'b': case 'B': _perform<uint8_t, Func>(rhs, func); break;
+#endif
+#if ENABLE_16BITINT_DATA
+            case 'h': case 'H': _perform<uint16_t, Func>(rhs, func); break;
+#endif
+#if ENABLE_64BITINT_DATA
+            case 'q': case 'l': case 'u': case 'L': _perform<uint64_t, Func>(rhs, func); break;
+#endif
+            //case 'i': case 'I': _perform<unsigned, Func>(rhs, func); break;
+            case 'f': _perform<float, Func>(rhs, func); break;
+            case 'd': _perform<double, Func>(rhs, func); break;
             default: throw std::invalid_argument(std::string("Unsupported type for data: ") + data_t_);
         }
     }
@@ -151,6 +190,54 @@ struct PyCSparseMatrix {
         }
     }
 #endif
+
+#undef PERF3
+#undef PERF2
+
+#define PERF3(c, c2, IPtr, Indices) \
+                case c: case c2: {auto lhsmat = util::make_csparse_matrix((DataT *)datap_, (Indices *)indicesp_, (IPtr *)indptrp_, nr_, nc_, nnz_); \
+                                  auto rhsmat = util::make_csparse_matrix((DataT *)rhs.datap_, (Indices *)rhs.indicesp_, (IPtr *)rhs.indptrp_, rhs.nr_, rhs.nc_, rhs.nnz_); \
+                                  func(lhsmat, rhsmat);\
+                } break
+
+#define PERF2(c, c2, Indices) \
+        case c: case c2: { \
+            switch(indptr_t_[0]) { \
+                PERF3('L', 'l', uint64_t, Indices);\
+                PERF3('I', 'i', uint32_t, Indices);\
+            }\
+        } break
+
+#if ENABLE_CONST_FUNCS
+    template<typename DataT, typename Func> void _perform(const PyCSparseMatrix &rhs, const Func &func) const {
+        switch(indices_t_[0]) {
+#if ENABLE_8BITINT_INDICES
+            PERF2('B', 'b', uint8_t);
+#endif
+#if ENABLE_16BITINT_INDICES
+            PERF2('H', 'h', uint16_t);
+#endif
+            PERF2('I', 'i', uint32_t);
+            default: throw std::invalid_argument(std::string("Unsupported type for indices: ") + indices_t_);
+        }
+    }
+#endif
+
+#if ENABLE_NONCONST_FUNCS
+    template<typename DataT, typename Func> void _perform(PyCSparseMatrix &rhs, const Func &func) {
+        switch(indices_t_.front()) {
+#if ENABLE_8BITINT_INDICES
+            PERF2('B', 'b', uint8_t);
+#endif
+#if ENABLE_16BITINT_INDICES
+            PERF2('H', 'h', uint16_t);
+#endif
+            PERF2('I', 'i', uint32_t);
+            default: throw std::invalid_argument(std::string("Unsupported type for indices: ") + indices_t_);
+        }
+    }
+#endif
+
     size_t rows() const {return nr_;}
     size_t columns() const {return nc_;}
     size_t nnz() const {return nnz_;}

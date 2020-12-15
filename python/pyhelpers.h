@@ -84,7 +84,18 @@ inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::ob
         auto cbuf = py::cast<py::array>(x).request();
         set_centers(&dvecs, cbuf);
     } else if(py::isinstance<py::sequence>(x)) {
-        if(py::isinstance<py::int_>(py::cast<py::sequence>(x)[0])) {
+        auto seq = py::cast<py::sequence>(x);
+        auto fi = seq[0];
+        if(py::isinstance<py::array>(fi)) {
+            for(auto item: py::cast<py::sequence>(x)) {
+                auto ca = py::cast<py::array>(item);
+                auto bi = ca.request();
+                auto emp = [&](const auto &x) {dvecs.emplace_back() = trans(x);};
+                if(bi.format[0] == 'd') emp(blz::make_cv((double *)bi.ptr, bi.size));
+                else if(bi.format[0] == 'f') emp(blz::make_cv((float *)bi.ptr, bi.size));
+                else throw std::invalid_argument("Array type must be float or double");
+            }
+        } else if(py::isinstance<py::int_>(fi)) {
             const size_t nc = mat.columns();
             for(auto item: py::cast<py::sequence>(x)) {
                 Py_ssize_t rownum = py::cast<py::int_>(item).cast<Py_ssize_t>();
@@ -96,20 +107,10 @@ inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::ob
                     for(size_t i = 0; i < nc; ++i) {
                         if(r[i] > 0.) v.append(i, r[i]);
                     }
-                } else {
-                    for(const auto &pair: r) v.append(pair.index(), pair.value());
-                }
+                } else for(const auto &pair: r) v.append(pair.index(), pair.value());
             }
-        } else {
-            for(auto item: py::cast<py::sequence>(x)) {
-                auto ca = py::cast<py::array>(item);
-                auto bi = ca.request();
-                auto emp = [&](const auto &x) {dvecs.emplace_back() = trans(x);};
-                if(bi.format[0] == 'd') emp(blz::make_cv((double *)bi.ptr, bi.size));
-                else                    emp(blz::make_cv((float *)bi.ptr, bi.size));
-            }
-        }
-    } else throw std::invalid_argument("centers must be a numpy array or list of numpy arrays");
+        } else throw std::invalid_argument("Invalid: expected numpy array or list of numpy arrays or list of center ids");
+    } else throw std::invalid_argument("centers must be a 2d numpy array or sequence containing numpy arrays of the full vectors or center ids");
     return dvecs;
 }
 inline std::string size2dtype(Py_ssize_t n) {

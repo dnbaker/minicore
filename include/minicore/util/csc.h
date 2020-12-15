@@ -1000,7 +1000,17 @@ inline decltype(auto) sum(const CSparseMatrix<VT, IT, IPtrT> &sm) {
             }
         );
     } else {
-        throw NotImplementedError("Not supported: columnwise sums\n");
+        blaze::DynamicVector<VT, blz::rowVector> sums(sm.columns());
+        OMP_PFOR
+        for(size_t i = 0; i < sm.rows(); ++i) {
+            auto r = row(sm, i);
+            #pragma GCC unroll 4
+            for(size_t i = 0; i < r.n_; ++i) {
+                OMP_ATOMIC
+                sums[r.indices_[i]] += r.data_[i];
+            }
+        }
+        return sums;
     }
 }
 

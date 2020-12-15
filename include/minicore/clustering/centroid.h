@@ -56,18 +56,19 @@ void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &
     using VT = std::conditional_t<std::is_floating_point_v<DataT>, DataT, std::conditional_t<(sizeof(DataT) < 8), float, double>>;
     blz::DV<VT, blz::TransposeFlag_v<CtrT>> mv(mat.columns(), VT(0));
     double wsum = 0.;
-    OMP_PFOR_DYN
+#ifdef _OPENMP
+    #pragma omp parallel for schedule(dynamic) reduction(+:wsum)
+#endif
     for(size_t i = 0; i < nasn; ++i) {
-        for(const auto &pair: row(mat, asn[i])) {
-            VT v = pair.value();
-            if(w) {
-                auto wv = (*w)[asn[i]];
+        if(w) {
+            double itemw = (*w)[asn[i]];
+            wsum += itemw;
+            for(const auto &pair: row(mat, asn[i])) {
                 OMP_ATOMIC
-                wsum += wv;
-                v *= wv;
+                mv[pair.index()] += pair.value() * itemw;
             }
-            OMP_ATOMIC
-            mv[pair.index()] += v;
+        } else for(const auto &pair: row(mat, asn[i])) {
+            OMP_ATOMIC mv[pair.index()] += pair.value();
         }
     }
     if(!wsum) wsum = nasn;
@@ -604,19 +605,15 @@ void set_centroids_full_mean(const Mat &mat,
     //
 
     assert(asn.size() == costs.size() || !std::fprintf(stderr, "asn size %zu, cost size %zu\n", asn.size(), costs.size()));
-    //using asn_t = std::decay_t<decltype(asn[0])>;
     blaze::SmallArray<size_t, 16> sa;
     wy::WyRand<size_t, 4> rng(costs.size()); // Used for restarting orphaned centers
-    blz::DV<FT> pdf;
     const size_t np = costs.size(), k = ctrs.size();
     auto assigned = std::make_unique<std::vector<size_t>[]>(k);
-    //set_asn:
+    OMP_ONLY(std::unique_ptr<std::mutex[]> locks(new std::mutex[k]);)
     for(size_t i = 0; i < np; ++i) {
+        OMP_ONLY(std::lock_guard<std::mutex> lock(locks[asn[i]]);)
         assigned[asn[i]].push_back(i);
     }
-#ifndef NDEBUG
-    for(unsigned i = 0; i < k; ++i) std::fprintf(stderr, "Center %u has %zu assigned points\n", i, assigned[i].size());
-#endif
     for(unsigned i = 0; i < k; ++i)
         if(assigned[i].empty())
             blz::push_back(sa, i);
@@ -692,18 +689,8 @@ void set_centroids_full_mean(const Mat &mat,
                 costs[pid] = 0.;
                 assigned[cid].push_back(pid);
             }
-#if 0
-            if(asn[rs[i]] != sa[i]) {
-                DBG_ONLY(std::fprintf(stderr, "Point %zd is not assigned to itself (%zd, empty #%zd). Cost: %g. Cost with itself: %g\n", rs[i], sa[i], i, costs[rs[i]], cmp::msr_with_prior(measure, ctrs[sa[i]], ctrs[sa[i]], prior, psum, ctrsums[sa[i]], ctrsums[sa[i]]));)
-                asn[rs[i]] = sa[i];
-            }
-#endif
         }
     }
-#if defined(_OPENMP) && !BLAZE_USE_SHARED_MEMORY_PARALLELIZATION
-    #pragma message("Parallelizing loop, may cause things to break")
-    #pragma omp parallel for
-#endif
     for(unsigned i = 0; i < k; ++i) {
         DBG_ONLY(std::fprintf(stderr, "Computing mean for centroid %u with %zu assigned points\n", i, assigned[i].size());)
         // Compute mean for centroid
@@ -743,13 +730,9 @@ double set_centroids_full_mean(const Mat &mat,
     WeightsT *weights, FT temp, SumT &ctrsums)
 {
     assert(ctrsums.size() == ctrs.size());
-    //std::fprintf(stderr, "Calling set_centroids_full_mean with weights = %p, temp = %g\n", (void *)weights, temp);
 
     const unsigned k = ctrs.size();
-    //blz::DV<FT, blz::rowVector> wsums(k, 0.), asn(k, 0.);
     asns = softmax<rowwise>(costs * -temp);
-    //std::cerr << softmaxcosts << '\n';
-    //std::fprintf(stderr, "costs are of dim %zu/%zu\n", softmaxcosts.rows(), softmaxcosts.columns());
     double ret = 0.;
     OMP_PRAGMA("omp parallel for reduction(+:ret)")
     for(size_t i = 0; i < asns.rows(); ++i) {
