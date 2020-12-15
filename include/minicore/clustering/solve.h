@@ -172,6 +172,7 @@ void set_centroids_hard(const Mat &mat,
     if(dist::is_bregman(measure)) {
         assert(FULL_WEIGHTED_MEAN == pol || JSM_MEDIAN == pol);
     }
+    const bool isnorm = msr_is_normalized(measure);
     switch(pol) {
         case JSM_MEDIAN:
         case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(mat, measure, prior, asn, costs, centers, weights, ctrsums, rowsums);

@@ -697,12 +697,11 @@ void set_centroids_full_mean(const Mat &mat,
         const auto nasn = assigned[i].size();
         const auto asp = assigned[i].data();
         auto &ctr = ctrs[i];
-        if(nasn == 1) {
+        if(nasn == 0) continue;
+        else if(nasn == 1) {
             auto mr = row(mat, *asp);
             assert(ctr.size() == mr.size());
             set_center(ctr, mr);
-        } else if(nasn == 0) {
-            // do nothing
         } else {
             set_center(ctr, mat, asp, nasn, weights);
         }
