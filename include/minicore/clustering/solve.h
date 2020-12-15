@@ -225,15 +225,6 @@ void assign_points_hard(const Mat &mat,
 
     // Compute distance function
     // Handles similarity measure, caching, and the use of a prior for exponential family models
-    //
-    //
-    // TODO: use https://www.aaai.org/Papers/ICML/2003/ICML03-022.pdf
-    //        triangle inequality to accelerate k-means algorithm
-    //       this depends on whether or not a measure is a metric
-    //       , or, for the rho-metric generalization
-    //       a suitable relaxation allowing similar acceleration.
-    //       Also, if there are enough centers, a nearest neighbor structure
-    //       could make centroid assignment faster
     auto compute_cost = [&](auto id, auto cid) ALWAYS_INLINE {
         FT ret = cmp::msr_with_prior(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0) {
