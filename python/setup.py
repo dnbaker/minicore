@@ -42,7 +42,6 @@ def parallelCCompile(self, sources, output_dir=None, macros=None,
 import distutils.ccompiler
 distutils.ccompiler.CCompiler.compile=parallelCCompile
 
-__version__ = check_output(["git", "describe", "--abbrev=4"]).decode().strip().split("-")[0]
 
 
 
@@ -175,6 +174,8 @@ class BuildExt(build_ext):
             ext.extra_link_args = link_opts + extra_link_opts
         build_ext.build_extensions(self)
 
+
+__version__ = "0.2.2"
 setup(
     name='minicore',
     version=__version__,
@@ -184,8 +185,8 @@ setup(
     description='A python module for coresets and clustering',
     long_description='',
     ext_modules=ext_modules,
-    install_requires=['pybind11>=2.4', 'numpy>=0.19'],
-    setup_requires=['pybind11>=2.4'],
+    install_requires=['pybind11', 'numpy>=0.19'],
+    setup_requires=['pybind11'],
     cmdclass={'build_ext': BuildExt},
     zip_safe=False,
     packages=find_packages()
