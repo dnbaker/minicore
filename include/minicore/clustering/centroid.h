@@ -141,14 +141,13 @@ using namespace ::minicore::distance;
 
 static constexpr INLINE CentroidPol msr2pol(distance::DissimilarityMeasure msr) {
     switch(msr) {
-        case EMD: case WEMD:
         case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
         default:
             return NOT_APPLICABLE;
 
 
-        case UWLLR: case LLR: case MKL: case JSD: case SQRL2: case POISSON:
-        case REVERSE_POISSON: case REVERSE_MKL: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
+        case UWLLR: case LLR: case MKL: case JSD: case SQRL2:
+        case REVERSE_MKL: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case RSYMMETRIC_ITAKURA_SAITO:
 
         case SRULRT: case SRLRT: case JSM:
@@ -192,7 +191,7 @@ struct CentroidPolicy {
                 coresets::l1_median(cm, ret, wc->data());
             else
                 coresets::l1_median(cm, ret);
-        } else if(measure == dist::LLR || measure == dist::UWLLR || measure == dist::OLLR) {
+        } else if(measure == dist::LLR || measure == dist::UWLLR) {
             PRETTY_SAY << "LLR test\n";
             FT total_sum_inv;
             if(wc) {
@@ -289,7 +288,7 @@ struct CentroidPolicy {
                 }
             }
             double div;
-            if(measure == dist::LLR || measure == dist::OLLR || measure == dist::UWLLR) {
+            if(measure == dist::LLR || measure == dist::UWLLR) {
                 if(weight_cv)
                     div = sum(blz::elements(rs * **weight_cv, aip, ain));
                 else
@@ -382,7 +381,7 @@ struct CentroidPolicy {
                     }
                 }
             }
-            if(measure == dist::LLR || measure == dist::UWLLR || measure == dist::OLLR) {
+            if(measure == dist::LLR || measure == dist::UWLLR) {
                 OMP_PFOR
                 for(auto i = 0u; i < newcon.size(); ++i)
                     newcon[i] *= 1. / blz::dot(column(assignments, i), rs);

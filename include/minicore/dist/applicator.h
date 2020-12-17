@@ -25,16 +25,13 @@ using namespace minicore::distance;
             MACRO(SYMMETRIC_ITAKURA_SAITO) MACRO(RSYMMETRIC_ITAKURA_SAITO)\
             MACRO(COSINE_DISTANCE) MACRO(COSINE_SIMILARITY)\
             MACRO(PROBABILITY_COSINE_DISTANCE) MACRO(PROBABILITY_COSINE_SIMILARITY)\
-            MACRO(LLR) MACRO(OLLR) MACRO(UWLLR)\
+            MACRO(LLR) MACRO(UWLLR)\
             MACRO(BHATTACHARYYA_METRIC) MACRO(BHATTACHARYYA_DISTANCE)\
             MACRO(HELLINGER)\
-            MACRO(POISSON)\
-            MACRO(REVERSE_POISSON)\
             MACRO(JSD)\
             MACRO(JSM) MACRO(MKL) MACRO(REVERSE_MKL)\
-            MACRO(EMD) MACRO(WEMD)\
             MACRO(ITAKURA_SAITO) MACRO(REVERSE_ITAKURA_SAITO)\
-            MACRO(PL2) MACRO(PSL2) MACRO(L1) MACRO(L2) MACRO(SQRL2)\
+            MACRO(L1) MACRO(L2) MACRO(SQRL2)\
             MACRO(TOTAL_VARIATION_DISTANCE)
 
 template<typename MatrixType, typename ElementType=blaze::ElementType_t<MatrixType>>
@@ -311,10 +308,6 @@ public:
             ret = l2Norm(weighted_row(i) - o);
         } else if constexpr(constexpr_measure == SQRL2) {
             ret = blaze::sqrNorm(weighted_row(i) - o);
-        } else if constexpr(constexpr_measure == PSL2) {
-            ret = blaze::sqrNorm(i - o);
-        } else if constexpr(constexpr_measure == PL2) {
-            ret = p_l2norm(i, o);
         } else if constexpr(constexpr_measure == JSD) {
             if(cp) {
                 ret = jsd(i, o, *cp);
@@ -327,16 +320,6 @@ public:
             ret = cp ? mkl(i, o, *cp): mkl(i, o);
         } else if constexpr(constexpr_measure == MKL) {
             ret = cp ? mkl(o, i, *cp): mkl(o, i);
-        } else if constexpr(constexpr_measure == EMD) {
-            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
-            ret = p_wasserstein(row(i), o);
-        } else if constexpr(constexpr_measure == WEMD) {
-            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
-            ret = p_wasserstein(weighted_row(i), o);
-        } else if constexpr(constexpr_measure == REVERSE_POISSON) {
-            ret = cp ? pkl(i, o, *cp): pkl(i, o);
-        } else if constexpr(constexpr_measure == POISSON) {
-            ret = cp ? pkl(o, i, *cp): pkl(o, i);
         } else if constexpr(constexpr_measure == HELLINGER) {
             ret = cp ? blaze::sqrNorm(sqrtrow(i) - *cp)
                      : blaze::sqrNorm(sqrtrow(i) - blaze::sqrt(o));
@@ -348,8 +331,6 @@ public:
             ret = cp ? llr(i, o, *cp): llr(i, o);
         } else if constexpr(constexpr_measure == UWLLR) {
             ret = cp ? uwllr(i, o, *cp): uwllr(i, o);
-        } else if constexpr(constexpr_measure == OLLR) {
-            throw 1; // Not implemented
         } else if constexpr(constexpr_measure == ITAKURA_SAITO) {
             ret = itakura_saito(o, i);
         } else if constexpr(constexpr_measure == REVERSE_ITAKURA_SAITO) {
@@ -382,13 +363,9 @@ public:
             ret = l1Norm(weighted_row(i) - o);
         } else if constexpr(constexpr_measure == L2) {
             ret = l2Norm(weighted_row(i) - o);
-        } else if constexpr(constexpr_measure == PL2) {
-            ret = p_l2norm(i, o);
         } else if constexpr(constexpr_measure == SQRL2) {
             ret = blaze::sqrNorm(weighted_row(i) - o);
             //std::fprintf(stderr, "SQRL2 between row %zu and row starting at %p is %g\n", i, (void *)&*o.begin(), ret);
-        } else if constexpr(constexpr_measure == PSL2) {
-            ret = blaze::sqrNorm(i - o);
         } else if constexpr(constexpr_measure == JSD) {
             if(cp) {
                 ret = jsd(i, o, *cp);
@@ -405,16 +382,6 @@ public:
             if(cp) {
                 ret = mkl(i, o, *cp);
             } else ret = mkl(i, o);
-        } else if constexpr(constexpr_measure == EMD) {
-            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
-            ret = p_wasserstein(row(i), o);
-        } else if constexpr(constexpr_measure == WEMD) {
-            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
-            ret = p_wasserstein(weighted_row(i), o);
-        } else if constexpr(constexpr_measure == REVERSE_POISSON) {
-            ret = cp ? pkl(o, i, *cp): pkl(o, i);
-        } else if constexpr(constexpr_measure == POISSON) {
-            ret = cp ? pkl(i, o, *cp): pkl(i, o);
         } else if constexpr(constexpr_measure == HELLINGER) {
             if(cp) {
                 ret = blaze::sqrNorm(sqrtrow(i) - *cp);
@@ -431,9 +398,6 @@ public:
             ret = cp ? llr(i, o, *cp): llr(i, o);
         } else if constexpr(constexpr_measure == UWLLR) {
             ret = cp ? uwllr(i, o, *cp): uwllr(i, o);
-        } else if constexpr(constexpr_measure == OLLR) {
-            ret = cp ? llr(i, o, *cp): llr(i, o);
-            std::cerr << "Note: computing LLR, not OLLR, for this case\n";
         } else if constexpr(constexpr_measure == ITAKURA_SAITO) {
             ret = itakura_saito(i, o);
         } else if constexpr(constexpr_measure == REVERSE_ITAKURA_SAITO) {
@@ -464,12 +428,8 @@ public:
             ret = l1Norm(weighted_row(i) - weighted_row(j));
         } else if constexpr(constexpr_measure == L2) {
             ret = l2Norm(weighted_row(i) - weighted_row(j));
-        } else if constexpr(constexpr_measure == PL2) {
-            ret = p_l2norm(i, j);
         } else if constexpr(constexpr_measure == SQRL2) {
             ret = blaze::sqrNorm(weighted_row(i) - weighted_row(j));
-        } else if constexpr(constexpr_measure == PSL2) {
-            ret = blaze::sqrNorm(row(i) - row(j));
         } else if constexpr(constexpr_measure == JSD) {
             ret = jsd(i, j);
         } else if constexpr(constexpr_measure == JSM) {
@@ -478,16 +438,6 @@ public:
             ret = mkl(j, i);
         } else if constexpr(constexpr_measure == MKL) {
             ret = mkl(i, j);
-        } else if constexpr(constexpr_measure == EMD) {
-            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
-            ret = p_wasserstein(row(i), row(j));
-        } else if constexpr(constexpr_measure == WEMD) {
-            throw NotImplementedError("Removed: currently, p_wasserstein functions are not permitted");
-            ret = p_wasserstein(weighted_row(i), weighted_row(j));
-        } else if constexpr(constexpr_measure == REVERSE_POISSON) {
-            ret = pkl(j, i);
-        } else if constexpr(constexpr_measure == POISSON) {
-            ret = pkl(i, j);
         } else if constexpr(constexpr_measure == HELLINGER) {
             ret = hellinger(i, j);
         } else if constexpr(constexpr_measure == BHATTACHARYYA_METRIC) {
@@ -498,8 +448,6 @@ public:
             ret = llr(i, j);
         } else if constexpr(constexpr_measure == UWLLR) {
             ret = uwllr(i, j);
-        } else if constexpr(constexpr_measure == OLLR) {
-            ret = ollr(i, j);
         } else if constexpr(constexpr_measure == ITAKURA_SAITO) {
             ret = itakura_saito(i, j);
         } else if constexpr(constexpr_measure == REVERSE_ITAKURA_SAITO) {
@@ -541,16 +489,10 @@ public:
             case L1: ret = call<L1>(o, i); break;
             case L2: ret = call<L2>(o, i); break;
             case SQRL2: ret = call<SQRL2>(o, i); break;
-            case PSL2: ret = call<PSL2>(o, i); break;
-            case PL2: ret = call<PL2>(o, i); break;
             case JSD: ret = call<JSD>(o, i); break;
             case JSM: ret = call<JSM>(o, i); break;
             case REVERSE_MKL: ret = call<REVERSE_MKL>(o, i, cache); break;
             case MKL: ret = call<MKL>(o, i, cache); break;
-            case EMD: ret = call<EMD>(o, i); break;
-            case WEMD: ret = call<WEMD>(o, i); break;
-            case REVERSE_POISSON: ret = call<REVERSE_POISSON>(o, i, cache); break;
-            case POISSON: ret = call<POISSON>(o, i, cache); break;
             case HELLINGER: ret = call<HELLINGER>(o, i, cache); break;
             case BHATTACHARYYA_METRIC: ret = call<BHATTACHARYYA_METRIC>(o, i); break;
             case BHATTACHARYYA_DISTANCE: ret = call<BHATTACHARYYA_DISTANCE>(o, i); break;
@@ -558,7 +500,6 @@ public:
             case SRLRT: ret = std::sqrt(call<LLR>(o, i, cache)); break;
             case UWLLR: ret = call<UWLLR>(o, i, cache); break;
             case SRULRT: ret = std::sqrt(call<UWLLR>(o, i, cache)); break;
-            case OLLR: ret = call<OLLR>(o, i, cache); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(o, i, cache); break;
             case SYMMETRIC_ITAKURA_SAITO: ret = call<SYMMETRIC_ITAKURA_SAITO>(o, i, cache); break;
             case RSYMMETRIC_ITAKURA_SAITO: ret = call<RSYMMETRIC_ITAKURA_SAITO>(o, i, cache); break;
@@ -590,23 +531,16 @@ public:
             case TOTAL_VARIATION_DISTANCE: ret = call<TOTAL_VARIATION_DISTANCE>(i, o); break;
             case L1: ret = call<L1>(i, o); break;
             case L2: ret = call<L2>(i, o); break;
-            case PL2: ret = call<PL2>(i, o); break;
-            case PSL2: ret = call<PSL2>(i, o); break;
             case SQRL2: ret = call<SQRL2>(i, o); break;
             case JSD: ret = call<JSD>(i, o); break;
             case JSM: ret = call<JSM>(i, o); break;
             case REVERSE_MKL: ret = call<REVERSE_MKL>(i, o, cache); break;
             case MKL: ret = call<MKL>(i, o, cache); break;
-            case EMD: ret = call<EMD>(i, o); break;
-            case WEMD: ret = call<WEMD>(i, o); break;
-            case REVERSE_POISSON: ret = call<REVERSE_POISSON>(i, o, cache); break;
-            case POISSON: ret = call<POISSON>(i, o, cache); break;
             case HELLINGER: ret = call<HELLINGER>(i, o, cache); break;
             case BHATTACHARYYA_METRIC: ret = call<BHATTACHARYYA_METRIC>(i, o); break;
             case BHATTACHARYYA_DISTANCE: ret = call<BHATTACHARYYA_DISTANCE>(i, o); break;
             case LLR: ret = call<LLR>(i, o, cache); break;
             case UWLLR: ret = call<UWLLR>(i, o, cache); break;
-            case OLLR: ret = call<OLLR>(i, o, cache); break;
             case SRULRT: ret = std::sqrt(call<UWLLR>(i, o, cache)); break;
             case SRLRT: ret = std::sqrt(call<LLR>(i, o, cache)); break;
             case ITAKURA_SAITO: ret = call<ITAKURA_SAITO>(i, o, cache); break;
@@ -1782,19 +1716,18 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case LLR:
             case UWLLR:
             case ITAKURA_SAITO: case SIS: case REVERSE_ITAKURA_SAITO:
-            case REVERSE_POISSON: case REVERSE_MKL: case RSIS:
-            case POISSON:
+            case REVERSE_MKL: case RSIS:
             case MKL:
             {
                 if(tmpmulx.size() != nd) tmpmulx.resize(nd);
                 if(tmpmuly.size() != nd) tmpmuly.resize(nd);
                 tmpmulx = mr * lhrsi, tmpmuly = ctr * rhrsi;
                 FT klc;
-                if(msr == MKL || msr == POISSON) {
+                if(msr == MKL) {
                     klc = libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
                 } else if(msr == JSD || msr == JSM ) {
                     klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
-                } else if(msr == REVERSE_MKL || msr == REVERSE_POISSON) {
+                } else if(msr == REVERSE_MKL) {
                     klc = libkl::kl_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
                 } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
                     auto bothsum = lhsum + rhsum;
@@ -1911,8 +1844,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             case LLR:
             case UWLLR:
             case ITAKURA_SAITO: case SIS: case REVERSE_ITAKURA_SAITO:
-            case REVERSE_POISSON: case REVERSE_MKL: case RSIS:
-            case POISSON:
+            case REVERSE_MKL: case RSIS:
             case MKL:
             {
                 auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
@@ -1923,13 +1855,13 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 const size_t nnz_either = lhp - tmpmulx.data();
                 assert(lhp - tmpmulx.data() == rhp - tmpmuly.data());
                 FT klc, zc;
-                if(msr == MKL || msr == POISSON) {
+                if(msr == MKL) {
                     klc = libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = sharednz * lhinc * (lhl - rhl);
                 } else if(msr == JSD || msr == JSM ) {
                     klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc);
                     zc = ((lhincl + rhincl - shincl) * sharednz) * .5;
-                } else if(msr == REVERSE_MKL || msr == REVERSE_POISSON) {
+                } else if(msr == REVERSE_MKL) {
                     klc = libkl::kl_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * rhinc * (rhl - lhl);
                 } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {

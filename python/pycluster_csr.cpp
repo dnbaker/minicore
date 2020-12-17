@@ -1,21 +1,8 @@
 #include "pycluster.h"
 
-#if BUILD_CSR_CLUSTERING
-
-#if 0
-py::object cluster1_csr(const PyCSparseMatrix &smw, py::int_ k, double beta,
-                 py::object msr, py::object weights, double eps,
-                 int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
-{
-    return func1(smw, k, beta, msr, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter);
-}
-#endif
-
-#endif
-
 void init_clustering_csr(py::module &m) {
 #if BUILD_CSR_CLUSTERING
-    m.def("cluster", [](const PyCSparseMatrix &smw, py::object centers, double beta,
+    m.def("hcluster", [](const PyCSparseMatrix &smw, py::object centers, double beta,
                     py::object msr, py::object weights, double eps,
                     uint64_t kmeansmaxiter,
                         //size_t kmcrounds, int ntimes, int lspprounds,

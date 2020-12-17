@@ -27,7 +27,12 @@ shape = # np array or tuple
 
 assert len(data) == len(indices)
 
-mcmat = mc.SparseMatrixWrapper(mc.csr_tuple(data=data, indices=indices, indptr=indptr, shape=shape, nnz=len(data)))
+csrtup = mc.csr_tuple(data=data, indices=indices, indptr=indptr, shape=shape, nnz=len(data))
+
+mcmat = mc.SparseMatrixWrapper(csrtup)
+
+# We could also produce one without copying:
+csrmat = mc.CSparseMatrix(csrtup)
 
 k = 50
 beta = 0.5   # Pseudocount prior for Bregman divergences
@@ -40,7 +45,7 @@ ntimes = 2   # Perform kmeans++ sampling %i times, use the best-scoring set of c
 
 seed = 0     # if seed is not set, defaults to 0. Results will be identical with the same seed.
 
-measure = "REVERSE_MKL" # See https://github.com/dnbaker/minicore/blob/main/docs/msr.md for examples/integer codes
+measure = "MKL" # See https://github.com/dnbaker/minicore/blob/main/docs/msr.md for examples/integer codes
                         # value can be integral or be the short string description
                         # MKL = reverse categorical KL divergence
 
@@ -56,8 +61,8 @@ lspprounds = 2 # Perform %i rounds of localsearch++. Yields a higher quality set
 
 ctr_rows = mc.rowsel(centers)
 
-res = mc.cluster(mcmat, ctr_rows, betaprior=beta, msr=measure,
-                              weights=weights, lspprounds=lspprounds, seed=seed)
+res = mc.hcluster(mcmat, ctr_rows, betaprior=beta, msr=measure,
+                  weights=weights, lspprounds=lspprounds, seed=seed)
 
 
 # res is a dictionary with the following keys:

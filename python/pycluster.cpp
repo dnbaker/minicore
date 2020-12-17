@@ -4,6 +4,7 @@
 
 
 
+#if 0
 py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
                  py::object msr, py::object weights, double eps,
                  int ntimes, uint64_t seed, int lspprounds, int kmcrounds, uint64_t kmeansmaxiter)
@@ -46,19 +47,19 @@ py::object func1(const SparseMatrixWrapper &smw, py::int_ k, double beta,
     }
     throw std::invalid_argument("Weights were not float, double, or None.");
 }
+#endif
 
 
 void init_clustering(py::module &m) {
 
-    m.def("cluster", [](SparseMatrixWrapper &smw, py::object centers, double beta,
-                    py::object msr, py::object weights, double eps,
-                    uint64_t kmeansmaxiter, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                    Py_ssize_t reseed_count, bool with_rep) {
-                        return __py_cluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter,
-                            //kmcrounds, ntimes, lspprounds,
-                            seed,
-                            mbsize, ncheckins, reseed_count, with_rep);
-                    },
+    m.def("hcluster", [](SparseMatrixWrapper &smw, py::object centers, double beta,
+                         py::object msr, py::object weights, double eps,
+                         uint64_t kmeansmaxiter, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
+                         Py_ssize_t reseed_count, bool with_rep) {
+                             return __py_cluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter,
+                                 seed,
+                                 mbsize, ncheckins, reseed_count, with_rep);
+                         },
     py::arg("smw"),
     py::arg("centers"),
     py::arg("prior") = 0.,
