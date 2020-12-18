@@ -152,8 +152,9 @@ struct IndexCoreset {
         }
         indices_.resize(newsz);
         weights_.resize(newsz);
-        DBG_ONLY(std::fprintf(stderr, "Shrinking to fit\n");)
+        DBG_ONLY(std::fprintf(stderr, "Shrinking to fit: start at %zu\n", size());)
         if(shrink_to_fit) indices_.shrinkToFit(), weights_.shrinkToFit();
+        DBG_ONLY(std::fprintf(stderr, "after shrinking: %zu\n", size());)
         return *this;
     }
     std::vector<std::pair<IT, FT>> to_pairs() const {

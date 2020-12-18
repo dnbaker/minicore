@@ -4,6 +4,7 @@
 
 #include "minicore/dist.h"
 #include "minicore/clustering/centroid.h"
+#include "minicore/coreset/coreset.h"
 
 namespace minicore {
 
@@ -544,7 +545,6 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
     return std::make_tuple(initcost, cost, iternum);
 }
 // hard minibatch coreset clustering
-#if 0
 template<typename Matrix, // MatrixType
          typename FT=DefaultFT<Matrix>,
          typename CtrT=blz::DynamicVector<FT, rowVector>, // Vector Type
@@ -676,17 +676,47 @@ auto hmb_coreset_clustering(const Matrix &mat,
         }
 
         // Sample points
-        auto sampler = CoresetSampler();
+        auto sampler = coresets::CoresetSampler();
         coresets::SensitivityMethod sm;
         switch(measure) {
             case L1: case L2: sm = coresets::VX; break;
             default: sm = coresets::LBK; break;
         }
-        const WeightT *ptr = nullptr;
-        if(weights) ptr = weights;
-        sampler.make_sampler(np, nc, costs.data(), asn.data(), weights, sm);
+        using WT = const std::remove_const_t<std::decay_t<decltype((*weights)[0])>>;
+        
+        const WT *ptr = nullptr;
+        if(weights) ptr = weights->data();
+        sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, sm);
         auto pts = sampler.sample(mbsize);
         pts.compact();
+#if 0
+        if constexpr(blaze::IsRows_v<Matrix>) {
+#endif
+            using LMat = std::conditional_t<blaze::IsDenseMatrix_v<Matrix>,
+                                blz::DM<blz::ElementType_t<Matrix>>,
+                                blz::SM<blz::ElementType_t<Matrix>>
+            >;
+            LMat smat(pts.size(), mat.columns());
+            const size_t tnz = sum(blaze::generate(pts.size(), [&](auto x) {return nonZeros(row(mat, pts.indices_[x]));}));
+            smat.reserve(tnz);
+            OMP_PFOR
+            for(size_t i = 0; i < pts.indices_.size(); ++i)
+                row(smat, i) = row(mat, pts.indices_[i]);
+            using ResT = decltype(elements(*weights, pts.indices_.data(), pts.indices_.size()));
+            std::unique_ptr<ResT> wsel;
+            if(weights)
+                wsel.reset(new ResT(elements(*weights, pts.indices_.data(), pts.indices_.size())));
+            perform_hard_clustering(smat, measure, prior, centers, asn, costs, wsel.get());
+#if 0
+        } else {
+            auto smat = rows(mat, pts.indices_.data(), pts.indices_.size());
+            using ResT = decltype(elements(*weights, pts.indices_.data(), pts.indices_.size()));
+            std::unique_ptr<ResT> wsel;
+            if(weights)
+                wsel.reset(new ResT(elements(*weights, pts.indices_.data(), pts.indices_.size())));
+            perform_hard_clustering(smat, measure, prior, centers, asn, costs, wsel.get());
+        }
+#endif
 
         // 2. Optimize over the coreset
         // 3. Calculate new centers
@@ -699,7 +729,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
 #endif
     return std::make_tuple(initcost, cost, iternum);
 }
-#endif
 
 
 
@@ -707,6 +736,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
 using clustering::perform_hard_clustering;
 using clustering::perform_hard_minibatch_clustering;
 using clustering::perform_soft_clustering;
+using clustering::hmb_coreset_clustering;
 
 } // namespace minicore
 #endif /* #ifndef MINOCORE_CLUSTERING_SOLVE_H__ */
