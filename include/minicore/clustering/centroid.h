@@ -722,7 +722,7 @@ bool set_centroids_full_mean(const Mat &mat,
     }
     for(unsigned i = 0; i < k; ++i) shared::sort(assigned[i].begin(), assigned[i].end());
     for(unsigned i = 0; i < k; ++i) {
-        DBG_ONLY(std::fprintf(stderr, "Computing %smean for centroid %u with %zu assigned points\n", isnorm ? "normalized": "", i, assigned[i].size());)
+        //DBG_ONLY(std::fprintf(stderr, "Computing %smean for centroid %u with %zu assigned points\n", isnorm ? "normalized": "", i, assigned[i].size());)
         // Compute mean for centroid
         const auto nasn = assigned[i].size();
         const auto asp = assigned[i].data();

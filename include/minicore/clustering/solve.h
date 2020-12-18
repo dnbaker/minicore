@@ -131,7 +131,7 @@ perform_hard_clustering(const MT &mat,
             assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums);
             break;
         }
-        std::copy(centers_cpy.begin(), centers_cpy.begin(), centers.begin());
+        centers = centers_cpy;
         if(cost - newcost < eps * initcost) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g init cost\n",
@@ -229,7 +229,7 @@ void assign_points_hard(const Mat &mat,
     // Compute distance function
     // Handles similarity measure, caching, and the use of a prior for exponential family models
     auto compute_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        FT ret = cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        FT ret = cmp::msr_with_prior<FT>(measure, row(mat, id), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0) {
             if(unlikely(ret < -1e-5)) {
                 std::fprintf(stderr, "rowsum: %g. csum: %g. expected rsum: %g expected csum: %g\n", double(sum(row(mat, id))), double(sum(centers[cid])), rowsums[id], centersums[cid]);
@@ -470,6 +470,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             std::fprintf(stderr, "Cost at iter %zu (mbsize %zd): %g\n", iternum, mbsize, cost);
             if(iternum == 0) initcost = cost, bestcost = initcost;
             if(cost < bestcost) {
+                std::fprintf(stderr, "Distance between old and new centers: %g\n", blz::sum(blz::generate(centers.size(), [&](auto x) {return l2Dist(centers[x], savectrs[x]);})));
                 bestcost = cost;
                 savectrs = centers;
             }
@@ -587,16 +588,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
     };
     const size_t np = costs.size(), k = centers.size();
     auto perform_assign = [&]() {
-        OMP_PFOR_DYN
-        for(size_t i = 0; i < np; ++i) {
-            FT mincost = std::numeric_limits<FT>::max();
-            IT minind = -1;
-            for(size_t j = 0; j < k; ++j)
-                if(const FT nc = compute_point_cost(i, j);nc < mincost)
-                    mincost = nc, minind = j;
-            asn[i] = minind;
-            costs[i] = mincost;
-        }
     };
     wy::WyRand<std::make_unsigned_t<IT>> rng(seed);
     schism::Schismatic<std::make_unsigned_t<IT>> div((mat).rows());
@@ -607,10 +598,19 @@ auto hmb_coreset_clustering(const Matrix &mat,
     blz::DV<uint64_t> center_counts(k);
     for(;;) {
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
-        if(iternum % calc_cost_freq == 0 || (iternum == maxiter - 1)) {
+        if(1) {
             // Every once in a while, perform exhaustive center-point-comparisons
             // and restart any centers with no assigned points
-            perform_assign();
+            OMP_PFOR_DYN
+            for(size_t i = 0; i < np; ++i) {
+                FT mincost = std::numeric_limits<FT>::max();
+                IT minind = -1;
+                for(size_t j = 0; j < k; ++j)
+                    if(const FT nc = compute_point_cost(i, j);nc < mincost)
+                        mincost = nc, minind = j;
+                asn[i] = minind;
+                costs[i] = mincost;
+            }
             center_counts = 0;
 
             OMP_PFOR
@@ -654,44 +654,36 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 }
             }
             if(weights) {
-                if constexpr(blaze::IsVector_v<WeightT>) {
+                if constexpr(blaze::IsVector_v<WeightT>)
                     cost = blz::dot(costs, *weights);
-                } else {
-                    cost = blz::dot(costs, blz::make_cv(weights->data(), np));
-                }
-            } else {
-                cost = blz::sum(costs);
-            }
-            std::fprintf(stderr, "Cost at iter %zu (mbsize %zd): %g\n", iternum, mbsize, cost);
+                else cost = blz::dot(costs, blz::make_cv(weights->data(), np));
+            } else cost = blz::sum(costs);
+            std::fprintf(stderr, "[CSOPT] Cost at iter %zu (mbsize %zd): %g. [best prev: %g]\n", iternum, mbsize, cost, bestcost);
             if(iternum == 0) initcost = cost, bestcost = initcost;
             if(cost < bestcost) {
+                std::fprintf(stderr, "[CSOPT] at iter %zu, new cost %g is better than previous %g\n", iternum, cost, bestcost);
+                std::fprintf(stderr, "dist between: %g\n", blz::sum(blz::generate(centers.size(), [&](auto x) {return l2Dist(centers[x], savectrs[x]);})));
                 bestcost = cost;
                 savectrs = centers;
             }
         }
 
-        if(++iternum == maxiter) {
-            std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
+        if(++iternum >= maxiter) {
+            std::fprintf(stderr, "[CSOPT] Maximum iterations [%zu] reached\n", maxiter);
             break;
         }
 
         // Sample points
         auto sampler = coresets::CoresetSampler();
-        coresets::SensitivityMethod sm;
-        switch(measure) {
-            case L1: case L2: sm = coresets::VX; break;
-            default: sm = coresets::LBK; break;
-        }
+        const coresets::SensitivityMethod sm = measure == L1 || measure == L2 ? coresets::VX: coresets::LBK;
         using WT = const std::remove_const_t<std::decay_t<decltype((*weights)[0])>>;
         
         const WT *ptr = nullptr;
         if(weights) ptr = weights->data();
         sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, sm);
-        auto pts = sampler.sample(mbsize);
-        pts.compact();
-#if 0
-        if constexpr(blaze::IsRows_v<Matrix>) {
-#endif
+        for(size_t j = 0; j < calc_cost_freq; ++j) {
+            auto pts = sampler.sample(mbsize, rng());
+            pts.compact();
             using LMat = std::conditional_t<blaze::IsDenseMatrix_v<Matrix>,
                                 blz::DM<blz::ElementType_t<Matrix>>,
                                 blz::SM<blz::ElementType_t<Matrix>>
@@ -703,20 +695,27 @@ auto hmb_coreset_clustering(const Matrix &mat,
             for(size_t i = 0; i < pts.indices_.size(); ++i)
                 row(smat, i) = row(mat, pts.indices_[i]);
             using ResT = decltype(elements(*weights, pts.indices_.data(), pts.indices_.size()));
-            std::unique_ptr<ResT> wsel;
-            if(weights)
-                wsel.reset(new ResT(elements(*weights, pts.indices_.data(), pts.indices_.size())));
-            perform_hard_clustering(smat, measure, prior, centers, asn, costs, wsel.get());
-#if 0
-        } else {
-            auto smat = rows(mat, pts.indices_.data(), pts.indices_.size());
-            using ResT = decltype(elements(*weights, pts.indices_.data(), pts.indices_.size()));
-            std::unique_ptr<ResT> wsel;
-            if(weights)
-                wsel.reset(new ResT(elements(*weights, pts.indices_.data(), pts.indices_.size())));
-            perform_hard_clustering(smat, measure, prior, centers, asn, costs, wsel.get());
+            blz::DV<double> csw;
+            if(weights) {
+                csw = elements(*weights, pts.indices_.data(), pts.indices_.size()) * pts.weights_;
+            } else csw = pts.weights_;
+            blz::DV<double> cscosts(pts.size());
+            blz::DV<uint32_t> csasn(pts.size());
+            for(size_t i = 0; i < pts.size(); ++i) {
+                auto rs = rowsums[pts.indices_[i]];
+                auto bestscore = cmp::msr_with_prior<FT>(measure, row(smat, i, unchecked), centers[0], prior, prior_sum, rs, centersums[0]);
+                auto bestid = 0u;
+                for(size_t j = 1; j < k; ++j) {
+                    auto nscore = cmp::msr_with_prior<FT>(measure, row(smat, i, unchecked), centers[j], prior, prior_sum, rs, centersums[j]);
+                    if(nscore < bestscore) bestid = j, bestscore = nscore;
+                }
+                csasn[i] = bestid;
+                cscosts[i] = bestscore;
+            }
+            perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw);
+            centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
+            ++iternum;
         }
-#endif
 
         // 2. Optimize over the coreset
         // 3. Calculate new centers

@@ -191,5 +191,6 @@ int main(int argc, char *argv[]) {
     std::fprintf(stderr, "minibatch clustering with uniform weights, %sreplacement, %s importance sampling\n", with_replacement ? "with": "without", "without");
     clust::perform_hard_minibatch_clustering(x, msr, prior, is_mbcenters, asn, hardcosts, &weights, mbsize, NUMITER, 10, /*reseed_after=*/minreseed, /*with_replacement=*/with_replacement, /*seed=*/rng());
     std::fprintf(stderr, "now, using coreset minibatch clustering.\n");
-    //minicore::hmb_coreset_clustering(x, msr, prior, mbcenters, asn, hardcosts, static_cast<blz::DV<FLOAT_TYPE> *>(nullptr), mbsize, NUMITER, 10, minreseed, with_replacement, rng());
+    auto cs_mbcenters = ocenters;
+    minicore::hmb_coreset_clustering(x, msr, prior, cs_mbcenters, asn, hardcosts, static_cast<blz::DV<FLOAT_TYPE> *>(nullptr), mbsize, NUMITER, 10, minreseed, with_replacement, rng());
 }
