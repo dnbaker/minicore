@@ -292,9 +292,8 @@ int m2ccore(std::string in, std::string out, SumOpts &opts)
             }
             break;
         }
-        case dist::L2: case dist::PL2: {
+        case dist::L2: {
             assert(min(sm) >= 0.);
-            if(opts.dis == dist::PL2) for(auto r: blz::rowiterator(sm)) r /= blz::sum(r);
             if(opts.soft) {
                 throw NotImplementedError("L2/PL2 under soft clustering");
             } else {
@@ -392,8 +391,6 @@ int main(int argc, char **argv) {
             case 'I': opts.dis = dist::REVERSE_ITAKURA_SAITO; break;
             case 'J': opts.dis = dist::JSM;       break;
             case 'M': opts.dis = dist::MKL;       break;
-            case 'P': opts.dis = dist::PSL2;      break;
-            case 'Q': opts.dis = dist::PL2;       break;
             case 'S': opts.dis = dist::SQRL2;     break;
             case 'T': opts.dis = dist::TVD;       break;
             case 'Y': opts.dis = dist::BHATTACHARYYA_DISTANCE; break;

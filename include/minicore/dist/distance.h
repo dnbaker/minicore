@@ -28,20 +28,17 @@ enum DissimilarityMeasure {
     JSM, // Multinomial Jensen-Shannon Metric
     JSD, // Multinomial Jensen-Shannon Divergence
     MKL, // Multinomial KL Divergence
-    POISSON, // Poisson KL
     HELLINGER,
     BHATTACHARYYA_METRIC,
     BHATTACHARYYA_DISTANCE,
     TOTAL_VARIATION_DISTANCE,
     LLR,
     REVERSE_MKL,
-    REVERSE_POISSON,
     UWLLR, /* Unweighted Log-likelihood Ratio.
             * Specifically, this is the D_{JSD}^{\lambda}(x, y),
             * where \lambda = \frac{N_p}{N_p + N_q}
             *
             */
-    OLLR,       // Old LLR, deprecated (included for compatibility/comparisons)
     ITAKURA_SAITO, // \sum_{i=1}^D[\frac{a_i}{b_i} - \log{\frac{a_i}{b_i}} - 1]
     REVERSE_ITAKURA_SAITO, // Reverse I-S
     COSINE_DISTANCE,             // Cosine distance
@@ -50,19 +47,14 @@ enum DissimilarityMeasure {
     PROBABILITY_COSINE_SIMILARITY,
     DOT_PRODUCT_SIMILARITY,
     PROBABILITY_DOT_PRODUCT_SIMILARITY,
-    EMD,
-    WEMD, // Weighted Earth-mover's distance
     ORACLE_METRIC,
     ORACLE_PSEUDOMETRIC,
-    PL2,
-    PSL2,
     SYMMETRIC_ITAKURA_SAITO,
     REVERSE_SYMMETRIC_ITAKURA_SAITO,
     SRLRT,
     SRULRT,
     WLLR = LLR, // Weighted Log-likelihood Ratio, now equivalent to the LLR
     TVD = TOTAL_VARIATION_DISTANCE,
-    WASSERSTEIN=EMD,
     PSD = JSD, // Poisson JSD, but algebraically equivalent
     PSM = JSM,
     IS=ITAKURA_SAITO,
@@ -70,6 +62,21 @@ enum DissimilarityMeasure {
     RSYMMETRIC_ITAKURA_SAITO=REVERSE_SYMMETRIC_ITAKURA_SAITO,
     RSIS=REVERSE_SYMMETRIC_ITAKURA_SAITO,
 };
+
+static constexpr inline bool msr_is_normalized(DissimilarityMeasure msr) {
+    switch(msr) {
+        case IS: case SIS: case RSIS: case REVERSE_ITAKURA_SAITO: case TVD:
+        case MKL: case REVERSE_MKL: case COSINE_DISTANCE: case COSINE_SIMILARITY:
+        case HELLINGER: case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
+        case JSM: case JSD:
+            return true;
+
+        case LLR:
+        case SRLRT: case L1: case L2: case SQRL2: case UWLLR: case SRULRT:
+        default:
+        return false;
+    }
+}
 
 inline namespace detail {
 /*
@@ -79,7 +86,6 @@ inline namespace detail {
  *     1. Logs  (needs_logs)
  *     2. Sqrts (needs_sqrt)
  *     3. L2 norms (needs_l2_cache)
- *     4. PL2 norms (needs_probability_l2_cache)
  * 2. Whether the measure satisfies:
  *     1. Being a Bregman divergence (is_bregman)
  *     2. Being a distance metric (satisfies_metric)
@@ -107,8 +113,8 @@ inline namespace detail {
 
 static constexpr INLINE bool is_bregman(DissimilarityMeasure d)  {
     switch(d) {
-        case JSD: case MKL: case POISSON: case ITAKURA_SAITO:
-        case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO:
+        case JSD: case MKL: case ITAKURA_SAITO:
+        case REVERSE_MKL: case REVERSE_ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO:
         case SQRL2: case SRLRT: case SRULRT:
         return true;
@@ -117,7 +123,7 @@ static constexpr INLINE bool is_bregman(DissimilarityMeasure d)  {
     return false;
 }
 static constexpr INLINE bool satisfies_d2(DissimilarityMeasure d) {
-    return d == LLR || d == UWLLR || d == OLLR || is_bregman(d) || d == PSL2;
+    return d == LLR || d == UWLLR || is_bregman(d);
 }
 static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
     switch(d) {
@@ -128,7 +134,6 @@ static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
         case TOTAL_VARIATION_DISTANCE:
         case HELLINGER:
         case ORACLE_METRIC:
-        case PL2:
         case SRLRT: case SRULRT: // Not sure, but probably
             return true;
         default: ;
@@ -138,11 +143,10 @@ static constexpr INLINE bool satisfies_metric(DissimilarityMeasure d) {
 static constexpr INLINE bool satisfies_rho_metric(DissimilarityMeasure d) {
     if(satisfies_metric(d)) return true;
     switch(d) {
-        case PSL2:  // rho = 2
         case SQRL2: // rho = 2
         // These three don't, technically, but using a prior can force it to follow it on real data
         case ORACLE_PSEUDOMETRIC:
-        case LLR: case UWLLR: case OLLR: case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO:
+        case LLR: case UWLLR: case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO:
             return true;
         default:;
     }
@@ -151,9 +155,9 @@ static constexpr INLINE bool satisfies_rho_metric(DissimilarityMeasure d) {
 
 static constexpr INLINE bool needs_logs(DissimilarityMeasure d)  {
     switch(d) {
-        case JSM: case JSD: case MKL: case POISSON: case LLR: case OLLR: case ITAKURA_SAITO:
+        case JSM: case JSD: case MKL: case LLR: case ITAKURA_SAITO:
         case SRLRT: case SRULRT:
-        case REVERSE_MKL: case REVERSE_POISSON: case UWLLR: case REVERSE_ITAKURA_SAITO: case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO: return true;
+        case REVERSE_MKL: case UWLLR: case REVERSE_ITAKURA_SAITO: case SYMMETRIC_ITAKURA_SAITO: case REVERSE_SYMMETRIC_ITAKURA_SAITO: return true;
         default: break;
     }
     return false;
@@ -164,13 +168,11 @@ static constexpr INLINE bool use_scaled_centers(DissimilarityMeasure measure) {
     // compared to default behavior
     switch(measure) {
         case LLR:
-        case OLLR:
         case UWLLR:
         case L1:
         case SQRL2:
         case L2:
         case COSINE_DISTANCE:
-        case WEMD:
         case SYMMETRIC_ITAKURA_SAITO:
         case RSYMMETRIC_ITAKURA_SAITO:
            return true;
@@ -182,9 +184,9 @@ static constexpr INLINE bool is_probability(DissimilarityMeasure d)  {
     switch(d) {
         case TOTAL_VARIATION_DISTANCE: case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
         case HELLINGER:
-        case MKL: case POISSON: case REVERSE_MKL: case REVERSE_POISSON:
+        case MKL: case REVERSE_MKL:
         case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
-        case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO: case PSL2: case PL2:
+        case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
         case SYMMETRIC_ITAKURA_SAITO:
         case RSYMMETRIC_ITAKURA_SAITO:
         return true;
@@ -203,14 +205,12 @@ static constexpr bool expects_nonnegative(DissimilarityMeasure measure) {
         case COSINE_DISTANCE: case COSINE_SIMILARITY:
         case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
         case DOT_PRODUCT_SIMILARITY:
-        case WEMD: case EMD: case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: return false;
 
         default: // Unexpected, but will assume it's required.
-        case JSM: case JSD: case MKL: case POISSON: case HELLINGER: case BHATTACHARYYA_METRIC:
+        case JSM: case JSD: case MKL: case HELLINGER: case BHATTACHARYYA_METRIC:
         case BHATTACHARYYA_DISTANCE: case TOTAL_VARIATION_DISTANCE: case LLR:
-        case REVERSE_MKL: case REVERSE_POISSON: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
+        case REVERSE_MKL: case ITAKURA_SAITO: case REVERSE_ITAKURA_SAITO:
         case PROBABILITY_DOT_PRODUCT_SIMILARITY:
-        case PL2: case PSL2:
         case SYMMETRIC_ITAKURA_SAITO:
         case RSYMMETRIC_ITAKURA_SAITO:
         return true;
@@ -238,13 +238,12 @@ static constexpr INLINE bool  needs_sqrt(DissimilarityMeasure d) {
 
 static constexpr INLINE bool is_symmetric(DissimilarityMeasure d) {
     switch(d) {
-        case L1: case L2: case EMD: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
-        case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE: case OLLR:
+        case L1: case L2: case HELLINGER: case BHATTACHARYYA_DISTANCE: case BHATTACHARYYA_METRIC:
+        case JSD: case JSM: case LLR: case UWLLR: case SQRL2: case TOTAL_VARIATION_DISTANCE:
         case COSINE_DISTANCE: case COSINE_SIMILARITY:
         case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
         case SYMMETRIC_ITAKURA_SAITO:
         case RSYMMETRIC_ITAKURA_SAITO:
-        case PL2: case PSL2:
         case SRULRT: case SRLRT:
             return true;
         default: ;
@@ -275,20 +274,16 @@ static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "BHATTACHARYYA_DISTANCE";
         case BHATTACHARYYA_METRIC: return "BHATTACHARYYA_METRIC";
-        case EMD: return "EMD";
         case HELLINGER: return "HELLINGER";
         case JSD: return "JSD";
         case JSM: return "JSM";
         case L1: return "L1";
         case L2: return "L2";
         case LLR: return "LLR";
-        case OLLR: return "OLLR";
         case UWLLR: return "UWLLR";
         case ITAKURA_SAITO: return "ITAKURA_SAITO";
         case MKL: return "MKL";
-        case POISSON: return "POISSON";
         case REVERSE_MKL: return "REVERSE_MKL";
-        case REVERSE_POISSON: return "REVERSE_POISSON";
         case REVERSE_ITAKURA_SAITO: return "REVERSE_ITAKURA_SAITO";
         case SQRL2: return "SQRL2";
         case TOTAL_VARIATION_DISTANCE: return "TOTAL_VARIATION_DISTANCE";
@@ -300,8 +295,6 @@ static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {
         case ORACLE_PSEUDOMETRIC: return "ORACLE_PSEUDOMETRIC";
         case SRULRT: return "SRULRT";
         case SRLRT: return "SRLRT";
-        case PSL2: return "PSL2";
-        case PL2: return "PL2";
         case SYMMETRIC_ITAKURA_SAITO: return "SYMMETRIC_ITAKURA_SAITO";
         case RSYMMETRIC_ITAKURA_SAITO: return "RSYMMETRIC_ITAKURA_SAITO";
         default: return "INVALID TYPE";
@@ -314,19 +307,15 @@ static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";
         case BHATTACHARYYA_METRIC: return "Bhattacharyya metric: sqrt(1 - BhattacharyyaSimilarity(x, y))";
-        case EMD: return "Earth Mover's Distance: Optimal Transport";
         case HELLINGER: return "Hellinger Distance: sqrt(sum((sqrt(x) - sqrt(y))^2))/2";
         case JSD: return "Jensen-Shannon Divergence for Poisson and Multinomial models, for which they are equivalent";
         case JSM: return "Jensen-Shannon Metric, known as S2JSD and the Endres metric, for Poisson and Multinomial models, for which they are equivalent";
         case L1: return "L1 distance";
         case L2: return "L2 distance";
         case LLR: return "Log-likelihood Ratio under the multinomial model";
-        case OLLR: return "Original log-likelihood ratio. This is likely not correct, but it is related to the Jensen-Shannon Divergence";
         case UWLLR: return "Unweighted Log-likelihood Ratio. This is effectively the Generalized Jensen-Shannon Divergence with lambda parameter corresponding to the fractional contribution of counts in the first observation. This is symmetric, unlike the G_JSD, because the parameter comes from the counts.";
         case MKL: return "Multinomial KL divergence";
-        case POISSON: return "Poisson KL Divergence";
         case REVERSE_MKL: return "Reverse Multinomial KL divergence";
-        case REVERSE_POISSON: return "Reverse KL divergence";
         case SQRL2: return "Squared L2 Norm";
         case TOTAL_VARIATION_DISTANCE: return "Total Variation Distance: 1/2 sum_{i in D}(|x_i - y_i|)";
         case ITAKURA_SAITO: return "Itakura-Saito divergence, a Bregman divergence [sum((a / b) - log(a / b) - 1 for a, b in zip(A, B))]";
@@ -339,8 +328,6 @@ static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
         case PROBABILITY_COSINE_SIMILARITY: return "Cosine similarity of the probability vectors: \\frac{A \\cdot B}{|A|_2 |B|_2}";
         case ORACLE_METRIC: return "Placeholder for oracle metrics, allowing us to use DissimilarityMeasure in other situations";
         case ORACLE_PSEUDOMETRIC: return "Placeholder for oracle pseudometrics";
-        case PSL2: return "Probability squared L2 norm, k-means in probabilityspace";
-        case PL2: return "Probability L2 norm";
         case SRULRT: return "Square root of UWLLR, unweighted log likelihood ratio test; likely a metric: related to the JSM and Generalized JSD";
         case SRLRT: return "Square root of LRT, the log likelihood ratio test; likely a metric: related to the JSM and Generalized JSD";
         default: return prob2str(d);
@@ -354,7 +341,6 @@ static constexpr DissimilarityMeasure USABLE_MEASURES []  {
     JSM,
     JSD,
     MKL,
-    POISSON,
     HELLINGER,
     BHATTACHARYYA_METRIC,
     BHATTACHARYYA_DISTANCE,
@@ -362,19 +348,15 @@ static constexpr DissimilarityMeasure USABLE_MEASURES []  {
     LLR,
     UWLLR,
     REVERSE_MKL,
-    REVERSE_POISSON,
     ITAKURA_SAITO,
     REVERSE_ITAKURA_SAITO,
     COSINE_DISTANCE,
     COSINE_SIMILARITY,
-    PL2,
-    PSL2,
     SYMMETRIC_ITAKURA_SAITO,
     RSYMMETRIC_ITAKURA_SAITO,
     SRLRT,
     SRULRT
     // Absent:
-    // EMD/WEMB -- lacking proper evaluation
     // PROBABILITY_COSINE_DISTANCE/PROBABILITY_COSINE_SIMILARITY -- extensions to this space are not complete.
     // ORACLE_METRIC/ORACLE_PSEUDOMETRIC, as they are placeholders
 };
@@ -393,16 +375,16 @@ static void print_measures() {
 static constexpr bool is_valid_measure(DissimilarityMeasure measure) {
     switch(measure) {
         case L1: case L2: case SQRL2: case JSM: case JSD: case MKL:
-        case POISSON: case HELLINGER: case BHATTACHARYYA_METRIC:
+        case HELLINGER: case BHATTACHARYYA_METRIC:
         case BHATTACHARYYA_DISTANCE: case TOTAL_VARIATION_DISTANCE:
-        case UWLLR: case LLR: case REVERSE_MKL: case REVERSE_POISSON: case REVERSE_ITAKURA_SAITO:
+        case UWLLR: case LLR: case REVERSE_MKL: case REVERSE_ITAKURA_SAITO:
         case ITAKURA_SAITO: case COSINE_DISTANCE: case PROBABILITY_COSINE_DISTANCE:
         case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
-        case EMD: case WEMD: case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
+        case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
         case SYMMETRIC_ITAKURA_SAITO:
         case RSYMMETRIC_ITAKURA_SAITO:
         case SRLRT: case SRULRT:
-        case PL2: case PSL2: return true;
+        return true;
         default: ;
     }
     return false;

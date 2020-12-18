@@ -85,11 +85,12 @@ py::dict py_scluster(const Matrix &smw,
                void *weights = (void *)nullptr,
                std::string wfmt="f")
 {
-    std::fprintf(stderr, "temp=%g, beta=%g\n", temp, beta);
+    use_float = true;
     assert(beta > 0.);
     py::dict retdict;
     py::object asns = py::none(), costs = py::none();
-    std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs = obj2dvec(centers);
+    std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs;
+    smw.perform([&](auto &mat) {dvecs = obj2dvec(centers, mat);});
     const int k = dvecs.size();
     std::vector<Py_ssize_t> shape{Py_ssize_t(smw.rows()), k};
     assert(k >= 1);
@@ -102,23 +103,24 @@ py::dict py_scluster(const Matrix &smw,
         costs = mmfn(py::str(cpath), shape, dt);
         asns = mmfn(py::str(apath), shape, dt);
     } else {
-        if(use_float) costs = py::array_t<float>({smw.rows(), smw.columns()}), asns = py::array_t<float>({smw.rows(), smw.columns()});
-        else costs = py::array_t<double>({smw.rows(), smw.columns()}), asns = py::array_t<double>({smw.rows(), smw.columns()});
+        costs = py::array_t<float>({smw.rows(), smw.columns()}), asns = py::array_t<float>({smw.rows(), smw.columns()});
+        //else costs = py::array_t<double>({smw.rows(), smw.columns()}), asns = py::array_t<double>({smw.rows(), smw.columns()});
     }
     void *cp = py::cast<py::array>(costs).request().ptr,
          *ap = py::cast<py::array>(asns).request().ptr;
-    fprintf(stderr, "cp: %p. ap: %p\n", (void *)cp, (void *)ap);
+#if 0
     if(use_float) {
-        fprintf(stderr, "About to perform soft clustering with floats\n");
-        blz::CustomMatrix<float, unaligned, unpadded, rowMajor> cm((float *)cp, smw.rows(), k);
-        blz::CustomMatrix<float, unaligned, unpadded, rowMajor> am((float *)ap, smw.rows(), k);
-        smw.perform([&](auto &x) {retdict = cpp_scluster(x, k, beta, measure, dvecs, cm, am, temp, kmeansmaxiter, mbsize, mbn, weights, wfmt[0]);});
+#endif
+    blz::CustomMatrix<float, unaligned, unpadded, rowMajor> cm((float *)cp, smw.rows(), k);
+    blz::CustomMatrix<float, unaligned, unpadded, rowMajor> am((float *)ap, smw.rows(), k);
+    smw.perform([&](auto &x) {retdict = cpp_scluster(x, k, beta, measure, dvecs, cm, am, temp, kmeansmaxiter, mbsize, mbn, weights, wfmt[0]);});
+#if 0
     } else {
-        fprintf(stderr, "About to perform soft clustering with doubles\n");
         blz::CustomMatrix<double, unaligned, unpadded, rowMajor> cm((double *)cp, smw.rows(), k);
         blz::CustomMatrix<double, unaligned, unpadded, rowMajor> am((double *)ap, smw.rows(), k);
         smw.perform([&](auto &x) {retdict = cpp_scluster(x, k, beta, measure, dvecs, cm, am, temp, kmeansmaxiter, mbsize, mbn, weights, wfmt[0]);});
     }
+#endif
     retdict["costs"] = costs;
     retdict["asn"] = asns;
     return retdict;

@@ -336,6 +336,8 @@ struct ProdCSparseVector {
 
     ProdCSparseVector(const CSparseVector<VT, IT> &ovec, double prod): data_(ovec.data_), indices_(ovec.indices_), n_(ovec.n_), dim_(ovec.dim_), prod_(prod) {
     }
+    ProdCSparseVector(const ProdCSparseVector<VT, IT> &ovec, double prod): data_(ovec.data_), indices_(ovec.indices_), n_(ovec.n_), dim_(ovec.dim_), prod_(prod * ovec.prod_) {
+    }
     size_t nnz() const {return n_;}
     size_t size() const {return dim_;}
     using NCVT = std::remove_const_t<VT>;
@@ -407,10 +409,10 @@ struct ProdCSparseVector {
             return ret;
         }
         const ViewType &operator*() const {
-            return this;
+            return *this;
         }
         ViewType &operator*() {
-            return this;
+            return *this;
         }
         ViewType *operator->() {
             return this;
@@ -465,8 +467,11 @@ ProdCSparseVector<VT, IT> operator*(const CSparseVector<VT, IT> &lhs, OVT rhs) {
 
 template<typename VT, typename IT, typename OVT>
 ProdCSparseVector<VT, IT> operator/(const CSparseVector<VT, IT> &lhs, OVT rhs) {
-    VT mult = VT(1) / rhs;
-    return lhs * mult;
+    return lhs * double(1. / rhs);
+}
+template<typename VT, typename IT, typename OVT>
+ProdCSparseVector<VT, IT> operator/(const ProdCSparseVector<VT, IT> &lhs, OVT rhs) {
+    return ProdCSparseVector<VT, IT>(lhs, 1. / rhs);
 }
 
 template<typename VT1, typename IT1, typename VT2, bool TF>
@@ -1000,7 +1005,17 @@ inline decltype(auto) sum(const CSparseMatrix<VT, IT, IPtrT> &sm) {
             }
         );
     } else {
-        throw NotImplementedError("Not supported: columnwise sums\n");
+        blaze::DynamicVector<VT, blz::rowVector> sums(sm.columns());
+        OMP_PFOR
+        for(size_t i = 0; i < sm.rows(); ++i) {
+            auto r = row(sm, i);
+            #pragma GCC unroll 4
+            for(size_t i = 0; i < r.n_; ++i) {
+                OMP_ATOMIC
+                sums[r.indices_[i]] += r.data_[i];
+            }
+        }
+        return sums;
     }
 }
 

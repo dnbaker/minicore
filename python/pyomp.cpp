@@ -3,11 +3,16 @@
 
 py::ssize_t threadgetter() {
     py::ssize_t ret = 1;
-    OMP_ONLY(ret = omp_get_num_threads();)
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        ret = omp_get_num_threads();
+    }
+#endif
     return ret;
 }
 void threadsetter(py::ssize_t x) {
-    OMP_ONLY(if(x > 0) omp_set_num_threads(x);)
+    if(x > 0) omp_set_num_threads(x);
 }
 struct OMPThreadNumManager {
     OMPThreadNumManager(int nthreads=-1) {set(nthreads);}

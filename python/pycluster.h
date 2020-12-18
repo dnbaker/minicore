@@ -19,7 +19,8 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
                Py_ssize_t ncheckins,
                Py_ssize_t reseed_count,
                bool with_rep,
-               Py_ssize_t seed)
+               Py_ssize_t seed,
+               bool use_cs=false)
 {
     std::fprintf(stderr, "[%s]\n", __PRETTY_FUNCTION__);
     if(k != ctrs.size()) {
@@ -33,7 +34,11 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
     } else {
         if(ncheckins < 0) ncheckins = 10;
         Py_ssize_t checkin_freq = (kmeansmaxiter + ncheckins - 1) / ncheckins;
-        clusterret = perform_hard_minibatch_clustering(mat, measure, prior, ctrs, asn, costs, weights,
+        if(use_cs) {
+            clusterret = hmb_coreset_clustering(mat, measure, prior, ctrs, asn, costs, weights,
+                                                mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
+        } else
+            clusterret = perform_hard_minibatch_clustering(mat, measure, prior, ctrs, asn, costs, weights,
                                                        mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
     }
     auto &[initcost, finalcost, numiter]  = clusterret;
@@ -56,10 +61,11 @@ py::dict cpp_pycluster_from_centers_base(const Matrix &mat, unsigned int k, doub
                Py_ssize_t ncheckins,
                Py_ssize_t reseed_count,
                bool with_rep,
-               Py_ssize_t seed)
+               Py_ssize_t seed,
+               bool use_cs=true)
 {
     py::dict ret;
-    mat.perform([&](auto &x) {ret = cpp_pycluster_from_centers(x, k, beta, measure, ctrs, asn, costs, weights, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);});
+    mat.perform([&](auto &x) {ret = cpp_pycluster_from_centers(x, k, beta, measure, ctrs, asn, costs, weights, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed, use_cs);});
     return ret;
 }
 
@@ -79,21 +85,18 @@ py::dict cpp_pycluster(const Matrix &mat, unsigned int k, double beta,
                Py_ssize_t reseed_count=-1,
                bool with_rep=true)
 {
-    std::fprintf(stderr, "[%s] beginning cpp_pycluster\n", __PRETTY_FUNCTION__);
+    //std::fprintf(stderr, "[%s] beginning cpp_pycluster\n", __PRETTY_FUNCTION__);
     blz::DV<FT> prior{FT(beta)};
     const FT psum = beta * mat.columns();
     if(measure == dist::L1 || measure == dist::L2 || measure == dist::BHATTACHARYYA_METRIC) {
         std::fprintf(stderr, "D2 sampling may not provide a bicriteria approximation alone. TODO: use more expensive metric clustering for better objective functions.\n");
     }
     wy::WyRand<uint32_t> rng(seed);
-    using ET = typename Matrix::ElementType;
-    using MsrType = std::conditional_t<std::is_floating_point_v<ET>, ET, std::conditional_t<(sizeof(ET) <= 4), float, double>>;
     auto functor = [&](const auto &x, const auto &y) {
-        return cmp::msr_with_prior<MsrType>(measure, y, x, prior, psum, sum(y), sum(x));
+        using ComputeT = std::conditional_t<(sizeof(typename Matrix::ElementType) <= 4), float, double>;
+        return cmp::msr_with_prior<ComputeT>(measure, y, x, prior, psum, sum(y), sum(x));
     };
-    std::fprintf(stderr, "About to try to get initial centers\n");
     auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, kmcrounds, ntimes, lspprounds, use_exponential_skips, functor);
-    std::fprintf(stderr, "Got initial centers\n");
     auto &[idx, asn, costs] = initial_sol;
     std::vector<blz::CompressedVector<FT, blz::rowVector>> centers(k);
     for(unsigned i = 0; i < k; ++i) {
@@ -133,31 +136,30 @@ py::object __py_cluster_from_centers(const Matrix &smw,
                     //size_t kmcrounds, int ntimes, int lspprounds,
                     uint64_t seed,
                     Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                    Py_ssize_t reseed_count, bool with_rep)
+                    Py_ssize_t reseed_count, bool with_rep, bool use_cs=false)
 {
     blz::DV<double> prior{double(beta)};
     const dist::DissimilarityMeasure measure = assure_dm(msr);
-    std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs = obj2dvec(centers);
+    std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs;
+    smw.perform([&dvecs,&centers](const auto &mat) {dvecs = obj2dvec(centers, mat);});
     const unsigned long long k = dvecs.size();
     blz::DV<uint32_t> asn(smw.rows());
     if(k > 0xFFFFFFFFull) throw std::invalid_argument("k must be < 4.3 billion to fit into a uint32_t");
     const auto psum = beta * smw.columns();
-    blz::DV<double> centersums = blaze::generate(k, [&dvecs](auto x) {
-        return blz::sum(dvecs[x]);
-    });
+    blz::DV<double> centersums = blaze::generate(k, [&dvecs](auto x) {return blz::sum(dvecs[x]);});
     blz::DV<float> costs;
     smw.perform([&](auto &mat) {
-        using ET = typename std::decay_t<decltype(mat)>::ElementType;
-        using MsrType = std::conditional_t<std::is_floating_point_v<ET>, ET, std::conditional_t<(sizeof(ET) <= 4), float, double>>;
+        blz::DV<float> rsums = blaze::generate(smw.rows(), [&mat](auto x) {return sum(row(mat, x));});
+        using ComputeT = std::conditional_t<(sizeof(blz::ElementType_t<std::decay_t<decltype(mat)>>) <= 4), float, double>;
         costs = blaze::generate(mat.rows(), [&](size_t idx) {
             double bestcost;
             uint32_t bestind;
                 auto r = row(mat, idx);
-                const double rsum = sum(r);
+                const double rsum = rsums[idx];
                 bestind = 0;
-                auto c = cmp::msr_with_prior<MsrType>(measure, r, dvecs[0], prior, psum, rsum, centersums[0]);
+                auto c = cmp::msr_with_prior<ComputeT>(measure, r, dvecs[0], prior, psum, rsum, centersums[0]);
                 for(unsigned j = 1; j < k; ++j) {
-                    auto nextc = cmp::msr_with_prior<MsrType>(measure, r, dvecs[j], prior, psum, rsum, centersums[j]);
+                    auto nextc = cmp::msr_with_prior<ComputeT>(measure, r, dvecs[j], prior, psum, rsum, centersums[j]);
                     if(nextc < c)
                         c = nextc, bestind = j;
                 }
@@ -189,7 +191,7 @@ py::object __py_cluster_from_centers(const Matrix &smw,
         dcv.reset(new blaze::CustomVector<double, blz::unaligned, blz::unpadded>(bwptr, costs.size()));
     }
     // Only compile 1 version: double weights, which can take a nullable weight container
-    return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, dcv.get(), eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
+    return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, dcv.get(), eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed, use_cs);
 }
 
 
