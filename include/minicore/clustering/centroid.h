@@ -617,7 +617,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
 }
 
 template<typename FT=double, typename Mat, typename PriorT, typename AsnT, typename CostsT, typename CtrsT, typename WeightsT, typename IT=uint32_t, typename SumT>
-void set_centroids_full_mean(const Mat &mat,
+bool set_centroids_full_mean(const Mat &mat,
     const dist::DissimilarityMeasure measure,
     const PriorT &prior, AsnT &asn, CostsT &costs, CtrsT &ctrs,
     WeightsT *weights, SumT &ctrsums, const SumT &rowsums)
@@ -653,7 +653,9 @@ void set_centroids_full_mean(const Mat &mat,
     }
     assert(!nfails);
 #endif
+    bool restarted_any = false;
     if(const size_t ne = sa.size()) {
+        restarted_any = true;
         char buf[256];
         const auto pv = prior.size() ? FT(prior[0]): FT(0);
         std::sprintf(buf, "Restarting centers with no support for set_centroids_full_mean: %s as measure with prior of size %zu (%g)\n",
@@ -738,6 +740,7 @@ void set_centroids_full_mean(const Mat &mat,
             set_center(ctr, mat, asp, nasn, weights, isnorm ? static_cast<const SumT *>(nullptr): &rowsums);
         }
     }
+    return restarted_any;
 }
 
 template<typename Vector, typename AT, bool ATF>

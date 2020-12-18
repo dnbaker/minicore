@@ -51,7 +51,7 @@ void assign_points_hard(const Mat &mat,
                         const SumT &centersums,
                         const SumT &rowsums);
 template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT, typename SumT>
-void set_centroids_hard(const Mat &mat,
+bool set_centroids_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
                         std::vector<CtrT> &centers,
@@ -118,13 +118,13 @@ perform_hard_clustering(const MT &mat,
     auto centers_cpy = centers;
     for(;;) {
         std::fprintf(stderr, "Beginning iter %zu\n", iternum);
-        set_centroids_hard<FT>(mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
+        auto res = set_centroids_hard<FT>(mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
         //std::fprintf(stderr, "Set centroids %zu\n", iternum);
 
         assign_points_hard<FT>(mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
         auto newcost = compute_cost();
         std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);
-        if(newcost > cost) {
+        if(newcost > cost && !res) {
             std::cerr << "Warning: New cost " << newcost << " > original cost " << cost << ". Using prior iteration.\n;";
             centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
             assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums);
@@ -154,10 +154,11 @@ perform_hard_clustering(const MT &mat,
 /*
  *
  * set_centroids_hard assumes that costs of points have been assigned
- *
+ * Returns True if a center was restarted; for this case, we don't force termination of
+ * the clustering algorithm
  */
 template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=blz::DV<FT>, typename SumT>
-void set_centroids_hard(const Mat &mat,
+bool set_centroids_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
                         std::vector<CtrT> &centers,
@@ -172,9 +173,10 @@ void set_centroids_hard(const Mat &mat,
     if(dist::is_bregman(measure)) {
         assert(FULL_WEIGHTED_MEAN == pol || JSM_MEDIAN == pol);
     }
+    bool ctrs_restarted = false;
     switch(pol) {
         case JSM_MEDIAN:
-        case FULL_WEIGHTED_MEAN: set_centroids_full_mean<FT>(mat, measure, prior, asn, costs, centers, weights, ctrsums, rowsums);
+        case FULL_WEIGHTED_MEAN: ctrs_restarted |= set_centroids_full_mean<FT>(mat, measure, prior, asn, costs, centers, weights, ctrsums, rowsums);
             break;
         case L1_MEDIAN:
             set_centroids_l1<FT>(mat, asn, costs, centers, weights);
@@ -194,6 +196,7 @@ void set_centroids_hard(const Mat &mat,
         ctrsums[i] = sum(centers[i]);
         //std::fprintf(stderr, "After setting, ctr %zu has %g for a sum\n", i, ctrsums[i]);
     }
+    return ctrs_restarted;
 }
 
 template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT, typename SumT>
