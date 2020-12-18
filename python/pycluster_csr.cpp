@@ -8,12 +8,12 @@ void init_clustering_csr(py::module &m) {
                         //size_t kmcrounds, int ntimes, int lspprounds,
                     uint64_t seed,
                     Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                    Py_ssize_t reseed_count, bool with_rep) -> py::object
+                    Py_ssize_t reseed_count, bool with_rep, bool use_cs) -> py::object
     {
         return __py_cluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter,
                 //kmcrounds, ntimes, lspprounds,
                 seed,
-                mbsize, ncheckins, reseed_count, with_rep);
+                mbsize, ncheckins, reseed_count, with_rep, use_cs);
     },
     py::arg("smw"),
     py::arg("centers"),
@@ -26,7 +26,8 @@ void init_clustering_csr(py::module &m) {
     py::arg("mbsize") = Py_ssize_t(-1),
     py::arg("ncheckins") = Py_ssize_t(-1),
     py::arg("reseed_count") = Py_ssize_t(5),
-    py::arg("with_rep") = false
+    py::arg("with_rep") = false,
+    py::arg("use_cs") = false
     );
 
 #endif

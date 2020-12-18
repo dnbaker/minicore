@@ -52,7 +52,7 @@ void set_center(CtrT &lhs, const util::ProdCSparseVector<VT, IT> &rhs) {
 template<typename CtrT, typename VT, typename IT>
 void set_center(CtrT &lhs, const util::CSparseVector<VT, IT> &rhs) {
     lhs.reserve(rhs.nnz());
-    if(lhs.size() != rhs.dim_) lhs.resize(rhs.dim_);
+    if(lhs.size() != rhs.dim_) throw std::runtime_error("lhs size is not correct.");
     lhs.reset();
     for(const auto &pair: rhs) lhs[pair.index()] = pair.value();
 }

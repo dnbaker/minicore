@@ -587,8 +587,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
         return ret;
     };
     const size_t np = costs.size(), k = centers.size();
-    auto perform_assign = [&]() {
-    };
     wy::WyRand<std::make_unsigned_t<IT>> rng(seed);
     schism::Schismatic<std::make_unsigned_t<IT>> div((mat).rows());
     blz::DV<IT> sampled_indices(mbsize);
@@ -692,9 +690,11 @@ auto hmb_coreset_clustering(const Matrix &mat,
             const size_t tnz = sum(blaze::generate(pts.size(), [&](auto x) {return nonZeros(row(mat, pts.indices_[x]));}));
             smat.reserve(tnz);
             OMP_PFOR
-            for(size_t i = 0; i < pts.indices_.size(); ++i)
-                row(smat, i) = row(mat, pts.indices_[i]);
-            using ResT = decltype(elements(*weights, pts.indices_.data(), pts.indices_.size()));
+            for(size_t i = 0; i < pts.indices_.size(); ++i) {
+                auto lh = row(smat, i);
+                set_center(lh, row(mat, pts.indices_[i]));
+            }
+                //row(smat, i) = row(mat, pts.indices_[i]);
             blz::DV<double> csw;
             if(weights) {
                 csw = elements(*weights, pts.indices_.data(), pts.indices_.size()) * pts.weights_;

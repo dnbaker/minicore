@@ -19,7 +19,8 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
                Py_ssize_t ncheckins,
                Py_ssize_t reseed_count,
                bool with_rep,
-               Py_ssize_t seed)
+               Py_ssize_t seed,
+               bool use_cs=false)
 {
     std::fprintf(stderr, "[%s]\n", __PRETTY_FUNCTION__);
     if(k != ctrs.size()) {
@@ -33,7 +34,11 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
     } else {
         if(ncheckins < 0) ncheckins = 10;
         Py_ssize_t checkin_freq = (kmeansmaxiter + ncheckins - 1) / ncheckins;
-        clusterret = perform_hard_minibatch_clustering(mat, measure, prior, ctrs, asn, costs, weights,
+        if(use_cs) {
+            clusterret = hmb_coreset_clustering(mat, measure, prior, ctrs, asn, costs, weights,
+                                                mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
+        } else
+            clusterret = perform_hard_minibatch_clustering(mat, measure, prior, ctrs, asn, costs, weights,
                                                        mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
     }
     auto &[initcost, finalcost, numiter]  = clusterret;
@@ -56,10 +61,11 @@ py::dict cpp_pycluster_from_centers_base(const Matrix &mat, unsigned int k, doub
                Py_ssize_t ncheckins,
                Py_ssize_t reseed_count,
                bool with_rep,
-               Py_ssize_t seed)
+               Py_ssize_t seed,
+               bool use_cs=true)
 {
     py::dict ret;
-    mat.perform([&](auto &x) {ret = cpp_pycluster_from_centers(x, k, beta, measure, ctrs, asn, costs, weights, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);});
+    mat.perform([&](auto &x) {ret = cpp_pycluster_from_centers(x, k, beta, measure, ctrs, asn, costs, weights, eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed, use_cs);});
     return ret;
 }
 
@@ -130,7 +136,7 @@ py::object __py_cluster_from_centers(const Matrix &smw,
                     //size_t kmcrounds, int ntimes, int lspprounds,
                     uint64_t seed,
                     Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                    Py_ssize_t reseed_count, bool with_rep)
+                    Py_ssize_t reseed_count, bool with_rep, bool use_cs=false)
 {
     blz::DV<double> prior{double(beta)};
     const dist::DissimilarityMeasure measure = assure_dm(msr);
@@ -185,7 +191,7 @@ py::object __py_cluster_from_centers(const Matrix &smw,
         dcv.reset(new blaze::CustomVector<double, blz::unaligned, blz::unpadded>(bwptr, costs.size()));
     }
     // Only compile 1 version: double weights, which can take a nullable weight container
-    return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, dcv.get(), eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed);
+    return cpp_pycluster_from_centers_base(smw, k, beta, measure, dvecs, asn, costs, dcv.get(), eps, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep, seed, use_cs);
 }
 
 
