@@ -55,7 +55,7 @@ void init_clustering(py::module &m) {
     m.def("hcluster", [](SparseMatrixWrapper &smw, py::object centers, double beta,
                          py::object msr, py::object weights, double eps,
                          uint64_t kmeansmaxiter, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                         Py_ssize_t reseed_count, bool with_rep) {
+                         Py_ssize_t reseed_count, bool with_rep, bool use_cs) {
                              return __py_cluster_from_centers(smw, centers, beta, msr, weights, eps, kmeansmaxiter,
                                  seed,
                                  mbsize, ncheckins, reseed_count, with_rep, use_cs);

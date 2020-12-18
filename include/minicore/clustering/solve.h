@@ -696,17 +696,20 @@ auto hmb_coreset_clustering(const Matrix &mat,
             }
                 //row(smat, i) = row(mat, pts.indices_[i]);
             blz::DV<double> csw;
-            if(weights) {
+            if(weights)
                 csw = elements(*weights, pts.indices_.data(), pts.indices_.size()) * pts.weights_;
-            } else csw = pts.weights_;
+            else
+                csw = pts.weights_;
             blz::DV<double> cscosts(pts.size());
             blz::DV<uint32_t> csasn(pts.size());
+            OMP_PFOR
             for(size_t i = 0; i < pts.size(); ++i) {
                 auto rs = rowsums[pts.indices_[i]];
-                auto bestscore = cmp::msr_with_prior<FT>(measure, row(smat, i, unchecked), centers[0], prior, prior_sum, rs, centersums[0]);
+                auto sr = row(smat, i, unchecked);
+                auto bestscore = cmp::msr_with_prior<FT>(measure, sr, centers[0], prior, prior_sum, rs, centersums[0]);
                 auto bestid = 0u;
                 for(size_t j = 1; j < k; ++j) {
-                    auto nscore = cmp::msr_with_prior<FT>(measure, row(smat, i, unchecked), centers[j], prior, prior_sum, rs, centersums[j]);
+                    auto nscore = cmp::msr_with_prior<FT>(measure, sr, centers[j], prior, prior_sum, rs, centersums[j]);
                     if(nscore < bestscore) bestid = j, bestscore = nscore;
                 }
                 csasn[i] = bestid;

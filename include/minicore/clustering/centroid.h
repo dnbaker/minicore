@@ -33,9 +33,7 @@ static constexpr const char *cp2str(CentroidPol pol) {
 
 template<typename CtrT, typename VT, bool TF>
 void set_center(CtrT &lhs, const blaze::Vector<VT, TF> &rhs) {
-    if(lhs.size() != (*rhs).size()) {
-        lhs.resize((*rhs).size());
-    }
+    if(lhs.size() != (*rhs).size()) throw std::runtime_error("lhs size is not correct.");
     if constexpr(blaze::IsSparseVector_v<CtrT>) {
         lhs.reserve((*rhs).size());
     }
