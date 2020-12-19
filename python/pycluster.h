@@ -36,10 +36,10 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
         Py_ssize_t checkin_freq = (kmeansmaxiter + ncheckins - 1) / ncheckins;
         if(use_cs) {
             clusterret = hmb_coreset_clustering(mat, measure, prior, ctrs, asn, costs, weights,
-                                                mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
+                                                mbsize, kmeansmaxiter, checkin_freq, reseed_count, seed);
         } else
             clusterret = perform_hard_minibatch_clustering(mat, measure, prior, ctrs, asn, costs, weights,
-                                                       mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
+                                                           mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
     }
     auto &[initcost, finalcost, numiter]  = clusterret;
     auto pyctrs = centers2pylist(ctrs);

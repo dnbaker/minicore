@@ -566,7 +566,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
                             size_t maxiter=10000,
                             size_t calc_cost_freq=100,
                             unsigned int reseed_after=1,
-                            bool with_replacement=true,
                             uint64_t seed=0)
 {
     const bool isnorm = msr_is_normalized(measure);

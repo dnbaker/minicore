@@ -63,10 +63,42 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
 
 template<typename SMT, typename SAL>
 py::object centers2pylist(const std::vector<SMT, SAL> &ctrs) {
-    py::list ret;
-    for(const auto &ctr: ctrs)
-        ret.append(sparse2pysr(ctr));
-    return ret;
+    // We're converting the centers into a CSR-notation object in Numpy
+    // First, we compute nonzeros for each row, then use an exclusive scan
+    const auto nz = blz::evaluate(blz::generate(ctrs.size(), [&](const auto x) ALWAYS_INLINE {return nonZeros(ctrs[x]);}));
+    const size_t nnz = blz::sum(nz), nr = ctrs.size(), nc = ctrs.front().size();
+    py::array_t<uint32_t> idx(nnz);
+    py::array_t<uint64_t> indptr(nr + 1);
+    using DataT = std::conditional_t<(sizeof(blz::ElementType_t<SMT>) <= 4),
+                  float, double>;
+    py::array_t<DataT> data(nnz);
+    auto idxi = idx.request(), ipi = indptr.request(), datai = data.request();
+    // Note that the exclusive scan is end() + 1 to include the final entry
+    std::exclusive_scan(nz.begin(),
+                        nz.end() + 1,
+                        (uint64_t *)ipi.ptr, uint64_t(0));
+    // Now that that's done, we copy it over in parallel
+    OMP_PFOR
+    for(size_t i = 0; i < nr; ++i) {
+        const auto start = ((uint64_t *)ipi.ptr)[i], end = ((uint64_t *)ipi.ptr)[i + 1];
+        DataT *ptr = (DataT *)datai.ptr + start,
+             *eptr = (DataT *)datai.ptr + end;
+        std::ptrdiff_t diff = eptr - ptr;
+        uint32_t *iptr = (uint32_t *)idxi.ptr + start;
+        if constexpr(!blaze::IsDenseVector_v<SMT>) {
+            #pragma GCC unroll 4
+            for(auto cbeg = ctrs[i].begin();ptr < eptr; ++ptr, ++cbeg)
+                *iptr++ = cbeg->index(), *ptr++ = cbeg->value();
+        } else {
+            const auto &ctr = ctrs[i];
+            #pragma GCC unroll 4
+            for(size_t j = 0; j < ctr.size(); ++j)
+                if(const auto v = ctr[j];v > 0.)
+                    *iptr++ = j, *ptr++ = v;
+        }
+    }
+    return py::make_tuple(py::make_tuple(data, idx, indptr), // Returned matrix in CSR notation
+                          py::array_t<uint32_t>{{nr, nc}});   // Shape: num rows by number of columns
 }
 
 template<typename T, typename DestT=float>
