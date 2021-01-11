@@ -1,9 +1,6 @@
 #include "pycluster.h"
 
 
-
-
-
 void init_clustering(py::module &m) {
 
     m.def("hcluster", [](SparseMatrixWrapper &smw, py::object centers, double beta,

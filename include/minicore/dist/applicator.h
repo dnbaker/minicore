@@ -1670,8 +1670,17 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
     assert(!std::isnan(shl));
     assert(!std::isnan(shincl));
     if constexpr(!(blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && !(blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
-        FT ret;
+        FT ret = 0.;
         switch(msr) {
+            case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: case DOT_PRODUCT_SIMILARITY:
+            case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+            {
+                [&](int m) __attribute__((noinline,cold)) {
+                    throw std::runtime_error(std::string("Invalid measure: ") + std::to_string(m));
+                    std::exit(1);
+                }(static_cast<int>(msr));
+                break;
+            }
             // All of these use libkl kernels for fast comparisons after an initial layout
             case HELLINGER:
             {
@@ -1721,7 +1730,14 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             {
                 if(tmpmulx.size() != nd) tmpmulx.resize(nd);
                 if(tmpmuly.size() != nd) tmpmuly.resize(nd);
-                tmpmulx = mr * lhrsi, tmpmuly = ctr * rhrsi;
+                CONST_IF(blz::TransposeFlag_v<MatrixRowT> != blz::TransposeFlag_v<std::decay_t<decltype(tmpmulx)>>)
+                    tmpmulx = trans(mr * lhrsi);
+                else
+                    tmpmulx = mr * lhrsi;
+                CONST_IF(blz::TransposeFlag_v<CtrT> != blz::TransposeFlag_v<std::decay_t<decltype(tmpmuly)>>)
+                    tmpmuly = trans(ctr * rhrsi);
+                else
+                    tmpmuly = ctr * rhrsi;
                 FT klc;
                 if(msr == MKL) {
                     klc = libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
@@ -1730,12 +1746,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 } else if(msr == REVERSE_MKL) {
                     klc = libkl::kl_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
                 } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
-                    auto bothsum = lhsum + rhsum;
-                    const auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
-                    const auto emptymean = lambda * lhinc + m1l * rhinc;
-                    const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
-                                            + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
-                    klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lambda, lhinc, rhinc);
+                    klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhsum / (lhsum + rhsum), lhinc, rhinc);
                 } else if(msr == ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
                     //fprintf(stderr, "Is values: klc %g, zc %g\n", klc, zc);
