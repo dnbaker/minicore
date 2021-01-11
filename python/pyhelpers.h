@@ -92,9 +92,19 @@ py::object centers2pylist(const std::vector<SMT, SAL> &ctrs) {
                 *iptr++ = cbeg->index(), *ptr++ = cbeg->value();
         } else {
             const auto &ctr = ctrs[i];
-            #pragma GCC unroll 4
-            for(size_t j = 0; j < ctr.size(); ++j)
-                if(const auto v = ctr[j];v > 0.) *iptr++ = j, *ptr++ = v;
+            const size_t csz = ctr.size(), nc4 = (csz >> 2) << 2;
+            // Unroll by 4, manually
+            for(size_t j = 0; j < nc4;) {
+                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
+                ++j;
+                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
+                ++j;
+                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
+                ++j;
+                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
+                ++j;
+            }
+            for(size_t j = nc4; j < csz; ++j) if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
         }
     }
     py::array_t<uint64_t> shape(2);
