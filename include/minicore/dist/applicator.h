@@ -1659,16 +1659,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
     if(std::isnan(rhinc)) rhinc = 0.;
     assert(!std::isnan(lhinc));
     assert(!std::isnan(rhinc));
-    const FT rhl = rhinc ? std::log(rhinc): FT(0.),
-             lhl = lhinc ? std::log(lhinc): FT(0.),
-             rhincl = rhinc ? rhl * rhinc: FT(0.),
-             lhincl = lhinc ? lhl * lhinc: FT(0.),
-             shl = std::log((lhinc + rhinc) * FT(.5)),
-             shincl = rhinc + lhinc > 0. ? (lhinc + rhinc) * shl: 0.;
-    assert(!std::isnan(rhincl));
-    assert(!std::isnan(lhincl));
-    assert(!std::isnan(shl));
-    assert(!std::isnan(shincl));
     if constexpr(!(blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && !(blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
         FT ret = 0.;
         switch(msr) {
@@ -1766,12 +1756,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     break;
                 } else __builtin_unreachable();
                 ret = klc;
-#ifndef NDEBUG
-                if(ret < 0) {
-                    std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
-                                 pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc);
-                }
-#endif
                 if(msr == LLR || msr == SRLRT) {
                     ret *= (lhsum + rhsum);
                 }
@@ -1786,6 +1770,13 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         }
         return ret;
     } else if constexpr((blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && (blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
+        const FT rhl = rhinc ? std::log(rhinc): FT(0.),
+                 lhl = lhinc ? std::log(lhinc): FT(0.),
+                 rhincl = rhinc ? rhl * rhinc: FT(0.),
+                 lhincl = lhinc ? lhl * lhinc: FT(0.),
+                 shl = std::log((lhinc + rhinc) * FT(.5)),
+                 shincl = rhinc + lhinc > 0. ? (lhinc + rhinc) * shl: 0.;
+        assert(!std::isnan(shl));
         FT ret;
         assert((std::abs(mrsum - sum(mr)) < 1e-10 && std::abs(ctrsum - sum(ctr)) < 1e-10)
                || !std::fprintf(stderr, "[%s] Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", __PRETTY_FUNCTION__, double(sum(mr)), double(sum(ctr)), double(mrsum), double(ctrsum)));
