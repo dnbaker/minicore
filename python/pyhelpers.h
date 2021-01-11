@@ -76,8 +76,8 @@ py::object centers2pylist(const std::vector<SMT, SAL> &ctrs) {
     py::array_t<DataT> data(nnz);
     auto idxi = idx.request(), ipi = indptr.request(), datai = data.request();
     // Note that the exclusive scan is end() + 1 to include the final entry
-    std::exclusive_scan(nz.begin(),
-                        nz.end() + 1,
+    std::exclusive_scan(&nz[0],
+                        &nz.data[nr + 1],
                         (uint64_t *)ipi.ptr, uint64_t(0));
     // Now that that's done, we copy it over in parallel
     OMP_PFOR
