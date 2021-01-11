@@ -42,7 +42,21 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
                                                            mbsize, kmeansmaxiter, checkin_freq, reseed_count, with_rep, seed);
     }
     auto &[initcost, finalcost, numiter]  = clusterret;
-    auto pyctrs = centers2pylist(ctrs);
+    py::object pyctrs;
+    if constexpr(blaze::IsCustom_v<Matrix>) {
+        using MET = blaze::ElementType_t<Matrix>;
+        constexpr const char *dtype_str = std::is_same_v<MET, double> ? "d": std::is_same_v<MET, float> ? "f": "";
+        const size_t nd = ctrs.front().size();
+        py::array centers(py::dtype(dtype_str), std::vector<py::ssize_t>{ctrs.size(), ctrs.front().size()});
+        auto cbi = centers.request();
+        OMP_PFOR
+        for(size_t j = 0; j < ctrs.size(); ++j) {
+            std::copy(ctrs[j].data(), ctrs[j].data() + nd, (MET *)cbi.ptr + j * nd);
+        }
+        pyctrs = centers;
+    } else {
+        pyctrs = centers2pylist(ctrs);
+    }
     auto pycosts = vec2fnp<decltype(costs), float> (costs);
     auto pyasn = vec2fnp<decltype(asn), uint32_t>(asn);
     return py::dict("initcost"_a = initcost, "finalcost"_a = finalcost, "numiter"_a = numiter,
