@@ -67,7 +67,9 @@ template<typename SMT, typename SAL>
 py::object centers2pylist(const std::vector<SMT, SAL> &ctrs) {
     // We're converting the centers into a CSR-notation object in Numpy
     // First, we compute nonzeros for each row, then use an exclusive scan
-    const auto nz = blz::evaluate(blz::generate(ctrs.size(), [&](const auto x) ALWAYS_INLINE {return nonZeros(ctrs[x]);}));
+    blz::DV<uint64_t> nz(ctrs.size());
+    OMP_PFOR
+    for(size_t i = 0; i < ctrs.size(); ++i) nz[i] = nonZeros(ctrs[i]);
     const size_t nnz = blz::sum(nz), nr = ctrs.size(), nc = ctrs.front().size();
     py::array_t<uint32_t> idx(nnz);
     py::array_t<uint64_t> indptr(nr + 1);
@@ -75,10 +77,13 @@ py::object centers2pylist(const std::vector<SMT, SAL> &ctrs) {
                   float, double>;
     py::array_t<DataT> data(nnz);
     auto idxi = idx.request(), ipi = indptr.request(), datai = data.request();
-    // Note that the exclusive scan is end() + 1 to include the final entry
-    std::exclusive_scan(nz.begin(),
-                        nz.end() + 1,
-                        (uint64_t *)ipi.ptr, uint64_t(0));
+    uint64_t *ipip = (uint64_t *)ipi.ptr;
+    *ipip++ = 0;
+    uint64_t csum = 0;
+    for(size_t i = 0; i < nr; ++i) {
+        csum += nz[i];
+        *ipip++ = csum;
+    }
     // Now that that's done, we copy it over in parallel
     OMP_PFOR
     for(size_t i = 0; i < nr; ++i) {
