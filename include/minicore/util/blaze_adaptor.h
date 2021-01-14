@@ -176,7 +176,7 @@ struct DynamicMatrix: public blaze::DynamicMatrix<FT, SO> {
     ADD_FUNCS
 };
 
-template< typename Type, blaze::AlignmentFlag AF, blaze::PaddingFlag PF, bool SO >
+template< typename Type, blaze::AlignmentFlag AF=blaze::unaligned, blaze::PaddingFlag PF=blaze::unpadded, bool SO=blaze::rowMajor>
 struct CustomMatrix: public blaze::CustomMatrix<Type, AF, PF, SO> {
     using super = blaze::CustomMatrix<Type, AF, PF, SO>;
     using this_type = CustomMatrix<Type, AF, PF, SO>;
