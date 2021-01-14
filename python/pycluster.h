@@ -47,7 +47,7 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
         using MET = blaze::ElementType_t<Matrix>;
         constexpr const char *dtype_str = std::is_same_v<MET, double> ? "d": std::is_same_v<MET, float> ? "f": "";
         const size_t nd = ctrs.front().size();
-        py::array centers(py::dtype(dtype_str), std::vector<py::ssize_t>{ctrs.size(), ctrs.front().size()});
+        py::array centers(py::dtype(dtype_str), std::vector<py::ssize_t>{py::ssize_t(ctrs.size()), py::ssize_t(ctrs.front().size())});
         auto cbi = centers.request();
         OMP_PFOR
         for(size_t j = 0; j < ctrs.size(); ++j) {
