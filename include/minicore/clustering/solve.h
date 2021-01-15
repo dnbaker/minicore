@@ -566,7 +566,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
                             size_t maxiter=10000,
                             size_t calc_cost_freq=100,
                             unsigned int reseed_after=1,
-                            bool with_replacement=true,
                             uint64_t seed=0)
 {
     const bool isnorm = msr_is_normalized(measure);
@@ -675,7 +674,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
         auto sampler = coresets::CoresetSampler();
         const coresets::SensitivityMethod sm = measure == L1 || measure == L2 ? coresets::VX: coresets::LBK;
         using WT = const std::remove_const_t<std::decay_t<decltype((*weights)[0])>>;
-        
         const WT *ptr = nullptr;
         if(weights) ptr = weights->data();
         sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, sm);

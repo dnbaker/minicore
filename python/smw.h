@@ -227,18 +227,13 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
             // Note that this has been transposed
             return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));
         };
-        auto sol =
-            kind == -1 ?
-            repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp)
-            : kind == 'f' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr)
-            : kind == 'd' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const double *)wptr)
-            : kind == 'I' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const unsigned *)wptr)
-            : kind == 'i' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const int *)wptr)
-            : kind == 'H' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const uint16_t *)wptr)
-            : kind == 'L' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const uint64_t *)wptr)
-            : kind == 'l' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const int64_t *)wptr)
-            : kind == 'B' ? repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const uint8_t *)wptr)
-            : repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const int *)wptr);
+        std::vector<float> w;
+        switch(kind) {
+            case 'd': w.resize(x.rows()); std::copy((double *)wptr, (double *)wptr + x.rows(), w.data()); wptr = (void *)w.data();
+            case 'f': break;
+            case -1: throw std::invalid_argument("Unexpected dtype");
+        }
+        auto sol = repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr);
         auto &[lidx, lasn, lcosts] = sol;
         assert(lidx.size() == ki);
         assert(lasn.size() == smw.rows());
@@ -272,6 +267,7 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
         OMP_PFOR
         for(size_t i = 0; i < lcosts.size(); ++i)
             costp[i] = lcosts[i];
+        OMP_PFOR
         for(size_t i = 0; i < lidx.size(); ++i)
             rptr[i] = lidx[i];
     });
@@ -333,18 +329,24 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
         py::array_t<float> costs(smw.rows());
         auto costp = (float *)costs.request().ptr;
         smw.perform([&](auto &x) {
-            using FT = std::conditional_t<std::is_floating_point_v<typename std::decay_t<decltype(x)>::ElementType>, typename std::decay_t<decltype(x)>::ElementType, std::conditional_t<(sizeof(typename std::decay_t<decltype(x)>::ElementType) <= 4), float, double>>;
+            using TmpT = typename std::decay_t<decltype(x)>::ElementType;
+            using FT = std::conditional_t<sizeof(TmpT) <= 4, float, double>;
             auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
                 // Note that this has been transposed
                 return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));
             };
             //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
-            auto sol =
-                kind == -1 ?
-                repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp)
-                : kind == 'f' ? repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr)
-                : repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const double *)wptr);
-            auto &[lidx, lasn, lcosts] = sol;
+            std::unique_ptr<double[]> tmpw;
+            switch(kind) {
+                case 'f': tmpw.reset(new double[nr]); std::copy((float *)wptr, (float *)wptr + nr, tmpw.get()); wptr = (void *)tmpw.get(); break;
+                case 'd': case -1: break;
+                default: throw std::runtime_error("Unsupported dtype for weights");
+            }
+            auto sol = repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (double *)wptr);
+            //auto &[lidx, lasn, lcosts] = sol;
+            auto &lidx = std::get<0>(sol);
+            auto &lasn = std::get<1>(sol);
+            auto &lcosts = std::get<2>(sol);
             switch(retasnbits) {
                 case 8: {
                     auto raptr = (uint8_t *)retai.ptr;
@@ -369,9 +371,101 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
             OMP_PFOR
             for(size_t i = 0; i < lcosts.size(); ++i)
                 costp[i] = lcosts[i];
+            OMP_PFOR
             for(size_t i = 0; i < lidx.size(); ++i)
                 rptr[i] = lidx[i];
         });
+        return py::make_tuple(ret, retasn, costs);
+    }
+
+template<typename Mat>
+inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+                          Py_ssize_t lspp, bool use_exponential_skips,
+                          py::object weights)
+    {
+        if(gamma_beta < 0.) {
+            gamma_beta = 1. / smw.columns();
+            std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
+        }
+        const void *wptr = nullptr;
+        int kind = -1;
+        const auto mmsr = assure_dm(msr);
+        const size_t nr = smw.rows();
+        if(py::isinstance<py::array>(weights)) {
+            auto arr = py::cast<py::array>(weights);
+            auto info = arr.request();
+            if(info.format.size() > 1) throw std::invalid_argument(std::string("Invalid array format: ") + info.format);
+            switch(info.format.front()) {
+                case 'f': case 'd': kind = info.format.front(); break;
+                default:throw std::invalid_argument(std::string("Invalid array format: ") + info.format + ". Expected 'd', 'f', 'i', or 'u'.\n");
+            }
+            wptr = info.ptr;
+        }
+        auto ki = k.cast<Py_ssize_t>();
+        wy::WyRand<uint64_t> rng(seed);
+        const auto psum = gamma_beta * smw.columns();
+        const blz::StaticVector<double, 1> prior({gamma_beta});
+        py::array_t<uint32_t> ret(ki);
+        py::object retasn = py::none();
+        int retasnbits;
+        if(ki <= 256) {
+            retasn = py::array_t<uint8_t>(nr);
+            retasnbits = 8;
+        } else if(ki <= 63356) {
+            retasn = py::array_t<uint16_t>(nr);
+            retasnbits = 16;
+        } else {
+            retasn = py::array_t<uint32_t>(nr);
+            retasnbits = 32;
+        }
+        auto retai = py::cast<py::array>(retasn).request();
+        auto rptr = (uint32_t *)ret.request().ptr;
+        py::array_t<float> costs(smw.rows());
+        auto costp = (float *)costs.request().ptr;
+        using TmpT = typename Mat::ElementType;
+        using FT = std::conditional_t<sizeof(TmpT) <= 4, float, double>;
+        auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
+            // Note that this has been transposed
+            return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));
+        };
+        //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
+        std::unique_ptr<double[]> tmpw;
+        switch(kind) {
+            case 'f': tmpw.reset(new double[nr]); std::copy((float *)wptr, (float *)wptr + nr, tmpw.get()); wptr = (void *)tmpw.get(); break;
+            case 'd': case -1: break;
+            default: throw std::runtime_error("Unsupported dtype for weights");
+        }
+        auto sol = repeatedly_get_initial_centers(smw, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (double *)wptr);
+        //auto &[lidx, lasn, lcosts] = sol;
+        auto &lidx = std::get<0>(sol);
+        auto &lasn = std::get<1>(sol);
+        auto &lcosts = std::get<2>(sol);
+        switch(retasnbits) {
+            case 8: {
+                auto raptr = (uint8_t *)retai.ptr;
+                OMP_PFOR
+                for(size_t i = 0; i < lasn.size(); ++i)
+                    raptr[i] = lasn[i];
+            } break;
+            case 16: {
+                auto raptr = (uint16_t *)retai.ptr;
+                OMP_PFOR
+                for(size_t i = 0; i < lasn.size(); ++i)
+                    raptr[i] = lasn[i];
+            } break;
+            case 32: {
+                auto raptr = (uint32_t *)retai.ptr;
+                OMP_PFOR
+                for(size_t i = 0; i < lasn.size(); ++i)
+                    raptr[i] = lasn[i];
+            } break;
+            default: __builtin_unreachable();
+        }
+        std::fprintf(stderr, "Computed initial centers\n");
+        for(size_t i = 0; i < lcosts.size(); ++i)
+            costp[i] = lcosts[i];
+        for(size_t i = 0; i < lidx.size(); ++i)
+            rptr[i] = lidx[i];
         return py::make_tuple(ret, retasn, costs);
     }
 

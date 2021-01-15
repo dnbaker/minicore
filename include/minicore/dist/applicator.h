@@ -1185,14 +1185,6 @@ public:
         assert(ret >= -1e-2 * (row_sums_[i] + row_sums_[j]) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, FT(0.));
     }
-    FT ollr(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) {
-            std::fprintf(stderr, "note: ollr with prior is slightly incorrect due to the sparsity-destroying nature of the prior.\n");
-        }
-        FT ret = __getjsc(i) * row_sums_[i] + __getjsc(j) * row_sums_[j]
-            - blaze::dot(weighted_row(i) + weighted_row(j), neginf2zero(blaze::log((row(i) + row(j)) * .5)));
-        return std::max(ret, FT(0.));
-    }
     FT uwllr(size_t i, size_t j) const {
         if constexpr(IS_SPARSE) {
             if(prior_data_)
@@ -1304,7 +1296,7 @@ private:
             }
         }
 
-        //std::fprintf(stderr, "Set up row sums\n");
+        std::fprintf(stderr, "Set up row sums\n");
         if(dist::needs_logs(measure_)) {
             if(!IS_SPARSE) {
                 logdata_ = CacheMatrixType(neginf2zero(log(data_)));
@@ -1659,19 +1651,18 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
     if(std::isnan(rhinc)) rhinc = 0.;
     assert(!std::isnan(lhinc));
     assert(!std::isnan(rhinc));
-    const FT rhl = rhinc ? std::log(rhinc): FT(0.),
-             lhl = lhinc ? std::log(lhinc): FT(0.),
-             rhincl = rhinc ? rhl * rhinc: FT(0.),
-             lhincl = lhinc ? lhl * lhinc: FT(0.),
-             shl = std::log((lhinc + rhinc) * FT(.5)),
-             shincl = rhinc + lhinc > 0. ? (lhinc + rhinc) * shl: 0.;
-    assert(!std::isnan(rhincl));
-    assert(!std::isnan(lhincl));
-    assert(!std::isnan(shl));
-    assert(!std::isnan(shincl));
     if constexpr(!(blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && !(blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
-        FT ret;
+        FT ret = 0.;
         switch(msr) {
+            case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: case DOT_PRODUCT_SIMILARITY:
+            case PROBABILITY_DOT_PRODUCT_SIMILARITY:
+            {
+                [&](int m) __attribute__((noinline,cold)) {
+                    throw std::runtime_error(std::string("Invalid measure: ") + std::to_string(m));
+                    std::exit(1);
+                }(static_cast<int>(msr));
+                break;
+            }
             // All of these use libkl kernels for fast comparisons after an initial layout
             case HELLINGER:
             {
@@ -1721,7 +1712,14 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
             {
                 if(tmpmulx.size() != nd) tmpmulx.resize(nd);
                 if(tmpmuly.size() != nd) tmpmuly.resize(nd);
-                tmpmulx = mr * lhrsi, tmpmuly = ctr * rhrsi;
+                CONST_IF(blz::TransposeFlag_v<MatrixRowT> != blz::TransposeFlag_v<std::decay_t<decltype(tmpmulx)>>)
+                    tmpmulx = trans(mr * lhrsi);
+                else
+                    tmpmulx = mr * lhrsi;
+                CONST_IF(blz::TransposeFlag_v<CtrT> != blz::TransposeFlag_v<std::decay_t<decltype(tmpmuly)>>)
+                    tmpmuly = trans(ctr * rhrsi);
+                else
+                    tmpmuly = ctr * rhrsi;
                 FT klc;
                 if(msr == MKL) {
                     klc = libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
@@ -1730,12 +1728,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 } else if(msr == REVERSE_MKL) {
                     klc = libkl::kl_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
                 } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
-                    auto bothsum = lhsum + rhsum;
-                    const auto lambda = lhsum / (bothsum), m1l = 1. - lambda;
-                    const auto emptymean = lambda * lhinc + m1l * rhinc;
-                    const auto emptycontrib = (lhinc ? lambda * lhinc * std::log(lhinc / emptymean): FT(0))
-                                            + (rhinc ? m1l * rhinc * std::log(rhinc / emptymean): FT(0));
-                    klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lambda, lhinc, rhinc);
+                    klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhsum / (lhsum + rhsum), lhinc, rhinc);
                 } else if(msr == ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
                     //fprintf(stderr, "Is values: klc %g, zc %g\n", klc, zc);
@@ -1755,12 +1748,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     break;
                 } else __builtin_unreachable();
                 ret = klc;
-#ifndef NDEBUG
-                if(ret < 0) {
-                    std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
-                                 pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc);
-                }
-#endif
                 if(msr == LLR || msr == SRLRT) {
                     ret *= (lhsum + rhsum);
                 }
@@ -1775,6 +1762,13 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         }
         return ret;
     } else if constexpr((blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && (blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
+        const FT rhl = rhinc ? std::log(rhinc): FT(0.),
+                 lhl = lhinc ? std::log(lhinc): FT(0.),
+                 rhincl = rhinc ? rhl * rhinc: FT(0.),
+                 lhincl = lhinc ? lhl * lhinc: FT(0.),
+                 shl = std::log((lhinc + rhinc) * FT(.5)),
+                 shincl = rhinc + lhinc > 0. ? (lhinc + rhinc) * shl: 0.;
+        assert(!std::isnan(shl));
         FT ret;
         assert((std::abs(mrsum - sum(mr)) < 1e-10 && std::abs(ctrsum - sum(ctr)) < 1e-10)
                || !std::fprintf(stderr, "[%s] Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", __PRETTY_FUNCTION__, double(sum(mr)), double(sum(ctr)), double(mrsum), double(ctrsum)));

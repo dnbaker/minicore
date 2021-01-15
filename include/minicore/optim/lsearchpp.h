@@ -96,9 +96,9 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
         const auto argmin = reservoir_simd::argmin(ctrcosts, /*multithread=*/true);
         const auto delta = ctrcosts[argmin] - gain;
         if(delta < 0.) {
-            std::fprintf(stderr, "Swapping out %d for %lld for a gain of %g. (ctrcosts: %g. gain: %g)\n", int(ctrs[argmin]), sel, delta, ctrcosts[argmin], gain);
+            if(k > 25 || np > 100000)
+                std::fprintf(stderr, "Swapping out %d for %lld for a gain of %g. (ctrcosts: %g. gain: %g)\n", int(ctrs[argmin]), sel, delta, ctrcosts[argmin], gain);
             ctrs[argmin] = sel;
-            std::fprintf(stderr, "newcosts size: %zu. ctrcost dims: %zu/%zu\n", newcosts.size(), ctrcostmat.rows(), ctrcostmat.columns());
             column(ctrcostmat, argmin, blaze::unchecked) = newcosts;
             dv = blaze::min<blaze::rowwise>(ctrcostmat);
 #ifndef NDEBUG

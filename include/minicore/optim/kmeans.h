@@ -49,10 +49,10 @@ using blz::sqrL2Norm;
 template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 auto
-kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false) {
-#if 1
-    std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
-#endif
+kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true) {
+    const bool emit_log = (np > 100000 || k > 25);
+    if(emit_log)
+        std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
     std::vector<IT> centers(k, IT(0));
     blz::DV<FT> distances(np, std::numeric_limits<FT>::max());
     {
@@ -83,7 +83,10 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         setnewc:
         if(weights) {
             auto w = blz::make_cv(weights, np);
-            rvals = w * distances;
+            if constexpr(blaze::TransposeFlag_v<decltype(w)> == blaze::TransposeFlag_v<blz::DV<FT>>)
+                rvals = w * distances;
+            else
+                rvals = trans(w) * distances;
             newc = reservoir_simd::sample(rvals.data(), np, rng(), fmt);
         } else {
             newc = reservoir_simd::sample(distances.data(), np, rng(), fmt);
@@ -106,25 +109,29 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         assignments[newc] = center_idx;
         centers[center_idx] = newc;
         distances[newc] = 0.;
-        OMP_PFOR_DYN
-        for(size_t i = 0; i < np; ++i) {
+        auto compute = [&](size_t i) {
             auto &ldist = distances[i];
-            if(ldist == 0.) continue;
+            if(ldist <= 0.) return;
             auto dist = oracle(newc, i);
             if(dist < ldist) { // Only write if it changed
                 assignments[i] = center_idx;
                 ldist = dist;
             }
-        }
+        };
+        if(parallelize_oracle) {
+            OMP_PFOR_DYN
+            for(size_t i = 0; i < np; ++i)
+                compute(i);
+        } else for(size_t i = 0; i < np; compute(i++));
         ++center_idx;
     }
 
-    std::fprintf(stderr, "Completed kmeans++ with centers of size %zu\n", centers.size());
+    if(emit_log) std::fprintf(stderr, "Completed kmeans++ with centers of size %zu\n", centers.size());
     if(lspprounds > 0) {
-        std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
+        if(emit_log) std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
         localsearchpp_rounds(oracle, rng, distances, centers, assignments, np, lspprounds, weights);
     }
-    std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
+    if(emit_log) std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
     return std::make_tuple(std::move(centers), std::move(assignments), std::vector<FT>(distances.begin(), distances.end()));
 }
 #if 0

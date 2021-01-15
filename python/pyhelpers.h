@@ -8,6 +8,8 @@ using namespace minicore;
 using namespace pybind11::literals;
 namespace py = pybind11;
 
+static std::string standardize_dtype(std::string x);
+
 template<typename VT, bool SO>
 py::object sparse2pysr(const blaze::CompressedVector<VT, SO> &_x) {
     const auto &x = *_x;
@@ -63,10 +65,59 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
 
 template<typename SMT, typename SAL>
 py::object centers2pylist(const std::vector<SMT, SAL> &ctrs) {
-    py::list ret;
-    for(const auto &ctr: ctrs)
-        ret.append(sparse2pysr(ctr));
-    return ret;
+    // We're converting the centers into a CSR-notation object in Numpy
+    // First, we compute nonzeros for each row, then use an exclusive scan
+    blz::DV<uint64_t> nz(ctrs.size());
+    OMP_PFOR
+    for(size_t i = 0; i < ctrs.size(); ++i) nz[i] = nonZeros(ctrs[i]);
+    const size_t nnz = blz::sum(nz), nr = ctrs.size(), nc = ctrs.front().size();
+    py::array_t<uint32_t> idx(nnz);
+    py::array_t<uint64_t> indptr(nr + 1);
+    using DataT = std::conditional_t<(sizeof(blz::ElementType_t<SMT>) <= 4),
+                  float, double>;
+    py::array_t<DataT> data(nnz);
+    auto idxi = idx.request(), ipi = indptr.request(), datai = data.request();
+    uint64_t *ipip = (uint64_t *)ipi.ptr;
+    *ipip++ = 0;
+    uint64_t csum = 0;
+    for(size_t i = 0; i < nr; ++i) {
+        csum += nz[i];
+        *ipip++ = csum;
+    }
+    // Now that that's done, we copy it over in parallel
+    OMP_PFOR
+    for(size_t i = 0; i < nr; ++i) {
+        const auto start = ((uint64_t *)ipi.ptr)[i], end = ((uint64_t *)ipi.ptr)[i + 1];
+        DataT *ptr = (DataT *)datai.ptr + start,
+             *eptr = (DataT *)datai.ptr + end;
+        uint32_t *iptr = (uint32_t *)idxi.ptr + start;
+        if constexpr(!blaze::IsDenseVector_v<SMT>) {
+            #pragma GCC unroll 4
+            for(auto cbeg = ctrs[i].begin();ptr < eptr; ++ptr, ++cbeg)
+                *iptr++ = cbeg->index(), *ptr++ = cbeg->value();
+        } else {
+            const auto &ctr = ctrs[i];
+            const size_t csz = ctr.size(), nc4 = (csz >> 2) << 2;
+            // Unroll by 4, manually
+            for(size_t j = 0; j < nc4;) {
+                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
+                ++j;
+                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
+                ++j;
+                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
+                ++j;
+                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
+                ++j;
+            }
+            for(size_t j = nc4; j < csz; ++j) if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
+        }
+    }
+    py::array_t<uint64_t> shape(2);
+    auto dat = shape.request();
+    uint64_t *dptr = (uint64_t *)dat.ptr;
+    dptr[0] = nr; dptr[1] = nc;
+    return py::make_tuple(py::make_tuple(data, idx, indptr), // Returned matrix in CSR notation
+                          shape);   // Shape: num rows by number of columns
 }
 
 template<typename T, typename DestT=float>
@@ -81,12 +132,10 @@ template<typename Mat>
 inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::object x, const Mat &mat) {
     std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs;
     if(py::isinstance<py::array>(x) && py::cast<py::array>(x).request().ndim == 2) {
-        auto cbuf = py::cast<py::array>(x).request();
-        set_centers(&dvecs, cbuf);
+        set_centers(&dvecs, py::cast<py::array>(x).request());
     } else if(py::isinstance<py::sequence>(x)) {
         auto seq = py::cast<py::sequence>(x);
-        auto fi = seq[0];
-        if(py::isinstance<py::array>(fi)) {
+        if(py::isinstance<py::array>(seq[0])) {
             for(auto item: py::cast<py::sequence>(x)) {
                 auto ca = py::cast<py::array>(item);
                 auto bi = ca.request();
@@ -95,7 +144,7 @@ inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::ob
                 else if(bi.format[0] == 'f') emp(blz::make_cv((float *)bi.ptr, bi.size));
                 else throw std::invalid_argument("Array type must be float or double");
             }
-        } else if(py::isinstance<py::int_>(fi)) {
+        } else if(py::isinstance<py::int_>(seq[0])) {
             const size_t nc = mat.columns();
             for(auto item: py::cast<py::sequence>(x)) {
                 Py_ssize_t rownum = py::cast<py::int_>(item).cast<Py_ssize_t>();
@@ -113,6 +162,43 @@ inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::ob
     } else throw std::invalid_argument("centers must be a 2d numpy array or sequence containing numpy arrays of the full vectors or center ids");
     return dvecs;
 }
+template<typename FT>
+std::vector<blz::DynamicVector<FT, blz::rowVector>> obj2dvec(
+    py::object x, py::array_t<FT, py::array::c_style | py::array::forcecast> dataset) {
+    std::vector<blz::DynamicVector<FT, blz::rowVector>> dvecs;
+    if(py::isinstance<py::array>(x) && py::cast<py::array>(x).request().ndim == 2) {
+        set_centers(&dvecs, py::cast<py::array>(x).request());
+    } else if(py::isinstance<py::sequence>(x)) {
+        auto seq = py::cast<py::sequence>(x);
+        if(py::isinstance<py::array>(seq[0])) {
+            for(auto item: py::cast<py::sequence>(x)) {
+                auto ca = py::cast<py::array>(item);
+                auto bi = ca.request();
+                auto emp = [&](const auto &x) {dvecs.emplace_back() = trans(x);};
+                if(bi.format[0] == 'd') emp(blz::make_cv((double *)bi.ptr, bi.size));
+                else if(bi.format[0] == 'f') emp(blz::make_cv((float *)bi.ptr, bi.size));
+                else throw std::invalid_argument("Array type must be float or double");
+            }
+        } else if(py::isinstance<py::int_>(seq[0])) {
+            auto dbi = dataset.request();
+            const size_t nc = dbi.shape[1];
+            for(auto item: py::cast<py::sequence>(x)) {
+                const py::ssize_t rownum = py::cast<py::int_>(item).cast<Py_ssize_t>();
+                auto &v = dvecs.emplace_back();
+                v.resize(nc);
+                switch(standardize_dtype(dbi.format)[0]) {
+                    case 'd': v = trans(blz::make_cv((double *)dbi.ptr + rownum * nc, nc)); break;
+                    case 'f': v = trans(blz::make_cv((float *)dbi.ptr + rownum * nc, nc)); break;
+                    case 'I': case 'i': v = trans(blz::make_cv((uint32_t *)dbi.ptr + rownum * nc, nc)); break;
+                    case 'H': case 'h': v = trans(blz::make_cv((uint16_t *)dbi.ptr + rownum * nc, nc)); break;
+                    default: throw std::runtime_error("Center items must be double, float, uint32, or uint16");
+                }
+            }
+        } else throw std::invalid_argument("Invalid: expected numpy array or list of numpy arrays or list of center ids");
+    } else throw std::invalid_argument("centers must be a 2d numpy array or sequence containing numpy arrays of the full vectors or center ids");
+    return dvecs;
+}
+
 inline std::string size2dtype(Py_ssize_t n) {
     if(n > 0xFFFFFFFFu) return "L";
     if(n > 0xFFFFu) return "I";
