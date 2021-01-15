@@ -1185,14 +1185,6 @@ public:
         assert(ret >= -1e-2 * (row_sums_[i] + row_sums_[j]) || !std::fprintf(stderr, "ret: %g\n", ret));
         return std::max(ret, FT(0.));
     }
-    FT ollr(size_t i, size_t j) const {
-        if(IS_SPARSE && prior_data_) {
-            std::fprintf(stderr, "note: ollr with prior is slightly incorrect due to the sparsity-destroying nature of the prior.\n");
-        }
-        FT ret = __getjsc(i) * row_sums_[i] + __getjsc(j) * row_sums_[j]
-            - blaze::dot(weighted_row(i) + weighted_row(j), neginf2zero(blaze::log((row(i) + row(j)) * .5)));
-        return std::max(ret, FT(0.));
-    }
     FT uwllr(size_t i, size_t j) const {
         if constexpr(IS_SPARSE) {
             if(prior_data_)
@@ -1304,7 +1296,7 @@ private:
             }
         }
 
-        //std::fprintf(stderr, "Set up row sums\n");
+        std::fprintf(stderr, "Set up row sums\n");
         if(dist::needs_logs(measure_)) {
             if(!IS_SPARSE) {
                 logdata_ = CacheMatrixType(neginf2zero(log(data_)));

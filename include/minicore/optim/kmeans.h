@@ -50,9 +50,7 @@ template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 auto
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false) {
-#if 1
     std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
-#endif
     std::vector<IT> centers(k, IT(0));
     blz::DV<FT> distances(np, std::numeric_limits<FT>::max());
     {
@@ -83,7 +81,10 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         setnewc:
         if(weights) {
             auto w = blz::make_cv(weights, np);
-            rvals = w * distances;
+            if constexpr(blaze::TransposeFlag_v<decltype(w)> == blaze::TransposeFlag_v<blz::DV<FT>>)
+                rvals = w * distances;
+            else
+                rvals = trans(w) * distances;
             newc = reservoir_simd::sample(rvals.data(), np, rng(), fmt);
         } else {
             newc = reservoir_simd::sample(distances.data(), np, rng(), fmt);
