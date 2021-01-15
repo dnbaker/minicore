@@ -89,6 +89,7 @@ template<typename Matrix, typename RNG, typename Norm=blz::sqrL2Norm, typename W
 auto get_initial_centers(const Matrix &matrix, RNG &rng,
                          unsigned k, unsigned kmc2_rounds, int lspp, bool use_exponential_skips, const Norm &norm, WeightT *const weights=static_cast<WeightT *>(nullptr))
 {
+    constexpr bool is_dense_matrix = blaze::IsDenseMatrix_v<Matrix>;
     using FT = double;
     const size_t nr = matrix.rows();
     std::vector<uint32_t> indices, asn;
@@ -110,7 +111,7 @@ auto get_initial_centers(const Matrix &matrix, RNG &rng,
     } else {
         std::fprintf(stderr, "[%s] Performing kmeans++\n", __func__);
         std::vector<FT> fcosts;
-        std::tie(indices, asn, fcosts) = coresets::kmeanspp(oracle, rng, nr, k, weights, lspp, use_exponential_skips);
+        std::tie(indices, asn, fcosts) = coresets::kmeanspp(oracle, rng, nr, k, weights, lspp, use_exponential_skips, !is_dense_matrix);
         //indices = std::move(initcenters);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     }

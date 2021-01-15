@@ -49,7 +49,7 @@ using blz::sqrL2Norm;
 template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 auto
-kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false) {
+kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true) {
     std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s.\n", np, k, weights ? " and non-null weights": "");
     std::vector<IT> centers(k, IT(0));
     blz::DV<FT> distances(np, std::numeric_limits<FT>::max());
@@ -107,16 +107,20 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         assignments[newc] = center_idx;
         centers[center_idx] = newc;
         distances[newc] = 0.;
-        OMP_PFOR_DYN
-        for(size_t i = 0; i < np; ++i) {
+        auto compute = [&](size_t i) {
             auto &ldist = distances[i];
-            if(ldist == 0.) continue;
+            if(ldist <= 0.) return;
             auto dist = oracle(newc, i);
             if(dist < ldist) { // Only write if it changed
                 assignments[i] = center_idx;
                 ldist = dist;
             }
-        }
+        };
+        if(parallelize_oracle) {
+            OMP_PFOR_DYN
+            for(size_t i = 0; i < np; ++i)
+                compute(i);
+        } else for(size_t i = 0; i < np; compute(i++));
         ++center_idx;
     }
 

@@ -674,7 +674,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
         auto sampler = coresets::CoresetSampler();
         const coresets::SensitivityMethod sm = measure == L1 || measure == L2 ? coresets::VX: coresets::LBK;
         using WT = const std::remove_const_t<std::decay_t<decltype((*weights)[0])>>;
-        
         const WT *ptr = nullptr;
         if(weights) ptr = weights->data();
         sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, sm);

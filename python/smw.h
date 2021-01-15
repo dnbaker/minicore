@@ -461,10 +461,9 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
             } break;
             default: __builtin_unreachable();
         }
-        OMP_PFOR
+        std::fprintf(stderr, "Computed initial centers\n");
         for(size_t i = 0; i < lcosts.size(); ++i)
             costp[i] = lcosts[i];
-        OMP_PFOR
         for(size_t i = 0; i < lidx.size(); ++i)
             rptr[i] = lidx[i];
         return py::make_tuple(ret, retasn, costs);
