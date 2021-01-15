@@ -39,7 +39,7 @@ void init_pydense(py::module &m) {
                              so.lspp, so.use_exponential_skips, weights);
     },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
-       py::arg("smw"),
+       py::arg("matrix"),
        py::arg("opts"),
        py::arg("weights") = py::none()
     );
@@ -51,17 +51,59 @@ void init_pydense(py::module &m) {
                              so.lspp, so.use_exponential_skips, weights);
     },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
-       py::arg("smw"),
+       py::arg("matrix"),
        py::arg("opts"),
        py::arg("weights") = py::none()
+    );
+     m.def("kmeanspp", [](py::array_t<float, py::array::c_style | py::array::forcecast> arr, int k, py::object measure, py::object prior, py::object seed, py::object nkmc, py::object ntimes,
+                          py::object lspp, py::object weights, py::object expskips) {
+        auto dm = assure_dm(measure);
+        auto arri = arr.request();
+        if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
+        blz::CustomMatrix<float, unaligned, unpadded, rowMajor> cm((float *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(float));
+        return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), nkmc.cast<py::ssize_t>(), std::max(int(ntimes) - 1, 0),
+                             lspp.cast<py::ssize_t>(), expskips.cast<bool>(), weights);
+    },
+    "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
+       py::arg("matrix"),
+       py::arg("k"),
+       py::arg("msr") = py::int_(2),
+       py::arg("prior") = 0.,
+       py::arg("seed") = 0,
+       py::arg("nkmc") = 0,
+       py::arg("ntimes") = 0,
+       py::arg("lspp") = 0,
+       py::arg("weights") = py::none(),
+       py::arg("expskips") = false
+    );
+     m.def("kmeanspp", [](py::array_t<double, py::array::c_style | py::array::forcecast> arr, int k, py::object measure, py::object prior, py::object seed, py::object nkmc, py::object ntimes,
+                          py::object lspp, py::object weights, py::object expskips) {
+        auto dm = assure_dm(measure);
+        auto arri = arr.request();
+        if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
+        blz::CustomMatrix<double, unaligned, unpadded, rowMajor> cm((double *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(double));
+        return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), nkmc.cast<py::ssize_t>(), std::max(int(ntimes) - 1, 0),
+                             lspp.cast<py::ssize_t>(), expskips.cast<bool>(), weights);
+    },
+    "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
+       py::arg("matrix"),
+       py::arg("k"),
+       py::arg("msr") = py::int_(2),
+       py::arg("prior") = 0.,
+       py::arg("seed") = 0,
+       py::arg("nkmc") = 0,
+       py::arg("ntimes") = 0,
+       py::arg("lspp") = 0,
+       py::arg("weights") = py::none(),
+       py::arg("expskips") = false
     );
 
     m.def("greedy_select", mat2tup<double>,
       "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
-       py::arg("smw"), py::arg("sumopts"));
+       py::arg("matrix"), py::arg("sumopts"));
     m.def("greedy_select", mat2tup<float>,
       "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
-       py::arg("smw"), py::arg("sumopts"));
+       py::arg("matrix"), py::arg("sumopts"));
     m.def("d2_select",  [](py::array mat, const SumOpts &so, py::object weights) {
         auto matinf = mat.request();
         const size_t nr = matinf.shape[0], nc = matinf.shape[1];
@@ -101,5 +143,5 @@ void init_pydense(py::module &m) {
         std::copy(asn.begin(), asn.end(), (uint32_t *)api.ptr);
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
-       py::arg("smw"), py::arg("sumopts"), py::arg("weights") = py::none());
+       py::arg("matrix"), py::arg("sumopts"), py::arg("weights") = py::none());
 }
