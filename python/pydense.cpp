@@ -61,7 +61,7 @@ void init_pydense(py::module &m) {
         auto arri = arr.request();
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
         blz::CustomMatrix<float, unaligned, unpadded, rowMajor> cm((float *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(float));
-        return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), nkmc.cast<py::ssize_t>(), std::max(int(ntimes) - 1, 0),
+        return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), nkmc.cast<py::ssize_t>(), std::max(ntimes.cast<int>() - 1, 0),
                              lspp.cast<py::ssize_t>(), expskips.cast<bool>(), weights);
     },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
@@ -82,7 +82,7 @@ void init_pydense(py::module &m) {
         auto arri = arr.request();
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
         blz::CustomMatrix<double, unaligned, unpadded, rowMajor> cm((double *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(double));
-        return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), nkmc.cast<py::ssize_t>(), std::max(int(ntimes) - 1, 0),
+        return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), nkmc.cast<py::ssize_t>(), std::max(ntimes.cast<int>() - 1, 0),
                              lspp.cast<py::ssize_t>(), expskips.cast<bool>(), weights);
     },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
