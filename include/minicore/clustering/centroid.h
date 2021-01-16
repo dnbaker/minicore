@@ -125,10 +125,10 @@ void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nas
             const auto rinv = evaluate(1. / elements(*rs, asp, nasn));
             if constexpr(blz::TransposeFlag_v<decltype(rinv)> == SO) {
                 auto expmat = blaze::expand(trans(rinv), nc);
-                ctr = blaze::mean<blaze::columnwise>(rowsel % trans(expmat));
+                ctr = blaze::sum<blaze::columnwise>(rowsel % trans(expmat));
             } else {
                 auto expmat = blaze::expand(rinv, nc);
-                ctr = blaze::mean<blaze::columnwise>(rowsel % expmat);
+                ctr = blaze::sum<blaze::columnwise>(rowsel % expmat);
             }
         } else ctr = blaze::mean<blaze::columnwise>(rowsel);
     }
