@@ -55,31 +55,36 @@ void set_center(CtrT &lhs, const util::CSparseVector<VT, IT> &rhs) {
     for(const auto &pair: rhs) lhs[pair.index()] = pair.value();
 }
 
-template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT=blz::DV<blz::ElementType_t<DataT>>, typename RowSumsT=WeightT>
-void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asn, size_t nasn, WeightT *w = static_cast<WeightT>(nullptr), RowSumsT *rs=static_cast<RowSumsT *>(nullptr))
+template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT=blz::DV<DataT>, typename RowSumsT=WeightT>
+void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asn, size_t nasn, WeightT *w = static_cast<WeightT *>(nullptr), RowSumsT *rs=static_cast<RowSumsT *>(nullptr))
 {
-    using VT = std::conditional_t<std::is_floating_point_v<DataT>, DataT, std::conditional_t<(sizeof(DataT) < 8), float, double>>;
+    using VT = double;
     blz::DV<VT, blz::TransposeFlag_v<CtrT>> mv(mat.columns(), VT(0));
-    double wsum = 0.;
+    double wsum;
+    if(w) wsum = sum(blaze::generate(nasn, [asn,w](auto x) {return (*w)[asn[x]];}));
+    else  wsum = nasn;
+    const double winv = 1. / wsum;
 #ifdef _OPENMP
     #pragma omp parallel for schedule(dynamic, 16) reduction(+:wsum)
 #endif
     for(size_t i = 0; i < nasn; ++i) {
         auto r = row(mat, asn[i]);
-        const double dmul = 1. / (rs ? double((*rs)[i]): 1.);
+        const double dmul = winv / (rs ? double((*rs)[i]): 1.);
         if(w) {
-            double itemw = (*w)[asn[i]];
-            wsum += itemw;
-            itemw *= dmul;
+            VT itemw = (*w)[asn[i]] * dmul;
             SK_UNROLL_4
             for(size_t i = 0; i < r.n_; ++i) {
                 OMP_ATOMIC
                 mv[r.indices_[i]] += r.data_[i] * itemw;
             }
-        } else for(const auto &pair: r) OMP_ATOMIC mv[pair.index()] += pair.value() * dmul;
+        } else {
+            for(const auto &pair: r)
+                OMP_ATOMIC mv[pair.index()] += pair.value() * dmul;
+        }
     }
     if(!wsum) wsum = nasn;
-    ctr = mv / wsum;
+    std::cerr << "mv: " << mv << '\n';
+    ctr = mv;
 }
 
 template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT>
@@ -109,29 +114,52 @@ template<typename CtrT, typename MT, bool SO, typename IT, typename WeightT=blz:
 void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nasn, WeightT *w = static_cast<WeightT*>(nullptr), RowSumsT *rs=static_cast<RowSumsT *>(nullptr)) {
     auto rowsel = rows(*mat, asp, nasn);
     const size_t nc = (*mat).columns();
+    //std::cerr << "rowsel: " << rowsel << '\n';
+    //std::fprintf(stderr, "setting center, %s weights, %s rowsums\n", w ? "with": "without", rs ? "with": "without");
+
     if(w) {
         auto elsel = elements(*w, asp, nasn);
         // weighted sum over total weight -> weighted mean
-        const auto elsum = sum(elsel);
         if(rs) {
             const auto rinv = evaluate(1. / elements(*rs, asp, nasn));
             if constexpr(blz::TransposeFlag_v<decltype(rinv)> == blz::TransposeFlag_v<decltype(elsel)>)
-                ctr = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(elsel * rinv, nc)) / elsum;
+                ctr = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(elsel * rinv, nc)) / sum(elsel);
             else
-                ctr = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(elsel * trans(rinv), nc)) / elsum;
-        } else ctr = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(elsel, nc)) / elsum;
+                ctr = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(elsel * trans(rinv), nc)) / sum(elsel);
+        } else {
+            ctr = blaze::sum<blaze::columnwise>(rowsel % blaze::expand(elsel, nc)) / sum(elsel);
+        }
     } else {
         if(rs) {
             const auto rinv = evaluate(1. / elements(*rs, asp, nasn));
+#if NDEBUG
+            for(size_t i = 0; i < rinv.size(); ++i) {
+                auto rsum = sum(row(rowsel, i));
+                assert(std::abs(rsum * rinv[i] - 1.) < 1e-4 || !std::fprintf(stderr, "rsum: %g. rinv: %g. mult: %g\n", rsum, rinv[i], rsum * rinv[i]));
+            }
+#endif
             if constexpr(blz::TransposeFlag_v<decltype(rinv)> == SO) {
                 auto expmat = blaze::expand(trans(rinv), nc);
-                ctr = blaze::sum<blaze::columnwise>(rowsel % trans(expmat));
+                ctr = blaze::mean<blaze::columnwise>(rowsel % trans(expmat));
             } else {
                 auto expmat = blaze::expand(rinv, nc);
-                ctr = blaze::sum<blaze::columnwise>(rowsel % expmat);
+                ctr = blaze::mean<blaze::columnwise>(rowsel % expmat);
             }
-        } else ctr = blaze::mean<blaze::columnwise>(rowsel);
+            auto csum = sum(ctr);
+            DBG_ONLY(std::fprintf(stderr, "normalized sum is %g\n", csum);)
+        } else {
+            //std::fprintf(stderr, "no rowsums provided\n");
+            ctr = blaze::mean<blaze::columnwise>(rowsel);
+            DBG_ONLY(std::fprintf(stderr, "unnormalized sum is %g\n", sum(ctr));)
+#ifndef NDEBUG
+            auto seval = evaluate(blaze::sum<blz::columnwise>(rowsel) / double(nasn));
+            const double mdiff = sum(abs(ctr - seval)), sevalnorm = blz::l2Norm(seval);
+            assert(sum(abs(ctr - seval)) < 1e-5 * sevalnorm || !std::fprintf(stderr, "mdiff: %g. norm: %g\n", mdiff, sevalnorm));
+#endif
+        }
     }
+    //std::fprintf(stderr, "Total distance from center to all relevant rows after: %g\n", blaze::sum(blaze::generate(nasn, [&](auto idx) {return blz::sqrL2Dist(ctr, row(rowsel, idx));})));
+    //std::cerr << ctr << '\n';
 }
 
 
@@ -601,15 +629,6 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
             set_center(ctrs[i], row(mat, *asp));
         } else {
             set_center_l2(ctrs[i], mat, asp, nasn, weights, eps);
-#if 0
-            auto rowsel = rows(mat, asp, nasn);
-            VERBOSE_ONLY(std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << ctrs[i] << '\n';)
-            if(weights)
-                blz::geomedian(rowsel, ctrs[i], elements(*weights, asp, nasn), eps);
-            else
-                blz::geomedian(rowsel, ctrs[i], eps);
-            VERBOSE_ONLY(std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';)
-#endif
         }
     }
 }
@@ -735,7 +754,27 @@ bool set_centroids_full_mean(const Mat &mat,
                 set_center(ctr, mr);
             }
         } else {
-            set_center(ctr, mat, asp, nasn, weights, isnorm ? static_cast<const SumT *>(nullptr): &rowsums);
+            set_center(ctr, mat, asp, nasn, weights, isnorm ? &rowsums: static_cast<const SumT *>(nullptr));
+#ifndef NDEBUG
+            if(isnorm) {
+                const auto csum = blz::sum(ctr);
+                assert(std::abs(csum - 1.) <= 1e-4 || !std::fprintf(stderr, "csum: %g. expected 1.\n", csum));
+            }
+#endif
+#if 0
+            std::cerr << "Center set for " << nasn << " points: " << ctr << '\n';
+            if constexpr(blaze::IsSparseVector_v<CtrsT>) {
+                for(const auto &item: ctr) std::fprintf(stderr, "%zu:%g\n", item.index(), double(item.value()));
+            } else {
+                for(size_t i = 0; i < ctr.size(); ++i) std::fprintf(stderr, "%g,", double(ctr[i]));
+                std::fputc('\n', stderr);
+            }
+#endif
+            if(isnan(ctr)) {
+                []() __attribute__((noinline,cold)) {
+                    throw std::runtime_error("Unexpected nan in ctr");
+                }();
+            }
         }
     }
     return restarted_any;

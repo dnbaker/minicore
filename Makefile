@@ -79,7 +79,7 @@ endif
 
 TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskmattestdbg graphtestdbg jvtestdbg kmpptestdbg tbasdbg \
       jsdtestdbg jsdkmeanstestdbg jsdhashdbg fgcinctestdbg geomedtestdbg oracle_thorup_ddbg sparsepriortestdbg istestdbg msvdbg knntestdbg \
-        fkmpptestdbg mergetestdbg solvetestdbg testmsrdbg testmsrcsrdbg
+        fkmpptestdbg mergetestdbg solvetestdbg testmsrdbg testmsrcsrdbg test_centroiddbg
 
 all: $(EX)
 

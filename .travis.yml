@@ -40,3 +40,4 @@ script:
   - ./mergetestdbg
   - ./testmsrdbg
   - ./testmsrcsrdbg
+  - ./test_centroiddbg

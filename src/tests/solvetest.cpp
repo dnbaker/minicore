@@ -84,7 +84,7 @@ int main(int argc, char *argv[]) {
         if(nrows == 0) nrows = 500;
     }
     if(!x.rows() && !x.columns()) {
-        x = blz::generate(nrows, ncols, [](auto x, auto y) -> int {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); auto v = mt(); if(v & 7) return 0;return x * ((v >> 6) % 64);});
+        x = blz::generate(nrows, ncols, [](auto x, auto y) {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); return std::uniform_real_distribution<double>()(mt);});
     }
     OMP_ONLY(omp_set_num_threads(nthreads);)
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv) {
@@ -192,5 +192,5 @@ int main(int argc, char *argv[]) {
     clust::perform_hard_minibatch_clustering(x, msr, prior, is_mbcenters, asn, hardcosts, &weights, mbsize, NUMITER, 10, /*reseed_after=*/minreseed, /*with_replacement=*/with_replacement, /*seed=*/rng());
     std::fprintf(stderr, "now, using coreset minibatch clustering.\n");
     auto cs_mbcenters = ocenters;
-    minicore::hmb_coreset_clustering(x, msr, prior, cs_mbcenters, asn, hardcosts, static_cast<blz::DV<FLOAT_TYPE> *>(nullptr), mbsize, NUMITER, 10, minreseed, with_replacement, rng());
+    minicore::hmb_coreset_clustering(x, msr, prior, cs_mbcenters, asn, hardcosts, static_cast<blz::DV<FLOAT_TYPE> *>(nullptr), mbsize, NUMITER, 10, minreseed, rng());
 }

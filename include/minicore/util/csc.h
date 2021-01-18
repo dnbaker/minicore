@@ -1041,7 +1041,7 @@ std::ostream& operator<< (std::ostream& out, const CSparseVector<VT, IT> & item)
 {
     auto it = item.begin();
     for(size_t i = 0; i < item.dim_; ++i) {
-        if(it->index() > i) {
+        if(it == item.end() || it->index() > i) {
             out << 0.;
         } else {
             out << it->value();
@@ -1061,7 +1061,6 @@ std::ostream& operator<< (std::ostream& out, const CSparseMatrix<VT, IT, IPtrT> 
         out << row(item, i, blz::unchecked);
     }
     out << ")";
-    out << '\n';
     return out;
 }
 template<typename VT, bool SO, typename SVT, typename SVI>
