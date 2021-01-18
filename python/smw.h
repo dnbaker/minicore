@@ -222,7 +222,7 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
     try {
     smw.perform([&](auto &x) {
         using ET = typename std::decay_t<decltype(x)>::ElementType;
-        using FT = std::conditional_t<std::is_floating_point_v<ET>, ET, std::conditional_t<(sizeof(ET) <= 4), float, double>>;
+        using FT = std::conditional_t<(sizeof(ET) <= 4), float, double>;
         auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
             // Note that this has been transposed
             return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));
@@ -330,7 +330,7 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
         auto costp = (float *)costs.request().ptr;
         smw.perform([&](auto &x) {
             using TmpT = typename std::decay_t<decltype(x)>::ElementType;
-            using FT = std::conditional_t<sizeof(TmpT) <= 4, float, double>;
+            using FT = std::conditional_t<(sizeof(TmpT) <= 4), float, double>;
             auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
                 // Note that this has been transposed
                 return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));

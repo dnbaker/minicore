@@ -240,24 +240,34 @@ void assign_points_hard(const Mat &mat,
                 std::abort();
             }
             ret = 0.;
-        } else if(std::isnan(ret)) {
-            std::fprintf(stderr, "ret: %g\n", ret);
+        } else if(unlikely(std::isnan(ret))) {
+            std::fprintf(stderr, "ret: %g.row: ", ret);
+            std::cerr << row(mat, id);
+            std::fputc('\n', stderr);
+            std::fprintf(stderr, "ctr: \n");
+            std::cerr << centers[cid];
             throw std::runtime_error("nan");
             ret = 0.;
         }
         return ret;
     };
     const size_t e = costs.size(), k = centers.size();
-    OMP_PFOR
-    for(size_t i = 0; i < e; ++i) {
-        auto cost = compute_cost(i, 0);
+    auto onerow = [&](auto x) {
+        auto cost = compute_cost(x, 0);
         asn_t bestid = 0;
         for(unsigned j = 1; j < k; ++j)
-            if(auto newcost = compute_cost(i, j); newcost < cost)
+            if(auto newcost = compute_cost(x, j); newcost < cost)
                 bestid = j, cost = newcost;
-        costs[i] = cost;
-        asn[i] = bestid;
-        VERBOSE_ONLY(std::fprintf(stderr, "point %zu is assigned to center %u with cost %0.12g\n", i, bestid, cost);)
+        costs[x] = cost; asn[x] = bestid;
+        VERBOSE_ONLY(std::fprintf(stderr, "point %zu is assigned to center %u with cost %0.12g\n", x, bestid, cost);)
+    };
+    if constexpr(blaze::IsDenseMatrix_v<Mat>) {
+        for(size_t i = 0; i < e; onerow(i++));
+    } else {
+        OMP_PFOR
+        for(size_t i = 0; i < e; ++i) {
+            onerow(i);
+        }
     }
 }
 
@@ -528,7 +538,9 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             } else if(measure == distance::TVD) {
                 tvd_median(mat, centers[i], asnptr, asnsz, weights, rowsums);
             } else {
-                clustering::set_center(centers[i], mat, asnptr, asnsz, weights);
+                using Ptr = const blz::DV<double> *;
+                Ptr rsump = isnorm ? &rowsums: static_cast<Ptr>(nullptr);
+                clustering::set_center(centers[i], mat, asnptr, asnsz, weights, rsump);
             }
             //std::cerr << "Center[" << i << "] " << trans(centers[i]) << '\n';
             VERBOSE_ONLY(std::cerr << "##center with sum " << sum(centers[i]) << " and index "  << i << ": " << centers[i] << '\n';)
@@ -713,7 +725,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 csasn[i] = bestid;
                 cscosts[i] = bestscore;
             }
-            perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw);
+            perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw, 0., 3);
             centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
             ++iternum;
         }

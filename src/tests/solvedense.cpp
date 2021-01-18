@@ -77,17 +77,18 @@ int main(int argc, char *argv[]) {
                 std::fprintf(stderr, "Usage: %s <flags> \n-z: load blaze matrix from path\n-P: set prior (1.)\n-T set temp [1.]\n-p set num threads\n-m Set measure (MKL, 5)\n-k: set k [10]\t-T transpose mtx file\t-M parse mtx file from argument\n", *argv);
                 return EXIT_FAILURE;
     }}
-    int nrows = 500, ncols = 1000;
+    int nrows = 50, ncols = 5;
     if(char *s = std::getenv("NCOLS")) {
         ncols = std::atoi(s);
-        if(ncols == 0) ncols = 1000;
+        if(ncols == 0) ncols = 5;
     }
     if(char *s = std::getenv("NROWS")) {
         nrows = std::atoi(s);
-        if(nrows == 0) nrows = 500;
+        if(nrows == 0) nrows = 50;
     }
     if(!x.rows() && !x.columns()) {
-        x = blz::generate(nrows, ncols, [](auto x, auto y) -> int {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); auto v = mt(); if(v % 8) return 0;return x * ((v >> 6) % 64);});
+        x = blz::generate(nrows, ncols, [](auto x, auto y) {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); return std::uniform_real_distribution<double>()(mt) * (x + 1);});
+        std::cerr << "x: " << x << '\n';
     }
     OMP_ONLY(omp_set_num_threads(nthreads);)
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv) {
@@ -97,8 +98,8 @@ int main(int argc, char *argv[]) {
     const size_t nr = x.rows(), nc = x.columns();
     std::fprintf(stderr, "prior: %g\n", prior[0]);
     std::fprintf(stderr, "msr: %d/%s\n", (int)msr, dist::msr2str(msr));
-    std::vector<blaze::CompressedVector<FLOAT_TYPE, blaze::rowVector>> centers;
-    std::vector<blaze::CompressedVector<FLOAT_TYPE, blaze::rowVector>> ocenters;
+    std::vector<blaze::DynamicVector<FLOAT_TYPE, blaze::rowVector>> centers;
+    std::vector<blaze::DynamicVector<FLOAT_TYPE, blaze::rowVector>> ocenters;
     const FLOAT_TYPE psum = prior[0] * nc;
     blz::DV<FLOAT_TYPE> rowsums = blaze::sum<blz::rowwise>(x);
     blz::DV<FLOAT_TYPE> centersums(k);
@@ -111,9 +112,8 @@ int main(int argc, char *argv[]) {
         ids = {fp};
         centers.emplace_back(row(x, fp));
         centersums[0] = blz::sum(centers[0]);
-        hardcosts = blaze::generate(nr, [&](auto id) {
-            return cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, id, blz::unchecked), centers[0], prior, psum, rowsums[id], centersums[0]);
-        });
+        hardcosts.resize(nr);
+        for(size_t i = 0; i < nr; ++i) hardcosts[i] = cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, i, blz::unchecked), centers[0], prior, psum, rowsums[i], centersums[0]);
         while(centers.size() < k) {
             size_t index = reservoir_simd::sample(hardcosts.data(), nr, rng());
             std::fprintf(stderr, "Selected point %zu with cost %g\n", index, hardcosts[index]);
@@ -121,7 +121,6 @@ int main(int argc, char *argv[]) {
             hardcosts[index] = 0;
             centers.emplace_back(row(x, index));
             centersums[cid] = rowsums[index];
-            OMP_PFOR
             for(size_t id = 0; id < nr; ++id) {
                 if(id == index) {
                     asn[id] = cid; hardcosts[id] = 0.;
@@ -141,11 +140,22 @@ int main(int argc, char *argv[]) {
             if(std::find(ids.begin(), ids.end(), rid) == ids.end())
                 ids.emplace_back(rid);
         }
-        for(const auto id: ids) centers.emplace_back(row(x, id));
+        for(const auto id: ids) {
+            centers.emplace_back(row(x, id));
+            std::cerr << "row: " << row(x, id) << "\nvs ctr: " << centers.back() << '\n';
+        }
+        std::fprintf(stderr, "Getting sums\n");
         centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
-        complete_hardcost = blaze::generate(nr, k, [&](auto r, auto col) {
-            return cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
-        });
+        std::fprintf(stderr, "Getting hardcosts\n");
+        complete_hardcost.resize(nr, k);
+        for(size_t i = 0; i < nr; ++i) {
+            auto r(row(complete_hardcost, i));
+            assert(r.size() == k);
+            const auto rs = rowsums[i];
+            for(size_t j = 0; j < k; ++j)
+                r[j] = cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, i), centers[j], prior, psum, rs, centersums[j]);
+        }
+        std::fprintf(stderr, "Getting hardcost reduction\n");
         std::cerr << "full costs range: " << min(complete_hardcost) << " -> " << max(complete_hardcost) << '\n';
         hardcosts = blaze::generate(nr, [&](auto id) {
             auto r = row(complete_hardcost, id, blaze::unchecked);
@@ -159,6 +169,7 @@ int main(int argc, char *argv[]) {
             asn[id] = cid++;
         }
     }
+    std::fprintf(stderr, "initialized!\n");
     ocenters = centers;
     assert(rowsums.size() == x.rows());
     assert(centersums.size() == centers.size());
@@ -176,21 +187,4 @@ int main(int argc, char *argv[]) {
     if(!loaded_blaze) clust::perform_hard_clustering(x, msr, prior, centers, asn, hardcosts);
     auto t2 = std::chrono::high_resolution_clock::now();
     std::fprintf(stderr, "Wall time for clustering: %gms\n", std::chrono::duration<FLOAT_TYPE, std::milli>(t2 - t1).count());
-    std::fprintf(stderr, "Now performing minibatch clustering\n");
-    size_t mbsize = 500;
-    if(char *s = std::getenv("MBSIZE")) {
-        mbsize = std::strtoull(s, nullptr, 10);
-    }
-    std::fprintf(stderr, "mbsize: %zu\n", mbsize);
-    auto mbcenters = ocenters;
-    blz::DV<FLOAT_TYPE> weights(x.rows(), 1.);
-    int minreseed = 0;
-    std::fprintf(stderr, "minibatch clustering with no weights, %s replacement, %s importance sampling\n",  with_replacement ? "with": "without", "without");
-    clust::perform_hard_minibatch_clustering(x, msr, prior, mbcenters, asn, hardcosts, (std::vector<FLOAT_TYPE> *)nullptr, mbsize, NUMITER, 10, minreseed, /*with_replacement=*/with_replacement, /*seed=*/rng());
-    auto mbuwcenters = ocenters;
-    std::fprintf(stderr, "minibatch clustering with uniform weights, %s replacement, %s importance sampling\n",  with_replacement ? "with": "without", "without");
-    clust::perform_hard_minibatch_clustering(x, msr, prior, mbuwcenters, asn, hardcosts,  &weights, mbsize, NUMITER, 10, /*reseed_after=*/minreseed, /*with_replacement=*/with_replacement, /*seed=*/rng());
-    auto is_mbcenters = ocenters;
-    std::fprintf(stderr, "minibatch clustering with uniform weights, %sreplacement, %s importance sampling\n", with_replacement ? "with": "without", "without");
-    clust::perform_hard_minibatch_clustering(x, msr, prior, is_mbcenters, asn, hardcosts, &weights, mbsize, NUMITER, 10, /*reseed_after=*/minreseed, /*with_replacement=*/with_replacement, /*seed=*/rng());
 }

@@ -65,11 +65,13 @@ enum DissimilarityMeasure {
 
 static constexpr inline bool msr_is_normalized(DissimilarityMeasure msr) {
     switch(msr) {
+#if 0
         case IS: case SIS: case RSIS: case REVERSE_ITAKURA_SAITO: case TVD:
         case MKL: case REVERSE_MKL: case COSINE_DISTANCE: case COSINE_SIMILARITY:
         case HELLINGER: case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE:
         case JSM: case JSD:
             return true;
+#endif
 
         case LLR:
         case SRLRT: case L1: case L2: case SQRL2: case UWLLR: case SRULRT:
