@@ -5,6 +5,7 @@ from setuptools.command.build_ext import build_ext
 from glob import glob
 import multiprocessing
 import multiprocessing.pool
+from subprocess import check_output
 
 
 sleefdir = environ.get("SLEEF_DIR", "../sleef/build")
@@ -175,7 +176,7 @@ class BuildExt(build_ext):
         build_ext.build_extensions(self)
 
 
-__version__ = "0.2.4"
+__version__ = check_output("git describe --abbrev=4", shell=True).decode().split("-")[0]
 setup(
     name='minicore',
     version=__version__,
