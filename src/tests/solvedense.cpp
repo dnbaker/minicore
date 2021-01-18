@@ -142,7 +142,6 @@ int main(int argc, char *argv[]) {
         }
         for(const auto id: ids) {
             centers.emplace_back(row(x, id));
-            std::cerr << "row: " << row(x, id) << "\nvs ctr: " << centers.back() << '\n';
         }
         std::fprintf(stderr, "Getting sums\n");
         centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});

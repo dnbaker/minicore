@@ -131,7 +131,7 @@ void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nas
     } else {
         if(rs) {
             const auto rinv = evaluate(1. / elements(*rs, asp, nasn));
-#if NDEBUG
+#ifndef NDEBUG
             for(size_t i = 0; i < rinv.size(); ++i) {
                 auto rsum = sum(row(rowsel, i));
                 assert(std::abs(rsum * rinv[i] - 1.) < 1e-4 || !std::fprintf(stderr, "rsum: %g. rinv: %g. mult: %g\n", rsum, rinv[i], rsum * rinv[i]));
@@ -144,8 +144,7 @@ void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nas
                 auto expmat = blaze::expand(rinv, nc);
                 ctr = blaze::mean<blaze::columnwise>(rowsel % expmat);
             }
-            auto csum = sum(ctr);
-            DBG_ONLY(std::fprintf(stderr, "normalized sum is %g\n", csum);)
+            DBG_ONLY(std::fprintf(stderr, "normalized sum is %g\n", sum(ctr));)
         } else {
             //std::fprintf(stderr, "no rowsums provided\n");
             ctr = blaze::mean<blaze::columnwise>(rowsel);

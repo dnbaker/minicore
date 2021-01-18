@@ -175,7 +175,7 @@ class BuildExt(build_ext):
         build_ext.build_extensions(self)
 
 
-__version__ = "0.2.2"
+__version__ = "0.2.4"
 setup(
     name='minicore',
     version=__version__,
