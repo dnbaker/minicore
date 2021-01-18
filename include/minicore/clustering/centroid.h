@@ -83,7 +83,6 @@ void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &
         }
     }
     if(!wsum) wsum = nasn;
-    std::cerr << "mv: " << mv << '\n';
     ctr = mv;
 }
 
