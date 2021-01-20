@@ -1626,7 +1626,7 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
 }
 
 template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
-FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
+double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
 {
     static_assert(std::is_floating_point_v<FT>, "FT must be floating-point");
     const size_t nd = mr.size();
@@ -1650,8 +1650,9 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
     if(std::isnan(rhinc)) rhinc = 0.;
     assert(!std::isnan(lhinc));
     assert(!std::isnan(rhinc));
+    double ret;
     if constexpr(!(blaze::IsSparseVector_v<CtrT> || util::IsCSparseVector_v<CtrT>) && !(blaze::IsSparseVector_v<MatrixRowT> || util::IsCSparseVector_v<MatrixRowT>)) {
-        FT ret = 0.;
+        ret = 0.;
         switch(msr) {
             case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC: case DOT_PRODUCT_SIMILARITY:
             case PROBABILITY_DOT_PRODUCT_SIMILARITY:
@@ -1700,7 +1701,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 FT klc = dot(mr + pv, ctr + pv);
                 FT div = std::sqrt(sqrNorm(mr + pv)) * std::sqrt(sqrNorm(ctr + pv));
                 ret = klc / div;
-                ret = std::max(std::min(ret, FT(1.)), FT(0));
+                ret = std::max(std::min(ret, 1.), 0.);
                 static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
                 if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
                 break;
@@ -1763,7 +1764,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     klc = dot(tmpmulx + lhinc, tmpmuly + rhinc);
                     FT div = std::sqrt(sqrNorm(tmpmulx + lhinc)) * std::sqrt(sqrNorm(tmpmuly + rhinc));
                     ret = klc / div;
-                    ret = std::max(std::min(ret, FT(1.)), FT(0));
+                    ret = std::max(std::min(ret, 1.), 0.);
                     static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
                     if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
                     break;
@@ -1772,7 +1773,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 if(msr == LLR || msr == SRLRT) {
                     ret *= (lhsum + rhsum);
                 }
-                ret = std::max(ret, FT(0));
+                ret = std::max(ret, 0.);
                 if(msr == SRULRT || msr == SRLRT || msr == JSM) ret = std::sqrt(ret);
                 if(ret == std::numeric_limits<FT>::infinity()) {
                     ret = std::numeric_limits<FT>::max();
@@ -1790,7 +1791,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                  shl = std::log((lhinc + rhinc) * FT(.5)),
                  shincl = rhinc + lhinc > 0. ? (lhinc + rhinc) * shl: 0.;
         assert(!std::isnan(shl));
-        FT ret;
         assert((std::abs(mrsum - sum(mr)) < 1e-10 && std::abs(ctrsum - sum(ctr)) < 1e-10)
                || !std::fprintf(stderr, "[%s] Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", __PRETTY_FUNCTION__, double(sum(mr)), double(sum(ctr)), double(mrsum), double(ctrsum)));
         auto wc = ctr * rhrsi; //
@@ -1832,7 +1832,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     FT klc = dot(tmpmulx + pv, tmpmuly + pv) + sharednz * (pv * pv);
                     FT div = std::sqrt(sqrNorm(tmpmulx + pv) + sharednz * pv * pv) * std::sqrt(sqrNorm(tmpmuly + pv) + sharednz * pv * pv);
                     ret = klc / div;
-                    ret = std::max(std::min(ret, FT(1.)), FT(0));
+                    ret = std::max(std::min(ret, 1.), 0.);
                     static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
                     if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
                     break;
@@ -1897,7 +1897,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                     klc = dot(tmpmulx + lhinc, tmpmuly + rhinc) + sharednz * (lhinc * rhinc);
                     FT div = std::sqrt(sqrNorm(tmpmulx + lhinc) + sharednz * lhinc * lhinc) * std::sqrt(sqrNorm(tmpmuly + rhinc) + sharednz * rhinc * rhinc);
                     ret = klc / div;
-                    ret = std::max(std::min(ret, FT(1.)), FT(0));
+                    ret = std::max(std::min(ret, 1.), 0.);
                     static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
                     if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
                     break;
@@ -1913,7 +1913,7 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
                 if(msr == LLR || msr == SRLRT) {
                     ret *= (lhsum + rhsum);
                 }
-                ret = std::max(ret, FT(0));
+                ret = std::max(ret, 0.);
                 if(msr == SRULRT || msr == SRLRT || msr == JSM) ret = std::sqrt(ret);
                 if(ret == std::numeric_limits<FT>::infinity()) {
                     ret = std::numeric_limits<FT>::max();

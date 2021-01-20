@@ -151,7 +151,7 @@ void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nas
 #ifndef NDEBUG
             auto seval = evaluate(blaze::sum<blz::columnwise>(rowsel) / double(nasn));
             const double mdiff = sum(abs(ctr - seval)), sevalnorm = blz::l2Norm(seval);
-            assert(sum(abs(ctr - seval)) < 1e-5 * sevalnorm || !std::fprintf(stderr, "mdiff: %g. norm: %g\n", mdiff, sevalnorm));
+            assert(sum(abs(ctr - seval)) < 1e-4 * sevalnorm || !std::fprintf(stderr, "mdiff: %g. norm: %g\n", mdiff, sevalnorm));
 #endif
         }
     }

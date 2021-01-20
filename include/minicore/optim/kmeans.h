@@ -53,16 +53,23 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
 {
     const bool emit_log = (np > 100000 || k >= 25);
     if(emit_log)
-        std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s and %s, and %s.\n", np, k, weights ? " and non-null weights": "", parallelize_oracle ? "unparallelized": "parallelized", use_exponential_skips ? "with exponential skips": "SIMD sampling");
+        std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s and %s, and %s.\n", np, k, weights ? " and non-null weights": "", parallelize_oracle ? "parallelized": "unparallelized", use_exponential_skips ? "with exponential skips": "SIMD sampling");
     std::vector<IT> centers(k, IT(0));
     blz::DV<FT> distances(np, std::numeric_limits<FT>::max());
     {
         auto fc = rng() % np;
         centers[0] = fc;
-        distances = blaze::generate(np,[&](auto i) __attribute__((always_inline)) {
-            if(unlikely(i == fc)) return FT(0.);
-            return FT(oracle(fc, i));
-        });
+        if(parallelize_oracle) {
+            distances = blaze::generate(np,[&](auto i) __attribute__((always_inline)) {
+                if(unlikely(i == fc)) return FT(0.);
+                return FT(oracle(fc, i));
+            });
+        } else {
+            for(size_t i = 0; i < np; ++i) {
+                if(i == fc) distances[i] = 0.;
+                distances[i] = oracle(fc, i);
+            }
+        }
         assert(distances[fc] == 0.);
     }
     std::vector<IT> assignments(np, IT(0));

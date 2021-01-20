@@ -119,8 +119,8 @@ perform_hard_clustering(const MT &mat,
         if(w) return blz::dot(costs, *w);
         else  return blz::sum(costs);
     };
-    const blz::DV<FT> rowsums = sum<blz::rowwise>(mat);
-    blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return sum(centers[x]);});
+    const blz::DV<double> rowsums = sum<blz::rowwise>(mat);
+    blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x){return sum(centers[x]);});
     assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
     PYBIND11_EXCEPTION_CHECK();
     const auto initcost = compute_cost();
@@ -152,7 +152,7 @@ perform_hard_clustering(const MT &mat,
         if(cost - newcost < eps * std::max(double(newcost), double(cost))) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g/%0.12g for costs from init %0.12g\n",
-                         cost - newcost, eps * std::max(oldcost, cost), eps, cost, newcost, initcost);
+                         cost - newcost, eps * std::max(newcost, cost), eps, cost, newcost, initcost);
 #endif
             break;
         }
@@ -309,8 +309,8 @@ auto perform_soft_clustering(const MT &mat,
                              double eps=DEFAULT_EPS)
 {
     auto centers_cpy(centers);
-    blz::DV<FT> centersums(centers.size());
-    blz::DV<FT> rowsums((mat).rows());
+    blz::DV<double> centersums(centers.size());
+    blz::DV<double> rowsums((mat).rows());
     rowsums = sum<rowwise>(mat);
     centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
     double cost = std::numeric_limits<double>::max();
@@ -411,21 +411,21 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        FT ret = cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        double ret = cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0 || std::isnan(ret))
             ret = 0.;
         else if(std::isinf(ret))
-            ret = std::numeric_limits<FT>::max(); // To make it finite
+            ret = std::numeric_limits<double>::max(); // To make it finite
         return ret;
     };
     const size_t np = costs.size(), k = centers.size();
     auto perform_assign = [&]() {
         OMP_PFOR_DYN
         for(size_t i = 0; i < np; ++i) {
-            FT mincost = std::numeric_limits<FT>::max();
+            double mincost = std::numeric_limits<double>::max();
             IT minind = -1;
             for(size_t j = 0; j < k; ++j)
-                if(const FT nc = compute_point_cost(i, j);nc < mincost)
+                if(const double nc = compute_point_cost(i, j);nc < mincost)
                     mincost = nc, minind = j;
             asn[i] = minind;
             costs[i] = mincost;
@@ -528,7 +528,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
         for(size_t i = 0; i < mbsize; ++i) {
             const auto ind = sampled_indices[i];
             IT oldasn = asn[ind], bestind = -1;
-            FT bv = std::numeric_limits<FT>::max();
+            double bv = std::numeric_limits<double>::max();
             for(size_t j = 0; j < k; ++j)
                 if(auto nv = compute_point_cost(ind, j); nv < bv)
                     bv = nv, bestind = j;
@@ -610,11 +610,11 @@ auto hmb_coreset_clustering(const Matrix &mat,
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        FT ret = cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        double ret = cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0 || std::isnan(ret))
             ret = 0.;
         else if(std::isinf(ret))
-            ret = std::numeric_limits<FT>::max(); // To make it finite
+            ret = std::numeric_limits<double>::max(); // To make it finite
         return ret;
     };
     const size_t np = costs.size(), k = centers.size();
@@ -633,10 +633,10 @@ auto hmb_coreset_clustering(const Matrix &mat,
             // and restart any centers with no assigned points
             OMP_PFOR_DYN
             for(size_t i = 0; i < np; ++i) {
-                FT mincost = std::numeric_limits<FT>::max();
+                double mincost = std::numeric_limits<double>::max();
                 IT minind = -1;
                 for(size_t j = 0; j < k; ++j)
-                    if(const FT nc = compute_point_cost(i, j);nc < mincost)
+                    if(const double nc = compute_point_cost(i, j);nc < mincost)
                         mincost = nc, minind = j;
                 asn[i] = minind;
                 costs[i] = mincost;

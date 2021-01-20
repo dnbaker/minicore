@@ -326,8 +326,8 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
         }
         auto retai = py::cast<py::array>(retasn).request();
         auto rptr = (uint32_t *)ret.request().ptr;
-        py::array_t<float> costs(smw.rows());
-        auto costp = (float *)costs.request().ptr;
+        py::array_t<double> costs(smw.rows());
+        auto costp = (double *)costs.request().ptr;
         smw.perform([&](auto &x) {
             using TmpT = typename std::decay_t<decltype(x)>::ElementType;
             using FT = std::conditional_t<(sizeof(TmpT) <= 4), float, double>;
