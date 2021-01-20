@@ -125,7 +125,7 @@ int test2() {
     std::cerr << "Set d2!\n" << dm2 << '\n';
     const auto rowsums = blaze::generate(500, [&](auto x){return sum(row(dm2, x));});
     set_center(ctr, dm2, indices2.data(), 500, static_cast<blz::DV<double> *>(nullptr), &rowsums);
-    std::cerr << ctr << '\n';
+    assert(std::abs(sum(ctr) - 1.) < 1e-4);
     return 0;
 }
 
