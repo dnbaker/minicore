@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
     }
     if(!x.rows() && !x.columns()) {
         x = blz::generate(nrows, ncols, [](auto x, auto y) {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); return std::uniform_real_distribution<double>()(mt) * (x + 1);});
-        std::cerr << "x: " << x << '\n';
+        //std::cerr << "x: " << x << '\n';
     }
     OMP_ONLY(omp_set_num_threads(nthreads);)
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv) {

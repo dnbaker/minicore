@@ -1793,12 +1793,6 @@ FT msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixR
         FT ret;
         assert((std::abs(mrsum - sum(mr)) < 1e-10 && std::abs(ctrsum - sum(ctr)) < 1e-10)
                || !std::fprintf(stderr, "[%s] Found %0.20g and %0.20g, expected %0.20g and %0.20g\n", __PRETTY_FUNCTION__, double(sum(mr)), double(sum(ctr)), double(mrsum), double(ctrsum)));
-        // Not the smallest values expressible, but we need to leave space at the bottom of precision
-        // for these numbers to be divided by lhsum and rhsum, respectively
-        //std::fprintf(stderr, "sums: %g/%g\n", lhsum, rhsum);
-        //std::fprintf(stderr, "mrsum: %g. prior_sum: %g. ctrsum: %g. lhsum : %g. rhsum: %g\n", mrsum, prior_sum, ctrsum, lhsum, rhsum);
-        //assert(!std::isinf(lhinc));
-        //assert(!std::isinf(rhinc));
         auto wc = ctr * rhrsi; //
         auto wr = mr * lhrsi;  // wr and wc are weighted/normalized centers/rows
         switch(msr) {

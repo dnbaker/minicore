@@ -29,6 +29,12 @@ using util::tvd_median;
 #define PYBIND11_EXCEPTION_CHECK()
 #endif
 
+#ifndef MC_DEFAULT_EPS
+#define MC_DEFAULT_EPS 1e-8
+#endif
+static constexpr double DEFAULT_EPS = MC_DEFAULT_EPS;
+#undef MC_DEFAULT_EPS
+
 
 /*
  * set_centroids_* and assign_points_* functions form the E/M steps
@@ -106,7 +112,7 @@ perform_hard_clustering(const MT &mat,
                         AsnT &asn,
                         CostsT &costs,
                         const WeightT *weights=static_cast<WeightT *>(nullptr),
-                        double eps=1e-10,
+                        double eps=DEFAULT_EPS,
                         size_t maxiter=size_t(-1))
 {
     auto compute_cost = [&costs,w=weights]() -> FT {
@@ -116,7 +122,9 @@ perform_hard_clustering(const MT &mat,
     const blz::DV<FT> rowsums = sum<blz::rowwise>(mat);
     blz::DV<FT> centersums = blaze::generate(centers.size(), [&](auto x){return sum(centers[x]);});
     assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
+    PYBIND11_EXCEPTION_CHECK();
     const auto initcost = compute_cost();
+    PYBIND11_EXCEPTION_CHECK();
     FT cost = initcost;
     std::fprintf(stderr, "[%s] initial cost: %0.12g\n", __PRETTY_FUNCTION__, cost);
     if(cost == 0) {
@@ -127,7 +135,7 @@ perform_hard_clustering(const MT &mat,
     auto centers_cpy = centers;
     for(;;) {
         PYBIND11_EXCEPTION_CHECK();
-        std::fprintf(stderr, "Beginning iter %zu\n", iternum);
+        DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
         auto res = set_centroids_hard<FT>(mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
         //std::fprintf(stderr, "Set centroids %zu\n", iternum);
 
@@ -141,15 +149,15 @@ perform_hard_clustering(const MT &mat,
             break;
         }
         centers = centers_cpy;
-        if(cost - newcost < eps * initcost) {
+        if(cost - newcost < eps * std::max(oldcost, cost)) {
 #ifndef NDEBUG
-            std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g init cost\n",
-                         cost - newcost, eps * initcost, eps, initcost);
+            std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g/%0.12g for costs from init %0.12g\n",
+                         cost - newcost, eps * std::max(oldcost, cost), eps, cost, newcost, initcost);
 #endif
             break;
         }
         if(++iternum == maxiter) {
-            std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
+            //std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
             break;
         }
         cost = newcost;
@@ -298,7 +306,7 @@ auto perform_soft_clustering(const MT &mat,
                              size_t maxiter=size_t(-1),
                              int64_t mbsize=-1, int64_t mbn=10,
                              const WeightT *weights=static_cast<WeightT *>(nullptr),
-                             double eps=0.)
+                             double eps=DEFAULT_EPS)
 {
     auto centers_cpy(centers);
     blz::DV<FT> centersums(centers.size());
@@ -324,7 +332,7 @@ auto perform_soft_clustering(const MT &mat,
         DBG_ONLY(std::fprintf(stderr, "oldcost: %.20g. newcost: %.20g. Difference: %0.20g\n", oldcost, cost, oldcost - cost);)
         if(oldcost >= cost) // Update centers only if an improvement
             std::copy(centers_cpy.begin(), centers_cpy.end(), centers.begin());
-        if(oldcost - cost <= eps * initcost || ++iternum == maxiter) {
+        if(oldcost - cost <= eps * std::max(oldcost, cost) || ++iternum == maxiter) {
             break;
         }
     }
