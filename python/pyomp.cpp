@@ -24,5 +24,6 @@ void init_omp_helpers(py::module &m) {
     m.def("set_num_threads", threadsetter);
     m.def("get_num_threads", threadgetter);
     py::class_<OMPThreadNumManager>(m, "Threading").def(py::init<>()).def(py::init<py::ssize_t>())
-    .def_property("nthreads", &OMPThreadNumManager::get, &OMPThreadNumManager::set);
+    .def_property("nthreads", &OMPThreadNumManager::get, &OMPThreadNumManager::set)
+    .def_property("p", &OMPThreadNumManager::get, &OMPThreadNumManager::set);
 }

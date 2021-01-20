@@ -148,7 +148,6 @@ void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nas
         } else {
             //std::fprintf(stderr, "no rowsums provided\n");
             ctr = blaze::mean<blaze::columnwise>(rowsel);
-            DBG_ONLY(std::fprintf(stderr, "unnormalized sum is %g\n", sum(ctr));)
 #ifndef NDEBUG
             auto seval = evaluate(blaze::sum<blz::columnwise>(rowsel) / double(nasn));
             const double mdiff = sum(abs(ctr - seval)), sevalnorm = blz::l2Norm(seval);
