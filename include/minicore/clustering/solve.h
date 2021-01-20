@@ -149,7 +149,7 @@ perform_hard_clustering(const MT &mat,
             break;
         }
         centers = centers_cpy;
-        if(cost - newcost < eps * std::max(oldcost, cost)) {
+        if(cost - newcost < eps * std::max(double(newcost), double(cost))) {
 #ifndef NDEBUG
             std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g/%0.12g for costs from init %0.12g\n",
                          cost - newcost, eps * std::max(oldcost, cost), eps, cost, newcost, initcost);
@@ -710,10 +710,10 @@ auto hmb_coreset_clustering(const Matrix &mat,
         const WT *ptr = nullptr;
         if(weights) ptr = weights->data();
         sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, sm);
+        using LElement = blz::ElementType_t<Matrix>;
         using LMat = std::conditional_t<blaze::IsDenseMatrix_v<Matrix>,
-                            blz::DM<blz::ElementType_t<Matrix>>,
-                            blz::SM<blz::ElementType_t<Matrix>>
-        >;
+                            blz::DM<LElement>,
+                            blz::SM<LElement>>;
         LMat smat;
         blz::DV<double> cscosts(mbsize);
         blz::DV<uint32_t> csasn(mbsize);
