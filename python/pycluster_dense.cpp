@@ -31,11 +31,10 @@ py::object __py_cluster_from_centers_dense(py::array_t<FT, py::array::c_style | 
     blz::DV<uint32_t> asn(nr);
     if(k > 0xFFFFFFFFull) throw std::invalid_argument("k must be < 4.3 billion to fit into a uint32_t");
     const auto psum = beta * nc;
-    blz::DV<double> centersums = blaze::generate(k, [&dvecs](auto x) {return blz::sum(dvecs[x]);});
-    blz::DV<double> rsums = blaze::generate(nr, [&dbi,dbifmt,nc](auto x) {
-        return blz::sum(blz::make_cv((FT *)dbi.ptr + x * nc, nc));
-    });
-    blz::DV<float> costs = blaze::generate(nr, [&](size_t idx) {
+    blz::DV<double> centersums(k), rsums(nr), costs(nr);
+    for(size_t i = 0; i < k; ++i) centersums[i] = blz::sum(dvecs[i]);
+    for(size_t i = 0; i < nr; ++i) rsums[i] = blz::sum(blz::make_cv((FT *)dbi.ptr + x * nc, nc));
+    for(size_t idx = 0; idx < nr; ++idx) {
         uint32_t bestind = 0;
         const auto rsum = rsums[idx];
         double bestcost = cmp::msr_with_prior<FT>(measure, blz::make_cv((FT *)dbi.ptr + nc * idx, nc), dvecs[0], prior, psum, rsum, centersums[0]);
@@ -44,8 +43,8 @@ py::object __py_cluster_from_centers_dense(py::array_t<FT, py::array::c_style | 
             if(nextc < bestcost) bestcost = nextc, bestind = j;
         }
         asn[idx] = bestind;
-        return bestcost;
-    });
+        costs[idx] = bestcost;
+    }
     int wk = -1;
     blz::DV<double> bw;
     std::unique_ptr<blaze::CustomVector<double, blz::unaligned, blz::unpadded>> dcv;
