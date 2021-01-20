@@ -90,6 +90,7 @@ auto get_initial_centers(const Matrix &matrix, RNG &rng,
                          unsigned k, unsigned kmc2_rounds, int lspp, bool use_exponential_skips, const Norm &norm, WeightT *const weights=static_cast<WeightT *>(nullptr))
 {
     constexpr bool is_dense_matrix = blaze::IsDenseMatrix_v<Matrix>;
+    std::fprintf(stderr, "[%s] Calling get_initial_centers and matrix is %s\n", __PRETTY_FUNCTION__, is_dense_matrix ? "dense": "sparse");
     using FT = double;
     const size_t nr = matrix.rows();
     std::vector<uint32_t> indices, asn;
@@ -111,7 +112,12 @@ auto get_initial_centers(const Matrix &matrix, RNG &rng,
     } else {
         std::fprintf(stderr, "[%s] Performing kmeans++\n", __func__);
         std::vector<FT> fcosts;
-        std::tie(indices, asn, fcosts) = coresets::kmeanspp(oracle, rng, nr, k, weights, lspp, use_exponential_skips, !is_dense_matrix);
+        //kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true)
+        constexpr bool is_par = !is_dense_matrix;
+        std::fprintf(stderr, "Calling kmeans++ with nr = %zu, k = %d, weights = %p, %d rounds of localsearch++, %d expskips, and is_parallel: %d\n",
+                     nr, k, (void *)weights, lspp, use_exponential_skips, is_par);
+        std::tie(indices, asn, fcosts) = coresets::kmeanspp(oracle, rng, nr, k, weights, lspp, use_exponential_skips, is_par);
+//../include/minicore/clustering/mtx2cs.h
         //indices = std::move(initcenters);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     }
@@ -154,7 +160,7 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts, FT *weights=nullptr)
     auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed, weights, opts.use_exponential_skips);
     auto csum = blz::sum(costs);
     for(unsigned i = 0; i < opts.extra_sample_tries; ++i) {
-        auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed, weights);
+        auto [centers2, asn2, costs2] = jsd::make_kmeanspp(app, opts.k, opts.seed, weights, opts.use_exponential_skips);
         if(auto csum2 = blz::sum(costs2); csum2 < csum) {
             std::tie(centers, asn, costs, csum) = std::move(std::tie(centers2, asn2, costs2, csum2));
         }

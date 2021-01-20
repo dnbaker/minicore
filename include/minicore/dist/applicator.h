@@ -1606,9 +1606,9 @@ auto make_kmc2(const DissimilarityApplicator<MatrixType> &app, unsigned k, size_
 }
 
 template<typename MatrixType, typename WFT=blaze::ElementType_t<MatrixType>>
-auto make_kmeanspp(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, bool use_exponential_skips=false) {
+auto make_kmeanspp(const DissimilarityApplicator<MatrixType> &app, unsigned k, uint64_t seed=13, const WFT *weights=nullptr, bool use_exponential_skips=false, bool parallelize=blaze::IsDenseMatrix_v<MatrixType>) {
     wy::WyRand<uint64_t> gen(seed);
-    return coresets::kmeanspp(app, gen, app.size(), k, weights, use_exponential_skips);
+    return coresets::kmeanspp(app, gen, app.size(), k, weights, use_exponential_skips, parallelize);
 }
 
 template<typename MatrixType, typename WFT=blaze::ElementType_t<MatrixType>>

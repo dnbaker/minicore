@@ -60,13 +60,15 @@ class get_pybind_include(object):
         return pybind11.get_include(self.user)
 
 
+EXTRAS = environ.get("EXTRA", "")
+
 extra_compile_args = ['-march=native', '-DNDEBUG',
                       '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                       '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',
                       '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
                       "-DBLAZE_USE_SLEEF=1", "-pipe",
-                      '-Wno-deprecated-declarations', '-O3']
+                      '-Wno-deprecated-declarations', '-O3', EXTRAS]
 
 if 'BOOST_DIR' in environ:
     extra_compile_args.append("-I%s" % environ['BOOST_DIR'])
@@ -136,7 +138,6 @@ def cpp_flag(compiler):
 
     raise RuntimeError('Unsupported compiler -- at least C++11 support '
                        'is needed!')
-
 
 extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1", SLEEFLIB]
 
