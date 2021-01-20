@@ -33,7 +33,7 @@ py::object __py_cluster_from_centers_dense(py::array_t<FT, py::array::c_style | 
     const auto psum = beta * nc;
     blz::DV<double> centersums(k), rsums(nr), costs(nr);
     for(size_t i = 0; i < k; ++i) centersums[i] = blz::sum(dvecs[i]);
-    for(size_t i = 0; i < nr; ++i) rsums[i] = blz::sum(blz::make_cv((FT *)dbi.ptr + x * nc, nc));
+    for(size_t i = 0; i < nr; ++i) rsums[i] = blz::sum(blz::make_cv((FT *)dbi.ptr + i * nc, nc));
     for(size_t idx = 0; idx < nr; ++idx) {
         uint32_t bestind = 0;
         const auto rsum = rsums[idx];
