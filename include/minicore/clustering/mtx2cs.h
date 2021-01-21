@@ -114,11 +114,11 @@ auto get_initial_centers(const Matrix &matrix, RNG &rng,
         std::vector<FT> fcosts;
         //kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true)
         constexpr bool is_par = !is_dense_matrix;
+#ifndef NDEBUG
         std::fprintf(stderr, "Calling kmeans++ with nr = %zu, k = %d, weights = %p, %d rounds of localsearch++, %d expskips, and is_parallel: %d\n",
                      nr, k, (void *)weights, lspp, use_exponential_skips, is_par);
+#endif
         std::tie(indices, asn, fcosts) = coresets::kmeanspp(oracle, rng, nr, k, weights, lspp, use_exponential_skips, is_par);
-//../include/minicore/clustering/mtx2cs.h
-        //indices = std::move(initcenters);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     }
     assert(*std::max_element(indices.begin(), indices.end()) < nr);
@@ -137,7 +137,7 @@ auto repeatedly_get_initial_centers(const Matrix &matrix, RNG &rng,
         auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, lspp, use_exponential_skips, norm, weights);
         auto ncost = blz::sum(_costs);
         if(ncost < tcost) {
-            std::fprintf(stderr, "%g->%g: %g\n", tcost, ncost, tcost - ncost);
+            DBG_ONLY(std::fprintf(stderr, "%g->%g: %g\n", tcost, ncost, tcost - ncost);)
             std::tie(idx, asn, costs, tcost) = std::move(std::tie(_idx, _asn, _costs, ncost));
         }
     }

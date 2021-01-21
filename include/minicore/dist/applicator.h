@@ -1296,13 +1296,11 @@ private:
             }
         }
 
-        std::fprintf(stderr, "Set up row sums\n");
         if(dist::needs_logs(measure_)) {
             if(!IS_SPARSE) {
                 logdata_ = CacheMatrixType(neginf2zero(log(data_)));
             }
         }
-        //std::fprintf(stderr, "Cached logs\n");
         if(dist::needs_sqrt(measure_)) {
             if constexpr(IS_CSC_VIEW) {
                 sqrdata_ = CacheMatrixType(data_.rows(), data_.columns());
@@ -1316,7 +1314,6 @@ private:
                 sqrdata_ = CacheMatrixType(blaze::sqrt(data_));
             }
         }
-        //std::fprintf(stderr, "Cached sqrts\n");
         if(dist::needs_l2_cache(measure_)) {
             l2norm_cache_.reset(new VecT(data_.rows()));
             OMP_PFOR
@@ -1666,20 +1663,18 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             // All of these use libkl kernels for fast comparisons after an initial layout
             case HELLINGER:
             {
-                ret = libkl::helld_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
-                ret = std::sqrt(ret) * M_SQRT1_2;
+                ret = std::sqrt(
+                    libkl::helld_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc)
+                ) * M_SQRT1_2;
                 break;
             }
             case L2: case SQRL2:
             {
                 ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
 #ifndef NDEBUG
-                //std::cerr << "row: " << mr << '\n';
-                //std::cerr << "ctr: " << ctr << '\n';
                 FT tret = 0.;
                 for(size_t i = 0; i < nd; ++i) {
                     tret += (mr[i] - ctr[i]) * (mr[i] - ctr[i]);
-                    //std::fprintf(stderr, "%zu:%g:%g\n", i, double(mr[i]), double(ctr[i]));
                 }
                 assert(std::abs(ret - tret) <= 1e-5 * std::max(ret, tret) || !std::fprintf(stderr, "ret: %g. tret: %g. diff: %.20g\n", ret, tret, std::abs(ret - tret)));
 #endif
@@ -1752,14 +1747,12 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhsum / (lhsum + rhsum), lhinc, rhinc);
                 } else if(msr == ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
-                    //fprintf(stderr, "Is values: klc %g, zc %g\n", klc, zc);
                 } else if(msr == REVERSE_ITAKURA_SAITO) {
                     klc = libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
                 } else if(msr == SIS || msr == RSIS) {
                     klc = msr == SIS ?
                             libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
                           : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
-                    //fprintf(stderr, "klc: %0.20g, zc: %0.20g\n", klc, zc);
                 } else if(msr == PROBABILITY_COSINE_DISTANCE || msr == PROBABILITY_COSINE_SIMILARITY) {
                     klc = dot(tmpmulx + lhinc, tmpmuly + rhinc);
                     FT div = std::sqrt(sqrNorm(tmpmulx + lhinc)) * std::sqrt(sqrNorm(tmpmuly + rhinc));

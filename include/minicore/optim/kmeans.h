@@ -51,7 +51,7 @@ template<typename Oracle, typename FT=double,
 auto
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true)
 {
-    const bool emit_log = (np > 100000 || k >= 25);
+    const bool emit_log = false;
     if(emit_log)
         std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s and %s, and %s.\n", np, k, weights ? " and non-null weights": "", parallelize_oracle ? "parallelized": "unparallelized", use_exponential_skips ? "with exponential skips": "SIMD sampling");
     std::vector<IT> centers(k, IT(0));
@@ -421,7 +421,6 @@ template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
 auto
 kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=blaze::IsDenseMatrix_v<MT>) {
-    std::fprintf(stderr, "Calling kmeans++ for Blaze matrix %s\n", __PRETTY_FUNCTION__);
     if(rowwise) {
         auto rowit = blz::rowiterator(*mat);
         return kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips, parallelize_oracle);
@@ -615,7 +614,6 @@ double lloyd_loop(std::vector<IT> &assignments, std::vector<CFT> &counts,
         std::fprintf(stderr, "new loss at %zu: %0.30g. old loss: %0.30g\n", iternum, newloss, oldloss);
         oldloss = newloss;
     }
-    //std::fprintf(stderr, "Completed with final loss of %0.30g after %zu rounds\n", newloss, iternum);
     return newloss;
 }
 
@@ -711,7 +709,6 @@ double mb_lloyd_loop(std::vector<IT> &assignments, std::vector<WFT> &counts,
         assignments[i] = label;
         loss += closs;
     }
-    std::fprintf(stderr, "Completed with final loss of %0.30g after %zu rounds\n", loss, iternum);
     return loss;
 }
 
