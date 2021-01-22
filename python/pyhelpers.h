@@ -88,28 +88,20 @@ py::object centers2pylist(const std::vector<SMT, SAL> &ctrs) {
     OMP_PFOR
     for(size_t i = 0; i < nr; ++i) {
         const auto start = ((uint64_t *)ipi.ptr)[i], end = ((uint64_t *)ipi.ptr)[i + 1];
-        DataT *ptr = (DataT *)datai.ptr + start,
-             *eptr = (DataT *)datai.ptr + end;
-        uint32_t *iptr = (uint32_t *)idxi.ptr + start;
+        const size_t n = end - start;
+        DataT *const ptr = (DataT *)datai.ptr + start;
+        uint32_t *const iptr = (uint32_t *)idxi.ptr + start;
+        size_t ind = 0;
         if constexpr(!blaze::IsDenseVector_v<SMT>) {
-            #pragma GCC unroll 4
-            for(auto cbeg = ctrs[i].begin();ptr < eptr; ++ptr, ++cbeg)
-                *iptr++ = cbeg->index(), *ptr++ = cbeg->value();
+            auto cbeg = ctrs[i].begin();
+            for(;ind < n;++ind, ++cbeg) {
+                ptr[ind] = cbeg->value();
+                iptr[ind] = cbeg->index();
+            }
         } else {
             const auto &ctr = ctrs[i];
-            const size_t csz = ctr.size(), nc4 = (csz >> 2) << 2;
-            // Unroll by 4, manually
-            for(size_t j = 0; j < nc4;) {
-                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
-                ++j;
-                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
-                ++j;
-                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
-                ++j;
-                if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
-                ++j;
-            }
-            for(size_t j = nc4; j < csz; ++j) if(ctr[j] > 0) *iptr++ = j, *ptr++ = ctr[j];
+            for(size_t j = 0; j < ctr.size(); ++j)
+                if(ctr[j] > 0.) iptr[ind] = j, ptr[ind] = ctr[j], ++ind;
         }
     }
     py::array_t<uint64_t> shape(2);
