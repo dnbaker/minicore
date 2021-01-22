@@ -749,7 +749,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 csasn[i] = bestid;
                 cscosts[i] = bestscore;
             }
-            perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw, 0., 5);
+            perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw, 1e-4, 5);
             centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
             ++iternum;
         }
