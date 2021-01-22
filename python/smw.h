@@ -211,7 +211,7 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
         retasnbits = 32;
     } else {
         retasnbits = 64;
-        std::fprintf(stderr, "uint64 labels. >4 billion centers, are you crazy?\n");
+        throw std::runtime_error("uint64 labels. >4 billion centers, are you crazy?\n");
     }
     const char *kindstr = retasnbits == 8 ? "B": retasnbits == 16 ? "H": retasnbits == 32 ? "U": "L";
     py::array retasn(py::dtype(kindstr), std::vector<Py_ssize_t>{{Py_ssize_t(nr)}});
@@ -326,8 +326,8 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
         }
         auto retai = py::cast<py::array>(retasn).request();
         auto rptr = (uint32_t *)ret.request().ptr;
-        py::array_t<float> costs(smw.rows());
-        auto costp = (float *)costs.request().ptr;
+        py::array_t<double> costs(smw.rows());
+        auto costp = (double *)costs.request().ptr;
         smw.perform([&](auto &x) {
             using TmpT = typename std::decay_t<decltype(x)>::ElementType;
             using FT = std::conditional_t<(sizeof(TmpT) <= 4), float, double>;
@@ -435,6 +435,7 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
             case 'd': case -1: break;
             default: throw std::runtime_error("Unsupported dtype for weights");
         }
+        //std::fprintf(stderr, "Set up everything for init_centers call\n");
         auto sol = repeatedly_get_initial_centers(smw, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (double *)wptr);
         //auto &[lidx, lasn, lcosts] = sol;
         auto &lidx = std::get<0>(sol);
@@ -461,7 +462,7 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
             } break;
             default: __builtin_unreachable();
         }
-        std::fprintf(stderr, "Computed initial centers\n");
+        //std::fprintf(stderr, "Computed initial centers\n");
         for(size_t i = 0; i < lcosts.size(); ++i)
             costp[i] = lcosts[i];
         for(size_t i = 0; i < lidx.size(); ++i)

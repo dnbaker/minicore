@@ -15,15 +15,6 @@ py::object __py_cluster_from_centers_dense(py::array_t<FT, py::array::c_style | 
     const dist::DissimilarityMeasure measure = assure_dm(msr);
     auto dbi = dataset.request();
     if(dbi.ndim != 2) throw std::runtime_error("Expected 2 dimensions");
-    const auto dbif = standardize_dtype(dbi.format);
-    int dbifmt = -1;
-    switch(dbif[0]) {
-        case 'd': dbifmt = 'd'; break;
-        case 'f': dbifmt = 'f'; break;
-        case 'i': case 'I': dbifmt = 'I'; break;
-        case 'h': case 'H': dbifmt = 'H'; break;
-        break;
-    }
     const size_t nr = dbi.shape[0], nc = dbi.shape[1];
     std::vector<blz::DynamicVector<FT, blz::rowVector>> dvecs = obj2dvec(centers, py::cast<py::array_t<FT, py::array::c_style | py::array::forcecast>>(dataset));
 
@@ -31,11 +22,10 @@ py::object __py_cluster_from_centers_dense(py::array_t<FT, py::array::c_style | 
     blz::DV<uint32_t> asn(nr);
     if(k > 0xFFFFFFFFull) throw std::invalid_argument("k must be < 4.3 billion to fit into a uint32_t");
     const auto psum = beta * nc;
-    blz::DV<double> centersums = blaze::generate(k, [&dvecs](auto x) {return blz::sum(dvecs[x]);});
-    blz::DV<double> rsums = blaze::generate(nr, [&dbi,dbifmt,nc](auto x) {
-        return blz::sum(blz::make_cv((FT *)dbi.ptr + x * nc, nc));
-    });
-    blz::DV<float> costs = blaze::generate(nr, [&](size_t idx) {
+    blz::DV<double> centersums(k), rsums(nr), costs(nr);
+    for(size_t i = 0; i < k; ++i) centersums[i] = blz::sum(dvecs[i]);
+    for(size_t i = 0; i < nr; ++i) rsums[i] = blz::sum(blz::make_cv((FT *)dbi.ptr + i * nc, nc));
+    for(size_t idx = 0; idx < nr; ++idx) {
         uint32_t bestind = 0;
         const auto rsum = rsums[idx];
         double bestcost = cmp::msr_with_prior<FT>(measure, blz::make_cv((FT *)dbi.ptr + nc * idx, nc), dvecs[0], prior, psum, rsum, centersums[0]);
@@ -44,8 +34,8 @@ py::object __py_cluster_from_centers_dense(py::array_t<FT, py::array::c_style | 
             if(nextc < bestcost) bestcost = nextc, bestind = j;
         }
         asn[idx] = bestind;
-        return bestcost;
-    });
+        costs[idx] = bestcost;
+    }
     int wk = -1;
     blz::DV<double> bw;
     std::unique_ptr<blaze::CustomVector<double, blz::unaligned, blz::unpadded>> dcv;

@@ -5,6 +5,7 @@ from setuptools.command.build_ext import build_ext
 from glob import glob
 import multiprocessing
 import multiprocessing.pool
+from subprocess import check_output
 
 
 sleefdir = environ.get("SLEEF_DIR", "../sleef/build")
@@ -58,6 +59,8 @@ class get_pybind_include(object):
         import pybind11
         return pybind11.get_include(self.user)
 
+
+#EXTRAS = environ.get("EXTRA", "")
 
 extra_compile_args = ['-march=native', '-DNDEBUG',
                       '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
@@ -136,7 +139,6 @@ def cpp_flag(compiler):
     raise RuntimeError('Unsupported compiler -- at least C++11 support '
                        'is needed!')
 
-
 extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1", SLEEFLIB]
 
 class BuildExt(build_ext):
@@ -175,7 +177,7 @@ class BuildExt(build_ext):
         build_ext.build_extensions(self)
 
 
-__version__ = "0.2.2"
+__version__ = check_output("git describe --abbrev=4", shell=True).decode().split("-")[0]
 setup(
     name='minicore',
     version=__version__,

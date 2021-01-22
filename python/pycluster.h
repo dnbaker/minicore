@@ -22,7 +22,6 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
                Py_ssize_t seed,
                bool use_cs=false)
 {
-    std::fprintf(stderr, "[%s]\n", __PRETTY_FUNCTION__);
     if(k != ctrs.size()) {
         throw std::invalid_argument(std::string("k ") + std::to_string(k) + "!=" + std::to_string(ctrs.size()) + ", ctrs.size()");
     }
@@ -99,7 +98,6 @@ py::dict cpp_pycluster(const Matrix &mat, unsigned int k, double beta,
                Py_ssize_t reseed_count=-1,
                bool with_rep=true)
 {
-    //std::fprintf(stderr, "[%s] beginning cpp_pycluster\n", __PRETTY_FUNCTION__);
     blz::DV<FT> prior{FT(beta)};
     const FT psum = beta * mat.columns();
     if(measure == dist::L1 || measure == dist::L2 || measure == dist::BHATTACHARYYA_METRIC) {

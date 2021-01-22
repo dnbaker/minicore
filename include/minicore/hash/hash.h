@@ -131,6 +131,7 @@ public:
     FT project(OFT *data, IT *indices, size_t nelem, int hashid) const {
         auto hashr = row(randproj_, hashid);
         FT ret = 0;
+        // TODO: if indices is of 32-integers, we can use
         #pragma GCC unroll 8
         for(size_t i = 0; i < nelem; ++i) {
             ret = std::fma(hashr[indices[i]], std::sqrt(data[i]), ret);

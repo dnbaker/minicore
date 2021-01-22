@@ -88,7 +88,6 @@ int main(int argc, char *argv[]) {
     }
     if(!x.rows() && !x.columns()) {
         x = blz::generate(nrows, ncols, [](auto x, auto y) {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); return std::uniform_real_distribution<double>()(mt) * (x + 1);});
-        std::cerr << "x: " << x << '\n';
     }
     OMP_ONLY(omp_set_num_threads(nthreads);)
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv) {
@@ -142,7 +141,6 @@ int main(int argc, char *argv[]) {
         }
         for(const auto id: ids) {
             centers.emplace_back(row(x, id));
-            std::cerr << "row: " << row(x, id) << "\nvs ctr: " << centers.back() << '\n';
         }
         std::fprintf(stderr, "Getting sums\n");
         centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});

@@ -4,7 +4,6 @@
 PYBIND11_MODULE(pyminicore, m) {
     init_smw(m);
     init_coreset(m);
-    init_merge(m);
     init_centroid(m);
     init_omp_helpers(m);
     init_pycsparse(m);

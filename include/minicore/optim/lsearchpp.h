@@ -19,7 +19,7 @@ namespace coresets {
 
 
 template<typename Oracle, typename RNG, typename DistC, typename CtrsC, typename AsnT, typename WFT=double>
-auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, CtrsC &ctrs, AsnT &asn, size_t np, size_t nrounds, const WFT *weights=nullptr) {
+auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, CtrsC &ctrs, AsnT &asn, size_t np, size_t nrounds, const WFT *weights=nullptr, bool parallelize=true) {
     using value_type = std::decay_t<decltype(*std::begin(distances))>;
     std::uniform_real_distribution<value_type> dist;
     const unsigned k = ctrs.size();
@@ -56,36 +56,68 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
         newcosts = blaze::generate(np, [&](auto x) {return oracle(sel, x);});
         ctrcosts = 0.;
         gain = 0.;
-        OMP_ONLY(_Pragma("omp parallel for reduction(+:gain)"))
-        for(size_t i = 0; i < np; ++i) {
-            auto row_i = row(ctrcostmat, i);
-            if(const auto nc = newcosts[i], oldd = distances[i]; nc > oldd) {
-                using pt = std::pair<value_type, unsigned>;
-                pt top1 = {row_i[0], 0}, top2 = {row_i[1], 1};
-                static_assert(std::is_integral_v<decltype(top1.second)>, "");
-                static_assert(std::is_floating_point_v<decltype(top1.first)>, "");
-                if(top2.first < top1.first) std::swap(top1, top2);
-                SK_UNROLL_4
-                for(unsigned j = 2; j < k; ++j) {
-                    const auto netv = row_i[j];
-                    if(netv < top2.first) {
-                        if(netv < top1.first) {
-                            top2 = top1;
-                            top1 = {netv, j};
-                        } else {
-                            top2 = {netv, j};
+        if(parallelize) {
+            OMP_ONLY(_Pragma("omp parallel for reduction(+:gain)"))
+            for(size_t i = 0; i < np; ++i) {
+                auto row_i = row(ctrcostmat, i);
+                if(const auto nc = newcosts[i], oldd = distances[i]; nc > oldd) {
+                    using pt = std::pair<value_type, unsigned>;
+                    pt top1 = {row_i[0], 0}, top2 = {row_i[1], 1};
+                    static_assert(std::is_integral_v<decltype(top1.second)>, "");
+                    static_assert(std::is_floating_point_v<decltype(top1.first)>, "");
+                    if(top2.first < top1.first) std::swap(top1, top2);
+                    SK_UNROLL_4
+                    for(unsigned j = 2; j < k; ++j) {
+                        const auto netv = row_i[j];
+                        if(netv < top2.first) {
+                            if(netv < top1.first) {
+                                top2 = top1;
+                                top1 = {netv, j};
+                            } else {
+                                top2 = {netv, j};
+                            }
                         }
                     }
+                    if(top1.first != top2.first) {
+                        const auto diff = top2.first - top1.first;
+                        OMP_ATOMIC
+                        ctrcosts[top1.second] += diff;
+                    }
+                    // Now, the cost for each item is their cost - the cost of the next-lowest item
+                } else {
+                    gain += distances[i] - nc;
                 }
-                if(top1.first != top2.first) {
-                    const auto diff = top2.first - top1.first;
-                    OMP_ATOMIC
-                    ctrcosts[top1.second] += diff;
+            }
+        } else {
+            for(size_t i = 0; i < np; ++i) {
+                auto row_i = row(ctrcostmat, i);
+                if(const auto nc = newcosts[i], oldd = distances[i]; nc > oldd) {
+                    using pt = std::pair<value_type, unsigned>;
+                    pt top1 = {row_i[0], 0}, top2 = {row_i[1], 1};
+                    static_assert(std::is_integral_v<decltype(top1.second)>, "");
+                    static_assert(std::is_floating_point_v<decltype(top1.first)>, "");
+                    if(top2.first < top1.first) std::swap(top1, top2);
+                    SK_UNROLL_4
+                    for(unsigned j = 2; j < k; ++j) {
+                        const auto netv = row_i[j];
+                        if(netv < top2.first) {
+                            if(netv < top1.first) {
+                                top2 = top1;
+                                top1 = {netv, j};
+                            } else {
+                                top2 = {netv, j};
+                            }
+                        }
+                    }
+                    if(top1.first != top2.first) {
+                        const auto diff = top2.first - top1.first;
+                        OMP_ATOMIC
+                        ctrcosts[top1.second] += diff;
+                    }
+                    // Now, the cost for each item is their cost - the cost of the next-lowest item
+                } else {
+                    gain += distances[i] - nc;
                 }
-                // Now, the cost for each item is their cost -
-                // the cost of the next-lowest item
-            } else {
-                gain += distances[i] - nc;
             }
         }
 #ifndef NDEBUG
@@ -96,8 +128,10 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
         const auto argmin = reservoir_simd::argmin(ctrcosts, /*multithread=*/true);
         const auto delta = ctrcosts[argmin] - gain;
         if(delta < 0.) {
+#ifndef NDEBUG
             if(k > 25 || np > 100000)
                 std::fprintf(stderr, "Swapping out %d for %lld for a gain of %g. (ctrcosts: %g. gain: %g)\n", int(ctrs[argmin]), sel, delta, ctrcosts[argmin], gain);
+#endif
             ctrs[argmin] = sel;
             column(ctrcostmat, argmin, blaze::unchecked) = newcosts;
             dv = blaze::min<blaze::rowwise>(ctrcostmat);
