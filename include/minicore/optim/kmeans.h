@@ -142,21 +142,35 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     if(emit_log) std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
     return std::make_tuple(std::move(centers), std::move(assignments), std::vector<FT>(distances.begin(), distances.end()));
 }
+
 #if 0
+
 template<typename Oracle, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename WFT=FT>
 auto
-batched_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, int batchsize, double max_degradation=0.1, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false) {
-    std::fprintf(stderr, "Starting %s with np = %zu and k = %zu%s, with batchsize=%d and %g max degradation.\n", __PRETTY_FUNCTION__, np, k, weights ? " and non-null weights": "", batchsize, max_degradation);
+batched_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k,
+                 const WFT *weights, size_t lspprounds, bool use_exponential_skips,
+                 bool parallelize_oracle, unsigned batchsize=25, double maxdeg=0.9)
+{
+    const bool emit_log = false;
+    if(emit_log)
+        std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s and %s, and %s.\n", np, k, weights ? " and non-null weights": "", parallelize_oracle ? "parallelized": "unparallelized", use_exponential_skips ? "with exponential skips": "SIMD sampling");
     std::vector<IT> centers(k, IT(0));
     blz::DV<FT> distances(np, std::numeric_limits<FT>::max());
     {
         auto fc = rng() % np;
         centers[0] = fc;
-        distances = blaze::generate(np,[&](auto i) __attribute__((always_inline)) {
-            if(unlikely(i == fc)) return FT(0.);
-            return FT(oracle(fc, i));
-        });
+        if(parallelize_oracle) {
+            distances = blaze::generate(np,[&](auto i) __attribute__((always_inline)) {
+                if(unlikely(i == fc)) return FT(0.);
+                return FT(oracle(fc, i));
+            });
+        } else {
+            for(size_t i = 0; i < np; ++i) {
+                if(i == fc) distances[i] = 0.;
+                distances[i] = oracle(fc, i);
+            }
+        }
         assert(distances[fc] == 0.);
     }
     std::vector<IT> assignments(np, IT(0));
@@ -168,19 +182,23 @@ batched_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, int batchs
     // this is as optimized as it can be.
     // At least it's all embarassingly parallelizable
     const SampleFmt fmt = use_exponential_skips ? USE_EXPONENTIAL_SKIPS: NEITHER;
-    std::vector<uint64_t> sampled_ids(kperbatch);
+    int d0s = 0;
     for(size_t center_idx = 1;center_idx < k;) {
         DBG_ONLY(std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\r\n", center_idx, size_t(k), centers[center_idx - 1]);)
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
         auto cd = centers.data(), ce = cd + center_idx;
+        IT newc;
         setnewc:
         if(weights) {
             auto w = blz::make_cv(weights, np);
-            rvals = w * distances;
-            reservoir_simd::sample_k(rvals.data(), np, k, sampled_ids.data(), rng());
+            if constexpr(blaze::TransposeFlag_v<decltype(w)> == blaze::TransposeFlag_v<blz::DV<FT>>)
+                rvals = w * distances;
+            else
+                rvals = trans(w) * distances;
+            newc = reservoir_simd::sample(rvals.data(), np, rng(), fmt);
         } else {
-            reservoir_simd::sample_k(distances.data(), np, k, sampled_ids.data(), rng());
+            newc = reservoir_simd::sample(distances.data(), np, rng(), fmt);
         }
         if(unlikely(distances[newc] == 0.)) {
             std::fprintf(stderr, "Selected point of weight 0 (this should not happen unless there are negative or infinite weights): %zu\n", size_t(newc));
@@ -200,25 +218,29 @@ batched_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, int batchs
         assignments[newc] = center_idx;
         centers[center_idx] = newc;
         distances[newc] = 0.;
-        OMP_PFOR_DYN
-        for(size_t i = 0; i < np; ++i) {
+        auto compute = [&](size_t i) {
             auto &ldist = distances[i];
-            if(ldist == 0.) continue;
+            if(ldist <= 0.) return;
             auto dist = oracle(newc, i);
             if(dist < ldist) { // Only write if it changed
                 assignments[i] = center_idx;
                 ldist = dist;
             }
-        }
+        };
+        if(parallelize_oracle) {
+            OMP_PFOR_DYN
+            for(size_t i = 0; i < np; ++i)
+                compute(i);
+        } else for(size_t i = 0; i < np; compute(i++));
         ++center_idx;
     }
 
-    std::fprintf(stderr, "Completed kmeans++ with centers of size %zu\n", centers.size());
+    if(emit_log) std::fprintf(stderr, "Completed kmeans++ with centers of size %zu\n", centers.size());
     if(lspprounds > 0) {
-        std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
+        if(emit_log) std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
         localsearchpp_rounds(oracle, rng, distances, centers, assignments, np, lspprounds, weights);
     }
-    std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
+    if(emit_log) std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
     return std::make_tuple(std::move(centers), std::move(assignments), std::vector<FT>(distances.begin(), distances.end()));
 }
 #endif
