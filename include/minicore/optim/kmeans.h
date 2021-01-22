@@ -51,7 +51,7 @@ template<typename Oracle, typename FT=double,
 auto
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true)
 {
-    const bool emit_log = false;
+    const bool emit_log = true;
     if(emit_log)
         std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s and %s, and %s.\n", np, k, weights ? " and non-null weights": "", parallelize_oracle ? "parallelized": "unparallelized", use_exponential_skips ? "with exponential skips": "SIMD sampling");
     std::vector<IT> centers(k, IT(0));
@@ -137,7 +137,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     if(emit_log) std::fprintf(stderr, "Completed kmeans++ with centers of size %zu\n", centers.size());
     if(lspprounds > 0) {
         if(emit_log) std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
-        localsearchpp_rounds(oracle, rng, distances, centers, assignments, np, lspprounds, weights);
+        localsearchpp_rounds(oracle, rng, distances, centers, assignments, np, lspprounds, weights, parallelize_oracle);
     }
     if(emit_log) std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
     return std::make_tuple(std::move(centers), std::move(assignments), std::vector<FT>(distances.begin(), distances.end()));

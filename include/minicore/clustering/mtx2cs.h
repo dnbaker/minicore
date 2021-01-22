@@ -114,9 +114,8 @@ auto get_initial_centers(const Matrix &matrix, RNG &rng,
         std::vector<FT> fcosts;
         //kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true)
         constexpr bool is_par = !is_dense_matrix;
-        DBG_ONLY(
         std::fprintf(stderr, "Calling kmeans++ with nr = %zu, k = %d, weights = %p, %d rounds of localsearch++, %d expskips, and is_parallel: %d\n",
-                     nr, k, (void *)weights, lspp, use_exponential_skips, is_par);)
+                     nr, k, (void *)weights, lspp, use_exponential_skips, is_par);
         std::tie(indices, asn, fcosts) = coresets::kmeanspp(oracle, rng, nr, k, weights, lspp, use_exponential_skips, is_par);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     }

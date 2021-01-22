@@ -15,15 +15,6 @@ py::object __py_cluster_from_centers_dense(py::array_t<FT, py::array::c_style | 
     const dist::DissimilarityMeasure measure = assure_dm(msr);
     auto dbi = dataset.request();
     if(dbi.ndim != 2) throw std::runtime_error("Expected 2 dimensions");
-    const auto dbif = standardize_dtype(dbi.format);
-    int dbifmt = -1;
-    switch(dbif[0]) {
-        case 'd': dbifmt = 'd'; break;
-        case 'f': dbifmt = 'f'; break;
-        case 'i': case 'I': dbifmt = 'I'; break;
-        case 'h': case 'H': dbifmt = 'H'; break;
-        break;
-    }
     const size_t nr = dbi.shape[0], nc = dbi.shape[1];
     std::vector<blz::DynamicVector<FT, blz::rowVector>> dvecs = obj2dvec(centers, py::cast<py::array_t<FT, py::array::c_style | py::array::forcecast>>(dataset));
 
