@@ -652,11 +652,20 @@ struct CoresetSampler {
         const double dn = n;
         size_t sampled_directly = n;
         if(sens_ == FL) sampled_directly = std::max((long)(n - b_), 0L);
+        shared::flat_hash_map<IT, uint32_t> ctr;
         for(size_t i = 0; i < sampled_directly; ++i) {
             const auto ind = sampler_->sample();
             assert(ind < np_);
-            ret.indices_[i] = ind;
-            ret.weights_[i] = getweight(ind) / (dn * probs_[ind]);
+            auto it = ctr.find(ind);
+            if(it == ctr.end()) it = ctr.emplace(ind, uint32_t(1)).first;
+            else ++it->second;
+        }
+        size_t i = 0;
+        for(const auto &pair: ctr) {
+            ret.indices_[i] = pair.first;
+            ret.weights_[i] = pair.second * (getweight(pair.first) / (dn * probs_[pair.first]));
+            ++i;
+            assert(i < n);
         }
         if(sens_ == FL && fl_bicriteria_points_) {
             assert(fl_bicriteria_points_->size() == b_);
@@ -673,6 +682,11 @@ struct CoresetSampler {
                 ret.indices_[i] = *bit++;
                 ret.weights_[i] = std::max(wmul - *wit++, 0.);
             }
+        } else {
+            if(i < n) {
+                ret.resize(i);
+                std::fprintf(stderr, "After compressing %zu samples into unique items, we have only %zu entries\n", i, n);
+            }
         }
         return ret;
     }
@@ -683,7 +697,5 @@ struct CoresetSampler {
 }//coresets
 
 }// namespace minicore
-
 namespace cs = minicore::coresets;
-
 #endif /* FGC_CORESETS_H__ */

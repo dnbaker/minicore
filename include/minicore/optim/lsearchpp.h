@@ -52,7 +52,7 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
             sel = reservoir_simd::sample(dv.data(), dv.size(), seed);
         } else sel = reservoir_simd::sample(distances.data(), distances.size(), seed);
         DBG_ONLY(std::fprintf(stderr, "Selected %lld with cost %g (max cost: %g)\n", sel, distances[sel], blaze::max(dv));)
-        assert(sel < static_cast<std::ptrdiff_t>(np));
+        assert(sel < static_cast<long long unsigned int>(np));
         newcosts = blaze::generate(np, [&](auto x) {return oracle(sel, x);});
         ctrcosts = 0.;
         gain = 0.;

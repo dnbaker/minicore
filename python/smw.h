@@ -174,10 +174,11 @@ public:
     }
 };
 
+#if 0
 template<typename Mat>
 inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
                  int lspp,
-                 int use_exponential_skips,
+                 int use_exponential_skips, py::ssize_t n_local_trials,
                  py::object weights)
 {
     const void *wptr = nullptr;
@@ -233,7 +234,7 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
             case 'f': break;
             case -1: throw std::invalid_argument("Unexpected dtype");
         }
-        auto sol = repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr);
+        auto sol = repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr, n_local_trials);
         auto &[lidx, lasn, lcosts] = sol;
         assert(lidx.size() == ki);
         assert(lasn.size() == smw.rows());
@@ -278,21 +279,18 @@ inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, doubl
     } catch(...) {throw std::invalid_argument("No idea what exception was thrown, but it was unrecoverable.");}
     return py::make_tuple(ret, retasn, costs);
 }
+#endif
 
 template<typename Mat>
-inline py::tuple py_kmeanspp_so(const Mat &smw, const SumOpts &sm, py::object weights) {
-    return py_kmeanspp(smw, py::int_((int)sm.dis), sm.k, sm.gamma, sm.seed, sm.kmc2_rounds, std::max(sm.extra_sample_tries - 1, 0u),
-                       sm.lspp, sm.use_exponential_skips, weights);
-}
-template<typename Mat>
 inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                          Py_ssize_t lspp, bool use_exponential_skips,
+                          py::ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
                           py::object weights)
     {
         if(gamma_beta < 0.) {
             gamma_beta = 1. / smw.columns();
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
         }
+        if(seed == 0) seed = std::mt19937_64(std::rand())();
         const void *wptr = nullptr;
         int kind = -1;
         const auto mmsr = assure_dm(msr);
@@ -335,14 +333,13 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
                 // Note that this has been transposed
                 return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));
             };
-            //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
             std::unique_ptr<double[]> tmpw;
             switch(kind) {
                 case 'f': tmpw.reset(new double[nr]); std::copy((float *)wptr, (float *)wptr + nr, tmpw.get()); wptr = (void *)tmpw.get(); break;
                 case 'd': case -1: break;
                 default: throw std::runtime_error("Unsupported dtype for weights");
             }
-            auto sol = repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (double *)wptr);
+            auto sol = repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (double *)wptr, n_local_trials);
             //auto &[lidx, lasn, lcosts] = sol;
             auto &lidx = std::get<0>(sol);
             auto &lasn = std::get<1>(sol);
@@ -379,14 +376,21 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
     }
 
 template<typename Mat>
+inline py::tuple py_kmeanspp_so(const Mat &smw, const SumOpts &sm, py::object weights) {
+    return py_kmeanspp_noso(smw, py::int_((int)sm.dis), sm.k, sm.gamma, sm.seed, sm.kmc2_rounds, std::max(sm.extra_sample_tries - 1, 0u),
+                       sm.lspp, sm.use_exponential_skips, sm.n_local_trials, weights);
+}
+
+template<typename Mat>
 inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                          Py_ssize_t lspp, bool use_exponential_skips,
+                          Py_ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
                           py::object weights)
     {
         if(gamma_beta < 0.) {
             gamma_beta = 1. / smw.columns();
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
         }
+        if(seed == 0) seed = std::mt19937_64(std::rand())();
         const void *wptr = nullptr;
         int kind = -1;
         const auto mmsr = assure_dm(msr);
@@ -428,15 +432,13 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
             // Note that this has been transposed
             return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));
         };
-        //using RT = decltype(repeatedly_get_initial_centers(x, rng, ki, nkmc, ntimes, cmp));
         std::unique_ptr<double[]> tmpw;
         switch(kind) {
             case 'f': tmpw.reset(new double[nr]); std::copy((float *)wptr, (float *)wptr + nr, tmpw.get()); wptr = (void *)tmpw.get(); break;
             case 'd': case -1: break;
             default: throw std::runtime_error("Unsupported dtype for weights");
         }
-        //std::fprintf(stderr, "Set up everything for init_centers call\n");
-        auto sol = repeatedly_get_initial_centers(smw, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (double *)wptr);
+        auto sol = repeatedly_get_initial_centers(smw, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (double *)wptr, n_local_trials);
         //auto &[lidx, lasn, lcosts] = sol;
         auto &lidx = std::get<0>(sol);
         auto &lasn = std::get<1>(sol);

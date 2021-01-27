@@ -736,6 +736,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 csw = pts.weights_;
             cscosts.resize(pts.size());
             csasn.resize(pts.size());
+            // 2. Optimize over the coreset
             OMP_PFOR
             for(size_t i = 0; i < pts.size(); ++i) {
                 auto rs = rowsums[pts.indices_[i]];
@@ -753,10 +754,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
             centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
             ++iternum;
         }
-
-        // 2. Optimize over the coreset
-        // 3. Calculate new centers
-        // Set the new centers
     }
     centers = savectrs;
     cost = bestcost;

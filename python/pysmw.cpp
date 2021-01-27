@@ -8,9 +8,9 @@ using blz::unchecked;
 using smw_t = SparseMatrixWrapper;
 
 py::object run_kmpp_noso(const SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                         Py_ssize_t lspp, bool use_exponential_skips,
+                         Py_ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
                          py::object weights) {
-    return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, weights);
+    return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, n_local_trials, weights);
 }
 
 dist::DissimilarityMeasure assure_dm(py::object obj) {

@@ -4,9 +4,9 @@
 #if BUILD_CSR_CLUSTERING
 
 py::object run_kmpp_noso(const PyCSparseMatrix &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                         Py_ssize_t lspp, bool use_exponential_skips,
+                         py::ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
                          py::object weights) {
-    return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, weights);
+    return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, n_local_trials, weights);
 }
 #endif
 
@@ -90,7 +90,7 @@ void init_pycsparse(py::module &m) {
 
      m.def("kmeanspp", [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {
         return run_kmpp_noso(smw, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, so.kmc2_rounds, std::max(int(so.extra_sample_tries) - 1, 0),
-                       so.lspp, so.use_exponential_skips, weights);
+                       so.lspp, so.use_exponential_skips, so.n_local_trials, weights);
     },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("smw"),
@@ -101,7 +101,7 @@ void init_pycsparse(py::module &m) {
        "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
        "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
        py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("prior") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1,
-       py::arg("lspp") = 0, py::arg("use_exponential_skips") = false,
+       py::arg("lspp") = 0, py::arg("use_exponential_skips") = false, py::arg("n_local_trials") = 1,
        py::arg("weights") = py::none()
     );
     m.def("greedy_select",  [](PyCSparseMatrix &smw, const SumOpts &so) {

@@ -36,7 +36,7 @@ void init_pydense(py::module &m) {
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
         blz::CustomMatrix<float, unaligned, unpadded, rowMajor> cm((float *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(float));
         return py_kmeanspp_noso_dense(cm, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, so.kmc2_rounds, std::max(int(so.extra_sample_tries) - 1, 0),
-                             so.lspp, so.use_exponential_skips, weights);
+                             so.lspp, so.use_exponential_skips, so.n_local_trials, weights);
     },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("matrix"),
@@ -48,7 +48,7 @@ void init_pydense(py::module &m) {
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
         blz::CustomMatrix<double, unaligned, unpadded, rowMajor> cm((double *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(double));
         return py_kmeanspp_noso_dense(cm, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, so.kmc2_rounds, std::max(int(so.extra_sample_tries) - 1, 0),
-                             so.lspp, so.use_exponential_skips, weights);
+                             so.lspp, so.use_exponential_skips, so.n_local_trials, weights);
     },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("matrix"),
@@ -56,13 +56,13 @@ void init_pydense(py::module &m) {
        py::arg("weights") = py::none()
     );
      m.def("kmeanspp", [](py::array_t<float, py::array::c_style | py::array::forcecast> arr, int k, py::object measure, py::object prior, py::object seed, py::object nkmc, py::object ntimes,
-                          py::object lspp, py::object weights, py::object expskips) {
+                          py::object lspp, py::object weights, py::object expskips, py::object local_trials) {
         auto dm = assure_dm(measure);
         auto arri = arr.request();
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
         blz::CustomMatrix<float, unaligned, unpadded, rowMajor> cm((float *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(float));
         return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), nkmc.cast<py::ssize_t>(), std::max(ntimes.cast<int>() - 1, 0),
-                             lspp.cast<py::ssize_t>(), expskips.cast<bool>(), weights);
+                             lspp.cast<py::ssize_t>(), expskips.cast<bool>(), local_trials.cast<py::ssize_t>(), weights);
     },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("matrix"),
@@ -74,16 +74,17 @@ void init_pydense(py::module &m) {
        py::arg("ntimes") = 0,
        py::arg("lspp") = 0,
        py::arg("weights") = py::none(),
-       py::arg("expskips") = false
+       py::arg("expskips") = false,
+       py::arg("n_local_trials") = 1
     );
      m.def("kmeanspp", [](py::array_t<double, py::array::c_style | py::array::forcecast> arr, int k, py::object measure, py::object prior, py::object seed, py::object nkmc, py::object ntimes,
-                          py::object lspp, py::object weights, py::object expskips) {
+                          py::object lspp, py::object weights, py::object expskips, py::object local_trials) {
         auto dm = assure_dm(measure);
         auto arri = arr.request();
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
         blz::CustomMatrix<double, unaligned, unpadded, rowMajor> cm((double *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(double));
         return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), nkmc.cast<py::ssize_t>(), std::max(ntimes.cast<int>() - 1, 0),
-                             lspp.cast<py::ssize_t>(), expskips.cast<bool>(), weights);
+                             lspp.cast<py::ssize_t>(), expskips.cast<bool>(), local_trials.cast<py::ssize_t>(), weights);
     },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("matrix"),
@@ -95,7 +96,8 @@ void init_pydense(py::module &m) {
        py::arg("ntimes") = 0,
        py::arg("lspp") = 0,
        py::arg("weights") = py::none(),
-       py::arg("expskips") = false
+       py::arg("expskips") = false,
+       py::arg("n_local_trials") = 1
     );
 
     m.def("greedy_select", mat2tup<double>,
