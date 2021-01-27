@@ -686,7 +686,7 @@ struct CoresetSampler {
         } else {
             if(i < n) {
                 ret.resize(i);
-                std::fprintf(stderr, "After compressing %zu samples into unique items, we have only %zu entries\n", i, n);
+                std::fprintf(stderr, "After compressing %zu samples into unique items, we have only %zu entries\n", n, i);
             }
         }
         return ret;
