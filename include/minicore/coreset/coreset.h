@@ -657,15 +657,16 @@ struct CoresetSampler {
             const auto ind = sampler_->sample();
             assert(ind < np_);
             auto it = ctr.find(ind);
-            if(it == ctr.end()) it = ctr.emplace(ind, uint32_t(1)).first;
-            else ++it->second;
+            if(it != ctr.end()) ++it->second;
+            else ctr.emplace(ind, uint32_t(1));
         }
+        std::fprintf(stderr, "%zu unique after %zu\n", ctr.size(), sampled_directly);
         size_t i = 0;
         for(const auto &pair: ctr) {
             ret.indices_[i] = pair.first;
             ret.weights_[i] = pair.second * (getweight(pair.first) / (dn * probs_[pair.first]));
-            ++i;
             assert(i < n);
+            ++i;
         }
         if(sens_ == FL && fl_bicriteria_points_) {
             assert(fl_bicriteria_points_->size() == b_);
