@@ -192,5 +192,5 @@ int main(int argc, char *argv[]) {
     clust::perform_hard_minibatch_clustering(x, msr, prior, is_mbcenters, asn, hardcosts, &weights, mbsize, NUMITER, 10, /*reseed_after=*/minreseed, /*with_replacement=*/with_replacement, /*seed=*/rng());
     std::fprintf(stderr, "now, using coreset minibatch clustering.\n");
     auto cs_mbcenters = ocenters;
-    minicore::hmb_coreset_clustering(x, msr, prior, cs_mbcenters, asn, hardcosts, static_cast<blz::DV<FLOAT_TYPE> *>(nullptr), mbsize, NUMITER, 10, minreseed, rng());
+    minicore::hmb_coreset_clustering(x, msr, prior, cs_mbcenters, asn, hardcosts, static_cast<blz::DV<FLOAT_TYPE> *>(nullptr), mbsize, NUMITER, 2, minreseed, rng());
 }

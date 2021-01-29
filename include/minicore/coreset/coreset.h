@@ -8,6 +8,7 @@
 #include "minicore/util/shared.h"
 #include "minicore/util/blaze_adaptor.h"
 #include <zlib.h>
+#include "libsimdsampling/simdsampling.ho.h"
 #ifdef _OPENMP
 #  include <omp.h>
 #endif
@@ -336,7 +337,6 @@ struct CoresetSampler {
     template<typename CFT>
     void make_gmm_sampler(size_t ncenters,
                       const CFT *costs, const IT *assignments,
-                      uint64_t seed=137,
                       double alpha_est=0.)
     {
         // Note: this takes actual distances and then squares them.
@@ -349,17 +349,8 @@ struct CoresetSampler {
         std::vector<IT> center_counts(ncenters);
         double total_cost = 0.;
 
-        // TODO: vectorize
-        // Sketch: check for SSE2/AVX2/AVX512
-        //         if weights is null,
-        //         set a vector via Space::set1()
-        //
         OMP_PRAGMA("omp parallel for reduction(+:total_cost)")
         for(size_t i = 0; i < np_; ++i) {
-            // TODO: vectorize?
-            // weight sums per assignment couldn't be vectorized,
-            // total costs could be
-            // Probably a 4-16x speedup on 1/3 of the cost
             // So maybe like a ~30% speedup?
             auto asn = assignments[i];
             assert(asn < ncenters);
@@ -384,16 +375,20 @@ struct CoresetSampler {
         OMP_PFOR
         for(size_t i = 0; i < np_; ++i)
             this->probs_[i] *= si;
-        sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
-    template<typename CFT, typename CFT2=CFT>
+    void make_alias_sampler(uint64_t seed) {
+        auto p = probs_.get(), e = p + np_;
+        sampler_.reset(new Sampler(p, e, seed));
+    }
+    template<typename CFT, typename CFT2=CFT, typename IT2=IT>
     void make_sampler(size_t np, size_t ncenters,
                       const CFT *costs, const IT *assignments,
                       const CFT2 *weights=static_cast<CFT2 *>(nullptr),
                       uint64_t seed=137,
                       SensitivityMethod sens=BRAVERMAN_FELDMAN_LANG,
                       unsigned k = unsigned(-1),
-                      const IT *centerids = nullptr, // Necessary for FL sampling, otherwise useless
+                      const IT2 *centerids = static_cast<IT2 *>(nullptr), // Necessary for FL sampling, otherwise useless
+                      bool build_alias_sampler=true,
                       double alpha_est=0.)
     {
         sens_ = sens;
@@ -410,29 +405,23 @@ struct CoresetSampler {
             assert(!weights_.get());
         }
         if(sens == LUCIC_FAULKNER_KRAUSE_FELDMAN) {
-            make_gmm_sampler(ncenters, costs, assignments, seed, alpha_est);
+            make_gmm_sampler(ncenters, costs, assignments, alpha_est);
         } else if(sens == VARADARAJAN_XIAO) {
-            make_sampler_vx(ncenters, costs, assignments, seed);
+            make_probs_vx(ncenters, costs, assignments);
         } else if(sens == BFL) {
-            make_sampler_bfl(ncenters, costs, assignments, seed);
+            make_probs_bfl(ncenters, costs, assignments);
         } else if(sens == FL) {
-            make_sampler_fl(ncenters, costs, assignments, seed, centerids);
+            make_probs_fl(ncenters, costs, assignments, centerids);
         } else if(sens == LBK) {
-            make_sampler_lbk(ncenters, costs, assignments, seed);
+            make_probs_lbk(ncenters, costs, assignments);
         } else throw std::runtime_error("Invalid SensitivityMethod");
-#if 0
-        for(unsigned i = 0; i < np; ++i) {
-            std::fprintf(stderr, "point %u has prob %g\n", i, probs_[i]);
-        }
-#endif
+        if(build_alias_sampler) make_alias_sampler(seed);
     }
     template<typename CFT>
-    void make_sampler_vx(size_t ncenters,
-                         const CFT *costs, const IT *assignments,
-                         uint64_t seed=137)
+    void make_probs_vx(size_t ncenters,
+                         const CFT *costs, const IT *assignments)
     {
         const auto cv = blz::make_cv(const_cast<CFT *>(costs), np_);
-        std::cerr << "Costs: " << trans(cv) << '\n';
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
                      : blaze::sum(cv);
@@ -444,15 +433,12 @@ struct CoresetSampler {
             OMP_ATOMIC
             ++center_counts[assignments[i]];
         }
-        for(size_t i = 0; i < ncenters; ++i) {
-            std::fprintf(stderr, "center %zu has %u asn\n", i, int(center_counts[i]));
-        }
         if(weights_) {
             sensitivities = (*weights_) * cv / total_cost;
         } else {
             sensitivities = cv / total_cost;
         }
-        std::cerr << "Sensitivities: " << trans(sensitivities) << '\n';
+        //std::cerr << "Sensitivities: " << trans(sensitivities) << '\n';
         // sensitivities = weights * costs / total_cost
         blaze::DynamicVector<FT> ccinv(ncenters);
         std::transform(center_counts.begin(), center_counts.end(), ccinv.begin(), [](auto x) -> FT {return FT(1) / x;});
@@ -465,17 +451,16 @@ struct CoresetSampler {
         const double total_sensitivity = blaze::sum(sensitivities);
         // probabilities = sensitivity / sum(sensitivities) [use the same location in memory because we no longer need sensitivities]
         sensitivities *= 1. / total_sensitivity;
-        sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
-    template<typename CFT>
-    void make_sampler_fl(size_t,
-                         const CFT *costs, const IT *asn,
-                         uint64_t seed=137, const IT *bicriteria_centers=nullptr)
+    template<typename CFT, typename IT2=IT, typename OIT=IT>
+    void make_probs_fl(size_t,
+                       const CFT *costs, const IT2 *asn,
+                       const OIT *bicriteria_centers=static_cast<OIT *>(nullptr))
     {
         // See https://arxiv.org/pdf/1106.1379.pdf, figures 2,3,4
         fl_asn_.reset(new IT[np_]);
-        using cv_t = blaze::CustomVector<IT, blaze::unaligned, blaze::unpadded>;
-        cv_t flv(fl_asn_.get(), np_), aiv(const_cast<IT *>(asn), np_);
+        auto flv = blz::make_cv(fl_asn_.get(), np_);
+        auto aiv = blz::make_cv(const_cast<IT2 *>(asn), np_);
         flv = aiv;
         if(bicriteria_centers) {
             if(!fl_bicriteria_points_) fl_bicriteria_points_.reset(new blaze::DynamicVector<IT>(b_));
@@ -487,7 +472,6 @@ struct CoresetSampler {
             weights_ ? blaze::dot(*weights_, cv)
                      : blaze::sum(cv);
         probs_.reset(new FT[np_]);
-        sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
         double total_cost_inv = 1. / (total_cost);
         if(weights_) {
             OMP_PFOR
@@ -498,12 +482,10 @@ struct CoresetSampler {
             auto probv(blz::make_cv(const_cast<FT *>(probs_.get()), np_));
             probv = blaze::ceil(FT(np_) * total_cost_inv * cv) + 1.;
         }
-        sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
     template<typename CFT>
-    void make_sampler_lbk(size_t ncenters,
-                          const CFT *costs, const IT *assignments,
-                          uint64_t seed=137)
+    void make_probs_lbk(size_t ncenters,
+                          const CFT *costs, const IT *assignments)
     {
         const double alpha = 16 * std::log(k_) + 32., alpha2 = 2. * alpha;
 
@@ -545,18 +527,16 @@ struct CoresetSampler {
             sens[i] = tcinv * costs[i] + cost_sums[assignments[i]];
         }
         DBG_ONLY(std::fprintf(stderr, "sensitivity sum: %g\n", sum(sens));)
-        sampler_.reset(new Sampler(sens.data(), sens.data() + np_, seed));
         probs_.reset(new FT[np_]);
         std::transform(sens.data(),  sens.data() + np_, probs_.get(), [tsi=1./sum(sens)](auto x) {return x * tsi;});
     }
     template<typename CFT>
-    void make_sampler_bfl(size_t ncenters,
-                          const CFT *costs, const IT *assignments,
-                          uint64_t seed=137)
+    void make_probs_bfl(size_t ncenters,
+                          const CFT *costs, const IT *assignments)
     {
         // This is for a bicriteria approximation
-        // Use make_sampler_vx for a constant approximation for arbitrary metric spaces,
-        // and make_sampler_lbk for bicriteria approximations for \mu-similar divergences.
+        // Use make_probs_vx for a constant approximation for arbitrary metric spaces,
+        // and make_probs_lbk for bicriteria approximations for \mu-similar divergences.
         const auto cv = blz::make_cv(const_cast<CFT *>(costs), np_);
         double total_cost =
             weights_ ? blaze::dot(*weights_, cv)
@@ -594,7 +574,6 @@ struct CoresetSampler {
         }
         // Because this doesn't necessarily sum to 1.
         blaze::CustomVector<FT, blaze::unaligned, blaze::unpadded>(probs_.get(), np_) /= total_probs;
-        sampler_.reset(new Sampler(probs_.get(), probs_.get() + np_, seed));
     }
     auto getweight(size_t ind) const {
         return weights_ ? weights_->operator[](ind): static_cast<FT>(1.);
@@ -642,31 +621,48 @@ struct CoresetSampler {
     void sample(P *start, P *end) {
         sampler_->sample(start, end);
     }
-    IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0, double eps=0.1) {
-        if(unlikely(!sampler_.get())) throw std::runtime_error("Sampler not constructed");
-        if(seed) sampler_->seed(seed);
+    IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0, double eps=0.1, bool unique=false) {
+        if(seed && sampler_) sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
         assert(ret.indices_.size() == n);
         assert(ret.weights_.size() == n);
         assert(probs_.get());
-        const double dn = n;
         size_t sampled_directly = n;
         if(sens_ == FL) sampled_directly = std::max((long)(n - b_), 0L);
         shared::flat_hash_map<IT, uint32_t> ctr;
-        for(size_t i = 0; i < sampled_directly; ++i) {
-            const auto ind = sampler_->sample();
-            assert(ind < np_);
-            auto it = ctr.find(ind);
-            if(it != ctr.end()) ++it->second;
-            else ctr.emplace(ind, uint32_t(1));
-        }
-        std::fprintf(stderr, "%zu unique after %zu\n", ctr.size(), sampled_directly);
-        size_t i = 0;
-        for(const auto &pair: ctr) {
-            ret.indices_[i] = pair.first;
-            ret.weights_[i] = pair.second * (getweight(pair.first) / (dn * probs_[pair.first]));
-            assert(i < n);
-            ++i;
+        if(sampler_) {
+            for(size_t i = 0; (unique ? ctr.size(): i) < sampled_directly; ++i) {
+                const auto ind = sampler_->sample();
+                assert(ind < np_);
+                if(unique) {
+                    auto it = ctr.find(ind);
+                    if(it != ctr.end()) ++it->second;
+                    else ctr.emplace(ind, uint32_t(1));
+                } else {
+                    ret.indices_[i] = ind;
+                    ret.weights_[i] = getweight(ind) / (static_cast<double>(n) * probs_[ind]);
+                }
+            }
+            if(unique) {
+                if(ctr.size() < sampled_directly) {
+                    auto flpts = (fl_bicriteria_points_ ? fl_bicriteria_points_->size(): size_t(0));
+                    ret.resize(ctr.size() + flpts);
+                    std::fprintf(stderr, "After compressing %zu samples into unique items, we have only %zu entries, of which %zu are FL sample\n", n, ret.size(), flpts);
+                }
+                size_t i = 0;
+                for(const auto &pair: ctr) {
+                    ret.indices_[i] = pair.first;
+                    ret.weights_[i] = pair.second * (getweight(pair.first) / (static_cast<double>(n) * probs_[pair.first]));
+                    assert(i < n);
+                    ++i;
+                }
+            }
+        } else {
+            if(!seed) seed = std::rand();
+            auto indices = reservoir_simd::sample_k(probs_.get(), np_, n, seed, unique ? SampleFmt::WITH_REPLACEMENT: SampleFmt::NEITHER);
+            std::copy(indices.begin(), indices.end(), ret.indices_.data());
+            std::sort(indices.begin(), indices.end());
+            std::transform(indices.begin(), indices.end(), ret.weights_.begin(), [&](auto idx) {return getweight(idx) / (static_cast<double>(n) * probs_[idx]);});
         }
         if(sens_ == FL && fl_bicriteria_points_) {
             assert(fl_bicriteria_points_->size() == b_);
@@ -682,11 +678,6 @@ struct CoresetSampler {
             for(; i < n; ++i) {
                 ret.indices_[i] = *bit++;
                 ret.weights_[i] = std::max(wmul - *wit++, 0.);
-            }
-        } else {
-            if(i < n) {
-                ret.resize(i);
-                std::fprintf(stderr, "After compressing %zu samples into unique items, we have only %zu entries\n", n, i);
             }
         }
         return ret;

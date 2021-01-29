@@ -305,6 +305,15 @@ static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {
 static constexpr INLINE const char *msr2str(DissimilarityMeasure d) {
     return prob2str(d);
 }
+static constexpr double msr2alpha(DissimilarityMeasure d) {
+    switch(d) {
+        case L1: case L2: case TVD: return 1.;
+        case SQRL2: return 2.;
+        default: return is_bregman(d) ? 4.: 8.;
+        // 4. is from experimenting on real data, though this is not strictly correct
+        // It's probably just a decent heuristic
+    }
+}
 static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
     switch(d) {
         case BHATTACHARYYA_DISTANCE: return "Bhattacharyya distance: -log(dot(sqrt(x) * sqrt(y)))";

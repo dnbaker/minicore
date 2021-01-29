@@ -599,8 +599,8 @@ auto hmb_coreset_clustering(const Matrix &mat,
                             size_t calc_cost_freq=100,
                             unsigned int reseed_after=1,
                             uint64_t seed=0,
-                            size_t subiter=4,
-                            double subeps=1e-2)
+                            size_t subiter=2,
+                            double subeps=1e-3)
 {
     const bool isnorm = msr_is_normalized(measure);
     if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
@@ -608,6 +608,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
     blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
     const double prior_sum = prior.size() == 1 ? prior.size() * prior[0]: blz::sum(prior);
     size_t iternum = 0;
+    maxiter = (calc_cost_freq - 1 + maxiter) / calc_cost_freq; // Divide into calc cost freq times
     double initcost = std::numeric_limits<double>::max(), cost = initcost, bestcost = cost;
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
@@ -621,7 +622,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
     };
     const size_t np = costs.size(), k = centers.size();
     wy::WyRand<std::make_unsigned_t<IT>> rng(seed);
-    schism::Schismatic<std::make_unsigned_t<IT>> div((mat).rows());
     blz::DV<IT> sampled_indices(mbsize);
     std::vector<std::vector<IT>> assigned(k);
     blz::DV<FT> wc;
@@ -698,7 +698,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
             savectrs = centers;
         }
 
-        if(++iternum >= maxiter) {
+        if(++iternum > maxiter) {
             std::fprintf(stderr, "[CSOPT] Maximum iterations [%zu] reached\n", maxiter);
             break;
         }
@@ -709,7 +709,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
         using WT = const std::remove_const_t<std::decay_t<decltype((*weights)[0])>>;
         const WT *ptr = nullptr;
         if(weights) ptr = weights->data();
-        sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, sm);
+        sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, seed, sm, k, (uint64_t *)nullptr, false, msr2alpha(measure));
         using LElement = blz::ElementType_t<Matrix>;
         constexpr bool is_dense = blaze::IsDenseMatrix_v<Matrix>;
         using LMat = std::conditional_t<is_dense,
@@ -720,10 +720,11 @@ auto hmb_coreset_clustering(const Matrix &mat,
         blz::DV<uint32_t> csasn(mbsize);
         blz::DV<uint32_t> nnz;
         for(size_t j = 0; j < calc_cost_freq; ++j) {
+            //std::fprintf(stderr, "%zu:%zu\n", iternum, j);
             auto pts = sampler.sample(mbsize, rng());
             pts.compact();
             smat.resize(pts.size(), mat.columns());
-            if constexpr(!blaze::IsDenseMatrix_v<Matrix>) {
+            if constexpr(blaze::IsSparseMatrix_v<Matrix>) {
                 nnz = blaze::generate(pts.size(), [&](auto x) {return nonZeros(row(mat, pts.indices_[x]));});
                 const size_t tnz = sum(nnz);
                 smat.reserve(tnz);
@@ -759,7 +760,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
             }
             perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw, subeps, subiter);
             centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
-            ++iternum;
         }
     }
     centers = savectrs;
