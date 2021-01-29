@@ -8,9 +8,9 @@ using blz::unchecked;
 using smw_t = SparseMatrixWrapper;
 
 py::object run_kmpp_noso(const SparseMatrixWrapper &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                         Py_ssize_t lspp, bool use_exponential_skips,
+                         Py_ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
                          py::object weights) {
-    return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, weights);
+    return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, n_local_trials, weights);
 }
 
 dist::DissimilarityMeasure assure_dm(py::object obj) {
@@ -345,12 +345,12 @@ void init_smw(py::module &m) {
     m.def("kmeanspp", run_kmpp_noso
        , kmeans_doc,
        py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("prior") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1,
-       py::arg("lspp") = 0, py::arg("use_exponential_skips") = false,
+       py::arg("lspp") = 0, py::arg("use_exponential_skips") = false, py::arg("n_local_trials") = 1,
        py::arg("weights") = py::none()
     );
     m.def("kmeanspp", [](const SparseMatrixWrapper &smw, const SumOpts &so, py::object weights) {
         return run_kmpp_noso(smw, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, so.kmc2_rounds, std::max(int(so.extra_sample_tries) - 1, 0),
-                       so.lspp, so.use_exponential_skips, weights);
+                       so.lspp, so.use_exponential_skips, so.n_local_trials, weights);
     },
         kmeans_doc,
        py::arg("smw"),

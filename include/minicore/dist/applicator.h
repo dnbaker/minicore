@@ -1896,11 +1896,11 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     break;
                 } else __builtin_unreachable();
                 ret = klc + zc;
-                //std::fprintf(stderr, "klc %g + zc %g = %g\n", klc, zc, ret);
                 if(ret < 0) {
 #ifndef NDEBUG
-                    std::fprintf(stderr, "[Warning: value < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
-                                 pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
+                    std::fprintf(stderr, "klc %g + zc %g = %g\n", klc, zc, ret);
+                    std::fprintf(stderr, "[Warning: value (%0.20g) < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
+                                 ret, pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
 #endif
                 }
                 if(msr == LLR || msr == SRLRT) {

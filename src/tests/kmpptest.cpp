@@ -72,11 +72,27 @@ int main(int argc, char *argv[]) {
         std::memcpy(&r[0], &(tmpvecs[i][0]), sizeof(FLOAT_TYPE) * nd);
     }
     auto start = t();
-    auto centers = kmeanspp(ptr, ptr + n, gen, npoints);
+//kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true, size_t n_local_samples=1)
+////include/minicore/optim/kmeans.h
+//kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, size_t n_local_trials=1) {
+    auto centers = kmeanspp(ptr, ptr + n, gen,
+                            npoints, blz::sqrL2Norm(), (double *)nullptr, 0, false, true, size_t(25));
     auto stop = t();
-    std::fprintf(stderr, "Time for kmeans++: %0.12gs\n", double((stop - start).count()) / 1e9);
-    std::fprintf(stderr, "cost for kmeans++: %0.12g\n", std::accumulate(std::get<2>(centers).begin(), std::get<2>(centers).end(), 0.));
+    std::fprintf(stderr, "Time for kmeans++ with 25 local tries: %0.12gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "cost for kmeans++ with 25 local tries: %0.12g\n", std::accumulate(std::get<2>(centers).begin(), std::get<2>(centers).end(), 0.));
     start = t();
+    centers = kmeanspp(ptr, ptr + n, gen,
+                       npoints, blz::sqrL2Norm(), (double *)nullptr, 0, false, true, size_t(26));
+    stop = t();
+    std::fprintf(stderr, "Time for kmeans++ with 26 local tries: %0.12gs\n", double((stop - start).count()) / 1e9);
+    std::fprintf(stderr, "cost for kmeans++ with 26 local tries: %0.12g\n", std::accumulate(std::get<2>(centers).begin(), std::get<2>(centers).end(), 0.));
+    {
+        start = t();
+        auto centers = kmeanspp(ptr, ptr + n, gen, npoints, blz::sqrL2Norm(), (double *)nullptr, 0, false, true, size_t(1));
+        stop = t();
+        std::fprintf(stderr, "Time for kmeans++ with 1 local try: %0.12gs\n", double((stop - start).count()) / 1e9);
+        std::fprintf(stderr, "cost for kmeans++ with 1 local try: %0.12g\n", std::accumulate(std::get<2>(centers).begin(), std::get<2>(centers).end(), 0.));
+    }
     auto centers3 = reservoir_kmeanspp(ptr, ptr + n, gen, npoints, blz::sqrL2Norm(), (double *)nullptr, 0, 1);
 
     // WFT *weights=static_cast<WFT *>(nullptr), bool multithread=true, int lspprounds=0, int ntimes=1

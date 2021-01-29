@@ -29,6 +29,10 @@ struct SumOpts {
     bool soft = false;
     bool discrete_metric_search = false; // Search in metric solver before performing EM
     double outlier_fraction = 0.;
+
+    size_t n_local_trials = 1; // How many points to sample at each KMeans++ iteration. Defaults to 1.
+
+
     // If nonzero, performs KMC2 with m kmc2_rounds as chain length
     // Otherwise, performs standard D2 sampling
     size_t kmc2_rounds = 0;
@@ -87,7 +91,7 @@ struct SumOpts {
  */
 template<typename Matrix, typename RNG, typename Norm=blz::sqrL2Norm, typename WeightT=const double>
 auto get_initial_centers(const Matrix &matrix, RNG &rng,
-                         unsigned k, unsigned kmc2_rounds, int lspp, bool use_exponential_skips, const Norm &norm, WeightT *const weights=static_cast<WeightT *>(nullptr))
+                         unsigned k, unsigned kmc2_rounds, int lspp, bool use_exponential_skips, const Norm &norm, size_t n_local_trials, WeightT *const weights=static_cast<WeightT *>(nullptr))
 {
     constexpr bool is_dense_matrix = blaze::IsDenseMatrix_v<Matrix>;
     //std::fprintf(stderr, "[%s] Calling get_initial_centers and matrix is %s\n", __PRETTY_FUNCTION__, is_dense_matrix ? "dense": "sparse");
@@ -116,7 +120,7 @@ auto get_initial_centers(const Matrix &matrix, RNG &rng,
         constexpr bool is_par = !is_dense_matrix;
         std::fprintf(stderr, "Calling kmeans++ with nr = %zu, k = %d, weights = %p, %d rounds of localsearch++, %d expskips, and is_parallel: %d\n",
                      nr, k, (void *)weights, lspp, use_exponential_skips, is_par);
-        std::tie(indices, asn, fcosts) = coresets::kmeanspp(oracle, rng, nr, k, weights, lspp, use_exponential_skips, is_par);
+        std::tie(indices, asn, fcosts) = coresets::kmeanspp(oracle, rng, nr, k, weights, lspp, use_exponential_skips, is_par, n_local_trials);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     }
     assert(*std::max_element(indices.begin(), indices.end()) < nr);
@@ -126,13 +130,13 @@ auto get_initial_centers(const Matrix &matrix, RNG &rng,
 template<typename Matrix, typename RNG, typename Norm=blz::sqrL2Norm, typename WeightT=const double>
 auto repeatedly_get_initial_centers(const Matrix &matrix, RNG &rng,
                                     unsigned k, unsigned kmc2_rounds, int ntimes, int lspp=0, bool use_exponential_skips=false, const Norm &norm=Norm(),
-                                    WeightT *const weights=static_cast<WeightT *>(nullptr))
+                                    WeightT *const weights=static_cast<WeightT *>(nullptr), size_t n_local_trials=1)
 {
     using FT = double;
-    auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, lspp, use_exponential_skips, norm, weights);
+    auto [idx,asn,costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, lspp, use_exponential_skips, norm, n_local_trials, weights);
     auto tcost = blz::sum(costs);
     for(;--ntimes > 0;) {
-        auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, lspp, use_exponential_skips, norm, weights);
+        auto [_idx,_asn,_costs] = get_initial_centers(matrix, rng, k, kmc2_rounds, lspp, use_exponential_skips, norm, n_local_trials, weights);
         auto ncost = blz::sum(_costs);
         if(ncost < tcost) {
             DBG_ONLY(std::fprintf(stderr, "%g->%g: %g\n", tcost, ncost, tcost - ncost);)

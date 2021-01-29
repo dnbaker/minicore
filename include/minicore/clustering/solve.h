@@ -598,7 +598,9 @@ auto hmb_coreset_clustering(const Matrix &mat,
                             size_t maxiter=10000,
                             size_t calc_cost_freq=100,
                             unsigned int reseed_after=1,
-                            uint64_t seed=0)
+                            uint64_t seed=0,
+                            size_t subiter=2,
+                            double subeps=1e-3)
 {
     const bool isnorm = msr_is_normalized(measure);
     if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
@@ -606,6 +608,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
     blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
     const double prior_sum = prior.size() == 1 ? prior.size() * prior[0]: blz::sum(prior);
     size_t iternum = 0;
+    maxiter = (calc_cost_freq - 1 + maxiter) / calc_cost_freq; // Divide into calc cost freq times
     double initcost = std::numeric_limits<double>::max(), cost = initcost, bestcost = cost;
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
@@ -619,7 +622,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
     };
     const size_t np = costs.size(), k = centers.size();
     wy::WyRand<std::make_unsigned_t<IT>> rng(seed);
-    schism::Schismatic<std::make_unsigned_t<IT>> div((mat).rows());
     blz::DV<IT> sampled_indices(mbsize);
     std::vector<std::vector<IT>> assigned(k);
     blz::DV<FT> wc;
@@ -628,77 +630,75 @@ auto hmb_coreset_clustering(const Matrix &mat,
     for(;;) {
         PYBIND11_EXCEPTION_CHECK();
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
-        if(1) {
-            // Every once in a while, perform exhaustive center-point-comparisons
-            // and restart any centers with no assigned points
-            OMP_PFOR_DYN
-            for(size_t i = 0; i < np; ++i) {
-                double mincost = std::numeric_limits<double>::max();
-                IT minind = -1;
-                for(size_t j = 0; j < k; ++j)
-                    if(const double nc = compute_point_cost(i, j);nc < mincost)
-                        mincost = nc, minind = j;
-                asn[i] = minind;
-                costs[i] = mincost;
-            }
-            center_counts = 0;
+        // Every once in a while, perform exhaustive center-point-comparisons
+        // and restart any centers with no assigned points
+        OMP_PFOR_DYN
+        for(size_t i = 0; i < np; ++i) {
+            double mincost = std::numeric_limits<double>::max();
+            IT minind = -1;
+            for(size_t j = 0; j < k; ++j)
+                if(const double nc = compute_point_cost(i, j);nc < mincost)
+                    mincost = nc, minind = j;
+            asn[i] = minind;
+            costs[i] = mincost;
+        }
+        center_counts = 0;
 
+        OMP_PFOR
+        for(size_t i = 0; i < np; ++i) {
+            assert(asn[i] < k);
+            OMP_ATOMIC
+            ++center_counts[asn[i]];
+        }
+        blaze::SmallArray<uint32_t, 8> foundindices;
+        for(size_t i = 0; i < center_counts.size(); ++i)
+            if(center_counts[i] <= reseed_after) // If there are few points assigned to a center, restart it
+                foundindices.pushBack(i);
+        if(foundindices.size()) {
+            DBG_ONLY(std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());)
+            for(const auto fidx: foundindices) {
+                // set new centers
+                auto &ctr = centers[fidx];
+                size_t id;
+                if(weights) {
+                    if constexpr(blaze::IsVector_v<WeightT>) {
+                        wc = costs * *weights;
+                    } else if constexpr(std::is_floating_point_v<WeightT>) {
+                        wc = costs * blz::make_cv(weights, np);
+                    } else {
+                        wc = costs * blz::make_cv(weights->data(), np);
+                    }
+                    id = reservoir_simd::sample(wc.data(), np, rng());
+                } else {
+                    id = reservoir_simd::sample(costs.data(), np, rng());
+                }
+                if(isnorm) clustering::set_center(ctr, row(mat, id, blz::unchecked) / rowsums[id]);
+                else       clustering::set_center(ctr, row(mat, id, blz::unchecked));
+                centersums[fidx] = sum(ctr);
+            }
             OMP_PFOR
             for(size_t i = 0; i < np; ++i) {
-                assert(asn[i] < k);
-                OMP_ATOMIC
-                ++center_counts[asn[i]];
-            }
-            blaze::SmallArray<uint32_t, 8> foundindices;
-            for(size_t i = 0; i < center_counts.size(); ++i)
-                if(center_counts[i] <= reseed_after) // If there are few points assigned to a center, restart it
-                    foundindices.pushBack(i);
-            if(foundindices.size()) {
-                DBG_ONLY(std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());)
-                for(const auto fidx: foundindices) {
-                    // set new centers
-                    auto &ctr = centers[fidx];
-                    size_t id;
-                    if(weights) {
-                        if constexpr(blaze::IsVector_v<WeightT>) {
-                            wc = costs * *weights;
-                        } else if constexpr(std::is_floating_point_v<WeightT>) {
-                            wc = costs * blz::make_cv(weights, np);
-                        } else {
-                            wc = costs * blz::make_cv(weights->data(), np);
-                        }
-                        id = reservoir_simd::sample(wc.data(), np, rng());
-                    } else {
-                        id = reservoir_simd::sample(costs.data(), np, rng());
-                    }
-                    if(isnorm) clustering::set_center(ctr, row(mat, id, blz::unchecked) / rowsums[id]);
-                    else       clustering::set_center(ctr, row(mat, id, blz::unchecked));
-                    centersums[fidx] = sum(ctr);
-                }
-                OMP_PFOR
-                for(size_t i = 0; i < np; ++i) {
-                    auto &ccost = costs[i];
-                    for(const auto fidx: foundindices)
-                        if(auto newcost = compute_point_cost(i, fidx);newcost < ccost)
-                             ccost = newcost, asn[i] = fidx;
-                }
-            }
-            if(weights) {
-                if constexpr(blaze::IsVector_v<WeightT>)
-                    cost = blz::dot(costs, *weights);
-                else cost = blz::dot(costs, blz::make_cv(weights->data(), np));
-            } else cost = blz::sum(costs);
-            std::fprintf(stderr, "[CSOPT] Cost at iter %zu (mbsize %zd): %g. [best prev: %g]\n", iternum, mbsize, cost, bestcost);
-            if(iternum == 0) initcost = cost, bestcost = initcost;
-            if(cost < bestcost) {
-                std::fprintf(stderr, "[CSOPT] at iter %zu, new cost %g is better than previous %g\n", iternum, cost, bestcost);
-                std::fprintf(stderr, "dist between: %g\n", blz::sum(blz::generate(centers.size(), [&](auto x) {return l2Dist(centers[x], savectrs[x]);})));
-                bestcost = cost;
-                savectrs = centers;
+                auto &ccost = costs[i];
+                for(const auto fidx: foundindices)
+                    if(auto newcost = compute_point_cost(i, fidx);newcost < ccost)
+                         ccost = newcost, asn[i] = fidx;
             }
         }
+        if(weights) {
+            if constexpr(blaze::IsVector_v<WeightT>)
+                cost = blz::dot(costs, *weights);
+            else cost = blz::dot(costs, blz::make_cv(weights->data(), np));
+        } else cost = blz::sum(costs);
+        std::fprintf(stderr, "[CSOPT] Cost at iter %zu (mbsize %zd): %g. [best prev: %g]\n", iternum, mbsize, cost, bestcost);
+        if(iternum == 0) initcost = cost, bestcost = initcost;
+        else if(cost < bestcost) {
+            std::fprintf(stderr, "[CSOPT] at iter %zu, new cost %g is better than previous %g\n", iternum, cost, bestcost);
+            std::fprintf(stderr, "dist between: %g\n", blz::sum(blz::generate(centers.size(), [&](auto x) {return l2Dist(centers[x], savectrs[x]);})));
+            bestcost = cost;
+            savectrs = centers;
+        }
 
-        if(++iternum >= maxiter) {
+        if(++iternum > maxiter) {
             std::fprintf(stderr, "[CSOPT] Maximum iterations [%zu] reached\n", maxiter);
             break;
         }
@@ -709,26 +709,34 @@ auto hmb_coreset_clustering(const Matrix &mat,
         using WT = const std::remove_const_t<std::decay_t<decltype((*weights)[0])>>;
         const WT *ptr = nullptr;
         if(weights) ptr = weights->data();
-        sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, sm);
+        sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, seed, sm, k, (uint64_t *)nullptr, false, msr2alpha(measure));
         using LElement = blz::ElementType_t<Matrix>;
-        using LMat = std::conditional_t<blaze::IsDenseMatrix_v<Matrix>,
+        constexpr bool is_dense = blaze::IsDenseMatrix_v<Matrix>;
+        using LMat = std::conditional_t<is_dense,
                             blz::DM<LElement>,
                             blz::SM<LElement>>;
         LMat smat;
         blz::DV<double> cscosts(mbsize);
         blz::DV<uint32_t> csasn(mbsize);
+        blz::DV<uint32_t> nnz;
         for(size_t j = 0; j < calc_cost_freq; ++j) {
+            //std::fprintf(stderr, "%zu:%zu\n", iternum, j);
             auto pts = sampler.sample(mbsize, rng());
             pts.compact();
             smat.resize(pts.size(), mat.columns());
-            const size_t tnz = sum(blaze::generate(pts.size(), [&](auto x) {return nonZeros(row(mat, pts.indices_[x]));}));
-            smat.reserve(tnz);
+            if constexpr(blaze::IsSparseMatrix_v<Matrix>) {
+                nnz = blaze::generate(pts.size(), [&](auto x) {return nonZeros(row(mat, pts.indices_[x]));});
+                const size_t tnz = sum(nnz);
+                smat.reserve(tnz);
+                for(size_t i = 0; i < pts.size(); ++i) {
+                    smat.reserve(i, nnz[i]);
+                }
+            }
             OMP_PFOR
             for(size_t i = 0; i < pts.indices_.size(); ++i) {
                 auto lh = row(smat, i);
                 set_center(lh, row(mat, pts.indices_[i]));
             }
-                //row(smat, i) = row(mat, pts.indices_[i]);
             blz::DV<double> csw;
             if(weights)
                 csw = elements(*weights, pts.indices_.data(), pts.indices_.size()) * pts.weights_;
@@ -736,6 +744,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 csw = pts.weights_;
             cscosts.resize(pts.size());
             csasn.resize(pts.size());
+            // 2. Optimize over the coreset
             OMP_PFOR
             for(size_t i = 0; i < pts.size(); ++i) {
                 auto rs = rowsums[pts.indices_[i]];
@@ -749,14 +758,9 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 csasn[i] = bestid;
                 cscosts[i] = bestscore;
             }
-            perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw, 1e-4, 5);
+            perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw, subeps, subiter);
             centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
-            ++iternum;
         }
-
-        // 2. Optimize over the coreset
-        // 3. Calculate new centers
-        // Set the new centers
     }
     centers = savectrs;
     cost = bestcost;

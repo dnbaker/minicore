@@ -65,7 +65,7 @@ class get_pybind_include(object):
 extra_compile_args = ['-march=native', '-DNDEBUG',
                       '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                       '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
-                      '-Wall', '-Wextra', '-Wformat', '-Wdeprecated',
+                      '-Wall', '-Wextra', '-Wformat',
                       '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
                       "-DBLAZE_USE_SLEEF=1", "-pipe",
                       '-Wno-deprecated-declarations', '-O3']
