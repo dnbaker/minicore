@@ -17,7 +17,7 @@ using namespace minicore;
 #endif
 
 int main(int argc, char *argv[]) {
-    int NUMITER = 100;
+    int NUMITER = 10;
     if(const char *s = std::getenv("NUMITER")) {
         NUMITER = std::atoi(s) > 0 ? std::atoi(s): 1;
     }

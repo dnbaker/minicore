@@ -1670,25 +1670,13 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             }
             case L2: case SQRL2:
             {
-                ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
-#ifndef NDEBUG
-                FT tret = 0.;
-                for(size_t i = 0; i < nd; ++i) {
-                    tret += (mr[i] - ctr[i]) * (mr[i] - ctr[i]);
-                }
-                assert(std::abs(ret - tret) <= 1e-5 * std::max(ret, tret) || !std::fprintf(stderr, "ret: %g. tret: %g. diff: %.20g\n", ret, tret, std::abs(ret - tret)));
-#endif
+                ret = libkl::nnsqrl2_reduce_aligned(mr.data(), ctr.data(), nd);
                 if(msr == L2) ret = std::sqrt(ret);
                 break;
             }
             case L1:
             {
                 ret = libkl::tvd_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., pv, pv) * 2.;
-#ifndef NDEBUG
-                FT tret = 0.;
-                for(size_t i = 0; i < nd; ++i) tret += std::abs(mr[i] - ctr[i]);
-                assert(std::abs(ret - tret) <= 1e-5 * std::max(ret, tret) || !std::fprintf(stderr, "ret: %g. tret: %g. diff: %.20g\n", ret, tret, std::abs(ret - tret)));
-#endif
                 break;
             }
             case COSINE_DISTANCE: case COSINE_SIMILARITY:
@@ -1704,7 +1692,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             case TVD: {
                 ret = libkl::tvd_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
 #ifndef NDEBUG
-                FT tret = 0.;
+                double tret = 0.;
                 for(size_t i = 0; i < nd; ++i) tret += std::abs(mr[i] * lhrsi + lhinc - (ctr[i] * rhrsi + rhinc)) * .5;
                 assert(std::abs(ret - tret) <= (1e-5 * std::max(ret, tret)) || !std::fprintf(stderr, "ret: %g. tret: %g. diff: %.20g\n", ret, tret, std::abs(ret - tret)));
 #endif
@@ -1809,7 +1797,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     ret = std::sqrt(ret) * M_SQRT1_2;
                     break;
                 } else if(msr == L2 || msr == SQRL2) {
-                    ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0.);
+                    ret = libkl::nnsqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either);
                     if(ret < 0.) {
                         std::fprintf(stderr, "negative sqrl2 distance: %g?\n", ret);
                         ret = 0.;

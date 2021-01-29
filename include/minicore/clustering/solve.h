@@ -126,7 +126,7 @@ perform_hard_clustering(const MT &mat,
     const auto initcost = compute_cost();
     PYBIND11_EXCEPTION_CHECK();
     FT cost = initcost;
-    std::fprintf(stderr, "[%s] initial cost: %0.12g\n", __PRETTY_FUNCTION__, cost);
+    std::fprintf(stderr, "[perform_hard_clustering] initial cost: %0.12g\n", cost);
     if(cost == 0) {
         std::fprintf(stderr, "Cost is 0 (unexpected), but the cost can't decrease. No optimization performed\n");
         return {0., 0., 0};
@@ -143,7 +143,6 @@ perform_hard_clustering(const MT &mat,
         auto newcost = compute_cost();
         DBG_ONLY(std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);)
         if(newcost > cost && !res) {
-            std::cerr << "Warning: New cost " << newcost << " > original cost " << cost << ". Using prior iteration.\n;";
             centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
             assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums);
             break;
@@ -745,8 +744,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
             cscosts.resize(pts.size());
             csasn.resize(pts.size());
             // 2. Optimize over the coreset
-            OMP_PFOR
-            for(size_t i = 0; i < pts.size(); ++i) {
+            auto perform_one = [&](auto i) {
                 auto rs = rowsums[pts.indices_[i]];
                 auto sr = row(smat, i, unchecked);
                 auto bestscore = cmp::msr_with_prior<FT>(measure, sr, centers[0], prior, prior_sum, rs, centersums[0]);
@@ -757,9 +755,23 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 }
                 csasn[i] = bestid;
                 cscosts[i] = bestscore;
+            };
+            const size_t pend = pts.size();
+            if constexpr(is_dense) {
+                for(size_t i = 0; i < pend; ++i) {
+                    perform_one(i);
+                }
+            } else {
+                OMP_PFOR
+                for(size_t i = 0; i < pend; ++i) {
+                    perform_one(i);
+                }
             }
             perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw, subeps, subiter);
-            centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
+            if constexpr(is_dense) {
+                for(size_t i = 0; i < centers.size(); ++i) centersums[i] = sum(centers[i]);
+            } else
+                centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
         }
     }
     centers = savectrs;

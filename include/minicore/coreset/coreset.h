@@ -446,8 +446,6 @@ struct CoresetSampler {
         for(size_t i = 0; i < np_; ++i) {
             sensitivities[i] += ccinv[assignments[i]];
         }
-        std::cerr << "New sensitivities: " << trans(sensitivities) << '\n';
-        // sensitivities = weights * costs / total_cost + 1. / (cluster_size)
         const double total_sensitivity = blaze::sum(sensitivities);
         // probabilities = sensitivity / sum(sensitivities) [use the same location in memory because we no longer need sensitivities]
         sensitivities *= 1. / total_sensitivity;
