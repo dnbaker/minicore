@@ -57,7 +57,6 @@ index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
         for(size_t i = 0; i < icsz; ++i) assert(icdat[i] < mat.rows());
 #endif
         auto rows = blaze::rows(mat, icdat, icsz);
-        std::fprintf(stderr, "blaze row selection: %zu/%zu of matrix %zu/%zu\n", rows.rows(), rows.columns(), mat.rows(), mat.columns());
         resize_and_assign(ret, rows);
     } else {
 #if !NDEBUG
@@ -66,9 +65,6 @@ index2matrix(const IndexCoreset<IT, FT> &ic, const MatrixType &mat,
         auto columns = blaze::columns(mat, icdat, icsz);
         resize_and_assign(ret, columns);
     }
-#if !NDEBUG
-    std::fprintf(stderr, "Gathered pieces for index2matrix\n");
-#endif
     return MatrixCoreset<MatrixType, FT>{std::move(ret), std::move(weights), rowwise};
 } // index2matrix
 } // coresets

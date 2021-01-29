@@ -51,7 +51,7 @@ template<typename Oracle, typename FT=double,
 auto
 kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true, size_t n_local_samples=1)
 {
-    const bool emit_log = true;
+    const bool emit_log = false;
     if(emit_log)
         std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s and %s, and %s.\n", np, k, weights ? " and non-null weights": "", parallelize_oracle ? "parallelized": "unparallelized", use_exponential_skips ? "with exponential skips": "SIMD sampling");
     std::vector<IT> centers(k, IT(0));
@@ -102,7 +102,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     std::vector<IT> samplesasn(odists.size()), oasn(odists.size());
     if(odists.size()) odists = distances, oasn = assignments;
     for(size_t center_idx = 1;center_idx < k;) {
-        std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\r\n", center_idx, size_t(k), centers[center_idx - 1]);
+        //std::fprintf(stderr, "Centers size: %zu/%zu. Newest center: %u\r\n", center_idx, size_t(k), centers[center_idx - 1]);
         // At this point, the cdf has been prepared, and we are ready to sample.
         // add new element
         auto cd = centers.data(), ce = cd + center_idx;
@@ -117,16 +117,17 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             if(n_local_samples <= 1u)
                 newc = reservoir_simd::sample(rvals.data(), np, rngv, fmt);
             else
-                reservoir_simd::sample_k(rvals.data(), np, k, samplesbuf.data(), rngv, fmt);
+                reservoir_simd::sample_k(rvals.data(), np, n_local_samples, samplesbuf.data(), rngv, fmt);
         } else {
             if(n_local_samples <= 1u)
                 newc = reservoir_simd::sample(distances.data(), np, rngv, fmt);
             else
-                reservoir_simd::sample_k(distances.data(), np, k, samplesbuf.data(), rngv, fmt);
+                reservoir_simd::sample_k(distances.data(), np, n_local_samples, samplesbuf.data(), rngv, fmt);
         }
         double dsum = -1.;
         if(n_local_samples > 1) {
             for(size_t i = 0; i < n_local_samples; ++i) {
+                VERBOSE_ONLY(std::fprintf(stderr, "Performing %zu sample/%zu for %zu\n", i, n_local_samples, center_idx);)
                 if(i > 0) samplescosts = odists, samplesasn = oasn;
                 auto sptr = i > 0 ? &samplescosts: &distances;
                 auto iptr = i > 0 ? &samplesasn: &assignments;
@@ -149,8 +150,14 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
                     }
                     nsum = sum(*sptr);
                 }
-                if(dsum < 0.) dsum = nsum, newc = nextc;
-                else if(nsum < dsum) distances = samplescosts, dsum = nsum, assignments = samplesasn, newc = nextc;
+                if(dsum < 0.) {
+                    dsum = nsum, newc = nextc;
+                } else {
+                    if(nsum < dsum) {
+                        std::fprintf(stderr, "Sample %zu for idx %zu replaced cost %.10g with %0.10g\n", i, center_idx, nsum, dsum);
+                        distances = samplescosts, dsum = nsum, assignments = samplesasn, newc = nextc;
+                    } VERBOSE_ONLY(else std::fprintf(stderr, "new cost: %g. old: %g. old cost is %g better\n", nsum, dsum, dsum - nsum);)
+                }
             }
             centers[center_idx] = newc;
             assignments[newc] = center_idx;
@@ -186,17 +193,17 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         if(emit_log) std::fprintf(stderr, "Performing %u rounds of ls++\n", int(lspprounds));
         localsearchpp_rounds(oracle, rng, distances, centers, assignments, np, lspprounds, weights, parallelize_oracle);
     }
-    if(emit_log) std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
+    //if(emit_log) std::fprintf(stderr, "returning %zu centers and %zu assignments\n", centers.size(), assignments.size());
     return std::make_tuple(std::move(centers), std::move(assignments), std::vector<FT>(distances.begin(), distances.end()));
 }
 
 template<typename Iter, typename FT=double,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
 auto
-kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, size_t n_local_trials=1) {
+kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true, size_t n_local_trials=1) {
     auto dm = make_index_dm(first, norm);
     static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, lspprounds, use_exponential_skips, n_local_trials);
+    return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, lspprounds, use_exponential_skips, parallelize_oracle, n_local_trials);
 }
 
 template<typename Oracle, typename FT=double,
@@ -339,7 +346,6 @@ kmc2(const Oracle &oracle, RNG &rng, size_t np, size_t k, size_t m = 2000)
     };
 
     while(centers.size() < k) {
-        DBG_ONLY(std::fprintf(stderr, "Center %zu/%zu\r\n", centers.size(), k);)
         auto x = div.mod(IT(rng()));
         double xdist = mindist(x);
         auto xdi = 1. / xdist;
@@ -387,13 +393,13 @@ kmc2(Iter first, Iter end, RNG &rng, size_t k, size_t m = 2000, const Norm &norm
 template<typename MT, bool SO,
          typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
 auto
-kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=blaze::IsDenseMatrix_v<MT>) {
+kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=blaze::IsDenseMatrix_v<MT>, size_t n_local_samples=1) {
     if(rowwise) {
         auto rowit = blz::rowiterator(*mat);
-        return kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips, parallelize_oracle);
+        return kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips, parallelize_oracle, n_local_samples);
     } else { // columnwise
         auto columnit = blz::columniterator(*mat);
-        return kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips, parallelize_oracle);
+        return kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips, parallelize_oracle, n_local_samples);
     }
 }
 
@@ -504,9 +510,6 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<CFT> &counts,
             }
         }
     }
-#ifndef NDEBUG
-    std::fprintf(stderr, "Assigned cluster centers\n");
-#endif
     for(size_t i = 0; i < centers.rows(); ++i) {
         VERBOSE_ONLY(std::fprintf(stderr, "center %zu has count %g\n", i, counts[i]);)
         if(!counts[i]) {
@@ -553,7 +556,6 @@ double lloyd_iteration(std::vector<IT> &assignments, std::vector<CFT> &counts,
         assignments[i] = label;
         total_loss += getw(i) * dist;
     }
-    std::fprintf(stderr, "total loss: %g\n", total_loss);
     if(std::isnan(total_loss)) total_loss = std::numeric_limits<decltype(total_loss)>::infinity();
     return total_loss;
 }
@@ -571,7 +573,6 @@ double lloyd_loop(std::vector<IT> &assignments, std::vector<CFT> &counts,
     size_t iternum = 0;
     double oldloss = std::numeric_limits<double>::max(), newloss;
     for(;;) {
-        std::fprintf(stderr, "Starting iter %zu\n", iternum);
         newloss = lloyd_iteration(assignments, counts, centers, data, func, weights, use_moving_average);
         double change_in_cost = std::abs(oldloss - newloss) / std::min(oldloss, newloss);
         if(iternum++ == maxiter || change_in_cost <= tolerance) {
@@ -722,7 +723,7 @@ auto kmeans_matrix_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng,
 #ifndef NDEBUG
     for(auto idx: ics.indices_)
         assert(idx < rowwise ? (*mat).rows(): (*mat).columns());
-    std::fprintf(stderr, "Got kmeans coreset of size %zu\n", ics.size());
+    //std::fprintf(stderr, "Got kmeans coreset of size %zu\n", ics.size());
 #endif
     return index2matrix(ics, *mat);
 }

@@ -489,7 +489,7 @@ struct CoresetSampler {
     {
         const double alpha = 16 * std::log(k_) + 32., alpha2 = 2. * alpha;
 
-        DBG_ONLY(std::fprintf(stderr, "alpha: %g\n", alpha);)
+        VERBOSE_ONLY(std::fprintf(stderr, "alpha: %g\n", alpha);)
         //auto center_counts = std::make_unique<IT[]>(ncenters);
         blaze::DynamicVector<FT> weight_sums(ncenters, FT(0));
         blaze::DynamicVector<FT> cost_sums(ncenters, FT(0));
@@ -501,7 +501,7 @@ struct CoresetSampler {
             assert(asn < ncenters);
             const auto w = getweight(i);
 
-            DBG_ONLY(std::fprintf(stderr, "weight %zu: %g with asn %u\n", i, w, asn);)
+            VERBOSE_ONLY(std::fprintf(stderr, "weight %zu: %g with asn %u\n", i, w, asn);)
             OMP_ATOMIC
             weight_sums[asn] += w; // If unweighted, weights are 1.
             //OMP_ATOMIC
@@ -513,20 +513,20 @@ struct CoresetSampler {
             total_costs += w * costs[i];
         }
         double weight_sum = blaze::sum(weight_sums);
-        DBG_ONLY(std::fprintf(stderr, "wsum: %g\n", weight_sum);)
+        VERBOSE_ONLY(std::fprintf(stderr, "wsum: %g\n", weight_sum);)
         total_costs /= weight_sum;
         const double tcinv = alpha / total_costs;
-        DBG_ONLY(std::fprintf(stderr, "tcinv: %g\n", tcinv);)
+        VERBOSE_ONLY(std::fprintf(stderr, "tcinv: %g\n", tcinv);)
         blaze::DynamicVector<FT> sens(np_);
         for(size_t i = 0; i < ncenters; ++i) {
             cost_sums[i] = alpha2 * cost_sums[i] / (weight_sums[i] * total_costs) + 4 * weight_sum / weight_sums[i];
-            DBG_ONLY(std::fprintf(stderr, "Adjusted cost: %g\n", cost_sums[i]);)
+            VERBOSE_ONLY(std::fprintf(stderr, "Adjusted cost: %g\n", cost_sums[i]);)
         }
         OMP_PFOR
         for(size_t i = 0; i < np_; ++i) {
             sens[i] = tcinv * costs[i] + cost_sums[assignments[i]];
         }
-        DBG_ONLY(std::fprintf(stderr, "sensitivity sum: %g\n", sum(sens));)
+        VERBOSE_ONLY(std::fprintf(stderr, "sensitivity sum: %g\n", sum(sens));)
         probs_.reset(new FT[np_]);
         std::transform(sens.data(),  sens.data() + np_, probs_.get(), [tsi=1./sum(sens)](auto x) {return x * tsi;});
     }

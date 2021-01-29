@@ -28,18 +28,12 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
     ctrcostmat = blaze::generate(np, k, [&](auto x, auto y) {
         return oracle(x, ctrs[y]);
     });
-    DBG_ONLY(std::fprintf(stderr, "np: %zu\n", np);)
     blaze::CustomVector<value_type, blaze::unaligned, blaze::unpadded> dv(&distances[0], np);
     std::unique_ptr<blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded>> wv;
     if(weights) {
         wv.reset(new blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded>((WFT *)weights, np));
     }
     dv = blz::min<blz::rowwise>(ctrcostmat);
-#ifndef NDEBUG
-    auto ccost = blz::sum(dv);
-    const auto ocost = ccost;
-    std::fprintf(stderr, "Cost before lsearch++: %g\n", ccost);
-#endif
 
     blz::DV<value_type> ctrcosts(k), newcosts(np);
     value_type gain;
@@ -120,11 +114,6 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
                 }
             }
         }
-#ifndef NDEBUG
-        for(unsigned i = 0; i < k; ++i) {
-            std::fprintf(stderr, "Center %u has %u for id and %g for costs\n", i, ctrs[i], ctrcosts[i]);
-        }
-#endif
         const auto argmin = reservoir_simd::argmin(ctrcosts, /*multithread=*/true);
         const auto delta = ctrcosts[argmin] - gain;
         if(delta < 0.) {
@@ -135,11 +124,6 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
             ctrs[argmin] = sel;
             column(ctrcostmat, argmin, blaze::unchecked) = newcosts;
             dv = blaze::min<blaze::rowwise>(ctrcostmat);
-#ifndef NDEBUG
-            auto nextccost = blz::sum(dv);
-            std::fprintf(stderr, "Cost before lsearch++: %g. After: %g\n", ccost, nextccost);
-            ccost = nextccost;
-#endif
             total_gain += delta;
         }
     }
@@ -147,9 +131,6 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
     for(size_t i = 0; i < np; ++i) {
         asn[i] = reservoir_simd::argmin(row(ctrcostmat, i, blaze::unchecked), /*multithread=*/false);
     }
-#ifndef NDEBUG
-    std::fprintf(stderr, "Cost before %zu rounds of lsearch++: %g. After: %g\n", nrounds, ocost, ccost);
-#endif
     return total_gain;
 }
 
