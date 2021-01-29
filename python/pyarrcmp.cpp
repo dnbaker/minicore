@@ -13,13 +13,14 @@ using minicore::distance::DissimilarityMeasure;
 using blaze::row;
 
 template<typename VT>
-double __ac1d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, DissimilarityMeasure ms, size_t dim, double prior, bool reverse, int use_double=sizeof(VT) > 4) {
-    if(reverse) return __ac1d(rhp, lhp, ms, dim, prior, !reverse, use_double);
+double __ac1d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, DissimilarityMeasure ms, size_t dim, double prior, bool reverse, int use_double=sizeof(VT) > 4, double lhsum=-1., double rhsum=-1.) {
+    if(reverse) return __ac1d(rhp, lhp, ms, dim, prior, !reverse, use_double, rhsum, lhsum);
     double ret;
     auto lh = blz::make_cv(const_cast<VT *>(lhp), dim);
     auto rh = blz::make_cv(const_cast<VT *>(rhp), dim);
-    const auto lhsum = sum(lh), rhsum = sum(rh);
     const auto psum = prior * dim;
+    if(lhsum < 0.) lhsum = sum(lh);
+    if(rhsum < 0.) rhsum = sum(rh);
     std::vector<double> pv({prior});
     if(use_double) ret = cmp::msr_with_prior<double>(ms, lh, rh, pv, psum, lhsum, rhsum);
     else           ret = cmp::msr_with_prior<float> (ms, lh, rh, pv, psum, lhsum, rhsum);
@@ -27,13 +28,18 @@ double __ac1d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, Dissimilar
 }
 
 template<typename VT>
-void __ac1d2d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, void *ret, DissimilarityMeasure ms, size_t nr, size_t nc, double prior, bool reverse, int use_double) {
-    if(reverse) {
-        __ac1d2d(rhp, lhp, ret, ms, nr, nc, prior, !reverse, use_double);
-        return;
+void __ac1d2d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, void *ret, DissimilarityMeasure ms, size_t nr, size_t nc, double prior, bool reverse, int use_double,
+              double lhsum=-1., double *rhsums=nullptr)
+{
+    std::unique_ptr<double[]> rhs;
+    if(rhsums == nullptr) {
+        rhs.reset(new double[nr]);
+        rhsums = rhs.get();
+        for(size_t i = 0; i < nr; ++i) rhsums[i] = sum(blz::make_cv((VT *)rhp + nc * i, nc));
     }
+    if(lhsum < 0.) lhsum = sum(blz::make_cv((VT *)lhp, nc));
     for(size_t i = 0; i < nr; ++i) {
-        auto v = __ac1d(lhp, rhp + nc * i, ms, nc, prior, reverse, use_double);
+        auto v = __ac1d(lhp, rhp + nc * i, ms, nc, prior, reverse, use_double, lhsum, rhsums[i]);
         if(use_double) static_cast<double *>(ret)[i] = v;
         else           static_cast<float *>(ret)[i] = v;
     }
@@ -41,17 +47,13 @@ void __ac1d2d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, void *ret,
 
 template<typename VT>
 void __ac2d2d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, void *ret, DissimilarityMeasure ms, size_t lnr, size_t rnr, size_t nc, double prior, bool reverse, int use_double=sizeof(VT) > 4)
-#if 0
-        __ac2d2d((float*)lbi.ptr, (float *)rbi.ptr, ret, ms, lbi.shape[0], rbi.shape[0], lbi.shape[1], prior, reverse, use_double);
-#endif
 {
-    if(reverse) {
-        __ac2d2d(rhp, lhp, ret, ms, lnr, rnr, nc, prior, !reverse, use_double);
-        return;
-    }
+    blz::DV<double> lhsums(lnr), rhsums(rnr);
+    for(size_t i = 0; i < lnr; ++i) lhsums[i] = sum(blz::make_cv((VT *)lhp + i * nc, nc));
+    for(size_t i = 0; i < rnr; ++i) rhsums[i] = sum(blz::make_cv((VT *)rhp + i * nc, nc));
     for(size_t i = 0; i < lnr; ++i) {
         void *rptr = static_cast<void *>((float *)ret + rnr * i * (use_double ? 2: 1));
-        __ac1d2d(lhp + nc * i, rhp, rptr, ms, rnr, nc, prior, reverse, use_double);
+        __ac1d2d(lhp + nc * i, rhp, rptr, ms, rnr, nc, prior, reverse, use_double, lhsums[i], rhsums.data());
     }
 }
 
@@ -123,7 +125,8 @@ py::object arrcmp(py::array lhs, py::array rhs, py::object msr, double prior, bo
     auto v = ((lhi.ndim - 1) << 1) | (rhi.ndim - 1);
     switch(v) {
         case 1: case 2: {
-            return arrcmp1d2d(lhs, rhs, ms, prior, v > 1 ? reverse: !reverse, use_double, lhdt);
+            bool orev = v > 1 ? reverse: !reverse;
+            return arrcmp1d2d(lhs, rhs, ms, prior, orev, use_double, lhdt);
         }
         case 0: return arrcmp1d(lhs, rhs, ms, prior, reverse, use_double, rhdt);
         case 3: return arrcmp2d(lhs, rhs, ms, prior, reverse, use_double, rhdt);
