@@ -245,7 +245,7 @@ void assign_points_hard(const Mat &mat,
     // Compute distance function
     // Handles similarity measure, caching, and the use of a prior for exponential family models
     auto compute_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        FT ret = cmp::msr_with_prior<FT>(measure, row(mat, id), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        FT ret = msr_with_prior<FT>(measure, row(mat, id), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0) {
             if(unlikely(ret < -1e-5)) {
                 std::fprintf(stderr, "rowsum: %g. csum: %g. expected rsum: %g expected csum: %g\n", double(sum(row(mat, id))), double(sum(centers[cid])), rowsums[id], centersums[cid]);
@@ -370,7 +370,7 @@ double set_centroids_soft(const Mat &mat,
                           : double(blz::sum(prior));
     costs = blaze::generate(mat.rows(), centers.size(), [&](auto id, auto cid) ALWAYS_INLINE {
         assert(cid < centers.size());
-        return cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        return msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
     });
     //std::cerr << "Costs: " << costs << '\n';
     return ret;
@@ -410,7 +410,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        double ret = cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        double ret = msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0 || std::isnan(ret))
             ret = 0.;
         else if(std::isinf(ret))
@@ -612,7 +612,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        double ret = cmp::msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
+        double ret = msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
         if(ret < 0 || std::isnan(ret))
             ret = 0.;
         else if(std::isinf(ret))
@@ -626,6 +626,13 @@ auto hmb_coreset_clustering(const Matrix &mat,
     blz::DV<FT> wc;
     if(weights) wc.resize(np);
     blz::DV<uint64_t> center_counts(k);
+    coresets::CoresetSampler sampler;
+    const coresets::SensitivityMethod sm = measure == L1 || measure == L2 ? coresets::VX: coresets::LBK;
+    constexpr bool is_dense = blaze::IsDenseMatrix_v<Matrix>;
+    using LMat = std::conditional_t<is_dense,
+                        blz::DM<LElement>,
+                        blz::SM<LElement>>;
+    LMat smat;
     for(;;) {
         PYBIND11_EXCEPTION_CHECK();
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
@@ -703,18 +710,11 @@ auto hmb_coreset_clustering(const Matrix &mat,
         }
 
         // Sample points
-        auto sampler = coresets::CoresetSampler();
-        const coresets::SensitivityMethod sm = measure == L1 || measure == L2 ? coresets::VX: coresets::LBK;
         using WT = const std::remove_const_t<std::decay_t<decltype((*weights)[0])>>;
         const WT *ptr = nullptr;
         if(weights) ptr = weights->data();
         sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, seed, sm, k, (uint64_t *)nullptr, false, msr2alpha(measure));
         using LElement = blz::ElementType_t<Matrix>;
-        constexpr bool is_dense = blaze::IsDenseMatrix_v<Matrix>;
-        using LMat = std::conditional_t<is_dense,
-                            blz::DM<LElement>,
-                            blz::SM<LElement>>;
-        LMat smat;
         blz::DV<double> cscosts(mbsize);
         blz::DV<uint32_t> csasn(mbsize);
         blz::DV<uint32_t> nnz;
@@ -747,10 +747,10 @@ auto hmb_coreset_clustering(const Matrix &mat,
             auto perform_one = [&](auto i) {
                 auto rs = rowsums[pts.indices_[i]];
                 auto sr = row(smat, i, unchecked);
-                auto bestscore = cmp::msr_with_prior<FT>(measure, sr, centers[0], prior, prior_sum, rs, centersums[0]);
+                auto bestscore = msr_with_prior<FT>(measure, sr, centers[0], prior, prior_sum, rs, centersums[0]);
                 auto bestid = 0u;
                 for(size_t j = 1; j < k; ++j) {
-                    auto nscore = cmp::msr_with_prior<FT>(measure, sr, centers[j], prior, prior_sum, rs, centersums[j]);
+                    auto nscore = msr_with_prior<FT>(measure, sr, centers[j], prior, prior_sum, rs, centersums[j]);
                     if(nscore < bestscore) bestid = j, bestscore = nscore;
                 }
                 csasn[i] = bestid;

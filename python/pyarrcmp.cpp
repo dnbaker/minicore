@@ -24,8 +24,8 @@ double __ac1d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, Dissimilar
         if(lhsum < 0.) lhsum = sum(lh);
         if(rhsum < 0.) rhsum = sum(rh);
     }
-    if(use_double) ret = cmp::msr_with_prior<double>(ms, lh, rh, prior, psum, lhsum, rhsum);
-    else           ret = cmp::msr_with_prior<float> (ms, lh, rh, prior, psum, lhsum, rhsum);
+    if(use_double) ret = dmsr_with_prior(ms, lh, rh, prior, psum, lhsum, rhsum);
+    else           ret = fmsr_with_prior(ms, lh, rh, prior, psum, lhsum, rhsum);
     return ret;
 }
 

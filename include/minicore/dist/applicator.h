@@ -1622,7 +1622,18 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
     return cs;
 }
 
-template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
+
+template<typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
+double dmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
+    return msr_with_prior<double>(msr, ctr, mr, prior, prior_sum, ctrsum, mrsum);
+}
+
+template<typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
+double fmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
+    return msr_with_prior<float>(msr, ctr, mr, prior, prior_sum, ctrsum, mrsum);
+}
+
+template<typename FT=float, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
 double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
 {
     static_assert(std::is_floating_point_v<FT>, "FT must be floating-point");
@@ -1940,6 +1951,8 @@ using jsd::make_jsm_applicator;
 using jsd::make_probdiv_applicator;
 
 using cmp::msr_with_prior;
+using cmp::fmsr_with_prior;
+using cmp::dmsr_with_prior;
 
 
 
