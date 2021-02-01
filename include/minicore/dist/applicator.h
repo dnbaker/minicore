@@ -1806,10 +1806,9 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                         std::fprintf(stderr, "Warning: negative sqrl2 distance: %g?\n", ret);
                         ret = 0.;
                     } else if(unlikely(std::isnan(ret))) {
-                        for(size_t i = 0; i < nnz_either; ++i) std::fprintf(stderr, "vs[%zu] = %g/%g\n", i, tmpmulx[i], tmpmuly[i]);
-                        throw std::runtime_error("ret is nan somehow");
-                    }
-                    if(msr == L2) ret = std::sqrt(ret);
+                        ret = -1.;
+                        std::fprintf(stderr, "ret is nan, returning -1\n");
+                    } else if(msr == L2) ret = std::sqrt(ret);
                     break;
                 } else if(msr == L1) {
                     ret = libkl::tvd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., pv, pv) * 2.;
@@ -1888,16 +1887,15 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     break;
                 } else __builtin_unreachable();
                 ret = klc + zc;
-                if(ret < 0) {
+                if(unlikely(ret < 0)) {
 #ifndef NDEBUG
                     std::fprintf(stderr, "klc %g + zc %g = %g\n", klc, zc, ret);
                     std::fprintf(stderr, "[Warning: value (%0.20g) < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
                                  ret, pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
 #endif
                 }
-                if(msr == LLR || msr == SRLRT) {
+                if(msr == LLR || msr == SRLRT)
                     ret *= (lhsum + rhsum);
-                }
                 ret = std::max(ret, 0.);
                 if(msr == SRULRT || msr == SRLRT || msr == JSM) ret = std::sqrt(ret);
                 if(ret == std::numeric_limits<FT>::infinity()) {
@@ -1907,7 +1905,9 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                 }
             }
             break;
-            default: ret = 0.; throw NotImplementedError("unexpected msr; not yet supported");
+            default: ret = -1.;
+                    std::fprintf(stderr, "Unexpected distance measure. Returning -1. (%s)\n", msr2str(msr));
+                    break;
         }
         return ret;
     } else if constexpr(!blz::IsSparseVector_v<MatrixRowT>) {
