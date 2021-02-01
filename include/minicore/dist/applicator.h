@@ -1670,7 +1670,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             }
             case L2: case SQRL2:
             {
-                ret = libkl::nnsqrl2_reduce_aligned(mr.data(), ctr.data(), nd);
+                ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
                 if(msr == L2) ret = std::sqrt(ret);
                 break;
             }
@@ -1797,7 +1797,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     ret = std::sqrt(ret) * M_SQRT1_2;
                     break;
                 } else if(msr == L2 || msr == SQRL2) {
-                    ret = libkl::nnsqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either);
+                    ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0.);
                     if(ret < 0.) {
                         std::fprintf(stderr, "negative sqrl2 distance: %g?\n", ret);
                         ret = 0.;
