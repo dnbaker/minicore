@@ -629,6 +629,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
     coresets::CoresetSampler sampler;
     const coresets::SensitivityMethod sm = measure == L1 || measure == L2 ? coresets::VX: coresets::LBK;
     constexpr bool is_dense = blaze::IsDenseMatrix_v<Matrix>;
+    using LElement = blz::ElementType_t<Matrix>;
     using LMat = std::conditional_t<is_dense,
                         blz::DM<LElement>,
                         blz::SM<LElement>>;
@@ -714,7 +715,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
         const WT *ptr = nullptr;
         if(weights) ptr = weights->data();
         sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, seed, sm, k, (uint64_t *)nullptr, false, msr2alpha(measure));
-        using LElement = blz::ElementType_t<Matrix>;
         blz::DV<double> cscosts(mbsize);
         blz::DV<uint32_t> csasn(mbsize);
         blz::DV<uint32_t> nnz;

@@ -1623,15 +1623,6 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
 }
 
 
-template<typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
-double dmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
-    return msr_with_prior<double>(msr, ctr, mr, prior, prior_sum, ctrsum, mrsum);
-}
-
-template<typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
-double fmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
-    return msr_with_prior<float>(msr, ctr, mr, prior, prior_sum, ctrsum, mrsum);
-}
 
 template<typename FT=float, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
 double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
@@ -1936,6 +1927,14 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
         blaze::CompressedVector<ElementType_t<CtrT>, blaze::TransposeFlag_v<CtrT>> cv = ctr;
         return msr_with_prior(msr, cv, mr, prior, prior_sum, ctrsum, mrsum);
     }
+}
+template<typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
+double dmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
+    return msr_with_prior<double>(msr, ctr, mr, prior, prior_sum, ctrsum, mrsum);
+}
+template<typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
+double fmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
+    return msr_with_prior<float>(msr, ctr, mr, prior, prior_sum, ctrsum, mrsum);
 }
 
 
