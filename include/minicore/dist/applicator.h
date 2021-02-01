@@ -1670,7 +1670,8 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             }
             case L2: case SQRL2:
             {
-                ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
+                //ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
+                ret = libkl::nnsqrl2_reduce_aligned(mr.data(), ctr.data(), nd);
                 if(msr == L2) ret = std::sqrt(ret);
                 break;
             }
@@ -1797,11 +1798,12 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     ret = std::sqrt(ret) * M_SQRT1_2;
                     break;
                 } else if(msr == L2 || msr == SQRL2) {
-                    ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0.);
-                    if(ret < 0.) {
-                        std::fprintf(stderr, "negative sqrl2 distance: %g?\n", ret);
+                    //ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0.);
+                    ret = libkl::nnsqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either);
+                    if(unlikely(ret < 0.)) {
+                        std::fprintf(stderr, "Warning: negative sqrl2 distance: %g?\n", ret);
                         ret = 0.;
-                    } else if(std::isnan(ret)) {
+                    } else if(unlikely(std::isnan(ret))) {
                         for(size_t i = 0; i < nnz_either; ++i) std::fprintf(stderr, "vs[%zu] = %g/%g\n", i, tmpmulx[i], tmpmuly[i]);
                         throw std::runtime_error("ret is nan somehow");
                     }

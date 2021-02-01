@@ -27,7 +27,7 @@ void init_clustering_csr(py::module &m) {
     py::arg("ncheckins") = Py_ssize_t(-1),
     py::arg("reseed_count") = Py_ssize_t(5),
     py::arg("with_rep") = false,
-    py::arg("use_cs") = false
+    py::arg("cs") = false
     );
 
 #endif

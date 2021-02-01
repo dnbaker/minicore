@@ -656,11 +656,14 @@ struct CoresetSampler {
                 }
             }
         } else {
+            if(!probs_.get()) throw std::runtime_error("probs not generated, cannot sample");
+            if(ret.indices_.size() != n) throw std::runtime_error(std::string("Wrong size ret indices ") + std::to_string(n) + " ," + std::to_string(ret.indices_.size()));
             if(!seed) seed = std::rand();
             auto indices = reservoir_simd::sample_k(probs_.get(), np_, n, seed, unique ? SampleFmt::WITH_REPLACEMENT: SampleFmt::NEITHER);
+            for(const auto v: indices) if(v > np_) throw std::runtime_error(std::string("index out of bounds") + std::to_string(v));
             std::copy(indices.begin(), indices.end(), ret.indices_.data());
-            std::sort(indices.begin(), indices.end());
-            std::transform(indices.begin(), indices.end(), ret.weights_.begin(), [&](auto idx) {return getweight(idx) / (static_cast<double>(n) * probs_[idx]);});
+            std::sort(ret.indices_.begin(), ret.indices_.end());
+            std::transform(ret.indices_.begin(), ret.indices_.end(), ret.weights_.begin(), [&](auto idx) {return getweight(idx) / (static_cast<double>(n) * probs_[idx]);});
         }
         if(sens_ == FL && fl_bicriteria_points_) {
             assert(fl_bicriteria_points_->size() == b_);

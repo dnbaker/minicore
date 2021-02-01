@@ -719,11 +719,11 @@ auto hmb_coreset_clustering(const Matrix &mat,
         blz::DV<uint32_t> csasn(mbsize);
         blz::DV<uint32_t> nnz;
         for(size_t j = 0; j < calc_cost_freq; ++j) {
-            //std::fprintf(stderr, "%zu:%zu\n", iternum, j);
+            //std::fprintf(stderr, "CSOPT inner loop %zu:%zu\n", iternum, j);
             auto pts = sampler.sample(mbsize, rng());
-            pts.compact();
+            //pts.compact();
             smat.resize(pts.size(), mat.columns());
-            if constexpr(blaze::IsSparseMatrix_v<Matrix>) {
+            if constexpr(blaze::IsSparseMatrix_v<LMat>) {
                 nnz = blaze::generate(pts.size(), [&](auto x) {return nonZeros(row(mat, pts.indices_[x]));});
                 const size_t tnz = sum(nnz);
                 smat.reserve(tnz);
