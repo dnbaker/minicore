@@ -245,27 +245,7 @@ void assign_points_hard(const Mat &mat,
     // Compute distance function
     // Handles similarity measure, caching, and the use of a prior for exponential family models
     auto compute_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        FT ret = msr_with_prior<FT>(measure, row(mat, id), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
-        if(ret < 0) {
-            if(unlikely(ret < -1e-5)) {
-                std::fprintf(stderr, "rowsum: %g. csum: %g. expected rsum: %g expected csum: %g\n", double(sum(row(mat, id))), double(sum(centers[cid])), rowsums[id], centersums[cid]);
-                std::fprintf(stderr, "Warning: got a negative distance back %0.12g under %d/%s for ids %u/%u. Check details. Total L1 distance: %g\n", ret, (int)measure, msr2str(measure),
-                             (unsigned)id, (unsigned)cid, l1Dist(centers[cid], row(mat, id)));
-                std::cerr << centers[cid] << '\n';
-                std::cerr << row(mat, id) << '\n';
-                std::abort();
-            }
-            ret = 0.;
-        } else if(unlikely(std::isnan(ret))) {
-            std::fprintf(stderr, "ret: %g.row: ", ret);
-            std::cerr << row(mat, id);
-            std::fputc('\n', stderr);
-            std::fprintf(stderr, "ctr: \n");
-            std::cerr << centers[cid];
-            throw std::runtime_error("nan");
-            ret = 0.;
-        }
-        return ret;
+        return msr_with_prior<FT>(measure, row(mat, id), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
     };
     const size_t e = costs.size(), k = centers.size();
     auto onerow = [&](auto x) {
@@ -583,8 +563,7 @@ template<typename Matrix, // MatrixType
          typename CostsT,
          typename PriorT=blz::DynamicVector<FT, rowVector>,
          typename AsnT=blz::DynamicVector<uint32_t>,
-         typename WeightT=CtrT, // Vector Type
-         typename=std::enable_if_t<std::is_floating_point_v<FT>>
+         typename WeightT=CtrT // Vector Type
         >
 auto hmb_coreset_clustering(const Matrix &mat,
                             const dist::DissimilarityMeasure measure,
@@ -595,29 +574,26 @@ auto hmb_coreset_clustering(const Matrix &mat,
                             const WeightT *weights=static_cast<WeightT *>(nullptr),
                             size_t mbsize=1000,
                             size_t maxiter=10000,
-                            size_t calc_cost_freq=100,
+                            size_t calc_cost_freq=1000,
                             unsigned int reseed_after=1,
                             uint64_t seed=0,
                             size_t subiter=2,
                             double subeps=1e-3)
 {
+    static_assert(std::is_floating_point_v<FT>, "Must float");
     const bool isnorm = msr_is_normalized(measure);
     if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
     const blz::DV<double> rowsums = sum<blz::rowwise>(mat);
     blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
     const double prior_sum = prior.size() == 1 ? prior.size() * prior[0]: blz::sum(prior);
     size_t iternum = 0;
+    std::fprintf(stderr, "With %zu total loops, expected %zu inner split into %zu chunks\n", maxiter, calc_cost_freq, (calc_cost_freq - 1 + maxiter) / calc_cost_freq);
     maxiter = (calc_cost_freq - 1 + maxiter) / calc_cost_freq; // Divide into calc cost freq times
     double initcost = std::numeric_limits<double>::max(), cost = initcost, bestcost = cost;
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        double ret = msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
-        if(ret < 0 || std::isnan(ret))
-            ret = 0.;
-        else if(std::isinf(ret))
-            ret = std::numeric_limits<double>::max(); // To make it finite
-        return ret;
+        return msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
     };
     const size_t np = costs.size(), k = centers.size();
     wy::WyRand<std::make_unsigned_t<IT>> rng(seed);
@@ -705,7 +681,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
             savectrs = centers;
         }
 
-        if(++iternum > maxiter) {
+        if(++iternum >= maxiter) {
             std::fprintf(stderr, "[CSOPT] Maximum iterations [%zu] reached\n", maxiter);
             break;
         }
@@ -743,6 +719,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 csw = pts.weights_;
             cscosts.resize(pts.size());
             csasn.resize(pts.size());
+#if 0
             // 2. Optimize over the coreset
             auto perform_one = [&](auto i) {
                 auto rs = rowsums[pts.indices_[i]];
@@ -767,6 +744,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                     perform_one(i);
                 }
             }
+#endif
             perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw, subeps, subiter);
             if constexpr(is_dense) {
                 for(size_t i = 0; i < centers.size(); ++i) centersums[i] = sum(centers[i]);
