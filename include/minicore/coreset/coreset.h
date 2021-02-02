@@ -647,12 +647,19 @@ struct CoresetSampler {
                     ret.resize(ctr.size() + flpts);
                     std::fprintf(stderr, "After compressing %zu samples into unique items, we have only %zu entries, of which %zu are FL sample\n", n, ret.size(), flpts);
                 }
-                size_t i = 0;
-                for(const auto &pair: ctr) {
-                    ret.indices_[i] = pair.first;
-                    ret.weights_[i] = pair.second * (getweight(pair.first) / (static_cast<double>(n) * probs_[pair.first]));
-                    assert(i < n);
-                    ++i;
+                const size_t csz = ctr.size();
+                // Copy from map, sort, and set
+                using PairT = typename shared::flat_hash_map<IT, uint32_t>::value_type;
+                auto space = std::make_unique<PairT[]>(csz);
+                std::copy(ctr.begin(), ctr.end(), space.get());
+                shared::sort(space.get(), space.get() + csz,
+                    [](const PairT &x, const PairT &y)
+                    {return std::tie(x.first, x.second) < std::tie(y.first, y.second);}
+                );
+                for(size_t i = 0; i < csz; ++i) {
+                    const auto idx = space[i].first;
+                    ret.indices_[i] = idx;
+                    ret.weights_[i] = space[i].second * (getweight(idx) / (n * probs_[idx]));
                 }
             }
         } else {
@@ -660,7 +667,7 @@ struct CoresetSampler {
             if(ret.indices_.size() != n) throw std::runtime_error(std::string("Wrong size ret indices ") + std::to_string(n) + " ," + std::to_string(ret.indices_.size()));
             if(!seed) seed = std::rand();
             auto indices = reservoir_simd::sample_k(probs_.get(), np_, n, seed, unique ? SampleFmt::WITH_REPLACEMENT: SampleFmt::NEITHER);
-            for(const auto v: indices) if(v > np_) throw std::runtime_error(std::string("index out of bounds") + std::to_string(v));
+            DBG_ONLY(for(const auto v: indices) if(v > np_) throw std::runtime_error(std::string("index out of bounds") + std::to_string(v));)
             std::copy(indices.begin(), indices.end(), ret.indices_.data());
             std::sort(ret.indices_.begin(), ret.indices_.end());
             std::transform(ret.indices_.begin(), ret.indices_.end(), ret.weights_.begin(), [&](auto idx) {return getweight(idx) / (static_cast<double>(n) * probs_[idx]);});

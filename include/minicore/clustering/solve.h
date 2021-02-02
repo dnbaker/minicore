@@ -102,7 +102,7 @@ template<typename MT, // MatrixType
          typename PriorT=blz::DynamicVector<FT, rowVector>,
          typename AsnT=blz::DynamicVector<uint32_t>,
          typename WeightT=blz::DynamicVector<FT>, // Vector Type
-         typename=std::enable_if_t<std::is_floating_point_v<FT>>
+         typename RSumsT=blz::DV<double>
         >
 std::tuple<double, double, size_t>
 perform_hard_clustering(const MT &mat,
@@ -113,15 +113,22 @@ perform_hard_clustering(const MT &mat,
                         CostsT &costs,
                         const WeightT *weights=static_cast<WeightT *>(nullptr),
                         double eps=DEFAULT_EPS,
-                        size_t maxiter=size_t(-1))
+                        size_t maxiter=size_t(-1),
+                        RSumsT *rsums=static_cast<RSumsT *>(nullptr))
 {
+    auto tstart = std::chrono::high_resolution_clock::now();
     auto compute_cost = [&costs,w=weights]() -> FT {
         if(w) return blz::dot(costs, *w);
         else  return blz::sum(costs);
     };
-    const blz::DV<double> rowsums = sum<blz::rowwise>(mat);
-    blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x){return sum(centers[x]);});
-    assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums); // Assign points myself
+    RSumsT rowsums;
+    static_assert(std::is_floating_point_v<FT>, "Sanity check");
+    if(!rsums) {
+        rowsums = sum<blz::rowwise>(mat);
+        rsums = &rowsums;
+    }
+    blz::DV<double> ctrsums = blaze::generate(centers.size(), [&](auto x){return sum(centers[x]);});
+    assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, ctrsums, *rsums); // Assign points myself
     PYBIND11_EXCEPTION_CHECK();
     const auto initcost = compute_cost();
     PYBIND11_EXCEPTION_CHECK();
@@ -136,34 +143,33 @@ perform_hard_clustering(const MT &mat,
     for(;;) {
         PYBIND11_EXCEPTION_CHECK();
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
-        auto res = set_centroids_hard<FT>(mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
-        //std::fprintf(stderr, "Set centroids %zu\n", iternum);
+        auto ctrstart = std::chrono::high_resolution_clock::now();
+        auto res = set_centroids_hard<FT>(mat, measure, prior, centers_cpy, asn, costs, weights, ctrsums, *rsums);
+        auto ctrstop = std::chrono::high_resolution_clock::now();
+        std::fprintf(stderr, "Setting centroids took %gms\n", std::chrono::duration<double, std::milli>(ctrstop - ctrstart).count());
 
-        assign_points_hard<FT>(mat, measure, prior, centers_cpy, asn, costs, weights, centersums, rowsums);
+        ctrstart = std::chrono::high_resolution_clock::now();
+        assign_points_hard<FT>(mat, measure, prior, centers_cpy, asn, costs, weights, ctrsums, *rsums);
+        ctrstop = std::chrono::high_resolution_clock::now();
+        std::fprintf(stderr, "Assigning points took %gms\n", std::chrono::duration<double, std::milli>(ctrstop - ctrstart).count());
+        ctrstart = std::chrono::high_resolution_clock::now();
         auto newcost = compute_cost();
+        ctrstop = std::chrono::high_resolution_clock::now();
+        std::fprintf(stderr, "Computing cost took %gms\n", std::chrono::duration<double, std::milli>(ctrstop - ctrstart).count());
         DBG_ONLY(std::fprintf(stderr, "Iteration %zu: [%.16g old/%.16g new]\n", iternum, cost, newcost);)
         if(newcost > cost && !res) {
-            centersums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
-            assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, centersums, rowsums);
+            ctrsums = blaze::generate(centers.size(), [&](auto x) {return sum(centers[x]);});
+            assign_points_hard<FT>(mat, measure, prior, centers, asn, costs, weights, ctrsums, *rsums);
             break;
         }
         centers = centers_cpy;
-        if(cost - newcost < eps * std::max(double(newcost), double(cost))) {
-#ifndef NDEBUG
-            std::fprintf(stderr, "Relative cost difference %0.12g compared to threshold %0.12g determined by %0.12g eps and %0.12g/%0.12g for costs from init %0.12g\n",
-                         cost - newcost, eps * std::max(newcost, cost), eps, cost, newcost, initcost);
-#endif
-            break;
-        }
-        if(++iternum == maxiter) {
-            //std::fprintf(stderr, "Maximum iterations [%zu] reached\n", iternum);
-            break;
-        }
+        ++iternum;
         cost = newcost;
+        if(cost - newcost < eps * std::max(double(newcost), double(cost)) || iternum >= maxiter)
+            break;
     }
-#ifndef NDEBUG
-    std::fprintf(stderr, "Completing clustering after %zu rounds. Initial cost %0.12g. Final cost %0.12g.\n", iternum, initcost, cost);
-#endif
+    auto tstop = std::chrono::high_resolution_clock::now();
+    std::fprintf(stderr, "clustering for %zu rounds, from cost %0.12g->%0.12g, in %gms\n", iternum, initcost, cost, std::chrono::duration<double, std::milli>(tstop - tstart).count());
     return {initcost, cost, iternum};
 }
 
@@ -380,7 +386,8 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                                        bool with_replacement=true,
                                        uint64_t seed=0)
 {
-    const bool isnorm = msr_is_normalized(measure);
+    auto tstart = std::chrono::high_resolution_clock::now();
+    static constexpr bool isnorm = false;
     if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
     const blz::DV<double> rowsums = sum<blz::rowwise>(mat);
     blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
@@ -390,12 +397,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
     std::vector<CtrT>  savectrs = centers;
     using IT = uint64_t;
     auto compute_point_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        double ret = msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
-        if(ret < 0 || std::isnan(ret))
-            ret = 0.;
-        else if(std::isinf(ret))
-            ret = std::numeric_limits<double>::max(); // To make it finite
-        return ret;
+        return msr_with_prior<FT>(measure, row(mat, id, unchecked), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
     };
     const size_t np = costs.size(), k = centers.size();
     auto perform_assign = [&]() {
@@ -550,9 +552,8 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
     }
     centers = savectrs;
     cost = bestcost;
-#ifndef NDEBUG
-    std::fprintf(stderr, "Completing clustering after %zu rounds. Initial cost %0.12g. Final cost %0.12g.\n", iternum, initcost, cost);
-#endif
+    auto tstop = std::chrono::high_resolution_clock::now();
+    std::fprintf(stderr, "clustering for %zu rounds, from cost %0.12g->%0.12g, in %gms\n", iternum, initcost, cost, std::chrono::duration<double, std::milli>(tstop - tstart).count());
     return std::make_tuple(initcost, cost, iternum);
 }
 
@@ -581,8 +582,8 @@ auto hmb_coreset_clustering(const Matrix &mat,
                             double subeps=1e-3)
 {
     static_assert(std::is_floating_point_v<FT>, "Must float");
-    const bool isnorm = msr_is_normalized(measure);
-    if(seed == 0) seed = (((uint64_t(std::rand())) << 48) ^ ((uint64_t(std::rand())) << 32)) | ((std::rand() << 16) | std::rand());
+    static constexpr bool isnorm = false;
+    if(seed == 0) seed = std::rand();
     const blz::DV<double> rowsums = sum<blz::rowwise>(mat);
     blz::DV<double> centersums = blaze::generate(centers.size(), [&](auto x){return blz::sum(centers[x]);});
     const double prior_sum = prior.size() == 1 ? prior.size() * prior[0]: blz::sum(prior);
@@ -610,6 +611,9 @@ auto hmb_coreset_clustering(const Matrix &mat,
                         blz::DM<LElement>,
                         blz::SM<LElement>>;
     LMat smat;
+    blz::DV<double> cscosts(mbsize), csw;
+    blz::DV<uint32_t> csasn(mbsize), nnz;
+    blz::DV<double> csrowsums;
     for(;;) {
         PYBIND11_EXCEPTION_CHECK();
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)
@@ -630,8 +634,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
         OMP_PFOR
         for(size_t i = 0; i < np; ++i) {
             assert(asn[i] < k);
-            OMP_ATOMIC
-            ++center_counts[asn[i]];
+            OMP_ATOMIC ++center_counts[asn[i]];
         }
         blaze::SmallArray<uint32_t, 8> foundindices;
         for(size_t i = 0; i < center_counts.size(); ++i)
@@ -690,16 +693,21 @@ auto hmb_coreset_clustering(const Matrix &mat,
         using WT = const std::remove_const_t<std::decay_t<decltype((*weights)[0])>>;
         const WT *ptr = nullptr;
         if(weights) ptr = weights->data();
+        auto start = std::chrono::high_resolution_clock::now();
         sampler.make_sampler(np, k, costs.data(), asn.data(), ptr, seed, sm, k, (uint64_t *)nullptr, false, msr2alpha(measure));
-        blz::DV<double> cscosts(mbsize);
-        blz::DV<uint32_t> csasn(mbsize);
-        blz::DV<uint32_t> nnz;
+        auto stop = std::chrono::high_resolution_clock::now();
+        std::fprintf(stderr, "[CSOPT] Took %gms to create sampler\n", std::chrono::duration<double, std::milli>(stop - start).count());
         for(size_t j = 0; j < calc_cost_freq; ++j) {
             //std::fprintf(stderr, "CSOPT inner loop %zu:%zu\n", iternum, j);
+            start = std::chrono::high_resolution_clock::now();
             auto pts = sampler.sample(mbsize, rng());
-            //pts.compact();
+            stop = std::chrono::high_resolution_clock::now();
+            std::fprintf(stderr, "[CSOPT] Took %gms to perform sample\n", std::chrono::duration<double, std::milli>(stop - start).count());
+
+            start = std::chrono::high_resolution_clock::now();
             smat.resize(pts.size(), mat.columns());
             if constexpr(blaze::IsSparseMatrix_v<LMat>) {
+                if(nnz.size() != pts.size()) nnz.resize(pts.size());
                 nnz = blaze::generate(pts.size(), [&](auto x) {return nonZeros(row(mat, pts.indices_[x]));});
                 const size_t tnz = sum(nnz);
                 smat.reserve(tnz);
@@ -707,45 +715,29 @@ auto hmb_coreset_clustering(const Matrix &mat,
                     smat.reserve(i, nnz[i]);
                 }
             }
+            csrowsums = elements(rowsums, pts.indices_.data(), pts.indices_.size());
+            stop = std::chrono::high_resolution_clock::now();
+            std::fprintf(stderr, "[CSOPT] Took %gms to resize coreset matrix\n", std::chrono::duration<double, std::milli>(stop - start).count());
+            start = std::chrono::high_resolution_clock::now();
             OMP_PFOR
             for(size_t i = 0; i < pts.indices_.size(); ++i) {
                 auto lh = row(smat, i);
                 set_center(lh, row(mat, pts.indices_[i]));
             }
-            blz::DV<double> csw;
-            if(weights)
-                csw = elements(*weights, pts.indices_.data(), pts.indices_.size()) * pts.weights_;
-            else
-                csw = pts.weights_;
+            stop = std::chrono::high_resolution_clock::now();
+            std::fprintf(stderr, "[CSOPT] Took %gms to set coreset matrix\n", std::chrono::duration<double, std::milli>(stop - start).count());
             cscosts.resize(pts.size());
             csasn.resize(pts.size());
-#if 0
-            // 2. Optimize over the coreset
-            auto perform_one = [&](auto i) {
-                auto rs = rowsums[pts.indices_[i]];
-                auto sr = row(smat, i, unchecked);
-                auto bestscore = msr_with_prior<FT>(measure, sr, centers[0], prior, prior_sum, rs, centersums[0]);
-                auto bestid = 0u;
-                for(size_t j = 1; j < k; ++j) {
-                    auto nscore = msr_with_prior<FT>(measure, sr, centers[j], prior, prior_sum, rs, centersums[j]);
-                    if(nscore < bestscore) bestid = j, bestscore = nscore;
-                }
-                csasn[i] = bestid;
-                cscosts[i] = bestscore;
-            };
-            const size_t pend = pts.size();
-            if constexpr(is_dense) {
-                for(size_t i = 0; i < pend; ++i) {
-                    perform_one(i);
-                }
+            std::fprintf(stderr, "About to perform coreset clustering\n");
+            start = std::chrono::high_resolution_clock::now();
+            if(weights) {
+                csw = elements(*weights, pts.indices_.data(), pts.indices_.size()) * pts.weights_;
+                perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw, subeps, subiter, &csrowsums);
             } else {
-                OMP_PFOR
-                for(size_t i = 0; i < pend; ++i) {
-                    perform_one(i);
-                }
+                perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &pts.weights_, subeps, subiter, &csrowsums);
             }
-#endif
-            perform_hard_clustering(smat, measure, prior, centers, csasn, cscosts, &csw, subeps, subiter);
+            stop = std::chrono::high_resolution_clock::now();
+            std::fprintf(stderr, "[CSOPT] Took %gms to perform coreset sub-clustering\n", std::chrono::duration<double, std::milli>(stop - start).count());
             if constexpr(is_dense) {
                 for(size_t i = 0; i < centers.size(); ++i) centersums[i] = sum(centers[i]);
             } else
