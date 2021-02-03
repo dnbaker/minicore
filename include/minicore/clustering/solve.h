@@ -384,7 +384,8 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                                        size_t calc_cost_freq=100,
                                        unsigned int reseed_after=1,
                                        bool with_replacement=true,
-                                       uint64_t seed=0)
+                                       uint64_t seed=0,
+                                       bool with_importance_sampling=false)
 {
     auto tstart = std::chrono::high_resolution_clock::now();
     static constexpr bool isnorm = false;
@@ -497,6 +498,8 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             for(size_t i = 0; i < mbsize; ++i) {
                 sampled_indices[i] = div.mod(rng());
             }
+        } else if(with_importance_sampling) {
+            throw std::runtime_error("Not yet implemented");
         } else {
             shared::flat_hash_set<IT> selidx;
             for(;selidx.size() < mbsize; selidx.insert(div.mod(rng())));
