@@ -1929,11 +1929,11 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
     }
 }
 template<typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
-double dmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
+static INLINE double dmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
     return msr_with_prior<double>(msr, ctr, mr, prior, prior_sum, ctrsum, mrsum);
 }
 template<typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
-double fmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
+static INLINE double fmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
     return msr_with_prior<float>(msr, ctr, mr, prior, prior_sum, ctrsum, mrsum);
 }
 
