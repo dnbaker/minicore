@@ -105,10 +105,6 @@ auto get_initial_centers(const Matrix &matrix, RNG &rng,
     if(kmc2_rounds > 0) {
         DBG_ONLY(std::fprintf(stderr, "[%s] Performing kmc\n", __func__);)
         indices = coresets::kmc2(oracle, rng, nr, k, kmc2_rounds);
-#ifndef NDEBUG
-        std::fprintf(stderr, "Got indices of size %zu\n", indices.size());
-        for(const auto idx: indices) if(idx > nr) std::fprintf(stderr, "idx %zu > max %zu\n", size_t(idx), nr);
-#endif
         // Return distance from item at reference i to item at j
         auto [oasn, ncosts] = coresets::get_oracle_costs(oracle, nr, indices);
         costs = std::move(ncosts);
@@ -118,8 +114,6 @@ auto get_initial_centers(const Matrix &matrix, RNG &rng,
         std::vector<FT> fcosts;
         //kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true)
         constexpr bool is_par = !is_dense_matrix;
-        std::fprintf(stderr, "Calling kmeans++ with nr = %zu, k = %d, weights = %p, %d rounds of localsearch++, %d expskips, and is_parallel: %d\n",
-                     nr, k, (void *)weights, lspp, use_exponential_skips, is_par);
         std::tie(indices, asn, fcosts) = coresets::kmeanspp(oracle, rng, nr, k, weights, lspp, use_exponential_skips, is_par, n_local_trials);
         std::copy(fcosts.data(), fcosts.data() + fcosts.size(), costs.data());
     }

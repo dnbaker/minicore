@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
     auto start = t();
 //kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true, size_t n_local_samples=1)
 ////include/minicore/optim/kmeans.h
-//kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, size_t n_local_trials=1) {
+//kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, bool use_exponential_skips=false, bool parallelize_oracle=true, size_t n_local_trials=1) {
     auto centers = kmeanspp(ptr, ptr + n, gen,
                             npoints, blz::sqrL2Norm(), (double *)nullptr, 0, false, true, size_t(25));
     auto stop = t();

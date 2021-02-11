@@ -11,19 +11,21 @@ using minicore::util::sum;
 using minicore::util::row;
 using minicore::distance::DissimilarityMeasure;
 using blaze::row;
+namespace dist = minicore::distance;
 
 template<typename VT>
-double __ac1d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, DissimilarityMeasure ms, size_t dim, double prior, bool reverse, int use_double=sizeof(VT) > 4, double lhsum=-1., double rhsum=-1.) {
+double __ac1d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, DissimilarityMeasure ms, size_t dim, blz::DV<double> &prior, bool reverse, int use_double, double lhsum, double rhsum) {
     if(reverse) return __ac1d(rhp, lhp, ms, dim, prior, !reverse, use_double, rhsum, lhsum);
     double ret;
+    const auto psum = prior[0] * dim;
     auto lh = blz::make_cv(const_cast<VT *>(lhp), dim);
     auto rh = blz::make_cv(const_cast<VT *>(rhp), dim);
-    const auto psum = prior * dim;
-    if(lhsum < 0.) lhsum = sum(lh);
-    if(rhsum < 0.) rhsum = sum(rh);
-    std::vector<double> pv({prior});
-    if(use_double) ret = cmp::msr_with_prior<double>(ms, lh, rh, pv, psum, lhsum, rhsum);
-    else           ret = cmp::msr_with_prior<float> (ms, lh, rh, pv, psum, lhsum, rhsum);
+    if(ms != dist::L1 && ms != dist::L2 && ms != dist::SQRL2) {
+        if(lhsum < 0.) lhsum = sum(lh);
+        if(rhsum < 0.) rhsum = sum(rh);
+    }
+    if(use_double) ret = dmsr_with_prior(ms, lh, rh, prior, psum, lhsum, rhsum);
+    else           ret = fmsr_with_prior(ms, lh, rh, prior, psum, lhsum, rhsum);
     return ret;
 }
 
@@ -32,14 +34,17 @@ void __ac1d2d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, void *ret,
               double lhsum=-1., double *rhsums=nullptr)
 {
     std::unique_ptr<double[]> rhs;
-    if(rhsums == nullptr) {
+    bool needs_sums = !(ms != dist::L1 && ms != dist::L2 && ms != dist::SQRL2);
+    if(needs_sums && rhsums == nullptr) {
         rhs.reset(new double[nr]);
         rhsums = rhs.get();
         for(size_t i = 0; i < nr; ++i) rhsums[i] = sum(blz::make_cv((VT *)rhp + nc * i, nc));
     }
-    if(lhsum < 0.) lhsum = sum(blz::make_cv((VT *)lhp, nc));
+    if(lhsum < 0. && needs_sums) lhsum = sum(blz::make_cv((VT *)lhp, nc));
+    blz::DV<double> pv({prior});
     for(size_t i = 0; i < nr; ++i) {
-        auto v = __ac1d(lhp, rhp + nc * i, ms, nc, prior, reverse, use_double, lhsum, rhsums[i]);
+        double rhsum = rhsums ? rhsums[i]: -1.;
+        auto v = __ac1d(lhp, rhp + nc * i, ms, nc, pv, reverse, use_double, lhsum, rhsum);
         if(use_double) static_cast<double *>(ret)[i] = v;
         else           static_cast<float *>(ret)[i] = v;
     }
@@ -57,6 +62,7 @@ void __ac2d2d(const VT *__restrict__ lhp, const VT *__restrict__ rhp, void *ret,
     }
 }
 
+#if 0
 py::object arrcmp1d2d(py::array lhs, py::array rhs, DissimilarityMeasure ms, double prior, bool reverse, int use_double, char dt) {
     auto lhi = lhs.request(), rhi = rhs.request();
     if(lhi.ndim != 1) throw std::runtime_error("Expect lh 1");
@@ -79,6 +85,7 @@ py::object arrcmp1d2d(py::array lhs, py::array rhs, DissimilarityMeasure ms, dou
     }
     return py::float_(-1.);
 }
+#endif
 
 py::object arrcmp2d(py::array lhs, py::array rhs, DissimilarityMeasure ms, double prior, bool reverse, int use_double, char dt) {
     py::object ret = py::none();
@@ -99,13 +106,14 @@ py::object arrcmp2d(py::array lhs, py::array rhs, DissimilarityMeasure ms, doubl
 }
 
 py::float_ arrcmp1d(py::array lhs, py::array rhs, DissimilarityMeasure ms, double prior, bool reverse, int use_double, char dt) {
+    blz::DV<double> pv({prior});
     switch(dt) {
 #undef DO_TYPE_
 #define DO_TYPE_(c, type)\
         case c: {\
             py::array_t<type, py::array::c_style | py::array::forcecast> lhc(lhs), rhc(rhs);\
             auto lbi = lhc.request(), rbi = rhc.request();\
-            return __ac1d((type *)lbi.ptr, (type *)rbi.ptr, ms, lbi.size, prior, reverse, use_double);\
+            return __ac1d((type *)lbi.ptr, (type *)rbi.ptr, ms, lbi.size, pv, reverse, use_double, -1., -1.);\
         }
         DO_TYPE_('f', float)
         DO_TYPE_('d', double)
@@ -122,12 +130,9 @@ py::object arrcmp(py::array lhs, py::array rhs, py::object msr, double prior, bo
     if(lhdt != rhdt) throw std::invalid_argument("arrcmp requires objects be of the same dtype");
     if(use_double < 0) use_double = std::max(lhi.itemsize, rhi.itemsize) > 4;
     if(lhi.ndim > 2 || rhi.ndim > 2) throw std::invalid_argument("arrcmp requires arrays of 1 or 2d");
+    if(lhi.ndim != rhi.ndim) throw std::runtime_error("arrays should be 1d or 2d");
     auto v = ((lhi.ndim - 1) << 1) | (rhi.ndim - 1);
     switch(v) {
-        case 1: case 2: {
-            bool orev = v > 1 ? reverse: !reverse;
-            return arrcmp1d2d(lhs, rhs, ms, prior, orev, use_double, lhdt);
-        }
         case 0: return arrcmp1d(lhs, rhs, ms, prior, reverse, use_double, rhdt);
         case 3: return arrcmp2d(lhs, rhs, ms, prior, reverse, use_double, rhdt);
         default: throw std::runtime_error("Wrong number of dimensions");

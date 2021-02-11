@@ -1622,7 +1622,9 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
     return cs;
 }
 
-template<typename FT=double, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
+
+
+template<typename FT=float, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
 double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
 {
     static_assert(std::is_floating_point_v<FT>, "FT must be floating-point");
@@ -1670,25 +1672,14 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             }
             case L2: case SQRL2:
             {
-                ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
-#ifndef NDEBUG
-                FT tret = 0.;
-                for(size_t i = 0; i < nd; ++i) {
-                    tret += (mr[i] - ctr[i]) * (mr[i] - ctr[i]);
-                }
-                assert(std::abs(ret - tret) <= 1e-5 * std::max(ret, tret) || !std::fprintf(stderr, "ret: %g. tret: %g. diff: %.20g\n", ret, tret, std::abs(ret - tret)));
-#endif
+                //ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
+                ret = libkl::nnsqrl2_reduce_aligned(mr.data(), ctr.data(), nd);
                 if(msr == L2) ret = std::sqrt(ret);
                 break;
             }
             case L1:
             {
                 ret = libkl::tvd_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., pv, pv) * 2.;
-#ifndef NDEBUG
-                FT tret = 0.;
-                for(size_t i = 0; i < nd; ++i) tret += std::abs(mr[i] - ctr[i]);
-                assert(std::abs(ret - tret) <= 1e-5 * std::max(ret, tret) || !std::fprintf(stderr, "ret: %g. tret: %g. diff: %.20g\n", ret, tret, std::abs(ret - tret)));
-#endif
                 break;
             }
             case COSINE_DISTANCE: case COSINE_SIMILARITY:
@@ -1704,7 +1695,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             case TVD: {
                 ret = libkl::tvd_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
 #ifndef NDEBUG
-                FT tret = 0.;
+                double tret = 0.;
                 for(size_t i = 0; i < nd; ++i) tret += std::abs(mr[i] * lhrsi + lhinc - (ctr[i] * rhrsi + rhinc)) * .5;
                 assert(std::abs(ret - tret) <= (1e-5 * std::max(ret, tret)) || !std::fprintf(stderr, "ret: %g. tret: %g. diff: %.20g\n", ret, tret, std::abs(ret - tret)));
 #endif
@@ -1809,15 +1800,15 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     ret = std::sqrt(ret) * M_SQRT1_2;
                     break;
                 } else if(msr == L2 || msr == SQRL2) {
-                    ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0.);
-                    if(ret < 0.) {
-                        std::fprintf(stderr, "negative sqrl2 distance: %g?\n", ret);
+                    //ret = libkl::sqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., 0., 0.);
+                    ret = libkl::nnsqrl2_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either);
+                    if(unlikely(ret < 0.)) {
+                        std::fprintf(stderr, "Warning: negative sqrl2 distance: %g?\n", ret);
                         ret = 0.;
-                    } else if(std::isnan(ret)) {
-                        for(size_t i = 0; i < nnz_either; ++i) std::fprintf(stderr, "vs[%zu] = %g/%g\n", i, tmpmulx[i], tmpmuly[i]);
-                        throw std::runtime_error("ret is nan somehow");
-                    }
-                    if(msr == L2) ret = std::sqrt(ret);
+                    } else if(unlikely(std::isnan(ret))) {
+                        ret = -1.;
+                        std::fprintf(stderr, "ret is nan, returning -1\n");
+                    } else if(msr == L2) ret = std::sqrt(ret);
                     break;
                 } else if(msr == L1) {
                     ret = libkl::tvd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., pv, pv) * 2.;
@@ -1896,16 +1887,15 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     break;
                 } else __builtin_unreachable();
                 ret = klc + zc;
-                if(ret < 0) {
+                if(unlikely(ret < 0)) {
 #ifndef NDEBUG
                     std::fprintf(stderr, "klc %g + zc %g = %g\n", klc, zc, ret);
                     std::fprintf(stderr, "[Warning: value (%0.20g) < 0.] pv: %g. lhsum: %g, lhinc:% g, rhsum:%0.20g, rhinc: %0.20g. rhl: %0.20g. lhl: %0.20g. rhincl: %0.20g. lhincl: %0.20g. shl: %0.20g, shincl: %0.20g. klc: %g. emptyc: %g\n",
                                  ret, pv, lhsum, lhinc, rhsum, rhinc, rhl, lhl, rhincl, lhincl, shl, shincl, klc, zc);
 #endif
                 }
-                if(msr == LLR || msr == SRLRT) {
+                if(msr == LLR || msr == SRLRT)
                     ret *= (lhsum + rhsum);
-                }
                 ret = std::max(ret, 0.);
                 if(msr == SRULRT || msr == SRLRT || msr == JSM) ret = std::sqrt(ret);
                 if(ret == std::numeric_limits<FT>::infinity()) {
@@ -1915,7 +1905,9 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                 }
             }
             break;
-            default: ret = 0.; throw NotImplementedError("unexpected msr; not yet supported");
+            default: ret = -1.;
+                    std::fprintf(stderr, "Unexpected distance measure. Returning -1. (%s)\n", msr2str(msr));
+                    break;
         }
         return ret;
     } else if constexpr(!blz::IsSparseVector_v<MatrixRowT>) {
@@ -1936,6 +1928,14 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
         return msr_with_prior(msr, cv, mr, prior, prior_sum, ctrsum, mrsum);
     }
 }
+template<typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
+double dmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
+    return msr_with_prior<double>(msr, ctr, mr, prior, prior_sum, ctrsum, mrsum);
+}
+template<typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
+double fmsr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum) {
+    return msr_with_prior<float>(msr, ctr, mr, prior, prior_sum, ctrsum, mrsum);
+}
 
 
 } // namespace cmp
@@ -1950,6 +1950,8 @@ using jsd::make_jsm_applicator;
 using jsd::make_probdiv_applicator;
 
 using cmp::msr_with_prior;
+using cmp::fmsr_with_prior;
+using cmp::dmsr_with_prior;
 
 
 
