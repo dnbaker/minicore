@@ -620,8 +620,13 @@ struct CoresetSampler {
         sampler_->sample(start, end);
     }
     IndexCoreset<IT, FT> sample(const size_t n, uint64_t seed=0, double eps=0.1, bool unique=false) {
-        if(seed && sampler_) sampler_->seed(seed);
         IndexCoreset<IT, FT> ret(n);
+        sample(ret, seed, eps, unique);
+        return ret;
+    }
+    void sample(IndexCoreset<IT, FT> &ret, uint64_t seed=0, double eps=0.1, bool unique=false) {
+        const size_t n = ret.size();
+        if(seed && sampler_) sampler_->seed(seed);
         assert(ret.indices_.size() == n);
         assert(ret.weights_.size() == n);
         assert(probs_.get());
@@ -688,7 +693,6 @@ struct CoresetSampler {
                 ret.weights_[i] = std::max(wmul - *wit++, 0.);
             }
         }
-        return ret;
     }
     size_t size() const {return np_;}
 };
