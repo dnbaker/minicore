@@ -161,7 +161,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
                     dsum = nsum, newc = nextc;
                 } else {
                     if(nsum < dsum) {
-                        std::fprintf(stderr, "Sample %zu for idx %zu replaced cost %.10g with %0.10g\n", i, center_idx, nsum, dsum);
+                        std::fprintf(stderr, "Sample %zu for idx %zu replaced cost %.10g with %0.10g\n", i, center_idx, dsum, nsum);
                         distances = samplescosts, dsum = nsum, assignments = samplesasn, newc = nextc;
                     } VERBOSE_ONLY(else std::fprintf(stderr, "new cost: %g. old: %g. old cost is %g better\n", nsum, dsum, dsum - nsum);)
                 }
