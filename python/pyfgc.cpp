@@ -1,7 +1,5 @@
 #include "pyfgc.h"
 
-void init_arrcmp(py::module &m);
-
 PYBIND11_MODULE(pyminicore, m) {
     init_smw(m);
     init_coreset(m);
