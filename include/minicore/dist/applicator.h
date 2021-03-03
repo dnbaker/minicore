@@ -1672,8 +1672,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             }
             case L2: case SQRL2:
             {
-                //ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
-                ret = libkl::nnsqrl2_reduce_aligned(mr.data(), ctr.data(), nd);
+                ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
                 if(msr == L2) ret = std::sqrt(ret);
                 break;
             }
@@ -1694,11 +1693,6 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             }
             case TVD: {
                 ret = libkl::tvd_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
-#ifndef NDEBUG
-                double tret = 0.;
-                for(size_t i = 0; i < nd; ++i) tret += std::abs(mr[i] * lhrsi + lhinc - (ctr[i] * rhrsi + rhinc)) * .5;
-                assert(std::abs(ret - tret) <= (1e-5 * std::max(ret, tret)) || !std::fprintf(stderr, "ret: %g. tret: %g. diff: %.20g\n", ret, tret, std::abs(ret - tret)));
-#endif
                 break;
             }
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: {
@@ -1749,7 +1743,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     FT div = std::sqrt(sqrNorm(tmpmulx + lhinc)) * std::sqrt(sqrNorm(tmpmuly + rhinc));
                     ret = klc / div;
                     ret = std::max(std::min(ret, 1.), 0.);
-                    static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
+                    static constexpr FT PI_INV = FT(1.) / FT(3.1415926535897932384626433832795028841971);
                     if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
                     break;
                 } else __builtin_unreachable();
@@ -1817,7 +1811,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     FT div = std::sqrt(sqrNorm(tmpmulx + pv) + sharednz * pv * pv) * std::sqrt(sqrNorm(tmpmuly + pv) + sharednz * pv * pv);
                     ret = klc / div;
                     ret = std::max(std::min(ret, 1.), 0.);
-                    static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
+                    static constexpr FT PI_INV = FT(1.) / FT(3.1415926535897932384626433832795028841971);
                     if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
                     break;
                 } else if(msr == TVD) {

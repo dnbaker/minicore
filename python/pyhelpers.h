@@ -123,8 +123,14 @@ auto vec2fnp(const T &x) {
 template<typename Mat>
 inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::object x, const Mat &mat) {
     std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs;
-    if(py::isinstance<py::array>(x) && py::cast<py::array>(x).request().ndim == 2) {
-        set_centers(&dvecs, py::cast<py::array>(x).request());
+    if(py::isinstance<py::array>(x)){
+        py::array arr = py::cast<py::array>(x);
+        auto inf = arr.request();
+        if(inf.ndim == 1) {
+            return obj2dvec(py::list(x), mat);
+        } else if(inf.ndim == 2) {
+            set_centers(&dvecs, py::cast<py::array>(x).request());
+        }
     } else if(py::isinstance<py::sequence>(x)) {
         auto seq = py::cast<py::sequence>(x);
         if(py::isinstance<py::array>(seq[0])) {
