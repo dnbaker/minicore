@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
         std::fprintf(stderr, "Time for kmeans++ with 1 local try: %0.12gs\n", double((stop - start).count()) / 1e9);
         std::fprintf(stderr, "cost for kmeans++ with 1 local try: %0.12g\n", std::accumulate(std::get<2>(centers).begin(), std::get<2>(centers).end(), 0.));
     }
-    auto centers3 = reservoir_kmeanspp(ptr, ptr + n, gen, npoints, blz::sqrL2Norm(), (double *)nullptr, 0, 1);
+    auto centers3 = kmeanspp(ptr, ptr + n, gen, npoints, blz::sqrL2Norm(), (double *)nullptr, 0, 1);
 
     // WFT *weights=static_cast<WFT *>(nullptr), bool multithread=true, int lspprounds=0, int ntimes=1
     stop = t();

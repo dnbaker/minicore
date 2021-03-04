@@ -68,7 +68,6 @@ py::object centers2pylist(const std::vector<SMT, SAL> &ctrs) {
     // We're converting the centers into a CSR-notation object in Numpy
     // First, we compute nonzeros for each row, then use an exclusive scan
     blz::DV<uint64_t> nz(ctrs.size());
-    OMP_PFOR
     for(size_t i = 0; i < ctrs.size(); ++i) nz[i] = nonZeros(ctrs[i]);
     const size_t nnz = blz::sum(nz), nr = ctrs.size(), nc = ctrs.front().size();
     py::array_t<uint32_t> idx(nnz);

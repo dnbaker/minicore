@@ -25,9 +25,18 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
     const unsigned k = ctrs.size();
     diskmat::PolymorphicMat<value_type> diskctrcostmat(np, k);
     auto &ctrcostmat = ~diskctrcostmat;
-    ctrcostmat = blaze::generate(np, k, [&](auto x, auto y) {
-        return oracle(x, ctrs[y]);
-    });
+    if(parallelize) {
+        ctrcostmat = blaze::generate(np, k, [&](auto x, auto y) {
+            return oracle(x, ctrs[y]);
+        });
+    } else {
+        for(size_t i = 0; i < np; ++i) {
+            auto r = row(ctrcostmat, i);
+            for(size_t j = 0; j < k; ++j) {
+                r[j] = oracle(i, ctrs[j]);
+            }
+        }
+    }
     blaze::CustomVector<value_type, blaze::unaligned, blaze::unpadded> dv(&distances[0], np);
     std::unique_ptr<blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded>> wv;
     if(weights) {
@@ -47,10 +56,15 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
         } else sel = reservoir_simd::sample(distances.data(), distances.size(), seed);
         DBG_ONLY(std::fprintf(stderr, "Selected %lld with cost %g (max cost: %g)\n", sel, distances[sel], blaze::max(dv));)
         assert(sel < static_cast<long long unsigned int>(np));
-        newcosts = blaze::generate(np, [&](auto x) {return oracle(sel, x);});
+        if(parallelize) {
+            newcosts = blaze::generate(np, [&](auto x) {return oracle(sel, x);});
+        } else {
+            for(size_t i = 0; i < np; ++i) {newcosts[i] = oracle(sel, i);}
+        }
         ctrcosts = 0.;
         gain = 0.;
-        if(parallelize) {
+        if(1) {
+            try {
             OMP_ONLY(_Pragma("omp parallel for reduction(+:gain)"))
             for(size_t i = 0; i < np; ++i) {
                 auto row_i = row(ctrcostmat, i);
@@ -82,7 +96,13 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
                     gain += distances[i] - nc;
                 }
             }
+            } catch(const std::runtime_error &ex) {
+                parallelize = false;
+                std::fprintf(stderr, "Warning, Caught an exception (%s), possibly nested parallel sections. Trying serial execution.\n", ex.what());
+                goto serial;
+            }
         } else {
+            serial:
             for(size_t i = 0; i < np; ++i) {
                 auto row_i = row(ctrcostmat, i);
                 if(const auto nc = newcosts[i], oldd = distances[i]; nc > oldd) {

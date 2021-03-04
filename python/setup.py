@@ -99,17 +99,6 @@ ext_modules = [
     )
 ]
 
-'''
-Extension(
-    'mm',
-    ['mmap.cpp'],
-    include_dirs=include_dirs,
-    language='c++',
-    extra_compile_args=extra_compile_args,
-)
-'''
-
-
 
 # As of Python 3.6, CCompiler has a `has_flag` method.
 # cf http://bugs.python.org/issue26689
