@@ -2,7 +2,8 @@ import pyminicore
 from pyminicore import *
 from . import constants
 from .constants import CSR as csr_tuple, KMCRSV
-from pyminicore import SparseMatrixWrapper as smw
+if hasattr(pyminicore, "SparseMatrixWrapper"):
+    from pyminicore import SparseMatrixWrapper as smw
 import numpy as np
 
 cluster_from_centers = pyminicore.hcluster

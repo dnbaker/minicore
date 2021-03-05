@@ -27,6 +27,7 @@ dist::DissimilarityMeasure assure_dm(py::object obj) {
     return ret;
 }
 void init_smw(py::module &m) {
+#if 1
     py::class_<SparseMatrixWrapper>(m, "SparseMatrixWrapper")
     .def(py::init<>())
     .def(py::init<py::object, py::object, py::object>(), py::arg("sparray"), py::arg("skip_empty")=false, py::arg("use_float")=true)
@@ -236,6 +237,7 @@ void init_smw(py::module &m) {
         }
         return ret;
     }, py::arg("byrow")=0);
+#endif
 
 
     // Utilities
@@ -348,6 +350,7 @@ void init_smw(py::module &m) {
        py::arg("lspp") = 0, py::arg("use_exponential_skips") = false, py::arg("n_local_trials") = 1,
        py::arg("weights") = py::none()
     );
+#if 1
     m.def("kmeanspp", [](const SparseMatrixWrapper &smw, const SumOpts &so, py::object weights) {
         return run_kmpp_noso(smw, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, so.kmc2_rounds, std::max(int(so.extra_sample_tries) - 1, 0),
                        so.lspp, so.use_exponential_skips, so.n_local_trials, weights);
@@ -388,6 +391,7 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("smw"), py::arg("sumopts"), py::arg("weights") = py::none());
+#endif
     m.def("d2_select",  [](py::array arr, const SumOpts &so) {
         auto bi = arr.request();
         if(bi.ndim != 2) throw std::invalid_argument("arr must have 2 dimensions");
@@ -415,6 +419,7 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, retasn, costs);
     }, "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
        py::arg("data"), py::arg("sumopts"));
+#if 1
     m.def("greedy_select",  [](SparseMatrixWrapper &smw, const SumOpts &so) {
         std::vector<uint64_t> centers;
         std::vector<double> dret;
@@ -431,6 +436,7 @@ void init_smw(py::module &m) {
         return py::make_tuple(ret, costs);
     }, "Computes a greedy selection of points from the matrix pointed to by smw, returning indexes and a vector of costs for each point. To allow for outliers, use the outlier_fraction parameter of Sumopts.",
        py::arg("smw"), py::arg("sumopts"));
+#endif
 
 
 

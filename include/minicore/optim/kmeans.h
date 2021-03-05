@@ -119,16 +119,16 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             else
                 reservoir_simd::sample_k(rvals.data(), np, n_local_samples, samplesbuf.data(), rngv, fmt);
         } else {
-            if(n_local_samples <= 1u)
+            if(n_local_samples <= 1u) {
+                int k = 0;
+                do {
                 newc = reservoir_simd::sample(distances.data(), np, rngv, fmt);
-            else
+                } while(distances[newc] <= 0. && ++k < 3);
+            } else
                 reservoir_simd::sample_k(distances.data(), np, n_local_samples, samplesbuf.data(), rngv, fmt);
         }
         double dsum = -1.;
         if(n_local_samples > 1) {
-            for(size_t i = 0; i < n_local_samples; ++i) {
-                //std::fprintf(stderr, "At center_idx %zu, sample %zu is %zu\n", center_idx, i, size_t(samplesbuf[i]));
-            }
             for(size_t i = 0; i < n_local_samples; ++i) {
                 VERBOSE_ONLY(std::fprintf(stderr, "Performing %zu sample/%zu for %zu\n", i, n_local_samples, center_idx);)
                 auto sptr = &distances;
@@ -139,7 +139,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
                     iptr = &samplesasn;
                 }
                 auto nextc = samplesbuf[i];
-                if(unlikely(sptr->operator[](nextc) <= 0.)) std::fprintf(stderr, "Note: Selected item with weight 0 at index %zu [maybe there's somethign wrong?]\n", i);
+                if(unlikely(sptr->operator[](nextc) <= 0.)) std::fprintf(stderr, "Note: Selected item with weight 0 at index %zu [maybe there's something wrong?]\n", i);
                 double nsum = 0.;
                 if(parallelize_oracle) {
                     OMP_PRAGMA("omp parallel for simd reduction(+:nsum)")
@@ -170,7 +170,9 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             assignments[newc] = center_idx;
         } else {
             if(distances[newc] == 0.) {
-                std::fprintf(stderr, "Warning: distance of 0 selected. Are all distances 0? mean, max: %g, %g. cidx: %zu\n", blz::mean(distances), max(distances), center_idx);
+                auto md =  blz::min(distances);
+                std::fprintf(stderr, "[%s] Warning: distance of 0 selected. Are all distances 0? min, mean: %g, %g. cidx: %zu\n", __PRETTY_FUNCTION__, md, mean(distances), center_idx);
+                if(std::isnan(md)) throw std::runtime_error("NAN distance found");
             }
             if(std::find(cd, ce, newc) != ce) {
                 std::fprintf(stderr, "Re-selected existing center %u. Continuing...\n", int(newc));
