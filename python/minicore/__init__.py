@@ -31,7 +31,7 @@ def cluster(data, *, msr, k, prior=0., seed=0, nmkc=0,
     if soft:
         try:
             return scluster(mcdata, centers=ids, msr=msr, prior=prior, weights=weights, temp=temp, maxiter=maxiter,
-                            mbn=mbn, savepref=outpref, weights=weights)
+                            mbn=mbn, savepref=outpref)
         except:
             raise NotImplementedError("Soft clustering not supported")
     else:
