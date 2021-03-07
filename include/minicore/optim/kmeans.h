@@ -54,6 +54,10 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     const bool emit_log = false;
     if(emit_log)
         std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s and %s, and %s.\n", np, k, weights ? " and non-null weights": "", parallelize_oracle ? "parallelized": "unparallelized", use_exponential_skips ? "with exponential skips": "SIMD sampling");
+    if(np < k) {
+        std::fprintf(stderr, "Warning: np (%zu) < k (%zu). Returning exactly %zu\n", k, np, np);
+        k = np;
+    }
     std::vector<IT> centers(k, IT(0));
     blz::DV<FT> distances(np, std::numeric_limits<FT>::max()), odists;
     {
@@ -122,8 +126,9 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             if(n_local_samples <= 1u) {
                 int k = 0;
                 do {
-                newc = reservoir_simd::sample(distances.data(), np, rngv, fmt);
-                } while(distances[newc] <= 0. && ++k < 3);
+                    newc = reservoir_simd::sample(distances.data(), np, rngv, fmt);
+                    if(distances[newc] > 0. && std::find(cd, ce, newc) == ce) break;
+                } while(++k < 3);
             } else
                 reservoir_simd::sample_k(distances.data(), np, n_local_samples, samplesbuf.data(), rngv, fmt);
         }
@@ -170,13 +175,12 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             assignments[newc] = center_idx;
         } else {
             if(distances[newc] == 0.) {
-                auto md =  blz::min(distances);
-                std::fprintf(stderr, "[%s] Warning: distance of 0 selected. Are all distances 0? min, mean: %g, %g. cidx: %zu\n", __PRETTY_FUNCTION__, md, mean(distances), center_idx);
-                if(std::isnan(md)) throw std::runtime_error("NAN distance found");
-            }
-            if(std::find(cd, ce, newc) != ce) {
-                std::fprintf(stderr, "Re-selected existing center %u. Continuing...\n", int(newc));
-                continue;
+                newc = reservoir_simd::argmax(distances, /*multithead=*/true);
+                std::fprintf(stderr, "[%s] Warning: distance of 0 selected. Are all distances 0? max: %g. cidx: %zu\n", __PRETTY_FUNCTION__, distances[newc], center_idx);
+                if(distances[newc] == 0.) {
+                    std::fprintf(stderr, "Note: all distances are 0\n");
+                    if(blaze::isnan(distances)) throw std::runtime_error("NAN distance found");
+                }
             }
             assignments[newc] = center_idx;
             centers[center_idx] = newc;
