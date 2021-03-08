@@ -169,7 +169,7 @@ class BuildExt(build_ext):
 __version__ = check_output("git describe --abbrev=4", shell=True).decode().split("-")[0]
 setup(
     name='minicore',
-    version=0.3,
+    version="0.3.1",
     author='Daniel Baker',
     author_email='dnb@cs.jhu.edu',
     url='https://github.com/dnbaker/minicore',

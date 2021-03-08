@@ -37,6 +37,29 @@ void init_smw(py::module &m) {
     .def("tofile", [](const SparseMatrixWrapper &wrap, std::string path) {
         wrap.tofile(path);
     })
+    .def("tocsr", [](const SparseMatrixWrapper &lhs) {
+        py::array_t<py::ssize_t> indptr(lhs.rows() + 1);
+        py::array_t<int32_t> indices(lhs.nnz());
+        py::array_t<double> data(lhs.nnz());
+        py::array_t<py::ssize_t> shape(2);
+        auto shapep = (py::ssize_t *)shape.request().ptr;
+        shapep[0] = lhs.rows(); shapep[1] = lhs.columns();
+        auto ipp = (py::ssize_t *)indptr.request().ptr;
+        auto ip = (int32_t *)indices.request().ptr;
+        auto fp = (double *)data.request().ptr;
+        ipp[0] = 0;
+        lhs.perform([&](auto &mat) {
+            for(size_t i = 0; i < mat.rows(); ++i) {
+                auto r = row(mat, i);
+                ipp[i + 1] = ipp[i] + nonZeros(r);
+                for(const auto &pair: r) {
+                    *ip++ = pair.index();
+                    *fp++ = pair.value();
+                }
+            }
+        });
+        return py::make_tuple(py::make_tuple(data, indices, indptr), shape);
+    })
     .def("fromfile", [](SparseMatrixWrapper &wrap, std::string path) {
         wrap.fromfile(path);
     })
@@ -469,5 +492,27 @@ void init_smw(py::module &m) {
     m.def("smat_from_blaze", [](py::object path) {
          return SparseMatrixWrapper(path.cast<std::string>());
     }, py::arg("path"));
-
+    m.def("tocsr", [](const SparseMatrixWrapper &lhs) {
+        py::array_t<py::ssize_t> indptr(lhs.rows() + 1);
+        py::array_t<int32_t> indices(lhs.nnz());
+        py::array_t<double> data(lhs.nnz());
+        py::array_t<py::ssize_t> shape(2);
+        auto shapep = (py::ssize_t *)shape.request().ptr;
+        shapep[0] = lhs.rows(); shapep[1] = lhs.columns();
+        auto ipp = (py::ssize_t *)indptr.request().ptr;
+        auto ip = (int32_t *)indices.request().ptr;
+        auto fp = (double *)data.request().ptr;
+        ipp[0] = 0;
+        lhs.perform([&](auto &mat) {
+            for(size_t i = 0; i < mat.rows(); ++i) {
+                auto r = row(mat, i);
+                ipp[i + 1] = ipp[i] + nonZeros(r);
+                for(const auto &pair: r) {
+                    *ip++ = pair.index();
+                    *fp++ = pair.value();
+                }
+            }
+        });
+        return py::make_tuple(py::make_tuple(data, indices, indptr), shape);
+    });
 } // init_smw

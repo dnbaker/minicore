@@ -119,7 +119,7 @@ public:
                 std::transform(m.begin(), m.end(), m.begin(), [](auto x) {return std::sqrt(x);});
             }
         } else if constexpr(measure == COSINE_DISTANCE || measure == PROBABILITY_COSINE_DISTANCE) {
-            static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
+            static constexpr FT PI_INV = 0.31830988618379067153L;
             if constexpr(blaze::IsDenseMatrix_v<MatType> || blaze::IsSparseMatrix_v<MatType>) {
                 m = blaze::acos(m) * PI_INV;
             } else if constexpr(dm::is_distance_matrix_v<MatType>) {
@@ -1237,7 +1237,7 @@ public:
     }
     auto get_measure() const {return measure_;}
 private:
-    static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
+    static constexpr FT PI_INV = 0.31830988618379067153L;
 
     template<typename Container=blaze::DynamicVector<FT, blaze::rowVector>>
     void prep(Prior prior, const Container *c=nullptr) {
@@ -1687,8 +1687,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                 FT div = std::sqrt(sqrNorm(mr + pv)) * std::sqrt(sqrNorm(ctr + pv));
                 ret = klc / div;
                 ret = std::max(std::min(ret, 1.), 0.);
-                static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
-                if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
+                if(msr == COSINE_DISTANCE) ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
                 break;
             }
             case TVD: {
@@ -1743,8 +1742,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     FT div = std::sqrt(sqrNorm(tmpmulx + lhinc)) * std::sqrt(sqrNorm(tmpmuly + rhinc));
                     ret = klc / div;
                     ret = std::max(std::min(ret, 1.), 0.);
-                    static constexpr FT PI_INV = FT(1.) / FT(3.1415926535897932384626433832795028841971);
-                    if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
+                    if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
                     break;
                 } else __builtin_unreachable();
                 ret = klc;
@@ -1810,8 +1808,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     FT div = std::sqrt(sqrNorm(tmpmulx + pv) + sharednz * pv * pv) * std::sqrt(sqrNorm(tmpmuly + pv) + sharednz * pv * pv);
                     ret = klc / div;
                     ret = std::max(std::min(ret, 1.), 0.);
-                    static constexpr FT PI_INV = FT(1.) / FT(3.1415926535897932384626433832795028841971);
-                    if(msr == COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
+                    if(msr == COSINE_DISTANCE) ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
                     break;
                 } else if(msr == TVD) {
                     ret = libkl::tvd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::abs(lhinc - rhinc) * sharednz * .5;
@@ -1869,14 +1866,13 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     klc = msr == SIS ?
                             libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc)
                           : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
-                    zc = sharednz * FT(.5) * std::log((lhinc / rhinc + rhinc / lhinc + FT(2)) * .25);
+                    zc = sharednz * FT(.5) * std::log((lhinc / rhinc + rhinc / lhinc + FT(2)) * FT(.25));
                 } else if(msr == PROBABILITY_COSINE_DISTANCE || msr == PROBABILITY_COSINE_SIMILARITY) {
                     klc = dot(tmpmulx + lhinc, tmpmuly + rhinc) + sharednz * (lhinc * rhinc);
                     FT div = std::sqrt(sqrNorm(tmpmulx + lhinc) + sharednz * lhinc * lhinc) * std::sqrt(sqrNorm(tmpmuly + rhinc) + sharednz * rhinc * rhinc);
                     ret = klc / div;
                     ret = std::max(std::min(ret, 1.), 0.);
-                    static constexpr FT PI_INV = 1. / 3.14159265358979323846264338327950288;
-                    if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * PI_INV;
+                    if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
                     break;
                 } else __builtin_unreachable();
                 ret = klc + zc;
