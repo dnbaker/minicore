@@ -86,7 +86,7 @@ void init_pycsparse(py::module &m) {
         auto da = py::cast<py::array>(data), ia = py::cast<py::array>(idx), ipa = py::cast<py::array>(indptr);
         auto sseq = py::cast<py::sequence>(shape);
         return PyCSparseMatrix(data, ia, ipa, sseq[0].cast<Py_ssize_t>(), sseq[1].cast<Py_ssize_t>(), da.request().size);
-    });
+    }, py::arg("data"), py::arg("indices"), py::arg("indptr"), py::arg("shape"));
 
      m.def("kmeanspp", [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {
         return run_kmpp_noso(smw, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, so.kmc2_rounds, std::max(int(so.extra_sample_tries) - 1, 0),

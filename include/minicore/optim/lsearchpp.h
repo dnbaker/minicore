@@ -38,9 +38,10 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
         }
     }
     blaze::CustomVector<value_type, blaze::unaligned, blaze::unpadded> dv(&distances[0], np);
-    std::unique_ptr<blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded>> wv;
+    using CW = blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded>;
+    std::unique_ptr<CW> wv;
     if(weights) {
-        wv.reset(new blaze::CustomVector<WFT, blaze::unaligned, blaze::unpadded>((WFT *)weights, np));
+        wv.reset(new CW((WFT *)weights, np));
     }
     dv = blz::min<blz::rowwise>(ctrcostmat);
 

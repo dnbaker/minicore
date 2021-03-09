@@ -130,7 +130,9 @@ inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::ob
         } else if(inf.ndim == 2) {
             set_centers(&dvecs, py::cast<py::array>(x).request());
         }
-    } else if(py::isinstance<py::sequence>(x)) {
+        return dvecs;
+    }
+    if(py::isinstance<py::sequence>(x) || py::isinstance<py::list>(x)) {
         auto seq = py::cast<py::sequence>(x);
         if(py::isinstance<py::array>(seq[0])) {
             for(auto item: py::cast<py::sequence>(x)) {
@@ -141,7 +143,8 @@ inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::ob
                 else if(bi.format[0] == 'f') emp(blz::make_cv((float *)bi.ptr, bi.size));
                 else throw std::invalid_argument("Array type must be float or double");
             }
-        } else if(py::isinstance<py::int_>(seq[0])) {
+        } else  {
+            try {
             const size_t nc = mat.columns();
             for(auto item: py::cast<py::sequence>(x)) {
                 Py_ssize_t rownum = py::cast<py::int_>(item).cast<Py_ssize_t>();
@@ -155,8 +158,11 @@ inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::ob
                     }
                 } else for(const auto &pair: r) v.append(pair.index(), pair.value());
             }
-        } else throw std::invalid_argument("Invalid: expected numpy array or list of numpy arrays or list of center ids");
-    } else throw std::invalid_argument("centers must be a 2d numpy array or sequence containing numpy arrays of the full vectors or center ids");
+            } catch(...) {
+                throw std::invalid_argument("Invalid: expected numpy array or list of numpy arrays or list of center ids");
+            }
+        }
+    }
     return dvecs;
 }
 template<typename FT>
