@@ -14,10 +14,10 @@ std::vector<py::ssize_t> topindices(T *ptr, size_t nf, size_t nti) {
     for(;i < e; ++i) {
         if(ptr[i] > dat.get()->first) {
             std::pop_heap(dat.get(), dat.get() + nti, std::greater<std::pair<double, py::ssize_t>>());
-            dat[nti - 1] = {ptr[i], i}; 
+            dat[nti - 1] = {ptr[i], i};
             std::push_heap(dat.get(), dat.get() + nti, std::greater<std::pair<double, py::ssize_t>>());
-        }   
-    }   
+        }
+    }
     for(size_t i = 0; i < nf; ++i) std::fprintf(stderr, "%g/%zu\n", dat[i].first, dat[i].second);
     std::vector<py::ssize_t> indices(nf);
     std::transform(dat.get(), &dat[nf], indices.data(), [](auto x) {return x.second;});
