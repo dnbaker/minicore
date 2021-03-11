@@ -54,6 +54,10 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     const bool emit_log = false;
     if(emit_log)
         std::fprintf(stderr, "Starting kmeanspp with np = %zu and k = %zu%s and %s, and %s.\n", np, k, weights ? " and non-null weights": "", parallelize_oracle ? "parallelized": "unparallelized", use_exponential_skips ? "with exponential skips": "SIMD sampling");
+    if(np < k) {
+        std::fprintf(stderr, "Warning: np (%zu) < k (%zu). Returning exactly %zu\n", k, np, np);
+        k = np;
+    }
     std::vector<IT> centers(k, IT(0));
     blz::DV<FT> distances(np, std::numeric_limits<FT>::max()), odists;
     {
@@ -119,16 +123,17 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             else
                 reservoir_simd::sample_k(rvals.data(), np, n_local_samples, samplesbuf.data(), rngv, fmt);
         } else {
-            if(n_local_samples <= 1u)
-                newc = reservoir_simd::sample(distances.data(), np, rngv, fmt);
-            else
+            if(n_local_samples <= 1u) {
+                int k = 0;
+                do {
+                    newc = reservoir_simd::sample(distances.data(), np, rngv, fmt);
+                    if(distances[newc] > 0. && std::find(cd, ce, newc) == ce) break;
+                } while(++k < 3);
+            } else
                 reservoir_simd::sample_k(distances.data(), np, n_local_samples, samplesbuf.data(), rngv, fmt);
         }
         double dsum = -1.;
         if(n_local_samples > 1) {
-            for(size_t i = 0; i < n_local_samples; ++i) {
-                //std::fprintf(stderr, "At center_idx %zu, sample %zu is %zu\n", center_idx, i, size_t(samplesbuf[i]));
-            }
             for(size_t i = 0; i < n_local_samples; ++i) {
                 VERBOSE_ONLY(std::fprintf(stderr, "Performing %zu sample/%zu for %zu\n", i, n_local_samples, center_idx);)
                 auto sptr = &distances;
@@ -139,7 +144,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
                     iptr = &samplesasn;
                 }
                 auto nextc = samplesbuf[i];
-                if(unlikely(sptr->operator[](nextc) <= 0.)) std::fprintf(stderr, "Note: Selected item with weight 0 at index %zu [maybe there's somethign wrong?]\n", i);
+                if(unlikely(sptr->operator[](nextc) <= 0.)) std::fprintf(stderr, "Note: Selected item with weight 0 at index %zu [maybe there's something wrong?]\n", i);
                 double nsum = 0.;
                 if(parallelize_oracle) {
                     OMP_PRAGMA("omp parallel for simd reduction(+:nsum)")
@@ -161,7 +166,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
                     dsum = nsum, newc = nextc;
                 } else {
                     if(nsum < dsum) {
-                        std::fprintf(stderr, "Sample %zu for idx %zu replaced cost %.10g with %0.10g\n", i, center_idx, nsum, dsum);
+                        std::fprintf(stderr, "Sample %zu for idx %zu replaced cost %.10g with %0.10g\n", i, center_idx, dsum, nsum);
                         distances = samplescosts, dsum = nsum, assignments = samplesasn, newc = nextc;
                     } VERBOSE_ONLY(else std::fprintf(stderr, "new cost: %g. old: %g. old cost is %g better\n", nsum, dsum, dsum - nsum);)
                 }
@@ -170,11 +175,12 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
             assignments[newc] = center_idx;
         } else {
             if(distances[newc] == 0.) {
-                std::fprintf(stderr, "Warning: distance of 0 selected. Are all distances 0? mean, max: %g, %g. cidx: %zu\n", blz::mean(distances), max(distances), center_idx);
-            }
-            if(std::find(cd, ce, newc) != ce) {
-                std::fprintf(stderr, "Re-selected existing center %u. Continuing...\n", int(newc));
-                continue;
+                newc = reservoir_simd::argmax(distances, /*multithead=*/true);
+                std::fprintf(stderr, "[%s] Warning: distance of 0 selected. Are all distances 0? max: %g. cidx: %zu\n", __PRETTY_FUNCTION__, distances[newc], center_idx);
+                if(distances[newc] == 0.) {
+                    std::fprintf(stderr, "Note: all distances are 0\n");
+                    if(blaze::isnan(distances)) throw std::runtime_error("NAN distance found");
+                }
             }
             assignments[newc] = center_idx;
             centers[center_idx] = newc;
@@ -215,20 +221,6 @@ kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT 
     return kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, lspprounds, use_exponential_skips, parallelize_oracle, n_local_trials);
 }
 
-template<typename Oracle, typename FT=double,
-         typename IT=std::uint32_t, typename RNG, typename WFT=FT>
-std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights=static_cast<WFT *>(nullptr), int lspprounds=0, int ntimes=1);
-
-template<typename Iter, typename FT=double,
-         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=FT>
-std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-reservoir_kmeanspp(Iter first, Iter end, RNG &rng, size_t k, const Norm &norm=Norm(), WFT *weights=nullptr, size_t lspprounds=0, int ntimes=1) {
-    auto dm = make_index_dm(first, norm);
-    static_assert(std::is_floating_point<FT>::value, "FT must be fp");
-    return reservoir_kmeanspp<decltype(dm), FT>(dm, rng, end - first, k, weights, lspprounds, ntimes);
-}
-
 
 template<typename Oracle, typename Sol, typename FT=double, typename IT=uint32_t>
 std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(const Oracle &oracle, size_t np, const Sol &sol)
@@ -252,75 +244,6 @@ std::pair<blaze::DynamicVector<IT>, blaze::DynamicVector<FT>> get_oracle_costs(c
     return std::make_pair(assignments, costs);
 }
 
-
-template<typename Oracle, typename FT,
-         typename IT, typename RNG, typename WFT>
-std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>>
-reservoir_kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, WFT *weights, int lspprounds, int ntimes)
-{
-    schism::Schismatic<IT> div(np);
-    std::vector<IT> centers({div.mod(IT(rng()))});
-    std::vector<IT> asn(np, 0);
-    std::vector<FT> distances(np);
-    for(unsigned i = 0; i < np; ++i) {
-        distances[i] = oracle(centers[0], i);
-    }
-    // Helper function for minimum distance
-    auto mindist = [&centers,&oracle,&asn,&distances](auto newind) {
-        auto cd = centers.data(), it = cd, end = &*centers.end();
-        auto dist = oracle(*it, newind);
-        auto bestind = 0u;
-        while(++it != end) {
-            auto newdist = oracle(*it, newind);
-            if(newdist < dist) {
-                dist = newdist, bestind = it - cd;
-            }
-        }
-        asn[newind] = bestind;
-        distances[newind] = dist;
-        return dist;
-    };
-    shared::flat_hash_set<IT> hashset(centers.begin(), centers.end());
-
-    while(centers.size() < k) {
-        size_t x;
-        do x = rng() % np; while(hashset.find(x) != hashset.end());
-        double xdist = mindist(x);
-        auto xdi = 1. / xdist;
-        const auto baseseed = IT(rng());
-        const double max64inv = 1. / std::numeric_limits<uint64_t>::max();
-        auto lfunc = [&](unsigned j) {
-            if(hashset.find(j) == hashset.end() || !distances[j]) return;
-            uint64_t local_seed = baseseed + j;
-            wy::wyhash64_stateless(&local_seed);
-            auto ydist = mindist(j);
-            if(weights) {
-                ydist *= weights[j];
-            }
-            const auto urd_val = local_seed * max64inv;
-            if(ydist * xdi > urd_val) {
-                OMP_CRITICAL
-                {
-                    if(ydist * xdi > urd_val)
-                        x = j, xdist = ydist, xdi = 1. / xdist;
-                    DBG_ONLY(std::fprintf(stderr, "Now x is %d with cost %g\n", int(x), xdist);)
-                }
-            }
-        };
-        for(int i = ntimes; i--;) {
-            OMP_PFOR
-            for(unsigned j = 1; j < np; ++j) {
-                lfunc(div.mod(j + x));
-            }
-        }
-        centers.emplace_back(x);
-        hashset.insert(x);
-    }
-    if(lspprounds > 0) {
-        localsearchpp_rounds(oracle, rng, distances, centers, asn, np, lspprounds, weights);
-    }
-    return std::make_tuple(std::move(centers), std::move(asn), std::move(distances));
-}
 
 /*
  * Implementation of the $KMC^2$ algorithm from:
@@ -410,22 +333,6 @@ kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=
         auto columnit = blz::columniterator(*mat);
         return kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, lspprounds, use_exponential_skips, parallelize_oracle, n_local_samples);
     }
-}
-
-template<typename MT, bool SO,
-         typename IT=std::uint32_t, typename RNG, typename Norm=sqrL2Norm, typename WFT=typename MT::ElementType>
-auto
-reservoir_kmeanspp(const blaze::Matrix<MT, SO> &mat, RNG &rng, size_t k, const Norm &norm=Norm(), bool rowwise=true, const WFT *weights=nullptr, size_t lspprounds=0, int ntimes=1) {
-    using FT = typename MT::ElementType;
-    std::tuple<std::vector<IT>, std::vector<IT>, std::vector<FT>> ret;
-    if(rowwise) {
-        auto rowit = blz::rowiterator(*mat);
-        ret = reservoir_kmeanspp(rowit.begin(), rowit.end(), rng, k, norm, weights, lspprounds, ntimes);
-    } else { // columnwise
-        auto columnit = blz::columniterator(*mat);
-        ret = reservoir_kmeanspp(columnit.begin(), columnit.end(), rng, k, norm, weights, lspprounds, ntimes);
-    }
-    return ret;
 }
 
 template<typename MT, bool SO,

@@ -42,14 +42,14 @@ int main() {
             try {
             auto v = cmp::msr_with_prior(msr, cv1, cv1, prior, psum, s1, s1);
             if(msr == minicore::distance::COSINE_SIMILARITY) {
-                if(v != 1.) assert(std::abs(v -= 1.) < 1e-15 || !std::fprintf(stderr, "v: %0.20g\n", v));
+                if(v != 1.) assert(std::abs(v -= 1.) < 1e-6 || !std::fprintf(stderr, "v: %0.20g\n", v));
                 continue;
             } else if(pval == 0. && msr == minicore::distance::MKL) {
                 continue;
             }
             if(v != 0) {
                 std::fprintf(stderr, "[%s] FAILURE (both blaze): %g != 0.\n", prob2str(msr), v);
-                if(v > 5e-9) {
+                if(v > 5e-4) {
                     assert(v == 0.);
                 }
                 ++anyfail;

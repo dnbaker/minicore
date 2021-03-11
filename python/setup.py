@@ -99,17 +99,6 @@ ext_modules = [
     )
 ]
 
-'''
-Extension(
-    'mm',
-    ['mmap.cpp'],
-    include_dirs=include_dirs,
-    language='c++',
-    extra_compile_args=extra_compile_args,
-)
-'''
-
-
 
 # As of Python 3.6, CCompiler has a `has_flag` method.
 # cf http://bugs.python.org/issue26689
@@ -180,7 +169,7 @@ class BuildExt(build_ext):
 __version__ = check_output("git describe --abbrev=4", shell=True).decode().split("-")[0]
 setup(
     name='minicore',
-    version=0.3,
+    version="0.3.1",
     author='Daniel Baker',
     author_email='dnb@cs.jhu.edu',
     url='https://github.com/dnbaker/minicore',

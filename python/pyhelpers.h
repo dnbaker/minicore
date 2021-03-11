@@ -68,7 +68,6 @@ py::object centers2pylist(const std::vector<SMT, SAL> &ctrs) {
     // We're converting the centers into a CSR-notation object in Numpy
     // First, we compute nonzeros for each row, then use an exclusive scan
     blz::DV<uint64_t> nz(ctrs.size());
-    OMP_PFOR
     for(size_t i = 0; i < ctrs.size(); ++i) nz[i] = nonZeros(ctrs[i]);
     const size_t nnz = blz::sum(nz), nr = ctrs.size(), nc = ctrs.front().size();
     py::array_t<uint32_t> idx(nnz);
@@ -123,9 +122,17 @@ auto vec2fnp(const T &x) {
 template<typename Mat>
 inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::object x, const Mat &mat) {
     std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs;
-    if(py::isinstance<py::array>(x) && py::cast<py::array>(x).request().ndim == 2) {
-        set_centers(&dvecs, py::cast<py::array>(x).request());
-    } else if(py::isinstance<py::sequence>(x)) {
+    if(py::isinstance<py::array>(x)){
+        py::array arr = py::cast<py::array>(x);
+        auto inf = arr.request();
+        if(inf.ndim == 1) {
+            return obj2dvec(py::list(x), mat);
+        } else if(inf.ndim == 2) {
+            set_centers(&dvecs, py::cast<py::array>(x).request());
+        }
+        return dvecs;
+    }
+    if(py::isinstance<py::sequence>(x) || py::isinstance<py::list>(x)) {
         auto seq = py::cast<py::sequence>(x);
         if(py::isinstance<py::array>(seq[0])) {
             for(auto item: py::cast<py::sequence>(x)) {
@@ -136,7 +143,8 @@ inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::ob
                 else if(bi.format[0] == 'f') emp(blz::make_cv((float *)bi.ptr, bi.size));
                 else throw std::invalid_argument("Array type must be float or double");
             }
-        } else if(py::isinstance<py::int_>(seq[0])) {
+        } else  {
+            try {
             const size_t nc = mat.columns();
             for(auto item: py::cast<py::sequence>(x)) {
                 Py_ssize_t rownum = py::cast<py::int_>(item).cast<Py_ssize_t>();
@@ -150,16 +158,34 @@ inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::ob
                     }
                 } else for(const auto &pair: r) v.append(pair.index(), pair.value());
             }
-        } else throw std::invalid_argument("Invalid: expected numpy array or list of numpy arrays or list of center ids");
-    } else throw std::invalid_argument("centers must be a 2d numpy array or sequence containing numpy arrays of the full vectors or center ids");
+            } catch(...) {
+                throw std::invalid_argument("Invalid: expected numpy array or list of numpy arrays or list of center ids");
+            }
+        }
+    }
     return dvecs;
 }
 template<typename FT>
 std::vector<blz::DynamicVector<FT, blz::rowVector>> obj2dvec(
     py::object x, py::array_t<FT, py::array::c_style | py::array::forcecast> dataset) {
     std::vector<blz::DynamicVector<FT, blz::rowVector>> dvecs;
-    if(py::isinstance<py::array>(x) && py::cast<py::array>(x).request().ndim == 2) {
-        set_centers(&dvecs, py::cast<py::array>(x).request());
+    if(py::isinstance<py::array>(x)){
+        py::array arr = py::cast<py::array>(x);
+        auto inf = arr.request();
+        if(inf.ndim == 1) {
+            py::array_t<int64_t, py::array::c_style | py::array::forcecast> arrcvr(arr);
+            inf = arrcvr.request();
+            auto dinf = dataset.request();
+            const auto nc = dinf.shape[1];
+            for(py::ssize_t i = 0; i < inf.size; ++i) {
+                int64_t idx = ((int64_t *)inf.ptr)[i];
+                auto &v = dvecs.emplace_back();
+                v.resize(nc);
+                v = trans(blz::make_cv((FT *)dinf.ptr + idx * nc, nc));
+            }
+        } else if(inf.ndim == 2) {
+            set_centers(&dvecs, py::cast<py::array>(x).request());
+        }
     } else if(py::isinstance<py::sequence>(x)) {
         auto seq = py::cast<py::sequence>(x);
         if(py::isinstance<py::array>(seq[0])) {

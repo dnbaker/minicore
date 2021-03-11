@@ -43,7 +43,7 @@ void init_pydense(py::module &m) {
        py::arg("opts"),
        py::arg("weights") = py::none()
     );
-     m.def("kmeanspp", [](py::array_t<double, py::array::c_style | py::array::forcecast> arr, const SumOpts &so, py::object weights) {
+     m.def("kmeanspp", [](py::array_t<double, py::array::c_style> arr, const SumOpts &so, py::object weights) {
         auto arri = arr.request();
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
         blz::CustomMatrix<double, unaligned, unpadded, rowMajor> cm((double *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(double));
@@ -77,7 +77,7 @@ void init_pydense(py::module &m) {
        py::arg("expskips") = false,
        py::arg("n_local_trials") = 1
     );
-     m.def("kmeanspp", [](py::array_t<double, py::array::c_style | py::array::forcecast> arr, int k, py::object measure, py::object prior, py::object seed, py::object nkmc, py::object ntimes,
+     m.def("kmeanspp", [](py::array_t<double, py::array::c_style> arr, int k, py::object measure, py::object prior, py::object seed, py::object nkmc, py::object ntimes,
                           py::object lspp, py::object weights, py::object expskips, py::object local_trials) {
         auto dm = assure_dm(measure);
         auto arri = arr.request();

@@ -437,7 +437,6 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
     shared::flat_hash_set<IT> idxs;
     if(!with_importance_sampling && !with_replacement)
         idxs.reserve(mbsize);
-    
     for(;;) {
         PYBIND11_EXCEPTION_CHECK();
         DBG_ONLY(std::fprintf(stderr, "Beginning iter %zu\n", iternum);)

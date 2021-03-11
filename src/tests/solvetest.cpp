@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
         }
         case '?':
         case 'h':dist::print_measures();
-                std::fprintf(stderr, "Usage: %s <flags> \n-z: load blaze matrix from path\n-P: set prior (1.)\n-T set temp [1.]\n-p set num threads\n-m Set measure (MKL, 5)\n-k: set k [10]\t-T transpose mtx file\t-M parse mtx file from argument\n", *argv);
+                std::fprintf(stderr, "Usage: %s <flags> \n-z: load blaze matrix from path\n-P: set prior (1.)\n-T set temp [1.]\n-p set num threads\n-m Set measure (MKL, 5)\n-k: set k [10]\n-T transpose mtx file\n-M parse mtx file from argument\n", *argv);
                 return EXIT_FAILURE;
     }}
     int nrows = 500, ncols = 1000;
