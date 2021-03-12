@@ -426,6 +426,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             }
         }
 #undef __perform_assign_one
+        PYBIND11_EXCEPTION_CHECK();
     };
     wy::WyRand<std::make_unsigned_t<IT>> rng(seed);
     schism::Schismatic<std::make_unsigned_t<IT>> div((mat).rows());
@@ -502,10 +503,11 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             } else {
                 cost = blz::sum(costs);
             }
-            std::fprintf(stderr, "Cost at iter %zu (mbsize %zd): %g\n", iternum, mbsize, cost);
+            PYBIND11_EXCEPTION_CHECK();
+            std::fprintf(stderr, "Cost at iter %zu (mbsize %zd): %0.20g\n", iternum, mbsize, cost);
             if(iternum == 0) initcost = cost, bestcost = initcost;
             if(cost < bestcost) {
-                std::fprintf(stderr, "Distance between old and new centers: %g\n", blz::sum(blz::generate(centers.size(), [&](auto x) {return l2Dist(centers[x], savectrs[x]);})));
+                std::fprintf(stderr, "Distance between old and new centers: %0.12g\n", blz::sum(blz::generate(centers.size(), [&](auto x) {return l2Dist(centers[x], savectrs[x]);})));
                 bestcost = cost;
                 savectrs = centers;
             }
@@ -658,6 +660,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
             asn[i] = minind;
             costs[i] = mincost;
         }
+        PYBIND11_EXCEPTION_CHECK();
         center_counts = 0;
 
         OMP_PFOR
@@ -665,10 +668,12 @@ auto hmb_coreset_clustering(const Matrix &mat,
             assert(asn[i] < k);
             OMP_ATOMIC ++center_counts[asn[i]];
         }
+        PYBIND11_EXCEPTION_CHECK();
         blaze::SmallArray<uint32_t, 8> foundindices;
         for(size_t i = 0; i < center_counts.size(); ++i)
             if(center_counts[i] <= reseed_after) // If there are few points assigned to a center, restart it
                 foundindices.pushBack(i);
+        PYBIND11_EXCEPTION_CHECK();
         if(foundindices.size()) {
             DBG_ONLY(std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());)
             for(const auto fidx: foundindices) {
@@ -699,6 +704,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                          ccost = newcost, asn[i] = fidx;
             }
         }
+        PYBIND11_EXCEPTION_CHECK();
         if(weights) {
             if constexpr(blaze::IsVector_v<WeightT>)
                 cost = blz::dot(costs, *weights);
