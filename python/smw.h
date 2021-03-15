@@ -328,13 +328,11 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
         auto costp = (double *)costs.request().ptr;
         blaze::DynamicVector<double> rsums(smw.rows());
         smw.perform([&](auto &x) {
-            std::fprintf(stderr, "Computing rowsums\n");
+            using TmpT = typename std::decay_t<decltype(x)>::ElementType;
+            using FT = std::conditional_t<(sizeof(TmpT) <= 4), float, double>;
             using minicore::util::sum;
             using blz::sum;
             rsums = sum<blaze::rowwise>(x);
-            std::fprintf(stderr, "Computed rowsums\n");
-            using TmpT = typename std::decay_t<decltype(x)>::ElementType;
-            using FT = std::conditional_t<(sizeof(TmpT) <= 4), float, double>;
             auto cmp = [&x,measure=mmsr,rsums=rsums.data(),psum,&prior](size_t xi, size_t yi) {
                 // Note that this has been transposed
                 auto rx = row(x, xi), ry = row(x, yi);
@@ -346,14 +344,14 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
                 case 'd': case -1: break;
                 default: throw std::runtime_error("Unsupported dtype for weights");
             }
-            wy::WyRand<uint64_t> rng(seed);
             auto sol = kmeanspp(cmp, rng, x.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
             auto solc = sum(std::get<2>(sol));
             for(auto nt = 0;nt < ntimes; ++nt) {
                 auto sol2 = kmeanspp(cmp, rng, x.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
                 auto sol2c = sum(std::get<2>(sol));
-                if(sol2c < sol2) {
-                    std::swap(std::tie(sol2, sol2c), std::tie(sol, solc));
+                if(sol2c < solc) {
+                    std::swap(sol2, sol);
+                    std::swap(sol2c, solc);
                     std::fprintf(stderr, "Replaced old cost of %0.20g with %0.20g\n", sol2c, solc);
                 }
             }
@@ -444,9 +442,14 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
         auto costp = (float *)costs.request().ptr;
         using TmpT = typename Mat::ElementType;
         using FT = std::conditional_t<sizeof(TmpT) <= 4, float, double>;
-        auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
+        using minicore::util::sum;
+        using blz::sum;
+        blaze::DynamicVector<double> rsums(smw.rows());
+        rsums = sum<blaze::rowwise>(smw);
+        auto cmp = [&smw,measure=mmsr,rsums=rsums.data(),psum,&prior](size_t xi, size_t yi) {
             // Note that this has been transposed
-            return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));
+            auto rx = row(smw, xi, blz::unchecked), ry = row(smw, yi, blz::unchecked);
+            return cmp::msr_with_prior<FT>(measure, ry, rx, prior, psum, rsums[yi], rsums[xi]);
         };
         std::unique_ptr<double[]> tmpw;
         switch(kind) {
@@ -454,7 +457,17 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
             case 'd': case -1: break;
             default: throw std::runtime_error("Unsupported dtype for weights");
         }
-        auto sol = repeatedly_get_initial_centers(smw, rng, ki, nkmc, ntimes, lspp, use_exponential_skips, cmp, (double *)wptr, n_local_trials);
+        auto sol = kmeanspp(cmp, rng, smw.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
+        auto solc = sum(std::get<2>(sol));
+        for(auto nt = 0;nt < ntimes; ++nt) {
+            auto sol2 = kmeanspp(cmp, rng, smw.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
+            auto sol2c = sum(std::get<2>(sol2));
+            if(sol2c < solc) {
+                std::swap(sol2, sol);
+                std::swap(sol2c, solc);
+                std::fprintf(stderr, "Replaced old cost of %0.20g with %0.20g\n", sol2c, solc);
+            }
+        }
         //auto &[lidx, lasn, lcosts] = sol;
         auto &lidx = std::get<0>(sol);
         auto &lasn = std::get<1>(sol);
