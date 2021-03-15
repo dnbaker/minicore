@@ -174,113 +174,6 @@ public:
     }
 };
 
-#if 0
-template<typename Mat>
-inline py::tuple py_kmeanspp(const Mat &smw, py::object msr, Py_ssize_t k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                 int lspp,
-                 int use_exponential_skips, py::ssize_t n_local_trials,
-                 py::object weights)
-{
-    const void *wptr = nullptr;
-    int kind = -1;
-    const auto mmsr = assure_dm(msr);
-    const size_t nr = smw.rows();
-    //std::fprintf(stderr, "Performing kmeans++ with msr %d/%s\n", (int)mmsr, cmp::msr2str(mmsr));
-    if(py::isinstance<py::array>(weights)) {
-        auto arr = py::cast<py::array>(weights);
-        auto info = arr.request();
-        if(info.format.size() > 1) throw std::invalid_argument(std::string("Invalid array format: ") + info.format);
-        switch(info.format.front()) {
-            case 'l': case 'i': case 'I': case 'H': case 'L': case 'B': case 'f': case 'd': kind = info.format.front(); break;
-            default:throw std::invalid_argument(std::string("Invalid array format: ") + info.format + ". Expected 'd', 'f', 'i', 'I', 'l', 'L', 'B', 'h'.\n");
-        }
-        wptr = info.ptr;
-    }
-    if(seed == 0) {
-        seed = std::mt19937_64(std::rand())();
-    }
-    wy::WyRand<uint64_t> rng(seed);
-    const auto psum = gamma_beta * smw.columns();
-    const blz::StaticVector<double, 1> prior({gamma_beta});
-    py::array_t<uint32_t> ret(k);
-    int retasnbits;
-    if(k <= 256) {
-        retasnbits = 8;
-    } else if(k <= 63356) {
-        retasnbits = 16;
-    } else if(k <= 0xFFFFFFFF) {
-        retasnbits = 32;
-    } else {
-        retasnbits = 64;
-        throw std::runtime_error("uint64 labels. >4 billion centers, are you crazy?\n");
-    }
-    const char *kindstr = retasnbits == 8 ? "B": retasnbits == 16 ? "H": retasnbits == 32 ? "U": "L";
-    py::array retasn(py::dtype(kindstr), std::vector<Py_ssize_t>{{Py_ssize_t(nr)}});
-    auto retai = retasn.request();
-    auto rptr = (uint32_t *)ret.request().ptr;
-    py::array_t<float> costs(smw.rows());
-    auto costp = (float *)costs.request().ptr;
-    try {
-    smw.perform([&](auto &x) {
-        using ET = typename std::decay_t<decltype(x)>::ElementType;
-        using FT = std::conditional_t<(sizeof(ET) <= 4), float, double>;
-        auto cmp = [measure=mmsr, psum,&prior](const auto &x, const auto &y) {
-            // Note that this has been transposed
-            return cmp::msr_with_prior<FT>(measure, y, x, prior, psum, sum(y), sum(x));
-        };
-        std::vector<float> w;
-        switch(kind) {
-            case 'd': w.resize(x.rows()); std::copy((double *)wptr, (double *)wptr + x.rows(), w.data()); wptr = (void *)w.data();
-            case 'f': break;
-            case -1: throw std::invalid_argument("Unexpected dtype");
-        }
-        auto sol = repeatedly_get_initial_centers(x, rng, k, nkmc, ntimes, lspp, use_exponential_skips, cmp, (const float *)wptr, n_local_trials);
-        auto &[lidx, lasn, lcosts] = sol;
-        assert(lidx.size() == ki);
-        assert(lasn.size() == smw.rows());
-        switch(retasnbits) {
-            case 8: {
-                auto raptr = (uint8_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
-            case 16: {
-                auto raptr = (uint16_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
-            case 32: {
-                auto raptr = (uint32_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
-            case 64: {
-                auto raptr = (uint64_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
-            default: __builtin_unreachable();
-        }
-        OMP_PFOR
-        for(size_t i = 0; i < lcosts.size(); ++i)
-            costp[i] = lcosts[i];
-        OMP_PFOR
-        for(size_t i = 0; i < lidx.size(); ++i)
-            rptr[i] = lidx[i];
-    });
-    } catch(const NotImplementedError &) {
-        throw std::invalid_argument("Unsupported measure");
-    } catch(const std::runtime_error &ex) {
-        throw static_cast<std::exception>(ex);
-    } catch(...) {throw std::invalid_argument("No idea what exception was thrown, but it was unrecoverable.");}
-    return py::make_tuple(ret, retasn, costs);
-}
-#endif
-
 template<typename Mat>
 inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
                           py::ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
@@ -459,16 +352,14 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
         }
         auto sol = kmeanspp(cmp, rng, smw.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
         auto solc = sum(std::get<2>(sol));
-        for(auto nt = 0;nt < ntimes; ++nt) {
+        for(auto nt = 0u;nt < ntimes; ++nt) {
             auto sol2 = kmeanspp(cmp, rng, smw.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
             auto sol2c = sum(std::get<2>(sol2));
             if(sol2c < solc) {
-                std::swap(sol2, sol);
-                std::swap(sol2c, solc);
+                std::swap(sol2, sol); std::swap(sol2c, solc);
                 std::fprintf(stderr, "Replaced old cost of %0.20g with %0.20g\n", sol2c, solc);
             }
         }
-        //auto &[lidx, lasn, lcosts] = sol;
         auto &lidx = std::get<0>(sol);
         auto &lasn = std::get<1>(sol);
         auto &lcosts = std::get<2>(sol);
