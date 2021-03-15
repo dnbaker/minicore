@@ -646,5 +646,6 @@ auto kmeans_matrix_coreset(const blaze::Matrix<MT, SO> &mat, size_t k, RNG &rng,
 
 
 } // namespace coresets
+using coresets::kmeanspp;
 } // namespace minicore
 #endif // FGC_KMEANS_H__
