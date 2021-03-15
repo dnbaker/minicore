@@ -72,6 +72,7 @@ void init_clustering_dense(py::module &m) {
                             constexpr const int pyflags = py::array::c_style | py::array::forcecast;
                             py::object ret;
                             switch(standardize_dtype(dataset.request().format)[0]) {
+                                default:
                                 case 'f': ret = __py_cluster_from_centers_dense(py::cast<py::array_t<float, pyflags>>(dataset),
                                                                                  centers, beta, msr, weights, eps, kmeansmaxiter,
                                                                                  seed, mbsize, ncheckins, reseed_count, with_rep, use_cs);
@@ -80,7 +81,6 @@ void init_clustering_dense(py::module &m) {
                                                                                  centers, beta, msr, weights, eps, kmeansmaxiter,
                                                                                  seed, mbsize, ncheckins, reseed_count, with_rep, use_cs);
                                 break;
-                                default: throw std::runtime_error("Unexpected dtype");
                             }
                             return ret;
                          },

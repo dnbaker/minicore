@@ -348,7 +348,15 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
             }
             wy::WyRand<uint64_t> rng(seed);
             auto sol = kmeanspp(cmp, rng, x.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
-            //auto &[lidx, lasn, lcosts] = sol;
+            auto solc = sum(std::get<2>(sol));
+            for(auto nt = 0;nt < ntimes; ++nt) {
+                auto sol2 = kmeanspp(cmp, rng, x.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
+                auto sol2c = sum(std::get<2>(sol));
+                if(sol2c < sol2) {
+                    std::swap(std::tie(sol2, sol2c), std::tie(sol, solc));
+                    std::fprintf(stderr, "Replaced old cost of %0.20g with %0.20g\n", sol2c, solc);
+                }
+            }
             auto &lidx = std::get<0>(sol);
             auto &lasn = std::get<1>(sol);
             auto &lcosts = std::get<2>(sol);

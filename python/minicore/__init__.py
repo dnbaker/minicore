@@ -5,6 +5,7 @@ from .constants import CSR as csr_tuple, KMCRSV
 if hasattr(pyminicore, "SparseMatrixWrapper"):
     from pyminicore import SparseMatrixWrapper as smw
 import numpy as np
+from .compute_variance import variance
 
 cluster_from_centers = pyminicore.hcluster
 
