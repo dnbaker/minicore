@@ -183,20 +183,25 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
             gamma_beta = 1. / smw.columns();
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
         }
+        if(nkmc > 1) std::fprintf(stderr, "Warning: nkmc been removed.\n");
         if(seed == 0) seed = std::mt19937_64(std::rand())();
         const void *wptr = nullptr;
         int kind = -1;
         const auto mmsr = assure_dm(msr);
         const size_t nr = smw.rows();
+        py::object newarr = py::none();
         if(py::isinstance<py::array>(weights)) {
             auto arr = py::cast<py::array>(weights);
             auto info = arr.request();
             if(info.format.size() > 1) throw std::invalid_argument(std::string("Invalid array format: ") + info.format);
             switch(info.format.front()) {
-                case 'f': case 'd': kind = info.format.front(); break;
-                default:throw std::invalid_argument(std::string("Invalid array format: ") + info.format + ". Expected 'd', 'f', 'i', or 'u'.\n");
+                case 'f': case 'd': kind = info.format.front(); wptr = info.ptr; break;
+                default: {
+                    py::array_t<double, py::array::forcecast | py::array::c_style> npa(weights);
+                    wptr = npa.request().ptr; kind = 'd';
+                    newarr = npa;
+                }
             }
-            wptr = info.ptr;
         }
         auto ki = k.cast<Py_ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
@@ -239,7 +244,7 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
             }
             auto sol = kmeanspp(cmp, rng, x.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
             auto solc = sum(std::get<2>(sol));
-            for(auto nt = 0;nt < ntimes; ++nt) {
+            for(auto nt = 0u;nt < ntimes; ++nt) {
                 auto sol2 = kmeanspp(cmp, rng, x.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
                 auto sol2c = sum(std::get<2>(sol));
                 if(sol2c < solc) {
@@ -298,19 +303,23 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
         }
         if(seed == 0) seed = std::mt19937_64(std::rand())();
+        if(nkmc > 1) std::fprintf(stderr, "Warning: nkmc been removed.\n");
         const void *wptr = nullptr;
         int kind = -1;
         const auto mmsr = assure_dm(msr);
         const size_t nr = smw.rows();
+        py::object carr = py::none();
         if(py::isinstance<py::array>(weights)) {
             auto arr = py::cast<py::array>(weights);
-            auto info = arr.request();
-            if(info.format.size() > 1) throw std::invalid_argument(std::string("Invalid array format: ") + info.format);
-            switch(info.format.front()) {
-                case 'f': case 'd': kind = info.format.front(); break;
-                default:throw std::invalid_argument(std::string("Invalid array format: ") + info.format + ". Expected 'd', 'f', 'i', or 'u'.\n");
+            py::buffer_info winfo = arr.request();
+            switch(standardize_dtype(winfo.format).front()) {
+                case 'f': case 'd': kind = winfo.format.front(); wptr = winfo.ptr; break;
+                default: {
+                    py::array_t<double, py::array::forcecast | py::array::c_style> arr2(arr);
+                    wptr = arr2.request().ptr; carr = arr2;
+                }
+                break;
             }
-            wptr = info.ptr;
         }
         auto ki = k.cast<Py_ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
