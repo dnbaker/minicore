@@ -1,6 +1,6 @@
 import numpy as np
 import minicore as mc
-
+import scipy.sparse as sp
 
 def variance(mat):
     '''
@@ -9,6 +9,10 @@ def variance(mat):
     '''
     if isinstance(mat, np.ndarray):
         return np.var(mat, axis=0)
+    elif isinstance(mat, sp.csr_matrix):
+        asq = mat.copy()
+        asq.data *= asq.data
+        return np.array(asq.mean(axis=0) - np.square(mat.mean(axis=0))).reshape(asq.shape[1])
     elif not isinstance(mat, mc.SparseMatrixWrapper):
         mat = mc.SparseMatrixWrapper(mat)
     return mat.variance(kind=0)
@@ -35,7 +39,7 @@ def hvg(mat, n=500, topnorm=False):
         topn = sorted(enumerate(vs), key=sortkey)[:n]
     topnids = np.sort(np.array([x[0] for x in topn]))
     topnv = np.array([x[1] for x in topn])
-    if isinstance(mat, np.ndarray):
+    if isinstance(mat, np.ndarray) or isinstance(mat, sp.csr_matrix):
         return (mat[:, topnids].copy(), topnids, topnv)
     elif not isinstance(mat, mc.SparseMatrixWrapper):
         mat = mc.SparseMatrixWrapper(mat)
