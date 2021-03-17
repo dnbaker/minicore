@@ -38,13 +38,19 @@ def hvg(mat, n=500, topnorm=False):
     def sortkey(x):
         return -x[1]
     if topnorm:
-        means = np.mean(mat, axis=0)
-        topn = sorted(enumerate(vs / means), key=sortkey)[:n]
+        means = np.array(np.mean(mat, axis=0)).reshape(mat.shape[1])
+        ratios = vs / means
+        ratios[np.where(np.logical_not(means))] = 0.
+        topn = sorted(enumerate(ratios), key=sortkey)[:n]
     else:
         topn = sorted(enumerate(vs), key=sortkey)[:n]
     topnids = np.sort(np.array([x[0] for x in topn]))
     topnv = np.array([x[1] for x in topn])
-    if isinstance(mat, np.ndarray) or isinstance(mat, sp.csr_matrix):
+    if isinstance(mat, np.ndarray):
+        return (mat[:, topnids].copy(), topnids, topnv)
+    elif isinstance(mat, sp.csr_matrix):
+        if mat.dtype.kind != 'f':
+            mat = mat.astype(np.float32)
         return (mat[:, topnids].copy(), topnids, topnv)
     elif not isinstance(mat, mc.SparseMatrixWrapper):
         try:
