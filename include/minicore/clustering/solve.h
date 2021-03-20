@@ -481,19 +481,13 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                     clustering::set_center(ctr, row(mat, id, blz::unchecked));
                     centersums[fidx] = sum(ctr);
                 }
-#define __process_one(i) do {\
-                    auto &ccost = costs[i];\
-                    for(const auto fidx: foundindices)\
-                        if(auto newcost = compute_point_cost(i, fidx);newcost < ccost)\
-                             ccost = newcost, asn[i] = fidx;\
-                    } while(0)
-                if constexpr(0) {
-                    for(size_t i = 0; i < np; ++i) {__process_one(i);}
-                } else {
-                    OMP_PFOR
-                    for(size_t i = 0; i < np; ++i) {__process_one(i);}
+                OMP_PFOR
+                for(size_t i = 0; i < np; ++i) {
+                    auto &ccost = costs[i];
+                    for(const auto fidx: foundindices)
+                        if(auto newcost = compute_point_cost(i, fidx);newcost < ccost)
+                             ccost = newcost, asn[i] = fidx;
                 }
-#undef __process_one
             }
             if(weights) {
                 if constexpr(blaze::IsVector_v<WeightT>) {
@@ -534,27 +528,21 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
         for(auto &i: assigned) i.clear();
         OMP_ONLY(auto locks = std::make_unique<std::mutex[]>(k);)
         // 2. Compute nearest centers + step sizes
-#define __perform_one(i) do {\
-            const auto ind = sampled_indices[i];\
-            IT oldasn = asn[ind], bestind = -1;\
-            double bv = std::numeric_limits<double>::max();\
-            for(size_t j = 0; j < k; ++j)\
-                if(auto nv = compute_point_cost(ind, j); nv < bv)\
-                    bv = nv, bestind = j;\
-            if(bestind == (IT(-1)))\
-                bestind = oldasn;\
-            {\
-                OMP_ONLY(std::lock_guard<std::mutex> lock(locks[bestind]);)\
-                assigned[bestind].push_back(ind);\
-            }\
-        } while(0)
-        if constexpr(0) {
-            for(size_t i = 0; i < mbsize; ++i) {__perform_one(i);}
-        } else {
-            OMP_PFOR
-            for(size_t i = 0; i < mbsize; ++i) {__perform_one(i);}
+        OMP_PFOR
+        for(size_t i = 0; i < mbsize; ++i) {
+            const auto ind = sampled_indices[i];
+            IT oldasn = asn[ind], bestind = -1;
+            double bv = std::numeric_limits<double>::max();
+            for(size_t j = 0; j < k; ++j)
+                if(auto nv = compute_point_cost(ind, j); nv < bv)
+                    bv = nv, bestind = j;
+            if(bestind == (IT(-1)))
+                bestind = oldasn;
+            {
+                OMP_ONLY(std::lock_guard<std::mutex> lock(locks[bestind]);)
+                assigned[bestind].push_back(ind);
+            }
         }
-#undef __perform_one
         OMP_PFOR
         for(size_t i= 0; i < assigned.size(); ++i) {
             shared::sort(assigned[i].begin(), assigned[i].end());
@@ -676,7 +664,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 foundindices.pushBack(i);
         PYBIND11_EXCEPTION_CHECK();
         if(foundindices.size()) {
-            DBG_ONLY(std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());)
+            std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());
             for(const auto fidx: foundindices) {
                 // set new centers
                 auto &ctr = centers[fidx];
@@ -693,6 +681,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 } else {
                     id = reservoir_simd::sample(costs.data(), np, rng());
                 }
+                //std::fprintf(stderr, "Assigning row %zu to center of size %zu\n", id, ctr.size());
                 //if(isnorm) clustering::set_center(ctr, row(mat, id, blz::unchecked) / rowsums[id]); else
                 clustering::set_center(ctr, row(mat, id, blz::unchecked));
                 centersums[fidx] = sum(ctr);
