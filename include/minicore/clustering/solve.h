@@ -270,7 +270,7 @@ void assign_points_hard(const Mat &mat,
         costs[x] = cost; asn[x] = bestid;
         VERBOSE_ONLY(std::fprintf(stderr, "point %zu is assigned to center %u with cost %0.12g\n", x, bestid, cost);)
     };
-    if constexpr(blaze::IsDenseMatrix_v<Mat>) {
+    if constexpr(0) {
         for(size_t i = 0; i < e; onerow(i++));
     } else {
         OMP_PFOR
@@ -417,7 +417,8 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             asn[i] = minind;\
             costs[i] = mincost;\
         } while(0)
-        if constexpr(blaze::IsDenseMatrix_v<Matrix>) {
+        if constexpr(0) {
+        //if constexpr(blaze::IsDenseMatrix_v<Matrix>)
             for(size_t i = 0; i < np; ++i) __perform_assign_one(i);
         } else {
             OMP_PFOR_DYN
@@ -486,7 +487,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                         if(auto newcost = compute_point_cost(i, fidx);newcost < ccost)\
                              ccost = newcost, asn[i] = fidx;\
                     } while(0)
-                if constexpr(blaze::IsDenseMatrix_v<Matrix>) {
+                if constexpr(0) {
                     for(size_t i = 0; i < np; ++i) {__process_one(i);}
                 } else {
                     OMP_PFOR
@@ -547,7 +548,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                 assigned[bestind].push_back(ind);\
             }\
         } while(0)
-        if constexpr(blaze::IsDenseMatrix_v<Matrix>) {
+        if constexpr(0) {
             for(size_t i = 0; i < mbsize; ++i) {__perform_one(i);}
         } else {
             OMP_PFOR
