@@ -33,9 +33,14 @@ static constexpr const char *cp2str(CentroidPol pol) {
 
 template<typename CtrT, typename VT, bool TF>
 void set_center(CtrT &lhs, const blaze::Vector<VT, TF> &rhs) {
-    if(lhs.size() != (*rhs).size()) throw std::runtime_error("lhs size is not correct.");
+    if constexpr(blaze::IsResizable_v<CtrT>) {
+        if(lhs.size() != (*rhs).size()) lhs.resize((*rhs).size());
+    } else {
+        if(lhs.size() != (*rhs).size())
+            throw std::runtime_error(std::string("lhs size is not correct. function: ") + __PRETTY_FUNCTION__ + "lhs: " + std::to_string(lhs.size()) + ", rhs: " + std::to_string((*rhs).size()));
+    }
     if constexpr(blaze::IsSparseVector_v<CtrT>) {
-        lhs.reserve((*rhs).size());
+        lhs.reserve(nonZeros(*rhs));
     }
     lhs = *rhs;
 }
@@ -43,21 +48,38 @@ void set_center(CtrT &lhs, const blaze::Vector<VT, TF> &rhs) {
 template<typename CtrT, typename VT, typename IT>
 void set_center(CtrT &lhs, const util::ProdCSparseVector<VT, IT> &rhs) {
     lhs.reserve(rhs.nnz());
-    if(lhs.size() != rhs.dim_) lhs.resize(rhs.dim_);
+    if(lhs.size() != rhs.dim_) {
+        if constexpr(blaze::IsResizable_v<CtrT>) {
+            lhs.resize(rhs.dim_);
+        } else {
+            throw std::runtime_error("Could not resize unresizable ctr\n");
+        }
+    }
     lhs.reset();
+    if constexpr(blaze::IsSparseVector_v<CtrT>) {
+        lhs.reserve(nonZeros(rhs));
+    }
     for(const auto &pair: rhs) lhs[pair.index()] = pair.value();
 }
 template<typename CtrT, typename VT, typename IT>
 void set_center(CtrT &lhs, const util::CSparseVector<VT, IT> &rhs) {
     lhs.reserve(rhs.nnz());
-    if(lhs.size() != rhs.dim_) throw std::runtime_error("lhs size is not correct.");
+    if constexpr(blaze::IsResizable_v<CtrT>) {
+        lhs.resize(rhs.dim_);
+    } else {
+        throw std::runtime_error("Cannot resize lhs to match rhs\n");
+    }
     lhs.reset();
+    if constexpr(blaze::IsSparseVector_v<CtrT>) {
+        lhs.reserve(nonZeros(rhs));
+    }
     for(const auto &pair: rhs) lhs[pair.index()] = pair.value();
 }
 
 template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT=blz::DV<DataT>, typename RowSumsT=WeightT>
 void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asn, size_t nasn, WeightT *w = static_cast<WeightT *>(nullptr), RowSumsT *rs=static_cast<RowSumsT *>(nullptr))
 {
+    //std::fprintf(stderr, "[%s] Setting center, size before: \n", __PRETTY_FUNCTION__, ctr.size());
     using VT = double;
     blz::DV<VT, blz::TransposeFlag_v<CtrT>> mv(mat.columns(), VT(0));
     double wsum;
@@ -84,6 +106,7 @@ void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &
     }
     if(!wsum) wsum = nasn;
     ctr = mv;
+    //std::fprintf(stderr, "[%s] Set center. size now: %zu\n", __PRETTY_FUNCTION__, ctr.size());
 }
 
 template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT>
@@ -677,8 +700,8 @@ bool set_centroids_full_mean(const Mat &mat,
         std::cerr << buf;
         const constexpr RestartMethodPol restartpol = RESTART_D2;
         const FT psum = prior.size() == 1 ? FT(prior[0]) * prior.size(): sum(prior);
-        for(size_t i = 0; i < k; ++i)
-            assigned[i].clear();
+        OMP_PFOR
+        for(size_t i = 0; i < k; ++i) assigned[i].clear();
         std::vector<std::ptrdiff_t> rs;
         for(size_t i = 0; i < ne; ++i) {
             // Instead, use a temporary buffer to store partial sums and randomly select newly-started centers
@@ -734,6 +757,7 @@ bool set_centroids_full_mean(const Mat &mat,
             }
         }
     }
+    OMP_PFOR
     for(unsigned i = 0; i < k; ++i) shared::sort(assigned[i].begin(), assigned[i].end());
     for(unsigned i = 0; i < k; ++i) {
         //DBG_ONLY(std::fprintf(stderr, "Computing %smean for centroid %u with %zu assigned points\n", isnorm ? "normalized": "", i, assigned[i].size());)

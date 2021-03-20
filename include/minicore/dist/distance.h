@@ -292,6 +292,8 @@ static constexpr INLINE const char *prob2str(DissimilarityMeasure d) {
         case COSINE_DISTANCE: return "COSINE_DISTANCE";
         case PROBABILITY_COSINE_DISTANCE: return "PROBABILITY_COSINE_DISTANCE";
         case COSINE_SIMILARITY: return "COSINE_SIMILARITY";
+        case DOT_PRODUCT_SIMILARITY: return "DOT_PRODUCT_SIMILARITY";
+        case PROBABILITY_DOT_PRODUCT_SIMILARITY: return "PROBABILITY_DOT_PRODUCT_SIMILARITY";
         case PROBABILITY_COSINE_SIMILARITY: return "PROBABILITY_COSINE_SIMILARITY";
         case ORACLE_METRIC: return "ORACLE_METRIC";
         case ORACLE_PSEUDOMETRIC: return "ORACLE_PSEUDOMETRIC";
@@ -341,6 +343,8 @@ static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
         case ORACLE_PSEUDOMETRIC: return "Placeholder for oracle pseudometrics";
         case SRULRT: return "Square root of UWLLR, unweighted log likelihood ratio test; likely a metric: related to the JSM and Generalized JSD";
         case SRLRT: return "Square root of LRT, the log likelihood ratio test; likely a metric: related to the JSM and Generalized JSD";
+        case DOT_PRODUCT_SIMILARITY: return "Dot product similarity";
+        case PROBABILITY_DOT_PRODUCT_SIMILARITY: return "PROBABILITY_DOT_PRODUCT_SIMILARITY";
         default: return prob2str(d);
     }
 }
@@ -357,18 +361,19 @@ static constexpr DissimilarityMeasure USABLE_MEASURES []  {
     BHATTACHARYYA_DISTANCE,
     TOTAL_VARIATION_DISTANCE,
     LLR,
-    UWLLR,
     REVERSE_MKL,
+    UWLLR,
     ITAKURA_SAITO,
     REVERSE_ITAKURA_SAITO,
     COSINE_DISTANCE,
     COSINE_SIMILARITY,
     SYMMETRIC_ITAKURA_SAITO,
-    RSYMMETRIC_ITAKURA_SAITO,
+    REVERSE_SYMMETRIC_ITAKURA_SAITO,
     SRLRT,
     SRULRT
     // Absent:
     // PROBABILITY_COSINE_DISTANCE/PROBABILITY_COSINE_SIMILARITY -- extensions to this space are not complete.
+    // COSINE_SIMILARITY -- not included because it isn't a dissimilarity
     // ORACLE_METRIC/ORACLE_PSEUDOMETRIC, as they are placeholders
 };
 

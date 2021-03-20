@@ -370,7 +370,7 @@ void init_smw(py::module &m) {
     m.def("kmeanspp", run_kmpp_noso
        , kmeans_doc,
        py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("prior") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1,
-       py::arg("lspp") = 0, py::arg("use_exponential_skips") = false, py::arg("n_local_trials") = 1,
+       py::arg("lspp") = 0, py::arg("expskips") = false, py::arg("n_local_trials") = 1,
        py::arg("weights") = py::none()
     );
 #if 1
