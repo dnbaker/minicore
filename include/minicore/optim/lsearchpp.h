@@ -64,8 +64,7 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
         }
         ctrcosts = 0.;
         gain = 0.;
-        if(1) {
-            try {
+        try {
             OMP_ONLY(_Pragma("omp parallel for reduction(+:gain)"))
             for(size_t i = 0; i < np; ++i) {
                 auto row_i = row(ctrcostmat, i);
@@ -97,43 +96,9 @@ auto localsearchpp_rounds(const Oracle &oracle, RNG &rng, DistC &distances, Ctrs
                     gain += distances[i] - nc;
                 }
             }
-            } catch(const std::runtime_error &ex) {
-                parallelize = false;
-                std::fprintf(stderr, "Warning, Caught an exception (%s), possibly nested parallel sections. Trying serial execution.\n", ex.what());
-                goto serial;
-            }
-        } else {
-            serial:
-            for(size_t i = 0; i < np; ++i) {
-                auto row_i = row(ctrcostmat, i);
-                if(const auto nc = newcosts[i], oldd = distances[i]; nc > oldd) {
-                    using pt = std::pair<value_type, unsigned>;
-                    pt top1 = {row_i[0], 0}, top2 = {row_i[1], 1};
-                    static_assert(std::is_integral_v<decltype(top1.second)>, "");
-                    static_assert(std::is_floating_point_v<decltype(top1.first)>, "");
-                    if(top2.first < top1.first) std::swap(top1, top2);
-                    SK_UNROLL_4
-                    for(unsigned j = 2; j < k; ++j) {
-                        const auto netv = row_i[j];
-                        if(netv < top2.first) {
-                            if(netv < top1.first) {
-                                top2 = top1;
-                                top1 = {netv, j};
-                            } else {
-                                top2 = {netv, j};
-                            }
-                        }
-                    }
-                    if(top1.first != top2.first) {
-                        const auto diff = top2.first - top1.first;
-                        OMP_ATOMIC
-                        ctrcosts[top1.second] += diff;
-                    }
-                    // Now, the cost for each item is their cost - the cost of the next-lowest item
-                } else {
-                    gain += distances[i] - nc;
-                }
-            }
+        } catch(const std::runtime_error &ex) {
+            std::fprintf(stderr, "Warning, Caught an exception (%s), possibly nested parallel sections. Trying serial execution.\n", ex.what());
+            throw;
         }
         const auto argmin = reservoir_simd::argmin(ctrcosts, /*multithread=*/true);
         const auto delta = ctrcosts[argmin] - gain;

@@ -22,7 +22,7 @@ void init_clustering_soft_csr(py::module &m);
 void init_clustering_soft(py::module &m);
 void init_pydense(py::module &m);
 void init_arrcmp(py::module &m);
-void init_hvg(py::module &m);
+//void init_hvg(py::module &m);
 
 
 // Direct CSR mode (no copying) saves memory, but takes a long time to compile

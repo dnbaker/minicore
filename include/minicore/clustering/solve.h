@@ -270,7 +270,7 @@ void assign_points_hard(const Mat &mat,
         costs[x] = cost; asn[x] = bestid;
         VERBOSE_ONLY(std::fprintf(stderr, "point %zu is assigned to center %u with cost %0.12g\n", x, bestid, cost);)
     };
-    if constexpr(blaze::IsDenseMatrix_v<Mat>) {
+    if constexpr(0) {
         for(size_t i = 0; i < e; onerow(i++));
     } else {
         OMP_PFOR
@@ -417,7 +417,8 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             asn[i] = minind;\
             costs[i] = mincost;\
         } while(0)
-        if constexpr(blaze::IsDenseMatrix_v<Matrix>) {
+        if constexpr(0) {
+        //if constexpr(blaze::IsDenseMatrix_v<Matrix>)
             for(size_t i = 0; i < np; ++i) __perform_assign_one(i);
         } else {
             OMP_PFOR_DYN
@@ -426,6 +427,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             }
         }
 #undef __perform_assign_one
+        PYBIND11_EXCEPTION_CHECK();
     };
     wy::WyRand<std::make_unsigned_t<IT>> rng(seed);
     schism::Schismatic<std::make_unsigned_t<IT>> div((mat).rows());
@@ -479,19 +481,13 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                     clustering::set_center(ctr, row(mat, id, blz::unchecked));
                     centersums[fidx] = sum(ctr);
                 }
-#define __process_one(i) do {\
-                    auto &ccost = costs[i];\
-                    for(const auto fidx: foundindices)\
-                        if(auto newcost = compute_point_cost(i, fidx);newcost < ccost)\
-                             ccost = newcost, asn[i] = fidx;\
-                    } while(0)
-                if constexpr(blaze::IsDenseMatrix_v<Matrix>) {
-                    for(size_t i = 0; i < np; ++i) {__process_one(i);}
-                } else {
-                    OMP_PFOR
-                    for(size_t i = 0; i < np; ++i) {__process_one(i);}
+                OMP_PFOR
+                for(size_t i = 0; i < np; ++i) {
+                    auto &ccost = costs[i];
+                    for(const auto fidx: foundindices)
+                        if(auto newcost = compute_point_cost(i, fidx);newcost < ccost)
+                             ccost = newcost, asn[i] = fidx;
                 }
-#undef __process_one
             }
             if(weights) {
                 if constexpr(blaze::IsVector_v<WeightT>) {
@@ -502,10 +498,11 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
             } else {
                 cost = blz::sum(costs);
             }
-            std::fprintf(stderr, "Cost at iter %zu (mbsize %zd): %g\n", iternum, mbsize, cost);
+            PYBIND11_EXCEPTION_CHECK();
+            std::fprintf(stderr, "Cost at iter %zu (mbsize %zd): %0.20g\n", iternum, mbsize, cost);
             if(iternum == 0) initcost = cost, bestcost = initcost;
             if(cost < bestcost) {
-                std::fprintf(stderr, "Distance between old and new centers: %g\n", blz::sum(blz::generate(centers.size(), [&](auto x) {return l2Dist(centers[x], savectrs[x]);})));
+                std::fprintf(stderr, "Distance between old and new centers: %0.12g\n", blz::sum(blz::generate(centers.size(), [&](auto x) {return l2Dist(centers[x], savectrs[x]);})));
                 bestcost = cost;
                 savectrs = centers;
             }
@@ -531,27 +528,21 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
         for(auto &i: assigned) i.clear();
         OMP_ONLY(auto locks = std::make_unique<std::mutex[]>(k);)
         // 2. Compute nearest centers + step sizes
-#define __perform_one(i) do {\
-            const auto ind = sampled_indices[i];\
-            IT oldasn = asn[ind], bestind = -1;\
-            double bv = std::numeric_limits<double>::max();\
-            for(size_t j = 0; j < k; ++j)\
-                if(auto nv = compute_point_cost(ind, j); nv < bv)\
-                    bv = nv, bestind = j;\
-            if(bestind == (IT(-1)))\
-                bestind = oldasn;\
-            {\
-                OMP_ONLY(std::lock_guard<std::mutex> lock(locks[bestind]);)\
-                assigned[bestind].push_back(ind);\
-            }\
-        } while(0)
-        if constexpr(blaze::IsDenseMatrix_v<Matrix>) {
-            for(size_t i = 0; i < mbsize; ++i) {__perform_one(i);}
-        } else {
-            OMP_PFOR
-            for(size_t i = 0; i < mbsize; ++i) {__perform_one(i);}
+        OMP_PFOR
+        for(size_t i = 0; i < mbsize; ++i) {
+            const auto ind = sampled_indices[i];
+            IT oldasn = asn[ind], bestind = -1;
+            double bv = std::numeric_limits<double>::max();
+            for(size_t j = 0; j < k; ++j)
+                if(auto nv = compute_point_cost(ind, j); nv < bv)
+                    bv = nv, bestind = j;
+            if(bestind == (IT(-1)))
+                bestind = oldasn;
+            {
+                OMP_ONLY(std::lock_guard<std::mutex> lock(locks[bestind]);)
+                assigned[bestind].push_back(ind);
+            }
         }
-#undef __perform_one
         OMP_PFOR
         for(size_t i= 0; i < assigned.size(); ++i) {
             shared::sort(assigned[i].begin(), assigned[i].end());
@@ -658,6 +649,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
             asn[i] = minind;
             costs[i] = mincost;
         }
+        PYBIND11_EXCEPTION_CHECK();
         center_counts = 0;
 
         OMP_PFOR
@@ -665,12 +657,14 @@ auto hmb_coreset_clustering(const Matrix &mat,
             assert(asn[i] < k);
             OMP_ATOMIC ++center_counts[asn[i]];
         }
+        PYBIND11_EXCEPTION_CHECK();
         blaze::SmallArray<uint32_t, 8> foundindices;
         for(size_t i = 0; i < center_counts.size(); ++i)
             if(center_counts[i] <= reseed_after) // If there are few points assigned to a center, restart it
                 foundindices.pushBack(i);
+        PYBIND11_EXCEPTION_CHECK();
         if(foundindices.size()) {
-            DBG_ONLY(std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());)
+            std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());
             for(const auto fidx: foundindices) {
                 // set new centers
                 auto &ctr = centers[fidx];
@@ -687,6 +681,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 } else {
                     id = reservoir_simd::sample(costs.data(), np, rng());
                 }
+                //std::fprintf(stderr, "Assigning row %zu to center of size %zu\n", id, ctr.size());
                 //if(isnorm) clustering::set_center(ctr, row(mat, id, blz::unchecked) / rowsums[id]); else
                 clustering::set_center(ctr, row(mat, id, blz::unchecked));
                 centersums[fidx] = sum(ctr);
@@ -699,6 +694,7 @@ auto hmb_coreset_clustering(const Matrix &mat,
                          ccost = newcost, asn[i] = fidx;
             }
         }
+        PYBIND11_EXCEPTION_CHECK();
         if(weights) {
             if constexpr(blaze::IsVector_v<WeightT>)
                 cost = blz::dot(costs, *weights);
