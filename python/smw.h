@@ -114,8 +114,10 @@ public:
                 } } while(0)
 
 #define __DISPATCH_ALL_IF(T1, T2) do {\
+     __DISPATCH_IF(T1, T2, uint16_t);\
      __DISPATCH_IF(T1, T2, uint32_t);\
      __DISPATCH_IF(T1, T2, uint64_t);\
+     __DISPATCH_IF(T1, T2, int16_t);\
      __DISPATCH_IF(T1, T2, int32_t);\
      __DISPATCH_IF(T1, T2, int64_t);\
      __DISPATCH_IF(T1, T2, float);\

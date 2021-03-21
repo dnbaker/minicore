@@ -25,6 +25,7 @@ py::object __py_cluster_from_centers_dense(py::array_t<FT, py::array::c_style | 
     blz::DV<double> centersums(k), rsums(nr), costs(nr);
     for(size_t i = 0; i < k; ++i) centersums[i] = blz::sum(dvecs[i]);
     for(size_t i = 0; i < nr; ++i) rsums[i] = blz::sum(blz::make_cv((FT *)dbi.ptr + i * nc, nc));
+    OMP_PFOR
     for(size_t idx = 0; idx < nr; ++idx) {
         uint32_t bestind = 0;
         const auto rsum = rsums[idx];
@@ -70,17 +71,28 @@ void init_clustering_dense(py::module &m) {
                          uint64_t kmeansmaxiter, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
                          Py_ssize_t reseed_count, bool with_rep, bool use_cs) {
                             constexpr const int pyflags = py::array::c_style | py::array::forcecast;
-                            py::object ret;
+                            py::object ret = py::none();
+                            try {
                             switch(standardize_dtype(dataset.request().format)[0]) {
                                 default:
-                                case 'f': ret = __py_cluster_from_centers_dense(py::cast<py::array_t<float, pyflags>>(dataset),
-                                                                                 centers, beta, msr, weights, eps, kmeansmaxiter,
-                                                                                 seed, mbsize, ncheckins, reseed_count, with_rep, use_cs);
+                                case 'f': {
+                                    py::array_t<float, pyflags> dcp(dataset);
+                                    PYBIND11_EXCEPTION_CHECK();
+                                    ret = __py_cluster_from_centers_dense(dcp, centers, beta, msr, weights, eps, kmeansmaxiter, seed, mbsize, ncheckins, reseed_count, with_rep, use_cs);
+                                    PYBIND11_EXCEPTION_CHECK();
+                                }
                                 break;
-                                case 'd': ret = __py_cluster_from_centers_dense(py::cast<py::array_t<double, pyflags>>(dataset),
-                                                                                 centers, beta, msr, weights, eps, kmeansmaxiter,
-                                                                                 seed, mbsize, ncheckins, reseed_count, with_rep, use_cs);
+                                case 'd': {
+                                    py::array_t<double, pyflags> dcp(dataset);
+                                    PYBIND11_EXCEPTION_CHECK();
+                                    ret = __py_cluster_from_centers_dense(dcp, centers, beta, msr, weights, eps, kmeansmaxiter, seed, mbsize, ncheckins, reseed_count, with_rep, use_cs);
+                                    PYBIND11_EXCEPTION_CHECK();
+                                }
                                 break;
+                            }
+                            } catch(const std::runtime_error &ex) {
+                                std::fprintf(stderr, "Error thrown: %s\n", ex.what());
+                                throw;
                             }
                             return ret;
                          },
