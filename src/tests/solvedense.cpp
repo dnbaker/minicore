@@ -184,8 +184,9 @@ int main(int argc, char *argv[]) {
     }
     assert(min(asn) == 0);
     assert(max(asn) == centers.size() - 1);
+    clust::perform_hard_minibatch_clustering(x, msr, prior, centers, asn, hardcosts, (std::vector<FLOAT_TYPE> *)nullptr, 500, 10, 10, 1, /*with_replacement=*/1, /*seed=*/rng());
     auto t1 = std::chrono::high_resolution_clock::now();
-    if(!loaded_blaze) clust::perform_hard_clustering(x, msr, prior, centers, asn, hardcosts);
+    clust::perform_hard_clustering(x, msr, prior, centers, asn, hardcosts);
     auto t2 = std::chrono::high_resolution_clock::now();
     std::fprintf(stderr, "Wall time for clustering: %gms\n", std::chrono::duration<FLOAT_TYPE, std::milli>(t2 - t1).count());
 }

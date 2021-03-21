@@ -10,6 +10,9 @@ def variance(mat):
     '''
     if isinstance(mat, np.ndarray):
         return np.var(mat, axis=0)
+    elif isinstance(mat, mc.csr_tuple):
+        csrmat = sp.csr_matrix((mat.data, mat.indices, mat.indptr), shape=mat.shape)
+        return variance(csrmat)
     elif isinstance(mat, sp.csr_matrix):
         asq = mat.copy()
         asq.data *= asq.data
@@ -33,6 +36,8 @@ def hvg(mat, n=500, topnorm=False):
         Output:
             tuple: (matrix, ids, variances)
     '''
+    if isinstance(mat, mc.csr_tuple):
+        return hvg(sp.csr_matrix((mat.data, mat.indices, mat.indptr), shape=mat.shape).astype(np.float32), n, topnorm)
     vs = variance(mat)
 
     def sortkey(x):
@@ -52,13 +57,9 @@ def hvg(mat, n=500, topnorm=False):
         if mat.dtype.kind != 'f':
             mat = mat.astype(np.float32)
         return (mat[:, topnids].copy(), topnids, topnv)
-    elif not isinstance(mat, mc.SparseMatrixWrapper):
-        try:
-            mat = mc.SparseMatrixWrapper(mat)
-        except RuntimeError as e:
-            csrmat = sp.csr_matrix((mat.data, mat.indices, mat.indptr), shape=mat.shape).astype(np.float32)
-            mat = mc.SparseMatrixWrapper(csrmat)
-    return (mat.submatrix(columnsel=topnids), topnids, topnv)
+    elif isinstance(mat, mc.SparseMatrixWrapper):
+        return (mat.submatrix(columnsel=topnids), topnids, topnv)
+    raise NotImplementError("hvg not supported for type that is not ndarray, csr_matrix, csr_tuple or SparseMatrixWrapper")
 
 
 __all__ = ["variance", "hvg"]
