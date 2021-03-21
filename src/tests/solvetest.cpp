@@ -147,12 +147,13 @@ int main(int argc, char *argv[]) {
             return cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
         });
         std::cerr << "full costs range: " << min(complete_hardcost) << " -> " << max(complete_hardcost) << '\n';
-        hardcosts = blaze::generate(nr, [&](auto id) {
+        hardcosts.resize(nr);
+        for(size_t id = 0; id < nr; ++id) {
             auto r = row(complete_hardcost, id, blaze::unchecked);
             auto it = std::min_element(r.begin(), r.end());
             asn[id] = it - r.begin();
-            return *it;
-        });
+            hardcosts[id] = *it;
+        }
         int cid = 0;
         for(const auto id: ids) {
             complete_hardcost(id, cid) = 0.;

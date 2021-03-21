@@ -194,9 +194,11 @@ bool set_centroids_hard(const Mat &mat,
 {
     MINOCORE_VALIDATE(dist::is_valid_measure(measure));
     const CentroidPol pol = msr2pol(measure);
+#if 0
     if(dist::is_bregman(measure)) {
         assert(FULL_WEIGHTED_MEAN == pol || JSM_MEDIAN == pol);
     }
+#endif
     bool ctrs_restarted = false;
     switch(pol) {
         case JSM_MEDIAN:
@@ -257,15 +259,13 @@ void assign_points_hard(const Mat &mat,
 
     // Compute distance function
     // Handles similarity measure, caching, and the use of a prior for exponential family models
-    auto compute_cost = [&](auto id, auto cid) ALWAYS_INLINE {
-        return msr_with_prior<FT>(measure, row(mat, id), centers[cid], prior, prior_sum, rowsums[id], centersums[cid]);
-    };
+#define __compute_cost(id, cid) msr_with_prior<FT>(measure, row(mat, id), centers[cid], prior, prior_sum, rowsums[id], centersums[cid])
     const size_t e = costs.size(), k = centers.size();
     auto onerow = [&](auto x) {
-        auto cost = compute_cost(x, 0);
+        auto cost = __compute_cost(x, 0);
         asn_t bestid = 0;
         for(unsigned j = 1; j < k; ++j)
-            if(auto newcost = compute_cost(x, j); newcost < cost)
+            if(auto newcost = __compute_cost(x, j); newcost < cost)
                 bestid = j, cost = newcost;
         costs[x] = cost; asn[x] = bestid;
         VERBOSE_ONLY(std::fprintf(stderr, "point %zu is assigned to center %u with cost %0.12g\n", x, bestid, cost);)
@@ -278,6 +278,10 @@ void assign_points_hard(const Mat &mat,
             onerow(i);
         }
     }
+#ifndef NDEBUG
+    std::fprintf(stderr, "[%s]: %zu-clustering with %s and %zu dimensions, completed!\n", __func__, centers.size(), dist::msr2str(measure), centers[0].size());
+#endif
+#undef __compute_cost
 }
 
 template<typename MT, // MatrixType
@@ -459,7 +463,7 @@ auto perform_hard_minibatch_clustering(const Matrix &mat,
                 if(center_counts[i] <= reseed_after) // If there are few points assigned to a center, restart it
                     foundindices.pushBack(i);
             if(foundindices.size()) {
-                DBG_ONLY(std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());)
+                std::fprintf(stderr, "Found %zu centers with no assigned points; restart them.\n", foundindices.size());
                 for(const auto fidx: foundindices) {
                     // set new centers
                     auto &ctr = centers[fidx];
@@ -681,8 +685,6 @@ auto hmb_coreset_clustering(const Matrix &mat,
                 } else {
                     id = reservoir_simd::sample(costs.data(), np, rng());
                 }
-                //std::fprintf(stderr, "Assigning row %zu to center of size %zu\n", id, ctr.size());
-                //if(isnorm) clustering::set_center(ctr, row(mat, id, blz::unchecked) / rowsums[id]); else
                 clustering::set_center(ctr, row(mat, id, blz::unchecked));
                 centersums[fidx] = sum(ctr);
             }

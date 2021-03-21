@@ -87,7 +87,10 @@ int main(int argc, char *argv[]) {
         if(nrows == 0) nrows = 50;
     }
     if(!x.rows() && !x.columns()) {
-        x = blz::generate(nrows, ncols, [](auto x, auto y) {wy::WyRand<uint64_t> mt((uint64_t(x) << 32) | y); return std::uniform_real_distribution<double>()(mt) * (x + 1);});
+        x.resize(nrows, ncols);
+        for(size_t xi = 0; xi < nrows; ++xi)
+            for(size_t y = 0; y < ncols; ++y)
+                { wy::WyRand<uint64_t> mt((uint64_t(xi) << 32) | y); x(xi, y) = std::uniform_real_distribution<double>()(mt) * (xi + 1);}
     }
     OMP_ONLY(omp_set_num_threads(nthreads);)
     if(std::find_if(argv, argc + argv, [](auto x) {return std::strcmp(x, "-h") == 0;}) != argc + argv) {
@@ -129,9 +132,10 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
-        complete_hardcost = blaze::generate(nr, k, [&](auto r, auto col) {
-            return cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, r, blz::unchecked), centers[col], prior, psum, rowsums[r], centersums[col]);
-        });
+        complete_hardcost.resize(nr, k);
+        for(size_t i = 0; i < nr; ++i)
+            for(size_t j = 0; j < k; ++j)
+                complete_hardcost(i, j) = cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, i, blz::unchecked), centers[j], prior, psum, rowsums[i], centersums[j]);
         //assert(blaze::min<blaze::rowwise>(complete_hardcost) ==
     } else {
         while(ids.size() < k) {
@@ -142,33 +146,32 @@ int main(int argc, char *argv[]) {
         for(const auto id: ids) {
             centers.emplace_back(row(x, id));
         }
-        std::fprintf(stderr, "Getting sums\n");
-        centersums = blaze::generate(centers.size(), [&](auto x) {return blz::sum(centers[x]);});
-        std::fprintf(stderr, "Getting hardcosts\n");
+        centersums.resize(centers.size());
+        for(size_t i = 0; i < centers.size(); ++i) centersums[i] = blz::sum(centers[i]);
         complete_hardcost.resize(nr, k);
         for(size_t i = 0; i < nr; ++i) {
             auto r(row(complete_hardcost, i));
             assert(r.size() == k);
             const auto rs = rowsums[i];
+            OMP_PFOR
             for(size_t j = 0; j < k; ++j)
                 r[j] = cmp::msr_with_prior<FLOAT_TYPE>(msr, row(x, i), centers[j], prior, psum, rs, centersums[j]);
         }
-        std::fprintf(stderr, "Getting hardcost reduction\n");
         std::cerr << "full costs range: " << min(complete_hardcost) << " -> " << max(complete_hardcost) << '\n';
-        hardcosts = blaze::generate(nr, [&](auto id) {
-            auto r = row(complete_hardcost, id, blaze::unchecked);
+        hardcosts.resize(nr);
+        for(size_t i = 0; i < nr; ++i) {
+            auto r = row(complete_hardcost, i, blaze::unchecked);
             auto it = std::min_element(r.begin(), r.end());
-            asn[id] = it - r.begin();
-            return *it;
-        });
+            asn[i] = it - r.begin();
+            hardcosts[i] = *it;
+        }
         int cid = 0;
         for(const auto id: ids) {
             complete_hardcost(id, cid) = 0.;
             asn[id] = cid++;
         }
     }
-    std::fprintf(stderr, "initialized!\n");
-    ocenters = centers;
+    while(ocenters.size() < centers.size()) ocenters.emplace_back(centers[ocenters.size()]);
     assert(rowsums.size() == x.rows());
     assert(centersums.size() == centers.size());
     auto mnc = blz::min(hardcosts);

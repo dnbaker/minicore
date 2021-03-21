@@ -154,12 +154,6 @@ void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nas
     } else {
         if(rs) {
             const auto rinv = evaluate(1. / elements(*rs, asp, nasn));
-#ifndef NDEBUG
-            for(size_t i = 0; i < rinv.size(); ++i) {
-                auto rsum = sum(row(rowsel, i));
-                assert(std::abs(rsum * rinv[i] - 1.) < 1e-4 || !std::fprintf(stderr, "rsum: %g. rinv: %g. mult: %g\n", rsum, rinv[i], rsum * rinv[i]));
-            }
-#endif
             if constexpr(blz::TransposeFlag_v<decltype(rinv)> == SO) {
                 auto expmat = blaze::expand(trans(rinv), nc);
                 ctr = blaze::mean<blaze::columnwise>(rowsel % trans(expmat));
@@ -167,11 +161,10 @@ void set_center(CtrT &ctr, const blaze::Matrix<MT, SO> &mat, IT *asp, size_t nas
                 auto expmat = blaze::expand(rinv, nc);
                 ctr = blaze::mean<blaze::columnwise>(rowsel % expmat);
             }
-            DBG_ONLY(std::fprintf(stderr, "normalized sum is %g\n", sum(ctr));)
         } else {
             //std::fprintf(stderr, "no rowsums provided\n");
             ctr = blaze::mean<blaze::columnwise>(rowsel);
-#ifndef NDEBUG
+#if 0
             auto seval = evaluate(blaze::sum<blz::columnwise>(rowsel) / double(nasn));
             const double mdiff = sum(abs(ctr - seval)), sevalnorm = blz::l2Norm(seval);
             assert(sum(abs(ctr - seval)) < 1e-4 * sevalnorm || !std::fprintf(stderr, "mdiff: %g. norm: %g\n", mdiff, sevalnorm));
@@ -293,7 +286,6 @@ struct CentroidPolicy {
             using ptr_t = decltype((**weight_cv).data());
             ptr_t ptr = nullptr;
             if(weight_cv) ptr = (**weight_cv).data();
-            OMP_PFOR
             for(unsigned i = 0; i < centers.size(); ++i) {
                 coresets::l1_median(mat, centers[i], assignv[i], ptr);
             }
@@ -567,7 +559,6 @@ void set_centroids_tvd(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, We
         }
         for(const auto &subasn: assigned) if(subasn.empty()) sa.pushBack(&subasn - assigned.data());
     }
-    OMP_PFOR
     for(unsigned i = 0; i < k; ++i) {
         const auto &asnv = assigned[i];
         const auto asp = asnv.data();
@@ -730,11 +721,11 @@ bool set_centroids_full_mean(const Mat &mat,
             auto r = row(mat, i, unchecked);
             const auto rsum = rowsums[i];
             costs[i] = cmp::msr_with_prior(measure, r, ctrs[0], prior, psum, rsum, ctrsums[0]);
-            assert(std::abs(sum(r) - rsum) < 1e-6 || !std::fprintf(stderr, "rsum %g and summed %g\n", rsum, sum(r)));
+            //assert(std::abs(sum(r) - rsum) < 1e-6 || !std::fprintf(stderr, "rsum %g and summed %g\n", rsum, sum(r)));
             for(unsigned j = 0; j < k; ++j) {
                 const auto csum = ctrsums[j];
-                DBG_ONLY(auto bsum = sum(ctrs[j]);)
-                assert(std::abs(csum - bsum) < 1e-10 || !std::fprintf(stderr, "for k = %u, csum %g but found bsum %g\n", j, csum, bsum));
+                //DBG_ONLY(auto bsum = sum(ctrs[j]);)
+                //assert(std::abs(csum - bsum) < 1e-10 || !std::fprintf(stderr, "for k = %u, csum %g but found bsum %g\n", j, csum, bsum));
                 const auto c = cmp::msr_with_prior(measure, r, ctrs[j], prior, psum,
                                                    rsum, csum);
                 if(c < costs[i]) {
@@ -759,9 +750,8 @@ bool set_centroids_full_mean(const Mat &mat,
     }
     OMP_PFOR
     for(unsigned i = 0; i < k; ++i) shared::sort(assigned[i].begin(), assigned[i].end());
+
     for(unsigned i = 0; i < k; ++i) {
-        //DBG_ONLY(std::fprintf(stderr, "Computing %smean for centroid %u with %zu assigned points\n", isnorm ? "normalized": "", i, assigned[i].size());)
-        // Compute mean for centroid
         const auto nasn = assigned[i].size();
         const auto asp = assigned[i].data();
         auto &ctr = ctrs[i];
@@ -776,21 +766,6 @@ bool set_centroids_full_mean(const Mat &mat,
             }
         } else {
             set_center(ctr, mat, asp, nasn, weights, isnorm ? &rowsums: static_cast<const SumT *>(nullptr));
-#ifndef NDEBUG
-            if(isnorm) {
-                const auto csum = blz::sum(ctr);
-                assert(std::abs(csum - 1.) <= 1e-4 || !std::fprintf(stderr, "csum: %g. expected 1.\n", csum));
-            }
-#endif
-#if 0
-            std::cerr << "Center set for " << nasn << " points: " << ctr << '\n';
-            if constexpr(blaze::IsSparseVector_v<CtrsT>) {
-                for(const auto &item: ctr) std::fprintf(stderr, "%zu:%g\n", item.index(), double(item.value()));
-            } else {
-                for(size_t i = 0; i < ctr.size(); ++i) std::fprintf(stderr, "%g,", double(ctr[i]));
-                std::fputc('\n', stderr);
-            }
-#endif
             if(isnan(ctr)) {
                 []() __attribute__((noinline,cold)) {
                     throw std::runtime_error("Unexpected nan in ctr");
@@ -894,7 +869,6 @@ double set_centroids_full_mean(const Mat &mat,
             }
         }
     }
-    OMP_PFOR
     for(size_t i = 0; i < k; ++i) ctrsums[i] = sum(ctrs[i]);
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g. Center sums: \n\n", temp);)
     return ret;
@@ -971,7 +945,7 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
         } else {
             winv = 1. / trans(sum<columnwise>(asns));
         }
-        OMP_PFOR
+        //OMP_PFOR
         for(size_t i = 0; i < tmprows.size(); ++i) {
             if constexpr(blz::TransposeFlag_v<std::decay_t<decltype(ctrs[0])>> == blaze::rowVector) {
                 ctrs[i] = trans(tmprows[i] * winv[i]);
@@ -980,7 +954,6 @@ double set_centroids_full_mean(const util::CSparseMatrix<VT, IT, IPtrT> &mat,
             }
         }
     }
-    OMP_PFOR
     for(size_t i = 0; i < ctrs.size(); ++i) ctrsums[i] = sum(ctrs[i]);
     //for(const auto &ctr: ctrs) std::cerr << ctr << '\n';
     DBG_ONLY(std::fprintf(stderr, "Centroids set, soft, with T = %g\n", temp);)
