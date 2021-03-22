@@ -851,7 +851,8 @@ void l1_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::Vector<ORVT, TF> &
         }
         const size_t nfeat = nzfeatures.size();
         (*ret).reset();
-        (*ret).resize(nfeat);
+        (*ret).resize(mat.nc_);
+        (*ret).reserve(nfeat);
         const bool nr_is_odd = nrows & 1;
         for(auto &pair: nzfeatures) {
             auto it = &pair.second;
@@ -901,7 +902,7 @@ void tvd_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<ORVT
             auto r = row(mat, rownum, unchecked);
             auto nnz = nonZeros(r);
             if(!nnz) continue;
-            const auto invmul = 1. / rsums[rownum];
+            const typename std::conditional_t<(sizeof(VT) <= 4), float, double> invmul = 1. / rsums[rownum];
             for(size_t i = 0; i < r.n_; ++i) {
                 auto idx = r.indices_[i];
                 const RVT val = RVT(r.data_[i]) * invmul;
@@ -916,6 +917,7 @@ void tvd_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<ORVT
         const size_t nfeat = nzfeatures.size();
         (*ret).reset();
         (*ret).reserve(nfeat);
+        (*ret).resize(mat.nc_)
         const bool nr_is_odd = nrows & 1;
         for(auto &pair: nzfeatures) {
             auto it = &pair.second;
