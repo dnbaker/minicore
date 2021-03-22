@@ -917,7 +917,7 @@ void tvd_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<ORVT
         const size_t nfeat = nzfeatures.size();
         (*ret).reset();
         (*ret).reserve(nfeat);
-        (*ret).resize(mat.nc_)
+        (*ret).resize(mat.nc_);
         const bool nr_is_odd = nrows & 1;
         for(auto &pair: nzfeatures) {
             auto it = &pair.second;
