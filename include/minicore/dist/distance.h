@@ -341,8 +341,8 @@ static constexpr INLINE const char *prob2desc(DissimilarityMeasure d) {
         case PROBABILITY_COSINE_SIMILARITY: return "Cosine similarity of the probability vectors: \\frac{A \\cdot B}{|A|_2 |B|_2}";
         case ORACLE_METRIC: return "Placeholder for oracle metrics, allowing us to use DissimilarityMeasure in other situations";
         case ORACLE_PSEUDOMETRIC: return "Placeholder for oracle pseudometrics";
-        case SRULRT: return "Square root of UWLLR, unweighted log likelihood ratio test; likely a metric: related to the JSM and Generalized JSD";
-        case SRLRT: return "Square root of LRT, the log likelihood ratio test; likely a metric: related to the JSM and Generalized JSD";
+        case SRULRT: return "Square root of UWLLR, unweighted log likelihood ratio test; related to the JSM and Generalized JSD";
+        case SRLRT: return "Square root of LRT, the log likelihood ratio test; related to the JSM and Generalized JSD";
         case DOT_PRODUCT_SIMILARITY: return "Dot product similarity";
         case PROBABILITY_DOT_PRODUCT_SIMILARITY: return "PROBABILITY_DOT_PRODUCT_SIMILARITY";
         default: return prob2str(d);
