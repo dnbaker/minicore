@@ -883,8 +883,8 @@ void l1_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::Vector<ORVT, TF> &
                     else (*ret)[i] = .5 * ((*it)[nrows / 2] + (*it)[nrows / 2 + 1]);
                 }
             } else if((nrows & 1) && nel == nrows / 2) {
-                if(it->front() > 0.) (*ret).append(i, .5 * it->front());
-                else if(it->back() < 0.) (*ret).append(i, .5 * it->back());
+                if(it->front() > 0.) (*ret)[i] = .5 * it->front();
+                else if(it->back() < 0.) (*ret)[i] = .5 * it->back();
             } // else the value is 0
         }
     } else {
