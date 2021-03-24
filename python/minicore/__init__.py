@@ -15,6 +15,8 @@ def ctrs2sp(centertups, nc):
     import scipy.sparse as sp
     return sp.vstack([sp.csr_matrix((x[0],[0] * len(x[0]), [0, len(x[0])]), shape=[1, nc]) for x in centertups])
 
+geometric_median = pyminicore.geomed
+
 
 #  This function provides a single starting point for clustering start-to-finish
 def cluster(data, *, msr, k, prior=0., seed=0, nmkc=0,
@@ -40,3 +42,11 @@ def cluster(data, *, msr, k, prior=0., seed=0, nmkc=0,
     else:
         return hcluster(data, centers=ids, prior=prior, msr=msr, weights=weights, eps=clustereps, maxiter=maxiter,
                         with_rep=with_rep, cs=cs)
+
+'''
+__all__ = ["cluster", "scluster", "hcluster", "hvg", "variance",
+           "cstr2sp", "cluster_from_centers", "geomed", "geometric_median",
+           "CSparseMatrix", "SparseMatrixWrapper", "smw", "csr_tuple", "KMCRSV",
+           "constants", "pyminicore", "greedy_select", "d2_select", "SumOpts", "meas2str", "meas2dict",
+           "usable_measures", "valid_measures", "display_measures", "mdict", "Threading", "set_num_threads", "get_num_threads"]
+'''

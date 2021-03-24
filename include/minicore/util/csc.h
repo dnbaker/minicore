@@ -851,7 +851,8 @@ void l1_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::Vector<ORVT, TF> &
         }
         const size_t nfeat = nzfeatures.size();
         (*ret).reset();
-        (*ret).resize(nfeat);
+        (*ret).resize(mat.nc_);
+        (*ret).reserve(nfeat);
         const bool nr_is_odd = nrows & 1;
         for(auto &pair: nzfeatures) {
             auto it = &pair.second;
@@ -881,6 +882,9 @@ void l1_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::Vector<ORVT, TF> &
                     if(nr_is_odd) (*ret)[i] = (*it)[nrows / 2];
                     else (*ret)[i] = .5 * ((*it)[nrows / 2] + (*it)[nrows / 2 + 1]);
                 }
+            } else if((nrows & 1) && nel == nrows / 2) {
+                if(it->front() > 0.) (*ret)[i] = .5 * it->front();
+                else if(it->back() < 0.) (*ret)[i] = .5 * it->back();
             } // else the value is 0
         }
     } else {
@@ -901,7 +905,7 @@ void tvd_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<ORVT
             auto r = row(mat, rownum, unchecked);
             auto nnz = nonZeros(r);
             if(!nnz) continue;
-            const auto invmul = 1. / rsums[rownum];
+            const typename std::conditional_t<(sizeof(VT) <= 4), float, double> invmul = 1. / rsums[rownum];
             for(size_t i = 0; i < r.n_; ++i) {
                 auto idx = r.indices_[i];
                 const RVT val = RVT(r.data_[i]) * invmul;
@@ -915,6 +919,7 @@ void tvd_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<ORVT
         }
         const size_t nfeat = nzfeatures.size();
         (*ret).reset();
+        (*ret).resize(mat.nc_);
         (*ret).reserve(nfeat);
         const bool nr_is_odd = nrows & 1;
         for(auto &pair: nzfeatures) {
@@ -925,6 +930,7 @@ void tvd_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<ORVT
             size_t nel = it->size();
             if(nel > nrows / 2) {
                 if(it->front() > 0.) {
+#define append insert
                     if(nr_is_odd) {
                         auto mid = ibeg + nrows / 2 - (nrows - nel);
                         (*ret).append(i, *mid);
@@ -946,7 +952,11 @@ void tvd_median(const CSparseMatrix<VT, IT, IPtr> &mat, blaze::SparseVector<ORVT
                     if(nr_is_odd) (*ret).append(i, (*it)[nrows / 2]);
                     else          (*ret).append(i, .5 * ((*it)[nrows / 2 - 1] + (*it)[nrows / 2]));
                 }
-            } // else the value is 0
+            } else if((nrows & 1) && nel == nrows / 2) {
+                if(it->front() > 0.) (*ret).append(i, .5 * it->front());
+                else if(it->back() < 0.) (*ret).append(i, .5 * it->back());
+            } // else it's zero.
+#undef append
         }
     } else {
         throw std::runtime_error("Not implemented");
@@ -1065,7 +1075,6 @@ std::ostream& operator<< (std::ostream& out, const CSparseMatrix<VT, IT, IPtrT> 
 }
 template<typename VT, bool SO, typename SVT, typename SVI>
 decltype(auto) assign(blaze::DenseVector<VT, SO> &lhs, const CSparseVector<SVT, SVI> &rhs) {
-    //std::fprintf(stderr, "[%s] Beginning assignment\n", __PRETTY_FUNCTION__);
     if((*lhs).size() != rhs.size()) (*lhs).resize(rhs.size());
     *lhs = 0.;
     DBG_ONLY(size_t i = 0;)
@@ -1081,7 +1090,6 @@ decltype(auto) assign(blaze::DenseVector<VT, SO> &lhs, const CSparseVector<SVT, 
 
 template<typename VT, bool SO, typename SVT, typename SVI>
 decltype(auto) assign(blaze::SparseVector<VT, SO> &lhs, const CSparseVector<SVT, SVI> &rhs) {
-    //std::fprintf(stderr, "[%s] Beginning assignment\n", __PRETTY_FUNCTION__);
     auto nnz = rhs.nnz();
     if((*lhs).size() != rhs.size()) (*lhs).resize(rhs.size());
     (*lhs).reset();
@@ -1098,7 +1106,6 @@ decltype(auto) assign(blaze::SparseVector<VT, SO> &lhs, const CSparseVector<SVT,
     }
     assert((*lhs).size() == rhs.size());
     assert(i == rhs.nnz());
-    std::fprintf(stderr, "Ending assignment\n");
 #ifndef NDEBUG
     std::cerr << *lhs;
     std::cerr << rhs;

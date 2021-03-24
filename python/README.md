@@ -3,6 +3,16 @@
 Much of the documentation is in doc-strings/type annotations.
 Here, I am trying to provide more of a user guide.
 
+
+
+## Installation
+
+```bash
+git clone --recursive https://github.com/dnbaker/minicore
+cd minicore/python
+OMP_NUM_THREADS=8 python3 setup.py install
+```
+
 # Coreset generation
 We have exposed a subset of functionality to Python. The `CoresetSampler` generates a coreset from a set of costs and a construction method,
 while the more involved clustering code is also exposed.
@@ -29,8 +39,6 @@ assert len(data) == len(indices)
 
 csrtup = mc.csr_tuple(data=data, indices=indices, indptr=indptr, shape=shape, nnz=len(data))
 
-mcmat = mc.SparseMatrixWrapper(csrtup)
-
 # We could also produce one without copying:
 csrmat = mc.CSparseMatrix(csrtup)
 
@@ -53,15 +61,13 @@ weights = None  # Set weights to be a 1d numpy array containing weights of type 
                 # If none, unused (uniform)
                 # otherwise, weights are used in both sampling and optimizing
 
-centers, assignments, costs = mc.kmeanspp(mcmat, msr=measure, k=k, betaprior=beta, ntimes=ntimes,
+centers, assignments, costs = mc.kmeanspp(csrmat, msr=measure, k=k, prior=beta, ntimes=ntimes,
                                           seed=seed, weights=weights)
 
 
 lspprounds = 2 # Perform %i rounds of localsearch++. Yields a higher quality set of centers at the expense of more runtime
 
-ctr_rows = mc.rowsel(centers)
-
-res = mc.hcluster(mcmat, ctr_rows, betaprior=beta, msr=measure,
+res = mc.hcluster(csrmat, centers, prior=beta, msr=measure,
                   weights=weights, lspprounds=lspprounds, seed=seed)
 
 
