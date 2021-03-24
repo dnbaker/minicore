@@ -1681,13 +1681,16 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                 ret = libkl::tvd_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., pv, pv) * 2.;
                 break;
             }
-            case COSINE_DISTANCE: case COSINE_SIMILARITY:
+            case COSINE_DISTANCE: case COSINE_SIMILARITY: case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
             {
-                FT klc = serial(dot(mr + pv, ctr + pv));
-                FT div = std::sqrt(serial(sqrNorm(mr + pv))) * std::sqrt(serial(sqrNorm(ctr + pv)));
-                ret = klc / div;
+                FT lhmul = msr == COSINE_DISTANCE || msr == COSINE_SIMILARITY ? FT(1): lhrsi;
+                FT rhmul = msr == COSINE_DISTANCE || msr == COSINE_SIMILARITY ? FT(1): rhrsi;
+                FT l_lhinc = msr == COSINE_DISTANCE || msr == COSINE_SIMILARITY ? FT(pv): lhinc;
+                FT l_rhinc = msr == COSINE_DISTANCE || msr == COSINE_SIMILARITY ? FT(pv): rhinc;
+                ret = libkl::cossim_reduce_aligned(mr.data(), ctr.data(), mr.size(), lhmul, rhmul, l_lhinc, l_rhinc);
                 ret = std::max(std::min(ret, 1.), 0.);
-                if(msr == COSINE_DISTANCE) ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
+                if(msr == COSINE_DISTANCE || msr == PROBABILITY_COSINE_DISTANCE)
+                    ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
                 break;
             }
             case TVD: {
@@ -1701,7 +1704,6 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                 else ret = -std::log(ret);
                 break;
             }
-            case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
             case JSM: case JSD:
             case SRULRT: case SRLRT:
             case LLR:
@@ -1736,13 +1738,6 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     klc = msr == SIS ?
                             libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
                           : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
-                } else if(msr == PROBABILITY_COSINE_DISTANCE || msr == PROBABILITY_COSINE_SIMILARITY) {
-                    klc = blaze::serial(dot(tmpmulx + lhinc, tmpmuly + rhinc));
-                    FT div = std::sqrt(serial(sqrNorm(tmpmulx + lhinc))) * std::sqrt(serial(sqrNorm(tmpmuly + rhinc)));
-                    ret = klc / div;
-                    ret = std::max(std::min(ret, 1.), 0.);
-                    if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
-                    break;
                 } else __builtin_unreachable();
                 ret = klc;
                 if(msr == LLR || msr == SRLRT) {
@@ -1774,6 +1769,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
 
             // All of these use libkl kernels for fast comparisons after an initial layout
             case COSINE_DISTANCE: case COSINE_SIMILARITY:
+            case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
             case L2: case SQRL2:
             case TVD:
             case L1:
@@ -1802,12 +1798,15 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     break;
                 } else if(msr == L1) {
                     ret = libkl::tvd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, 1., 1., pv, pv) * 2.;
-                } else if(msr == COSINE_DISTANCE || msr == COSINE_SIMILARITY) {
-                    FT klc = blaze::serial(dot(tmpmulx + pv, tmpmuly + pv)) + sharednz * (pv * pv);
-                    FT div = std::sqrt(blaze::serial(sqrNorm(tmpmulx + pv)) + sharednz * pv * pv) * std::sqrt(blaze::serial(sqrNorm(tmpmuly + pv)) + sharednz * pv * pv);
-                    ret = klc / div;
+                    break;
+                } else if(msr == PROBABILITY_COSINE_DISTANCE || msr == PROBABILITY_COSINE_SIMILARITY || msr == COSINE_DISTANCE || msr == COSINE_SIMILARITY) {
+                    double lhmul = 1., rhmul = 1., l_lhinc = pv,  l_rhinc = pv;
+                    if(msr == PROBABILITY_COSINE_DISTANCE || msr == PROBABILITY_COSINE_SIMILARITY) {
+                        lhmul = lhrsi; rhmul = rhrsi; l_lhinc = lhinc; l_rhinc = rhinc;
+                    }
+                    ret = libkl::cossim_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhmul, rhmul, l_lhinc, l_rhinc);
                     ret = std::max(std::min(ret, 1.), 0.);
-                    if(msr == COSINE_DISTANCE) ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
+                    if(msr == PROBABILITY_COSINE_DISTANCE || msr == COSINE_DISTANCE) ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
                     break;
                 } else if(msr == TVD) {
                     ret = libkl::tvd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhrsi, rhrsi, lhinc, rhinc) + std::abs(lhinc - rhinc) * sharednz * .5;
@@ -1821,7 +1820,6 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             }
 
 
-            case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
             case JSM: case JSD:
             case SRULRT: case SRLRT:
             case LLR:
@@ -1866,13 +1864,6 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                             libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc)
                           : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * FT(.5) * std::log((lhinc / rhinc + rhinc / lhinc + FT(2)) * FT(.25));
-                } else if(msr == PROBABILITY_COSINE_DISTANCE || msr == PROBABILITY_COSINE_SIMILARITY) {
-                    klc = serial(dot(tmpmulx + lhinc, tmpmuly + rhinc)) + sharednz * (lhinc * rhinc);
-                    FT div = std::sqrt(serial(sqrNorm(tmpmulx + lhinc) + sharednz * lhinc * lhinc)) * std::sqrt(serial(sqrNorm(tmpmuly + rhinc)) + sharednz * rhinc * rhinc);
-                    ret = klc / div;
-                    ret = std::max(std::min(ret, 1.), 0.);
-                    if(msr == PROBABILITY_COSINE_DISTANCE) ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
-                    break;
                 } else __builtin_unreachable();
                 ret = klc + zc;
                 if(unlikely(ret < 0)) {
