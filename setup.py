@@ -5,5 +5,4 @@ import sys, os
 '''
 wd = os.getcwd()
 print("Working directory: " + wd, file=sys.stderr)
-os.chdir(wd + "/python")
 check_call([sys.executable] + sys.argv)
