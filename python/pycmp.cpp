@@ -178,7 +178,6 @@ void init_cmp(py::module &m) {
             const Py_ssize_t nc = inf.shape[1], ndr = inf.shape[0];
             if(nc != Py_ssize_t(lhs.columns()))
                 throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
-            std::fprintf(stderr, "Processing matrix of shape %zu/%zu\n", nc, ndr);
             py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), ndr});
             blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)ret.request().ptr, nr, ndr);
             lhs.perform([&](auto &matrix) {
