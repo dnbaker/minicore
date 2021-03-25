@@ -4,7 +4,6 @@ Much of the documentation is in doc-strings/type annotations.
 Here, I am trying to provide more of a user guide.
 
 
-
 ## Installation
 
 ```bash
@@ -13,13 +12,14 @@ cd minicore/python
 OMP_NUM_THREADS=8 python3 setup.py install
 ```
 
+
 # Coreset generation
 We have exposed a subset of functionality to Python. The `CoresetSampler` generates a coreset from a set of costs and a construction method,
 while the more involved clustering code is also exposed.
 
 # Clustering
 For clustering Bregman divergences (squared distance, Itakura-Saito, and KL-divergence, for instance), kmeans++ sampling (via `kmeanspp`) provides accurate fast initial
-centers, while `cluster` performs EM from an initial set of points.
+centers, while `hcluster` performs EM from an initial set of points.
 
 Since we're using the blaze linear algebra library, we need to create a sparse matrix for clustering from CSR format.
 
@@ -68,7 +68,7 @@ centers, assignments, costs = mc.kmeanspp(csrmat, msr=measure, k=k, prior=beta, 
 lspprounds = 2 # Perform %i rounds of localsearch++. Yields a higher quality set of centers at the expense of more runtime
 
 res = mc.hcluster(csrmat, centers, prior=beta, msr=measure,
-                  weights=weights, lspprounds=lspprounds, seed=seed)
+                  weights=weights, lspp=lspprounds, seed=seed)
 
 
 # res is a dictionary with the following keys:
@@ -112,3 +112,12 @@ mc.set_num_threads(40)  # Sets the number of threads to be 40
 howmany = mc.get_num_threads()
 assert howmany == 40
 ```
+
+## Functions
+
+1. kmeanspp -- kmeans++ sampling
+2. hcluster -- hard clustering, with and without minibatch clustering. Set mbsize > 0 to enable minibatch clustering.
+3. scluster -- soft clustering; Currently only supported with full (Lloyd's) iteration
+4. SumOpts -- a set of options for clustering. Used as an entry point into greedy and d2 select.
+5. minicore.greedy\_select -- greedy furthest points sampling. Set outlier\_fraction to be > 0 to allow outliers.
+6. hvg -- Selects the most variable genes from a marix.
