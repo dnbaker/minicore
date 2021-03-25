@@ -9,6 +9,7 @@ Here, I am trying to provide more of a user guide.
 ```bash
 git clone --recursive https://github.com/dnbaker/minicore
 cd minicore/python
+# export CC if necessary to specify compiler
 OMP_NUM_THREADS=8 python3 setup.py install
 ```
 

@@ -15,6 +15,12 @@ Minicore both stands for "mini" and "core", as it builds *concise representation
 2. A compiler supporting C++17. We could remove this requirement without much work.
 3. We conditionally use OpenMP. This is enabled with the setting of the OMP variable.
 
+### Python bindings
+
+Python bindings require scipy, sklearn, numpy, and a recent C++ compiler capable of compiling C++-17.
+
+See `python/README.md` for an example and installation instructions.
+
 # Contents
 
 1. [graph](#Graph)

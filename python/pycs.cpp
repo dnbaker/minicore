@@ -46,14 +46,14 @@ void init_coreset(py::module &m) {
         std::copy(cs.probs_.get(), cs.probs_.get() + cs.np_, (float *)ret.request().ptr);
         return ret;
     }, "Create a numpy array of sampling probabilities")
-    .def("sample", [](CSType &cs, Py_ssize_t size, Py_ssize_t seed) {
+    .def("sample", [](CSType &cs, Py_ssize_t size, Py_ssize_t seed, bool unique_samples, double eps) {
         if(cs.sampler_ == nullptr) throw std::invalid_argument("Can't sample without created sampler. Call make_ampler");
         if(seed == 0) seed = std::rand();
-        auto ret = cs.sample(size);
+        auto ret = cs.sample(size, seed, eps, unique_samples);
         py::array_t<float> rf(size);
         py::array_t<uint64_t> ri(size);
         std::copy(ret.weights_.begin(), ret.weights_.end(), (float *)rf.request().ptr);
         std::copy(ret.indices_.begin(), ret.indices_.end(), (uint64_t *)ri.request().ptr);
         return py::make_tuple(rf, ri);
-    }, py::arg("size"), py::arg("seed") = 0);
+    }, py::arg("size"), py::arg("seed") = 0, py::arg("unique") = false, py::arg("eps") = 0.1);
 }
