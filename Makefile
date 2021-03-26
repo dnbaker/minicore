@@ -189,11 +189,15 @@ osm2dimacspg: src/utils/osm2dimacs.cpp $(STATIC_LIBS) libsleef.dyn.gen
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
+libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.dyn.gen sleef.h
+	ls $@ libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a SLEEF_DIR=../sleef/build)
+libsimdsampling/libsimdsampling.so: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h libsleef.dyn.gen sleef.h
+	ls $@ libsimdsampling/libsimdsampling.so 2>/dev/null || (cd libsimdsampling && $(MAKE) SLEEF_DIR=../sleef/build)
 libkl/libkl.so: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen sleef.h
-	ls $@ libkl/libkl.dylib || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
+	ls $@ libkl/libkl.dylib 2>/dev/null || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
 
 libkl/libkl.a: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen sleef.h
-	cd libkl && $(MAKE) SLEEF_DIR=../sleef/build
+	cd libkl && $(MAKE) libkl.a SLEEF_DIR=../sleef/build
 
 sleef.h: libsleef.dyn.gen
 	ls sleef.h 2>/dev/null || (ln -s $(shell pwd)/sleef/build/include/sleef.h $(shell pwd)/sleef.h)

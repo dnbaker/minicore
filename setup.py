@@ -7,9 +7,10 @@ import multiprocessing
 import multiprocessing.pool
 from subprocess import check_output
 
-def main_fn():
+def main():
 
-    sleefdir = environ.get("SLEEF_DIR", "../sleef/build")
+    sleefdir = environ.get("SLEEF_DIR", "sleef/build")
+    print(sleefdir)
     SLEEFLIB = sleefdir + "/lib/libsleef.a"
     
     if not path.isfile(SLEEFLIB):
@@ -17,8 +18,10 @@ def main_fn():
         if not path.isdir(sleefdir):
             makedirs(sleefdir)
         check_call(f"cd {sleefdir} && cmake .. -DBUILD_SHARED_LIBS=0 && make", shell=True)
-    else:
-        print("SLEEFLIB " + SLEEFLIB + " found as expected", file=sys.stderr)
+    if not path.isfile("libkl/libkl.a"):
+        check_call(f"make libkl/libkl.a", shell=True)
+    if not path.isfile("libsimdsampling/libsimdsampling.a"):
+        check_call(f"make libsimdsampling/libsimdsampling.a", shell=True)
     
     # from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
     # parallelizes extension compilation
@@ -44,7 +47,7 @@ def main_fn():
     import distutils.ccompiler
     distutils.ccompiler.CCompiler.compile=parallelCCompile
     
-    
+    LIBOBJS = [SLEEFLIB, "libkl/libkl.a", "libsimdsampling/libsimdsampling.a"]
     
     
     class get_pybind_include(object):
@@ -79,24 +82,25 @@ def main_fn():
         # Path to pybind11 headers
         get_pybind_include(),
         get_pybind_include(user=True),
-       "../",
-       "../include",
+       "./",
+       "./include",
        sleefdir + "/include",
-       "../include/minicore",
-       "../blaze",
-       "../pybind11/include"
+       "./include/minicore",
+       "./blaze",
+       "./pybind11/include",
+       "./python"
     ]
     
     ext_modules = [
         Extension(
             'pyminicore',
-             glob('*.cpp') + [
-             "../include/minicore/util/boost/zlib.cpp", "../include/minicore/util/boost/gzip.cpp"
+             glob('python/*.cpp') + [
+             "include/minicore/util/boost/zlib.cpp", "include/minicore/util/boost/gzip.cpp"
              ],
             include_dirs=include_dirs,
             language='c++',
             extra_compile_args=extra_compile_args + ["-DEXTERNAL_BOOST_IOSTREAMS=1"],
-            extra_objects=[SLEEFLIB]
+            extra_objects=LIBOBJS
         )
     ]
     
@@ -129,7 +133,8 @@ def main_fn():
         raise RuntimeError('Unsupported compiler -- at least C++11 support '
                            'is needed!')
     
-    extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1", SLEEFLIB]
+    extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1"] + LIBOBJS
+
     
     class BuildExt(build_ext):
         """A custom build extension for adding compiler-specific options."""
@@ -174,10 +179,10 @@ def main_fn():
         author='Daniel Baker',
         author_email='dnb@cs.jhu.edu',
         url='https://github.com/dnbaker/minicore',
-        description='A python module for coresets and clustering',
+        description='A python module for clustering and coresets',
         long_description='',
         ext_modules=ext_modules,
-        install_requires=['pybind11', 'numpy>=0.19'],
+        install_requires=['pybind11', 'numpy>=0.19', 'scipy'],
         setup_requires=['pybind11'],
         cmdclass={'build_ext': BuildExt},
         zip_safe=False,
@@ -185,4 +190,4 @@ def main_fn():
     )
 
 if __name__ == "__main__":
-    sys.exit(main_fn())
+    sys.exit(main())

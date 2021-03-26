@@ -8,7 +8,7 @@
 #include "minicore/util/shared.h"
 #include "minicore/util/blaze_adaptor.h"
 #include <zlib.h>
-#include "libsimdsampling/simdsampling.ho.h"
+#include "libsimdsampling/simdsampling.h"
 #ifdef _OPENMP
 #  include <omp.h>
 #endif
