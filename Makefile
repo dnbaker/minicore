@@ -197,7 +197,7 @@ libkl/libkl.so: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen sleef.h
 	ls $@ libkl/libkl.dylib 2>/dev/null || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
 
 libkl/libkl.a: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen sleef.h
-	ls sleef/build;cd libkl && $(MAKE) libkl.a SLEEF_DIR=../sleef/build
+	ls ../sleef/build;cd libkl && $(MAKE) libkl.a SLEEF_DIR=../sleef/build
 
 sleef.h: libsleef.dyn.gen
 	ls sleef.h 2>/dev/null || (ln -s $(shell pwd)/sleef/build/include/sleef.h $(shell pwd)/sleef.h)
