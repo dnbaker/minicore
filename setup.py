@@ -5,7 +5,7 @@ from setuptools.command.build_ext import build_ext
 from glob import glob
 import multiprocessing
 import multiprocessing.pool
-from subprocess import check_output
+from subprocess import check_output, check_call
 
 def main():
 
@@ -14,7 +14,6 @@ def main():
     SLEEFLIB = sleefdir + "/lib/libsleef.a"
     
     if not path.isfile(SLEEFLIB):
-        from subprocess import check_call
         if not path.isdir(sleefdir):
             makedirs(sleefdir)
         check_call(f"cd {sleefdir} && cmake .. -DBUILD_SHARED_LIBS=0 && make", shell=True)
