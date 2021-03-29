@@ -14,9 +14,8 @@ def main():
     if not path.isfile(SLEEFLIB):
         print("Making sleef")
         check_call(f"make {SLEEFLIB}", shell=True)
-    if not path.isfile("libkl/libkl.a"):
-        print("Making libkl.a")
-        check_call(f"make libkl/libkl.a", shell=True)
+    if not path.isfile("libkl.a"):
+        check_call(f"make libkl.a", shell=True)
     if not path.isfile("libsimdsampling/libsimdsampling.a"):
         print("Making libss.a")
         check_call(f"make libsimdsampling/libsimdsampling.a", shell=True)

@@ -191,15 +191,13 @@ osm2dimacspg: src/utils/osm2dimacs.cpp $(STATIC_LIBS) libsleef.dyn.gen
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
-libsimdsampling/libsimdsampling.a: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h
-	cd libsimdsampling && $(MAKE) libsimdsampling.a SLEEF_DIR=../sleef && cp libsimdsampling.a ..
 libsimdsampling/libsimdsampling.so: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h
 	cd libsimdsampling && $(MAKE) libsimdsampling.so SLEEF_DIR=../sleef && cp libsimdsampling.so ..
 libkl/libkl.so: libkl/libkl.c libkl/libkl.h sleef.h
 	ls $@ libkl/libkl.dylib 2>/dev/null || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
 
 libkl.o: libkl/libkl.c libkl/libkl.h libsleef.a
-	$(CC) $< -o $@ -c $(INCLUDE) $(WARNINGS) $(EXTRA) -std=c11 $(ND)
+	$(CC) $< -o $@ -c $(INCLUDE) $(WARNINGS) $(EXTRA) -std=c11 $(ND) -fPIC
 libkl.a: libkl.o
 	$(AR) rcs $@ $<
 libsimdsampling.a: libsimdsampling/libsimdsampling.a
