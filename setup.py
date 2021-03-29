@@ -44,7 +44,7 @@ def main():
     import distutils.ccompiler
     distutils.ccompiler.CCompiler.compile=parallelCCompile
     
-    LIBOBJS = [SLEEFLIB, "libkl/libkl.a", "libsimdsampling/libsimdsampling.a"]
+    LIBOBJS = [SLEEFLIB, "libkl.a", "libsimdsampling/libsimdsampling.a"]
     
     
     class get_pybind_include(object):
