@@ -6,20 +6,18 @@ from glob import glob
 import multiprocessing
 import multiprocessing.pool
 from subprocess import check_output, check_call
+SLEEFLIB="libsleef.a"
+sleefdir = environ.get("SLEEF_DIR", "sleef/build")
 
 def main():
 
-    sleefdir = environ.get("SLEEF_DIR", "sleef/build")
-    print(sleefdir)
-    SLEEFLIB = sleefdir + "/lib/libsleef.a"
-    
     if not path.isfile(SLEEFLIB):
-        if not path.isdir(sleefdir):
-            makedirs(sleefdir)
-        check_call(f"cd {sleefdir} && cmake .. -DBUILD_SHARED_LIBS=0 && make", shell=True)
-    if not path.isfile("libkl/libkl.a"):
-        check_call(f"make libkl/libkl.a", shell=True)
+        print("Making sleef")
+        check_call(f"make {SLEEFLIB}", shell=True)
+    if not path.isfile("libkl.a"):
+        check_call(f"make libkl.a", shell=True)
     if not path.isfile("libsimdsampling/libsimdsampling.a"):
+        print("Making libss.a")
         check_call(f"make libsimdsampling/libsimdsampling.a", shell=True)
     
     # from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
