@@ -53,6 +53,7 @@ CMAKE?=cmake
 INCLUDE=$(patsubst %,-I%,$(INCLUDE_PATHS))
 LIBS=$(patsubst %,-L%,$(LIBPATHS))
 CXX?=g++
+CC?=gcc
 STD?=c++17
 WARNINGS+=-Wall -Wextra -Wpointer-arith -Wformat -Wunused-variable -Wno-attributes -Wno-ignored-qualifiers -Wno-unused-function -Wdeprecated -Wno-deprecated-declarations \
     -Wno-deprecated-copy # Because of Boost.Fusion
@@ -82,6 +83,7 @@ TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskm
         fkmpptestdbg mergetestdbg solvetestdbg testmsrdbg testmsrcsrdbg test_centroiddbg
 
 all: $(EX)
+ex: $(EX)
 
 LIBPATHS+=libkl
 
@@ -189,20 +191,32 @@ osm2dimacspg: src/utils/osm2dimacs.cpp $(STATIC_LIBS) libsleef.dyn.gen
         $< -lbz2 -lexpat -o $@ -O3 -lbz2 -lexpat -pg
 
 
-libkl/libkl.so: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen sleef.h
-	ls $@ libkl/libkl.dylib || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
+libsimdsampling/libsimdsampling.so: libsimdsampling/simdsampling.cpp libsimdsampling/simdsampling.h
+	cd libsimdsampling && $(MAKE) libsimdsampling.so SLEEF_DIR=../sleef && cp libsimdsampling.so ..
+libkl/libkl.so: libkl/libkl.c libkl/libkl.h sleef.h
+	ls $@ libkl/libkl.dylib 2>/dev/null || (cd libkl && $(MAKE) SLEEF_DIR=../sleef/build)
 
-libkl/libkl.a: libkl/libkl.c libkl/libkl.h libsleef.dyn.gen sleef.h
-	cd libkl && $(MAKE) SLEEF_DIR=../sleef/build
-
-sleef.h: libsleef.dyn.gen
-	ls sleef.h 2>/dev/null || (ln -s $(shell pwd)/sleef/build/include/sleef.h $(shell pwd)/sleef.h)
+libkl.o: libkl/libkl.c libkl/libkl.h libsleef.a
+	$(CC) $< -o $@ -c $(INCLUDE) $(WARNINGS) $(EXTRA) -std=c11 $(ND) -fPIC
+libkl.a: libkl.o
+	$(AR) rcs $@ $<
+libsimdsampling.a: libsimdsampling/libsimdsampling.a
+	cp $< $@
+libsimdsampling/libsimdsampling.a:
+	cd libsimdsampling && $(MAKE) libsimdsampling.a
 
 libsleef.dyn.gen:
 	+(ls libsleef.so || ls libsleef.dylib) 2>/dev/null || (cd sleef && mkdir -p dynbuild && cd dynbuild && $(CMAKE) .. -DBUILD_SHARED_LIBS=1 && $(MAKE) && cp lib/* ../.. && cd ../.. && touch libsleef.dyn.gen)
 
-libsleef.a:
-	+ls libsleef.a 2>/dev/null || (cd sleef && mkdir -p build && cd build && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE) && cp lib/libsleef.a lib/libsleefdft.a ../.. && cd ..)
+sleef/sleefbuild/lib/libsleef.a:
+	(ninja --version && mkdir -p sleef/sleefbuild && cd sleef/sleefbuild && rm -f CMakeCache.txt && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 -G "Ninja" && ninja -j10) ||\
+	(mkdir -p sleef/sleefbuild && cd sleef/sleefbuild && rm -f CMakeCache.txt && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE))
+
+libsleef.a: sleef/sleefbuild/lib/libsleef.a
+	cp $< $@
+sleef/sleefbuild/include/sleef.h: libsleef.a sleef/sleefbuild
+sleef.h: sleef/sleefbuild/include/sleef.h
+	cp $< $@
 
 
 soft: solvetestdbg solvetest solvesoft solvesoftdbg

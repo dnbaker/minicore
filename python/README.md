@@ -8,7 +8,7 @@ Here, I am trying to provide more of a user guide.
 
 ```bash
 git clone --recursive https://github.com/dnbaker/minicore
-cd minicore/python
+cd minicore
 # export CC if necessary to specify compiler
 OMP_NUM_THREADS=8 python3 setup.py install
 ```
@@ -98,7 +98,6 @@ JSD, S2JSDLSH, and the Hellinger LSH are hash functions for the JSD and its squa
 L1, L2, and PStable hashers should work regardless.
 
 
-
 ## Multithreading
 
 By default, minicore uses the environmental variable `OMP\_NUM\_THREADS` number of threads.
@@ -118,7 +117,29 @@ assert howmany == 40
 
 1. kmeanspp -- kmeans++ sampling
 2. hcluster -- hard clustering, with and without minibatch clustering. Set mbsize > 0 to enable minibatch clustering.
-3. scluster -- soft clustering; Currently only supported with full (Lloyd's) iteration
+3. scluster -- soft clustering; Currently only supported with full (Lloyd's) iteration, but can fractionally assign points to multiple clusters based on distances.
+4. minicore.greedy\_select -- greedy furthest points sampling. Set outlier\_fraction to be > 0 to allow outliers.
+5. cmp -- perform distance computation between matrices. We support dense numpy against dense numpy, dense numpy against CSR, and CSR against CSR.
+    1. This supports all our distance measures.
+    2. CSR matrices may need to be converted to `minicore.CSparseMatrix` from either a minicore.csr\_tuple or scipy.csr\_matrix.
+5. hvg -- Selects the most variable genes from a marix.
+
+## Classes
+0. csr\_tuple -- a namedtuple containing fields of data, indices, indptr, nnz, and shape.
+    1. This is similar to scipy.sparse.csr\_matrix, except that
+        1. It does not support matrix or conversion operations
+        2. It supports 16-bit indices and data, as well as unsigned indices and indptr.
+1. CSparseMatrix -- a wrapper around CSR-format matrices, and does not own memory. This is usually the preferred matrix format of the library.
+    1. This is most easily constructed by calling on a csr\_tuple or scipy.sparse.csr\_matrix.
+2. SparseMatrixWrapper -- a wrapper around Blaze-lib sparse matrices. It allocates its own memory, and is usually fast, but has some additional thorns.
+3. CoresetSampler builds an alias sampler over a set of costs, given a coreset construction algorithm and an approximate solution.
 4. SumOpts -- a set of options for clustering. Used as an entry point into greedy and d2 select.
-5. minicore.greedy\_select -- greedy furthest points sampling. Set outlier\_fraction to be > 0 to allow outliers.
-6. hvg -- Selects the most variable genes from a marix.
+
+
+## Distances
+See this [full table](https://github.com/dnbaker/minicore/blob/main/docs/msr.md) for total details, but it can be more useful to have these visible on the command-line.
+`minicore.mdict()` emits a dictionary with keys as integral codes and values as short string codes.
+`minicore.meas2str` and `minicore.meas2desc` convert integral codes into descriptions and short string codes.
+Clustering and distance computation code accepts either format.
+
+

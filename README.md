@@ -13,13 +13,23 @@ Minicore both stands for "mini" and "core", as it builds *concise representation
 
 1. Boost, specifically the Boost Graph Library.
 2. A compiler supporting C++17. We could remove this requirement without much work.
-3. We conditionally use OpenMP. This is enabled with the setting of the OMP variable.
+2. We conditionally use OpenMP. This is enabled with the setting of the OMP variable.
+
+Certain applications have specific requirements, such as libosmium for kzclustexp, which computes coresets over OpenStreetMaps data, but these are included as submodules primarily.
+
 
 ### Python bindings
 
-Python bindings require scipy, sklearn, numpy, and a recent C++ compiler capable of compiling C++-17.
+Python bindings require numpy, scipy, and a recent C++ compiler capable of compiling C++-17.
 
-See `python/README.md` for an example and installation instructions.
+See `python/README.md` for an example and installation instructions, or you can install by running `python3 setup.py`
+from the base directory.
+
+Because minicore compiles distance code for the destination hardware, it's difficult to distribute via PyPI, but can still be installed in a single command via pip:
+
+```bash
+python3 -m pip install git+git://github.com/dnbaker/minicore@main
+```
 
 # Contents
 
@@ -51,7 +61,7 @@ See `python/README.md` for an example and installation instructions.
     1. Falls back to disk-backed data if above a specified size, uses RAM otherwise.
 7. Streaming metric and `\alpha-`approximate metric clusterer
     1. `minicore/streaming.h`
-8. Locality Sensitive Hashing
+8. Locality Sensitive Hashing has been extracted into the [minilsh](https://github.com/dnbaker/minilsh) library.
     1. LSH functions for:
         1. JSD
         2. S2JSD
@@ -60,7 +70,6 @@ See `python/README.md` for an example and installation instructions.
         5. L2 distance
         6. L_p distance, 1 >= p >= 2
     2. LSH table
-    3. TODO: multiprobe LSH tables
     4. See also [DCI](https://github.com/dnbaker/DCI) for an alternative view on LSH probing.
 
 
