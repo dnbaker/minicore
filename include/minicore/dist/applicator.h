@@ -1722,18 +1722,16 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                 else
                     tmpmuly = serial(ctr * rhrsi);
                 FT klc;
-                if(msr == MKL) {
-                    klc = libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
+                if(msr == MKL || msr == REVERSE_MKL) {
+                    klc = msr == MKL ? libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
+                                     : libkl::kl_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
                 } else if(msr == JSD || msr == JSM ) {
                     klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
-                } else if(msr == REVERSE_MKL) {
-                    klc = libkl::kl_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
                 } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
                     klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhsum / (lhsum + rhsum), lhinc, rhinc);
                 } else if(msr == ITAKURA_SAITO) {
-                    klc = libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
-                } else if(msr == REVERSE_ITAKURA_SAITO) {
-                    klc = libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
+                    lkc = msr == ITAKURA_SAITO ? libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
+                                               : libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
                 } else if(msr == SIS || msr == RSIS) {
                     klc = msr == SIS ?
                             libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
