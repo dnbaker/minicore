@@ -1730,7 +1730,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                 } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
                     klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhsum / (lhsum + rhsum), lhinc, rhinc);
                 } else if(msr == ITAKURA_SAITO) {
-                    lkc = msr == ITAKURA_SAITO ? libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
+                    klc = msr == ITAKURA_SAITO ? libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
                                                : libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
                 } else if(msr == SIS || msr == RSIS) {
                     klc = msr == SIS ?

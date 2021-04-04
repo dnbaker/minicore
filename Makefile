@@ -35,7 +35,7 @@ LIBPATHS+=sleef/build/lib
 LIBPATHS+=sleef/dynbuild/lib
 endif
 
-LINKS+= -lsleef
+LINKS+= -lsleef #-lkl -lsimdsampling
 
 ifdef TBBDIR
 INCLUDE_PATHS+= $(TBBDIR)/include
@@ -85,7 +85,8 @@ TESTS=tbmdbg coreset_testdbg bztestdbg btestdbg osm2dimacsdbg dmlsearchdbg diskm
 all: $(EX)
 ex: $(EX)
 
-LIBPATHS+=libkl
+LIBPATHS+= libkl
+LIBPATHS+= libsimdsampling
 
 tests: $(TESTS)
 print_tests:
@@ -105,15 +106,15 @@ STATIC_LIBS=libsleef.a
 #ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
 
 %: src/tests/%.o $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS) libkl/libkl.a libsimdsampling/libsimdsampling.a
 
 src/tests/%.o: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread -DNDEBUG $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)
 
 %.dbgo: %.cpp $(HEADERS) $(STATIC_LIBS)  libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1
-%dbg: src/tests/%.dbgo $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1
+%dbg: src/tests/%.dbgo $(HEADERS) $(STATIC_LIBS) libkl/libkl.a libsimdsampling/libsimdsampling.a
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread  $(LDFLAGS) $(OMP_STR) $(STATIC_LIBS)  -O1 libkl/libkl.a libsimdsampling/libsimdsampling.a
 
 printlibs:
 	echo $(LIBPATHS)
@@ -122,11 +123,11 @@ printlibs:
 #graphrun: src/graphtest.cpp $(wildcard include/minicore/*.h)
 #	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR)
 
-%: src/%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
+%: src/%.cpp $(HEADERS) $(STATIC_LIBS) libkl/libkl.a libsimdsampling/libsimdsampling.a
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS) libkl/libkl.a libsimdsampling/libsimdsampling.a
 
 %: src/utils/%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
-	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) $< -o $@ -DNDEBUG $(OMP_STR) -O3 $(STATIC_LIBS) libkl/libkl.a libsimdsampling/libsimdsampling.a
 
 mtx%: src/mtx%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) $< -o $@ $(OMP_STR) -O3 $(LDFLAGS)  -DNDEBUG $(STATIC_LIBS) # -fsanitize=undefined -fsanitize=address

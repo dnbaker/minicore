@@ -60,6 +60,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
     }
     std::vector<IT> centers(k, IT(0));
     blz::DV<FT> distances(np, std::numeric_limits<FT>::max()), odists;
+    auto getcost = [&](auto &dists) {if(weights) {return dot(blz::make_cv(weights, np), dists);} return sum(dists);};
     {
         IT fc;
         auto setdists = [&](auto &vec, auto index) {
@@ -78,12 +79,12 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
         fc = rng() % np;
         setdists(distances, fc);
         if(n_local_samples > 1) {
-            double fcost = sum(distances);
+            double fcost = getcost(distances);
             if(odists.size() != distances.size()) odists.resize(distances.size());
             for(size_t i = 1; i < n_local_samples; ++i) {
                 const size_t ofc = rng() % np;
                 setdists(odists, ofc);
-                if(double ocost = sum(odists);ocost < fcost) {
+                if(double ocost = getcost(odists);ocost < fcost) {
                     std::swap(distances, odists);
                     fcost = ocost; fc = ofc;
                 }
@@ -152,7 +153,8 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
                         auto &v = sptr->operator[](j);
                         if(auto newv = oracle(nextc, j);newv < v)
                             v = newv, (*iptr)[j] = center_idx;
-                        nsum += v;
+                        if(weights) nsum += v * weights[j];
+                        else        nsum += v;
                     }
                 } else {
                     for(size_t j = 0; j < np; ++j) {
@@ -160,7 +162,7 @@ kmeanspp(const Oracle &oracle, RNG &rng, size_t np, size_t k, const WFT *weights
                         if(auto newv = oracle(nextc, j);newv < v)
                             v = newv, (*iptr)[j] = center_idx;
                     }
-                    nsum = sum(*sptr);
+                    nsum = getcost(*sptr);
                 }
                 if(dsum < 0.) {
                     dsum = nsum, newc = nextc;
