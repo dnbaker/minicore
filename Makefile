@@ -210,8 +210,8 @@ libsleef.dyn.gen:
 	+(ls libsleef.so || ls libsleef.dylib) 2>/dev/null || (cd sleef && mkdir -p dynbuild && cd dynbuild && $(CMAKE) .. -DBUILD_SHARED_LIBS=1 && $(MAKE) && cp lib/* ../.. && cd ../.. && touch libsleef.dyn.gen)
 
 sleef/sleefbuild/lib/libsleef.a:
-	(ninja --version && mkdir -p sleef/sleefbuild && cd sleef/sleefbuild && rm -f CMakeCache.txt && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 -G "Ninja" && ninja -j10) ||\
-	(mkdir -p sleef/sleefbuild && cd sleef/sleefbuild && rm -f CMakeCache.txt && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && $(MAKE))
+	(ninja --version 2>/dev/null && mkdir -p sleef/sleefbuild && cd sleef/sleefbuild && rm -f CMakeCache.txt && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 -G "Ninja" && ninja -j10) ||\
+	(mkdir -p sleef/sleefbuild && cd sleef/sleefbuild && rm -f CMakeCache.txt && $(CMAKE) .. -DBUILD_SHARED_LIBS=0 && ($(MAKE) || ls lib/libsleef.a))
 
 libsleef.a: sleef/sleefbuild/lib/libsleef.a
 	cp $< $@
