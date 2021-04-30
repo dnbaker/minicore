@@ -389,21 +389,7 @@ static void print_measures() {
 }
 
 static constexpr bool is_valid_measure(DissimilarityMeasure measure) {
-    switch(measure) {
-        case L1: case L2: case SQRL2: case JSM: case JSD: case MKL:
-        case HELLINGER: case BHATTACHARYYA_METRIC:
-        case BHATTACHARYYA_DISTANCE: case TOTAL_VARIATION_DISTANCE:
-        case UWLLR: case LLR: case REVERSE_MKL: case REVERSE_ITAKURA_SAITO:
-        case ITAKURA_SAITO: case COSINE_DISTANCE: case PROBABILITY_COSINE_DISTANCE:
-        case DOT_PRODUCT_SIMILARITY: case PROBABILITY_DOT_PRODUCT_SIMILARITY:
-        case ORACLE_METRIC: case ORACLE_PSEUDOMETRIC:
-        case SYMMETRIC_ITAKURA_SAITO:
-        case RSYMMETRIC_ITAKURA_SAITO:
-        case SRLRT: case SRULRT:
-        return true;
-        default: ;
-    }
-    return false;
+    return measure != ORACLE_METRIC && measure != ORACLE_PSEUDOMETRIC;
 }
 
 

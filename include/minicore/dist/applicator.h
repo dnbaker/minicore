@@ -1875,13 +1875,11 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     ret *= (lhsum + rhsum);
                 ret = std::max(ret, 0.);
                 if(msr == SRULRT || msr == SRLRT || msr == JSM) ret = std::sqrt(ret);
-                if(ret == std::numeric_limits<FT>::infinity()) {
+                if(ret == std::numeric_limits<FT>::infinity())
                     ret = std::numeric_limits<FT>::max();
-                } else if(ret == -std::numeric_limits<FT>::infinity()) {
+                else if(ret == -std::numeric_limits<FT>::infinity())
                     ret = 0.;
-                }
-            }
-            break;
+            } break;
             default: ret = -1.;
                     std::fprintf(stderr, "Unexpected distance measure. Returning -1. (%s)\n", msr2str(msr));
                     break;
