@@ -1729,9 +1729,11 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
                 } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
                     klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhsum / (lhsum + rhsum), lhinc, rhinc);
-                } else if(msr == ITAKURA_SAITO) {
-                    klc = msr == ITAKURA_SAITO ? libkl::is_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
-                                               : libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
+                } else if(msr == ITAKURA_SAITO || msr == REVERSE_ITAKURA_SAITO) {
+                    auto lhp = msr == ITAKURA_SAITO ? tmpmulx.data(): tmpmuly.data();
+                    auto inc1 = msr == ITAKURA_SAITO ? lhinc: rhinc;
+                    auto inc2 = msr == ITAKURA_SAITO ? rhinc: lhinc;
+                    klc = libkl::is_reduce_aligned(lhp, rhp, nd, inc1, inc2);
                 } else if(msr == SIS || msr == RSIS) {
                     klc = msr == SIS ?
                             libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
@@ -1858,9 +1860,9 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     klc = libkl::is_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
                     zc = sharednz * (rhinc / lhinc - std::log(rhinc / lhinc)) - nd;
                 } else if(msr == SIS || msr == RSIS) {
-                    klc = msr == SIS ?
-                            libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nnz_either, lhinc, rhinc)
-                          : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nnz_either, rhinc, lhinc);
+                    auto lhp = tmpmulx.data(), rhp = tmpmuly.data();
+                    if(msr == RSIS) std::swap(lhp, rhp);
+                    klc = libkl::sis_reduce_aligned(lhp, rhp, nnz_either, lhinc, rhinc);
                     zc = sharednz * FT(.5) * std::log((lhinc / rhinc + rhinc / lhinc + FT(2)) * FT(.25));
                 } else __builtin_unreachable();
                 ret = klc + zc;

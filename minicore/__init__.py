@@ -18,6 +18,14 @@ def ctrs2sp(centertups, nc):
 geometric_median = pyminicore.geomed
 
 
+'''
+def hcluster(lhs, rhs=None, *, msr,
+    """
+    hcluster documentation
+    this is a wrapper function that automatically calls the correct pyminicore hcluster
+    """
+'''
+
 #  This function provides a single starting point for clustering start-to-finish
 def cluster(data, *, msr, k, prior=0., seed=0, nmkc=0,
             ntimes=1, lspp=0, use_exponential_skips=False,

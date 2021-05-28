@@ -31,7 +31,7 @@ def main():
                         depends, extra_postargs)
         cc_args = self._get_cc_args(pp_opts, debug, extra_preargs)
         # parallel code
-        N_cores = int(environ.get("OMP_NUM_THREADS", multiprocessing.cpu_count()))
+        N_cores = int(environ.get("OMP_NUM_THREADS", 1))
         def _single_compile(obj):
             try: src, ext = build[obj]
             except KeyError: return
