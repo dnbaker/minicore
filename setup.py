@@ -19,7 +19,7 @@ def main():
     if not path.isfile("libsimdsampling/libsimdsampling.a"):
         print("Making libss.a")
         check_call(f"make libsimdsampling/libsimdsampling.a", shell=True)
-    
+
     # from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
     # parallelizes extension compilation
     def parallelCCompile(self, sources, output_dir=None, macros=None,
@@ -39,30 +39,30 @@ def main():
         # convert to list, imap is evaluated on-demand
         list(multiprocessing.pool.ThreadPool(N_cores).imap(_single_compile,objects))
         return objects
-    
-    
+
+
     import distutils.ccompiler
     distutils.ccompiler.CCompiler.compile=parallelCCompile
-    
+
     LIBOBJS = [SLEEFLIB, "libkl.a", "libsimdsampling/libsimdsampling.a"]
-    
-    
+
+
     class get_pybind_include(object):
         """Helper class to determine the pybind11 include path
         The purpose of this class is to postpone importing pybind11
         until it is actually installed, so that the ``get_include()``
         method can be invoked. """
-    
+
         def __init__(self, user=False):
             self.user = user
-    
+
         def __str__(self):
             import pybind11
             return pybind11.get_include(self.user)
-    
-    
+
+
     #EXTRAS = environ.get("EXTRA", "")
-    
+
     extra_compile_args = ['-march=native', '-DNDEBUG',
                           '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                           '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
@@ -70,11 +70,11 @@ def main():
                           '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
                           "-DBLAZE_USE_SLEEF=1", "-pipe",
                           '-Wno-deprecated-declarations', '-O3']
-    
+
     if 'BOOST_DIR' in environ:
         extra_compile_args.append("-I%s" % environ['BOOST_DIR'])
-    
-    
+
+
     include_dirs=[
         # Path to pybind11 headers
         get_pybind_include(),
@@ -87,7 +87,7 @@ def main():
        "./pybind11/include",
        "./python"
     ]
-    
+
     ext_modules = [
         Extension(
             'pyminicore',
@@ -100,8 +100,8 @@ def main():
             extra_objects=LIBOBJS
         )
     ]
-    
-    
+
+
     # As of Python 3.6, CCompiler has a `has_flag` method.
     # cf http://bugs.python.org/issue26689
     def has_flag(compiler, flagname):
@@ -116,23 +116,23 @@ def main():
             except distutils.errors.CompileError:
                 return False
         return True
-    
-    
+
+
     def cpp_flag(compiler):
         """Return the -std=c++[11/14/17] compiler flag.
         The newer version is prefered over c++11 (when it is available).
         """
         flags = ['-std=c++17', '-std=c++14', '-std=c++11']
-    
+
         for flag in flags:
             if has_flag(compiler, flag): return flag
-    
+
         raise RuntimeError('Unsupported compiler -- at least C++11 support '
                            'is needed!')
-    
+
     extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1"] + LIBOBJS
 
-    
+
     class BuildExt(build_ext):
         """A custom build extension for adding compiler-specific options."""
         c_opts = {
@@ -143,14 +143,14 @@ def main():
             'msvc': [],
             'unix': [],
         }
-    
+
         from sys import platform
         if platform == 'darwin':
             darwin_opts = ['-mmacosx-version-min=10.7']# , '-libstd=libc++']
             # darwin_opts = []
             c_opts['unix'] += darwin_opts
             l_opts['unix'] += darwin_opts
-    
+
         def build_extensions(self):
             ct = self.compiler.compiler_type
             opts = self.c_opts.get(ct, [])
@@ -167,8 +167,8 @@ def main():
                 ext.extra_compile_args += extra_compile_args
                 ext.extra_link_args = link_opts + extra_link_opts
             build_ext.build_extensions(self)
-    
-    
+
+
     __version__ = check_output("git describe --abbrev=4", shell=True).decode().split("-")[0]
     setup(
         name='minicore',
