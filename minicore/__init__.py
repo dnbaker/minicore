@@ -7,12 +7,12 @@ if hasattr(pyminicore, "SparseMatrixWrapper"):
 import numpy as np
 from .util.compute_variance import variance
 from .util import hvg
+import scipy.sparse as sp
 
 
 cluster_from_centers = pyminicore.hcluster
 
 def ctrs2sp(centertups, nc):
-    import scipy.sparse as sp
     return sp.vstack([sp.csr_matrix((x[0],[0] * len(x[0]), [0, len(x[0])]), shape=[1, nc]) for x in centertups])
 
 geometric_median = pyminicore.geomed
@@ -102,7 +102,6 @@ def hcluster(matrix, centers, *, prior=0., msr=2, weights=None,
     25	SRLRT	Square root of LRT, the log likelihood ratio test; related to the JSM and Generalized JSD
     26	SRULRT	Square root of UWLLR, unweighted log likelihood ratio test; related to the JSM and Generalized JSD
     """
-    import scipy.sparse as sp
     if isinstance(matrix, sp.csr_matrix) or isinstance(matrix, csr_tuple):
         matrix = CSparseMatrix(matrix)
     argmat = matrix
