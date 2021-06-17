@@ -81,13 +81,10 @@ py::dict py_scluster(const Matrix &smw,
                Py_ssize_t mbsize=-1,
                Py_ssize_t mbn=10,
                std::string savepref="",
-               bool use_float=true,
                void *weights = (void *)nullptr,
                std::string wfmt="f")
 {
-    use_float = true;
     assert(beta > 0.);
-    py::dict retdict;
     py::object asns = py::none(), costs = py::none();
     std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs;
     smw.perform([&](auto &mat) {dvecs = obj2dvec(centers, mat);});
@@ -96,31 +93,21 @@ py::dict py_scluster(const Matrix &smw,
     assert(k >= 1);
     if(!savepref.empty()) {
         std::fprintf(stderr, "Using savepref to mmap cost matrices diretly: %s\n", savepref.data());
-        std::string cpath = savepref + ".costs." + (use_float ? ".f32": ".f64") + ".npy";
-        std::string apath = savepref + ".asns." + (use_float ? ".f32": ".f64") + ".npy";
+        std::string cpath = savepref + ".costs.f32.npy";
+        std::string apath = savepref + ".asns.f32.npy";
         auto mmfn = py::module::import("numpy").attr("memmap");
-        auto dt = py::dtype(use_float ? "f": "d");
+        auto dt = py::dtype("f");
         costs = mmfn(py::str(cpath), shape, dt);
         asns = mmfn(py::str(apath), shape, dt);
     } else {
         costs = py::array_t<float>({smw.rows(), smw.columns()}), asns = py::array_t<float>({smw.rows(), smw.columns()});
-        //else costs = py::array_t<double>({smw.rows(), smw.columns()}), asns = py::array_t<double>({smw.rows(), smw.columns()});
     }
     void *cp = py::cast<py::array>(costs).request().ptr,
          *ap = py::cast<py::array>(asns).request().ptr;
-#if 0
-    if(use_float) {
-#endif
     blz::CustomMatrix<float, unaligned, unpadded, rowMajor> cm((float *)cp, smw.rows(), k);
     blz::CustomMatrix<float, unaligned, unpadded, rowMajor> am((float *)ap, smw.rows(), k);
+    py::dict retdict;
     smw.perform([&](auto &x) {retdict = cpp_scluster(x, k, beta, measure, dvecs, cm, am, temp, kmeansmaxiter, mbsize, mbn, weights, wfmt[0]);});
-#if 0
-    } else {
-        blz::CustomMatrix<double, unaligned, unpadded, rowMajor> cm((double *)cp, smw.rows(), k);
-        blz::CustomMatrix<double, unaligned, unpadded, rowMajor> am((double *)ap, smw.rows(), k);
-        smw.perform([&](auto &x) {retdict = cpp_scluster(x, k, beta, measure, dvecs, cm, am, temp, kmeansmaxiter, mbsize, mbn, weights, wfmt[0]);});
-    }
-#endif
     retdict["costs"] = costs;
     retdict["asn"] = asns;
     return retdict;
