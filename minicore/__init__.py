@@ -20,7 +20,7 @@ geometric_median = pyminicore.geomed
 
 def hcluster(matrix, centers, *, prior=0., msr=2, weights=None,
              eps=1e-10, maxiter=1000, mbsize=-1, ncheckins=-1,
-             with_rep=False):
+             with_rep=False, cs=False):
     """
     def hcluster(matrix, centers, *, prior=0., msr=2, weights=None,
                  eps=1e-10, maxiter=1000, mbsize=-1, ncheckins=-1):
@@ -195,7 +195,7 @@ def cluster(data, *, msr, k, prior=0., seed=0, nmkc=0,
     if soft:
         try:
             return scluster(mcdata, centers=ids, msr=msr, prior=prior, weights=weights, temp=temp, maxiter=maxiter,
-                            mbn=mbn, savepref=outpref)
+                            savepref=outpref)
         except:
             raise NotImplementedError("Soft clustering not supported")
     else:
