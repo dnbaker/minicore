@@ -17,6 +17,40 @@ def ctrs2sp(centertups, nc):
 
 geometric_median = pyminicore.geomed
 
+def kmeanspp(matrix, k, *, prior=0., seed=0, ntimes=1, lspp=0, expskips=0, n_local_trials=1, weights=None):
+    """
+    Compute kmeans++ over the input matrix for given parameters.
+
+        Inputs:
+            Input matrix: sp.csr_matrix, minicore.CSparseMatrix, or numpy.ndarray
+
+        Second argument (k=) can be either pyminicore.SumOpts, which is a tuple holding clustering options
+                or, more commonly, an integer describing how many centers to sample.
+        If this is not a SumOpts object, then the rest of the kwargs are used.
+
+            seed [0] -- Set a seed for random sampling.
+            expskips [false] -- Set to do exponential skips without simd sampling
+            n_local_trials [1] -- Perform more than 1 samples per iteration during kmeans++
+                                  Higher quality approximation, increased runtime cost
+            ntimes  [1] -- Perform whole algorithm <argument> times, returning the solution with minimal objective cost.
+            weights [None] -- provide a 1-d numpy array of weights to perform weighted kmeans++ sampling.
+
+
+        Outputs:
+            Tuple of size three, consisting of:
+                np.ndarray[Int] - Sampled points
+                np.ndarray[Int] - Assignments
+                np.ndarray[Float] - Costs of each point
+    """
+    if isinstance(matrix, sp.csr_matrix) or isinstance(matrix, csr_tuple):
+        matrix = CSparseMatrix(matrix)
+    if isinstance(k, pyminicore.SumOpts):
+        return pyminicore.kmeanspp(matrix, k, weights=weights)
+    return pyminicore.kmeanspp(matrix, k=k, prior=prior, seed=seed, ntimes=ntimes,
+                               lspp=lspp, expskips=expskips,
+                               n_local_trials=n_local_trials,
+                               weights=weights)
+
 
 def hcluster(matrix, centers, *, prior=0., msr=2, weights=None,
              eps=1e-10, maxiter=1000, mbsize=-1, ncheckins=-1,
