@@ -42,7 +42,7 @@ def run_experiment(resultdir, msr, matrix, k, beta):
     results = [[] for i in range(ntrials)]
     for i in range(ntrials):
         start = time.time()
-        results[i] = mc.kmeanspp(matrix, msr=msr, betaprior=beta, k=k, nkmc=NKMC)
+        results[i] = mc.kmeanspp(matrix, msr=msr, prior=beta, k=k)
         stop = time.time()
         times[i] = stop - start
     argmed = times.index(np.median(times))

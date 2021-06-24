@@ -17,7 +17,7 @@ def ctrs2sp(centertups, nc):
 
 geometric_median = pyminicore.geomed
 
-def kmeanspp(matrix, k, *, prior=0., seed=0, ntimes=1, lspp=0, expskips=0, n_local_trials=1, weights=None):
+def kmeanspp(matrix, k, *, msr=2, prior=0., seed=0, ntimes=1, lspp=0, expskips=0, n_local_trials=1, weights=None):
     """
     Compute kmeans++ over the input matrix for given parameters.
 
@@ -46,7 +46,7 @@ def kmeanspp(matrix, k, *, prior=0., seed=0, ntimes=1, lspp=0, expskips=0, n_loc
         matrix = CSparseMatrix(matrix)
     if isinstance(k, pyminicore.SumOpts):
         return pyminicore.kmeanspp(matrix, k, weights=weights)
-    return pyminicore.kmeanspp(matrix, k=k, prior=prior, seed=seed, ntimes=ntimes,
+    return pyminicore.kmeanspp(matrix, k=k, msr=msr, prior=prior, seed=seed, ntimes=ntimes,
                                lspp=lspp, expskips=expskips,
                                n_local_trials=n_local_trials,
                                weights=weights)
