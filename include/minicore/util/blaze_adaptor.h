@@ -1,9 +1,10 @@
 #pragma once
-#if defined(__has_include) && __has_include("sleef.h")
+//#if defined(__has_include) && __has_include("sleef.h")
   extern "C" {
     #include "sleef.h"
   }
-#endif
+#include "libsimdsampling/simdsampling.h"
+//#endif
 #include "aesctr/wy.h"
 #include "blaze/Math.h"
 #include <distmat/distmat.h>

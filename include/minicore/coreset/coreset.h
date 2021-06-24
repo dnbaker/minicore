@@ -1,6 +1,9 @@
 #pragma once
 #ifndef FGC_CORESETS_H__
 #define FGC_CORESETS_H__
+extern "C" {
+    #include "sleef.h"
+}
 #include <vector>
 #include <map>
 #include <queue>
@@ -8,7 +11,7 @@
 #include "minicore/util/shared.h"
 #include "minicore/util/blaze_adaptor.h"
 #include <zlib.h>
-#include "libsimdsampling/simdsampling.h"
+//#include "libsimdsampling/simdsampling.h"
 #ifdef _OPENMP
 #  include <omp.h>
 #endif

@@ -9,7 +9,7 @@
 #include "minicore/util/oracle.h"
 #include "minicore/util/blaze_adaptor.h"
 #include "minicore/util/exception.h"
-#include "libsimdsampling/simdsampling.h"
+//#include "libsimdsampling/simdsampling.h"
 #include "libsimdsampling/argminmax.h"
 #include "diskmat/diskmat.h"
 
