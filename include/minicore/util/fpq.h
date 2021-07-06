@@ -23,7 +23,7 @@ struct fpq: public std::priority_queue<std::pair<FT, IT>, Container, Cmp> {
     auto &getc() {return this->c;}
     const auto &getc() const {return this->c;}
     void update(const fpq &o) {
-        for(const auto v: o.getc())
+        for(const auto &v: o.getc())
             add(v);
     }
     static constexpr bool is_vector = std::is_same_v<std::vector<std::pair<FT, IT>>, Container>;
@@ -31,7 +31,7 @@ struct fpq: public std::priority_queue<std::pair<FT, IT>, Container, Cmp> {
     std::pair<IT, FT> operator[](size_t i) const {
         return this->c[i];
     }
-    void add(const value_type v) {
+    void add(const value_type &v) {
         if(this->size() < size_) this->push(v);
         else if(v > this->top()) {
             this->pop();
