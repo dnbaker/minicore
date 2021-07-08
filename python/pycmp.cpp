@@ -240,4 +240,28 @@ void init_cmp(py::module &m) {
         });
         return ret;
     }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("prior") = 0.);
+    m.def("pcmp", [](const PyCSparseMatrix &lhs, py::object msr, py::object betaprior, py::ssize_t use_float) {
+        const double priorv = betaprior.cast<double>(), priorsum = priorv * lhs.columns();
+        const auto ms = assure_dm(msr);
+        blz::DV<float> lrsums(lhs.rows());
+        blz::DV<double> priorc({priorv});
+        lhs.perform([&](const auto &x){lrsums = sum<rowwise>(x);});
+        const Py_ssize_t nr = lhs.rows(), nc2 = (nr * (nr - 1)) / 2;
+        py::array ret(py::dtype("f"), std::vector<Py_ssize_t>{nc2});
+        auto retinf = ret.request();
+        blz::CustomVector<float, unaligned, unpadded, blz::rowMajor> cm((float *)retinf.ptr, nc2);
+        lhs.perform([&](auto &mat) {
+            const bool luf = use_float < 0 ? sizeof(typename std::decay_t<decltype(mat)>::ElementType) <= 4: bool(use_float);
+            for(py::ssize_t i = 0; i < nr - 1; ++i) {
+                auto retoff = &cm[nr * i - (i * (i + 1) / 2)];
+                auto lr(row(mat, i));
+                OMP_PFOR_DYN
+                for(py::ssize_t j = i + 1; j < nr; ++j) {
+                    retoff[j - i - 1] = luf ? cmp::msr_with_prior<float>(ms, lr, row(mat, j), priorc, priorsum, lrsums[i], lrsums[j])
+                                            : cmp::msr_with_prior<double>(ms, lr, row(mat, j), priorc, priorsum, lrsums[i], lrsums[j]);
+                }
+            }
+        });
+        return ret;
+    }, py::arg("matrix"), py::arg("msr") = 2, py::arg("prior") = 0., py::arg("use_float") = -1);
 }
