@@ -531,8 +531,8 @@ INLINE auto multinomial_jsd(const blaze::DenseVector<VT, SO> &lhs,
                             const blaze::DenseVector<VT, SO> &rhs)
 {
     using RT = blz::ElementType_t<VT>;
-    auto lhlog = blaze::evaluate(neginf2zero(log(lhs)));
-    auto rhlog = blaze::evaluate(neginf2zero(log(rhs)));
+    auto lhlog = blaze::evaluate(neginf2zero(log(*lhs)));
+    auto rhlog = blaze::evaluate(neginf2zero(log(*rhs)));
     auto mnlog = blaze::evaluate(neginf2zero(log((*lhs + *rhs) * RT(0.5))));
     auto lhc = blaze::dot(*lhs, *lhlog - mnlog);
     auto rhc = blaze::dot(*rhs, *rhlog - mnlog);
@@ -543,11 +543,11 @@ INLINE auto multinomial_jsd(const blaze::Vector<VT, SO> &lhs,
                             const blaze::Vector<VT2, SO> &rhs)
 {
     using RT = blz::ElementType_t<VT>;
-    auto lhlog = blaze::evaluate(neginf2zero(log(*lhs)));
-    auto rhlog = blaze::evaluate(neginf2zero(log(*rhs)));
-    auto mnlog = blaze::evaluate(neginf2zero(log((*lhs + *rhs) * RT(0.5))));
-    auto lhc = blaze::dot(*lhs, *lhlog - mnlog);
-    auto rhc = blaze::dot(*rhs, *rhlog - mnlog);
+    auto lhlog = blaze::evaluate(neginf2zero(log(lhs)));
+    auto rhlog = blaze::evaluate(neginf2zero(log(rhs)));
+    auto mnlog = blaze::evaluate(neginf2zero(log((lhs + rhs) * RT(0.5))));
+    auto lhc = blaze::dot(lhs, *lhlog - mnlog);
+    auto rhc = blaze::dot(rhs, *rhlog - mnlog);
     return RT(0.5) * (lhc + rhc);
 }
 template<typename VT, bool SO>
@@ -556,9 +556,9 @@ INLINE auto multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
 {
     using RT = blz::ElementType_t<VT>;
     auto lhlog = blaze::log(lhs), rhlog = blaze::log(rhs);
-    auto mnlog = blaze::evaluate(blaze::log((*lhs + *rhs) * RT(0.5)));
-    auto lhc = blaze::dot(*lhs, *lhlog - mnlog);
-    auto rhc = blaze::dot(*rhs, *rhlog - mnlog);
+    auto mnlog = blaze::evaluate(blaze::log((lhs + rhs) * RT(0.5)));
+    auto lhc = blaze::dot(lhs, *lhlog - mnlog);
+    auto rhc = blaze::dot(rhs, *rhlog - mnlog);
     return RT(0.5) * (lhc + rhc);
 }
 
@@ -637,7 +637,7 @@ auto bhattacharyya_measure(const blz::DenseVector<VT1, TF> &lhs, const blz::Dens
     // Requires same storage.
     // TODO: generalize for different storage classes/transpose flags using DenseVector and SparseVector
     // base classes
-    return sum(sqrt(*lhs * *rhs));
+    return sum(sqrt(lhs * rhs));
 }
 
 template<typename LHVec, typename RHVec>
@@ -670,14 +670,13 @@ INLINE decltype(auto) multinomial_jsm(Args &&...args) {
 template<typename VT, typename VT2, bool SO>
 inline auto s2jsd(const blz::Vector<VT, SO> &lhs, const blaze::Vector<VT2, SO> &rhs) {
     // Approximate jsd function for use in LSH tables.
-    return std::sqrt(blz::sum(blz::pow(*lhs - *rhs, 2) / (*lhs + *rhs)) * ElementType_t<VT>(0.5));
+    return std::sqrt(blz::sum(blz::pow(lhs - rhs, 2) / (lhs + rhs)) * ElementType_t<VT>(0.5));
 }
 
 
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
 CT scipy_p_wasserstein(const blz::SparseVector<VT, SO> &x, const blz::SparseVector<VT2, SO> &y, double p=1.) {
-    auto &xr = *x;
-    auto &yr = *y;
+    auto &xr = *x; auto &yr = *y;
     const size_t sz = xr.size();
     std::unique_ptr<uint32_t[]> ptr(new uint32_t[sz * 2]);
     auto xptr = ptr.get(), yptr = ptr.get() + sz;
@@ -774,7 +773,7 @@ CT scipy_p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> 
 
 template<typename VT, bool SO, typename VT2, typename CT=CommonType_t<ElementType_t<VT>, ElementType_t<VT2>>>
 CT p_wasserstein(const blz::Vector<VT, SO> &x, const blz::Vector<VT2, SO> &y, double p=1.) {
-    return scipy_p_wasserstein(x, y, p);
+    return scipy_p_wasserstein(*x, *y, p);
 }
 
 template<typename VT, bool SO, typename VT2>
@@ -800,9 +799,9 @@ static INLINE auto canberra_distance(const blz::DenseVector<VT, SO> &lhs, const 
 template<typename VT, typename VT2, bool SO, bool SO2>
 static INLINE auto hellinger(const blz::Vector<VT, SO> &lhs, const blz::Vector<VT2, SO2> &rhs) {
     if constexpr(SO == SO2) {
-        return l2Norm(sqrt(*lhs) - sqrt(*rhs));
+        return l2Norm(sqrt(lhs) - sqrt(rhs));
     } else {
-        return l2Norm(sqrt(*lhs) - trans(sqrt(*rhs)));
+        return l2Norm(sqrt(lhs) - trans(sqrt(rhs)));
     }
 }
 

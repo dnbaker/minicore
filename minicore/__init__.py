@@ -1,21 +1,21 @@
+from pyminicore import kmeanspp as pykmpp
+from pyminicore import SumOpts, CSparseMatrix
+from pyminicore import SparseMatrixWrapper as smw
 import pyminicore
-from pyminicore import *
 from .util import constants
 from .util.constants import CSR as csr_tuple, KMCRSV
-if hasattr(pyminicore, "SparseMatrixWrapper"):
-    from pyminicore import SparseMatrixWrapper as smw
 import numpy as np
 from .util.compute_variance import variance
 from .util import hvg
 import scipy.sparse as sp
 
 
-cluster_from_centers = pyminicore.hcluster
+def cluster_from_centers(*args, **kwargs):
+    from pyminicore import hcluster
+    return hcluster(*args, **kwargs)
 
 def ctrs2sp(centertups, nc):
     return sp.vstack([sp.csr_matrix((x[0],[0] * len(x[0]), [0, len(x[0])]), shape=[1, nc]) for x in centertups])
-
-geometric_median = pyminicore.geomed
 
 def kmeanspp(matrix, k, *, msr=2, prior=0., seed=0, ntimes=1, lspp=0, expskips=0, n_local_trials=1, weights=None):
     """
@@ -44,9 +44,11 @@ def kmeanspp(matrix, k, *, msr=2, prior=0., seed=0, ntimes=1, lspp=0, expskips=0
     """
     if isinstance(matrix, sp.csr_matrix) or isinstance(matrix, csr_tuple):
         matrix = CSparseMatrix(matrix)
-    if isinstance(k, pyminicore.SumOpts):
-        return pyminicore.kmeanspp(matrix, k, weights=weights)
-    return pyminicore.kmeanspp(matrix, k=k, msr=msr, prior=prior, seed=seed, ntimes=ntimes,
+    if isinstance(k, SumOpts):
+        return pykmpp(matrix, k, weights=weights)
+    if hasattr(matrix, "dtype"):
+        print("About to call kmeanspp, matrix = %s, %s" % (matrix, matrix.dtype))
+    return pykmpp(matrix, k=k, msr=msr, prior=prior, seed=seed, ntimes=ntimes,
                                lspp=lspp, expskips=expskips,
                                n_local_trials=n_local_trials,
                                weights=weights)
@@ -139,9 +141,10 @@ def hcluster(matrix, centers, *, prior=0., msr=2, weights=None,
     if isinstance(matrix, sp.csr_matrix) or isinstance(matrix, csr_tuple):
         matrix = CSparseMatrix(matrix)
     argmat = matrix
-    return pyminicore.hcluster(argmat, centers=centers, prior=prior, msr=msr, weights=weights, eps=eps,
-                               maxiter=maxiter, mbsize=mbsize, ncheckins=ncheckins,
-                               with_rep=with_rep)
+    from pyminicore import hcluster as pmhc
+    return pmhc(argmat, centers=centers, prior=prior, msr=msr, weights=weights, eps=eps,
+                maxiter=maxiter, mbsize=mbsize, ncheckins=ncheckins,
+                with_rep=with_rep)
 
 
 
@@ -206,9 +209,10 @@ def scluster(matrix, centers, *,
     """
     if isinstance(matrix, sp.csr_matrix) or isinstance(matrix, csr_tuple):
         matrix = CSparseMatrix(matrix)
-    return pyminicore.scluster(matrix, centers, msr=msr,
-                               prior=prior, temp=temp, maxiter=maxiter,
-                               savepref=savepref, weights=weights)
+    import pyminicore as pmc
+    return pmc.scluster(matrix, centers, msr=msr,
+                        prior=prior, temp=temp, maxiter=maxiter,
+                        savepref=savepref, weights=weights)
 
 
 #  This function provides a single starting point for clustering start-to-finish
@@ -222,10 +226,11 @@ def cluster(data, *, msr, k, prior=0., seed=0, nmkc=0,
         mcdata = CSparseMatrix(data)
     else:
         mcdata = data
-    ids, asn, costs = pyminicore.kmeanspp(data, msr=msr, k=k,
-                                          prior=prior, seed=seed,
-                                          ntimes=ntimes, lspp=lspp, expskips=use_exponential_skips,
-                                          n_local_trials=n_local_trials, weights=weights)
+    from pyminicore import kmeanspp as pykmpp
+    ids, asn, costs = pykmpp(data, msr=msr, k=k,
+                             prior=prior, seed=seed,
+                             ntimes=ntimes, lspp=lspp, expskips=use_exponential_skips,
+                             n_local_trials=n_local_trials, weights=weights)
     if soft:
         try:
             return scluster(mcdata, centers=ids, msr=msr, prior=prior, weights=weights, temp=temp, maxiter=maxiter,

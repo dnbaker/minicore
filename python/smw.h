@@ -304,6 +304,7 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
             gamma_beta = 1. / smw.columns();
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
         }
+        std::fprintf(stderr, "Starting %s\n", __PRETTY_FUNCTION__);
         if(seed == 0) seed = std::mt19937_64(std::rand())();
         if(nkmc > 1) std::fprintf(stderr, "Warning: nkmc been removed.\n");
         const void *wptr = nullptr;
@@ -336,10 +337,14 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
         } else if(ki <= 63356) {
             retasn = py::array_t<uint16_t>(nr);
             retasnbits = 16;
-        } else {
+        } else if(ki <= 0xFFFFFFFFu) {
             retasn = py::array_t<uint32_t>(nr);
             retasnbits = 32;
+        } else {
+            retasn = py::array_t<uint64_t>(nr);
+            retasnbits = 64;
         }
+        std::fprintf(stderr, "retasnbits is %u\n", retasnbits);
         auto retai = py::cast<py::array>(retasn).request();
         auto rptr = (uint32_t *)ret.request().ptr;
         py::array_t<float> costs(smw.rows());
@@ -348,8 +353,23 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
         using FT = std::conditional_t<sizeof(TmpT) <= 4, float, double>;
         using minicore::util::sum;
         using blz::sum;
+        std::fprintf(stderr, "Got pointers and info\n");
         blaze::DynamicVector<double> rsums(smw.rows());
-        rsums = sum<blaze::rowwise>(smw);
+        std::fprintf(stderr, "Computing sum over the matrix\n");
+#if 0
+        if constexpr(blaze::IsCustom_v<Mat>) {
+            OMP_PFOR
+            for(size_t i = 0; i < smw.rows(); ++i) {
+                auto r(row(smw, i));
+                
+            }
+        } else {
+            rsums = sum<blaze::rowwise>(smw);
+        }
+#else
+            rsums = sum<blaze::rowwise>(smw);
+#endif
+        std::fprintf(stderr, "Computed sum over the matrix\n");
         auto cmp = [&smw,measure=mmsr,rsums=rsums.data(),psum,&prior](size_t xi, size_t yi) {
             // Note that this has been transposed
             auto rx = row(smw, xi, blz::unchecked), ry = row(smw, yi, blz::unchecked);
@@ -361,6 +381,7 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
             case 'd': case -1: break;
             default: throw std::runtime_error("Unsupported dtype for weights");
         }
+        std::fprintf(stderr, "Weights: %p\n", tmpw.get());
         auto sol = kmeanspp(cmp, rng, smw.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
         auto solc = sum(std::get<2>(sol));
         for(auto nt = 0u;nt < ntimes; ++nt) {
@@ -374,23 +395,24 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
         auto &lidx = std::get<0>(sol);
         auto &lasn = std::get<1>(sol);
         auto &lcosts = std::get<2>(sol);
+        const size_t e = lasn.size();
         switch(retasnbits) {
             case 8: {
                 auto raptr = (uint8_t *)retai.ptr;
                 OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
+                for(size_t i = 0; i < e; ++i)
                     raptr[i] = lasn[i];
             } break;
             case 16: {
                 auto raptr = (uint16_t *)retai.ptr;
                 OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
+                for(size_t i = 0; i < e; ++i)
                     raptr[i] = lasn[i];
             } break;
             case 32: {
                 auto raptr = (uint32_t *)retai.ptr;
                 OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
+                for(size_t i = 0; i < e; ++i)
                     raptr[i] = lasn[i];
             } break;
             default: __builtin_unreachable();
