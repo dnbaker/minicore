@@ -81,7 +81,7 @@ void init_pydense(py::module &m) {
        py::arg("n_local_trials") = 1
     );
      m.def("kmeanspp", [](py::array_t<double, py::array::c_style> arr, int k, py::object measure, py::object prior, py::object seed, py::object nkmc, py::object ntimes,
-                          py::object lspp, py::object weights, py::object expskips, py::object local_trials) {
+                          py::object lspp, py::object weights, py::object expskips, py::object local_trials) -> py::object {
         auto dm = assure_dm(measure);
         auto arri = arr.request();
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
