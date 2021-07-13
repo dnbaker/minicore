@@ -19,6 +19,14 @@ namespace blz {
 template<blaze::AlignmentFlag AF = blaze::unaligned, blaze::PaddingFlag PF=blaze::unpadded, typename FT, typename IT>
 auto make_cv(FT *data, IT size);
 
+#if 0
+template<typename MT, bool SO> decltype(auto) operator*(const blaze::Matrix<MT, SO> &x) {return ~x;}
+template<typename VT, bool SO> decltype(auto) operator*(const blaze::Vector<VT, SO> &x) {return ~x;}
+template<typename MT, bool SO> decltype(auto) operator*(blaze::Matrix<MT, SO> &x) {return ~x;}
+template<typename VT, bool SO> decltype(auto) operator*(blaze::Vector<VT, SO> &x) {return ~x;}
+#endif
+    
+
 // These blaze adaptors exist for the purpose of
 // providing a pair of iterators.
 template<typename this_type>
@@ -297,7 +305,10 @@ template<typename OT>
 INLINE decltype(auto) sum(const OT &x) {return blaze::sum(x);}
 
 template<bool wiseness, typename OT>
-INLINE decltype(auto) sum(const OT &x) {return blaze::sum<wiseness>(x);}
+INLINE decltype(auto) sum(const OT &x) {
+    //std::fprintf(stderr, "[%s:%s:%d] Computing %d-wise sum\n", __PRETTY_FUNCTION__, __FILE__, __LINE__, wiseness);
+    return blaze::sum<wiseness>(x);
+}
 
 template<typename OT>
 INLINE decltype(auto) max(const OT &x) {return blaze::max(x);}

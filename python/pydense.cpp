@@ -31,6 +31,7 @@ py::tuple mat2tup(py::array_t<FT, py::array::c_style | py::array::forcecast> arr
 
 void init_pydense(py::module &m) {
 
+#if 0
      m.def("kmeanspp", [](py::array_t<float, py::array::c_style | py::array::forcecast> arr, const SumOpts &so, py::object weights) {
         auto arri = arr.request();
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
@@ -55,12 +56,14 @@ void init_pydense(py::module &m) {
        py::arg("opts"),
        py::arg("weights") = py::none()
     );
+#endif
      m.def("kmeanspp", [](py::array_t<float, py::array::c_style | py::array::forcecast> arr, int k, py::object measure, py::object prior, py::object seed, py::object nkmc, py::object ntimes,
                           py::object lspp, py::object weights, py::object expskips, py::object local_trials) {
         auto dm = assure_dm(measure);
         auto arri = arr.request();
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
         blz::CustomMatrix<float, unaligned, unpadded, rowMajor> cm((float *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(float));
+        std::fprintf(stderr, "Doing kmeans++ over matrix at %p with floats\n", arri.ptr);
         return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), nkmc.cast<py::ssize_t>(), std::max(ntimes.cast<int>() - 1, 0),
                              lspp.cast<py::ssize_t>(), expskips.cast<bool>(), local_trials.cast<py::ssize_t>(), weights);
     },
@@ -78,11 +81,12 @@ void init_pydense(py::module &m) {
        py::arg("n_local_trials") = 1
     );
      m.def("kmeanspp", [](py::array_t<double, py::array::c_style> arr, int k, py::object measure, py::object prior, py::object seed, py::object nkmc, py::object ntimes,
-                          py::object lspp, py::object weights, py::object expskips, py::object local_trials) {
+                          py::object lspp, py::object weights, py::object expskips, py::object local_trials) -> py::object {
         auto dm = assure_dm(measure);
         auto arri = arr.request();
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
         blz::CustomMatrix<double, unaligned, unpadded, rowMajor> cm((double *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(double));
+        std::fprintf(stderr, "Doing kmeans++ over matrix at %p with doubles\n", arri.ptr);
         return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), nkmc.cast<py::ssize_t>(), std::max(ntimes.cast<int>() - 1, 0),
                              lspp.cast<py::ssize_t>(), expskips.cast<bool>(), local_trials.cast<py::ssize_t>(), weights);
     },
