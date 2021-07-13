@@ -151,7 +151,7 @@ auto m2d2(blaze::Matrix<MT, SO> &sm, const SumOpts &opts, FT *weights=nullptr)
     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
     else if(opts.prior == dist::NONE)
         pcp = nullptr;
-    auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
+    auto app = jsd::make_probdiv_applicator(*sm, opts.dis, opts.prior, pcp);
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     auto [centers, asn, costs] = jsd::make_kmeanspp(app, opts.k, opts.seed, weights, opts.use_exponential_skips);
     auto csum = blz::sum(costs);
@@ -177,7 +177,7 @@ auto m2greedysel(blaze::Matrix<FT, SO> &sm, const SumOpts &opts)
     else if(opts.prior == dist::GAMMA_BETA) pc[0] = opts.gamma;
     else if(opts.prior == dist::NONE)
         pcp = nullptr;
-    auto app = jsd::make_probdiv_applicator(~sm, opts.dis, opts.prior, pcp);
+    auto app = jsd::make_probdiv_applicator(*sm, opts.dis, opts.prior, pcp);
     wy::WyRand<uint64_t, 2> rng(opts.seed);
     if(opts.outlier_fraction) {
         return coresets::kcenter_greedy_2approx_outliers_costs<decltype(app), double, uint64_t>(

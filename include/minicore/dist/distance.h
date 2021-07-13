@@ -543,11 +543,11 @@ INLINE auto multinomial_jsd(const blaze::Vector<VT, SO> &lhs,
                             const blaze::Vector<VT2, SO> &rhs)
 {
     using RT = blz::ElementType_t<VT>;
-    auto lhlog = blaze::evaluate(neginf2zero(log(lhs)));
-    auto rhlog = blaze::evaluate(neginf2zero(log(rhs)));
-    auto mnlog = blaze::evaluate(neginf2zero(log((lhs + rhs) * RT(0.5))));
-    auto lhc = blaze::dot(lhs, *lhlog - mnlog);
-    auto rhc = blaze::dot(rhs, *rhlog - mnlog);
+    auto lhlog = blaze::evaluate(neginf2zero(log(*lhs)));
+    auto rhlog = blaze::evaluate(neginf2zero(log(*rhs)));
+    auto mnlog = blaze::evaluate(neginf2zero(log((*lhs + *rhs) * RT(0.5))));
+    auto lhc = blaze::dot(*lhs, *lhlog - mnlog);
+    auto rhc = blaze::dot(*rhs, *rhlog - mnlog);
     return RT(0.5) * (lhc + rhc);
 }
 template<typename VT, bool SO>
@@ -555,10 +555,10 @@ INLINE auto multinomial_jsd(const blaze::SparseVector<VT, SO> &lhs,
                             const blaze::SparseVector<VT, SO> &rhs)
 {
     using RT = blz::ElementType_t<VT>;
-    auto lhlog = blaze::log(lhs), rhlog = blaze::log(rhs);
-    auto mnlog = blaze::evaluate(blaze::log((lhs + rhs) * RT(0.5)));
-    auto lhc = blaze::dot(lhs, *lhlog - mnlog);
-    auto rhc = blaze::dot(rhs, *rhlog - mnlog);
+    auto lhlog = blaze::log(lhs), rhlog = blaze::log(*rhs);
+    auto mnlog = blaze::evaluate(blaze::log((*lhs + *rhs) * RT(0.5)));
+    auto lhc = blaze::dot(*lhs, *lhlog - mnlog);
+    auto rhc = blaze::dot(*rhs, *rhlog - mnlog);
     return RT(0.5) * (lhc + rhc);
 }
 
@@ -568,9 +568,9 @@ INLINE auto multinomial_bregman(const blaze::DenseVector<FT, SO> &lhs,
                                 const blaze::DenseVector<FT, SO> &lhlog,
                                 const blaze::DenseVector<FT, SO> &rhlog)
 {
-    assert_all_nonzero(lhs);
-    assert_all_nonzero(rhs);
-    return blaze::dot(lhs, lhlog - rhlog);
+    assert_all_nonzero(*lhs);
+    assert_all_nonzero(*rhs);
+    return blaze::dot(*lhs, *lhlog - *rhlog);
 }
 template<typename FT, bool SO>
 INLINE auto      poisson_bregman(const blaze::DenseVector<FT, SO> &lhs,
@@ -579,9 +579,9 @@ INLINE auto      poisson_bregman(const blaze::DenseVector<FT, SO> &lhs,
                                  const blaze::DenseVector<FT, SO> &rhlog)
 {
     // Assuming these are all independent (not ideal)
-    assert_all_nonzero(lhs);
-    assert_all_nonzero(rhs);
-    return blaze::dot(lhs, lhlog - rhlog) + blaze::sum(rhs - lhs);
+    assert_all_nonzero(*lhs);
+    assert_all_nonzero(*rhs);
+    return blaze::dot(*lhs, *lhlog - *rhlog) + blaze::sum(*rhs - *lhs);
 }
 } // namespace bnj
 using namespace bnj;
