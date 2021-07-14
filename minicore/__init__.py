@@ -47,8 +47,6 @@ def kmeanspp(matrix, k, *, msr=2, prior=0., seed=0, ntimes=1, lspp=0, expskips=0
         matrix = CSparseMatrix(matrix)
     if isinstance(k, SumOpts):
         return pykmpp(matrix, k, weights=weights)
-    if hasattr(matrix, "dtype"):
-        print("About to call kmeanspp, matrix = %s, %s" % (matrix, matrix.dtype))
     return pykmpp(matrix, k=k, msr=msr, prior=prior, seed=seed, ntimes=ntimes,
                                lspp=lspp, expskips=expskips,
                                n_local_trials=n_local_trials,

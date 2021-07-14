@@ -37,7 +37,7 @@ void init_pydense(py::module &m) {
         auto arri = arr.request();
         if(arri.ndim != 2) throw std::invalid_argument("Wrong number of dimensions");
         blz::CustomMatrix<float, unaligned, unpadded, rowMajor> cm((float *)arri.ptr, arri.shape[0], arri.shape[1], arri.strides[0] / sizeof(float));
-        std::fprintf(stderr, "Doing kmeans++ over matrix at %p with floats\n", arri.ptr);
+        DBG_ONLY(std::fprintf(stderr, "Doing kmeans++ over matriy at %p with floats\n", arri.ptr);)
         return py_kmeanspp_noso_dense(cm, py::int_(int(dm)), py::int_(k), prior.cast<double>(), seed.cast<py::ssize_t>(), std::max(ntimes.cast<int>() - 1, 0),
                              lspp.cast<py::ssize_t>(), expskips.cast<bool>(), local_trials.cast<py::ssize_t>(), weights);
     },
