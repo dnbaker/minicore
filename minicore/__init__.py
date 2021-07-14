@@ -1,5 +1,6 @@
 from pyminicore import kmeanspp as pykmpp
-from pyminicore import SumOpts, CSparseMatrix
+from pyminicore import SumOpts, CSparseMatrix, CoresetSampler
+from pyminicore import pcmp, cmp
 from pyminicore import SparseMatrixWrapper as smw
 import pyminicore
 from .util import constants
@@ -52,6 +53,21 @@ def kmeanspp(matrix, k, *, msr=2, prior=0., seed=0, ntimes=1, lspp=0, expskips=0
                                lspp=lspp, expskips=expskips,
                                n_local_trials=n_local_trials,
                                weights=weights)
+
+'''
+def cmp(x, y=None, *, msr=2, prior=0., reverse=False, use_float=True):
+    """
+    Performs distance calculations between x and y
+    If y is None, performs pairwise comparisons against itself.
+    """
+    if y is None:
+        return pyminicore.pcmp(x, msr=msr, prior=prior, use_float=use_foat)
+    if isinstance(x, sp.csr_matrix):
+        x = mc.CSparseMatrix(x)
+    if isinstance(y, sp.csr_matrix):
+        y = mc.CSparseMatrix(y)
+    return pyminicore.cmp(x, y, msr=msr, prior=prior, reverse=
+'''
 
 
 def hcluster(matrix, centers, *, prior=0., msr=2, weights=None,
@@ -221,6 +237,9 @@ def cluster(data, *, msr, k, prior=0., seed=0, nmkc=0,
             n_local_trials=1, weights=None, mbsize=-1, clustereps=1e-4,
             temp=-1., cs=False, with_rep=True, outpref="mc.cluster.output",
             maxiter=50):
+    """Convenience wrapper for hcluster and scluster which selects
+        either hard or soft clustering
+    """
     soft = temp > 0.  # Enable soft clustering by setting temperature
     if isinstance(data, csr_tuple):
         mcdata = CSparseMatrix(data)
