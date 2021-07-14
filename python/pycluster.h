@@ -15,11 +15,11 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
                WFT *weights,
                double eps,
                size_t kmeansmaxiter,
-               Py_ssize_t mbsize,
-               Py_ssize_t ncheckins,
-               Py_ssize_t reseed_count,
+               py::ssize_t mbsize,
+               py::ssize_t ncheckins,
+               py::ssize_t reseed_count,
                bool with_rep,
-               Py_ssize_t seed,
+               py::ssize_t seed,
                bool use_cs=false)
 {
     if(k != ctrs.size()) {
@@ -32,7 +32,7 @@ py::dict cpp_pycluster_from_centers(const Matrix &mat, unsigned int k, double be
         clusterret = perform_hard_clustering(mat, measure, prior, ctrs, asn, costs, weights, eps, kmeansmaxiter);
     } else {
         if(ncheckins < 0) ncheckins = 10;
-        Py_ssize_t checkin_freq = (kmeansmaxiter + ncheckins - 1) / ncheckins;
+        py::ssize_t checkin_freq = (kmeansmaxiter + ncheckins - 1) / ncheckins;
         if(use_cs) {
             clusterret = hmb_coreset_clustering(mat, measure, prior, ctrs, asn, costs, weights,
                                                 mbsize, kmeansmaxiter, checkin_freq, reseed_count, seed);
@@ -70,11 +70,11 @@ py::dict cpp_pycluster_from_centers_base(const Matrix &mat, unsigned int k, doub
                WFT *weights,
                double eps,
                size_t kmeansmaxiter,
-               Py_ssize_t mbsize,
-               Py_ssize_t ncheckins,
-               Py_ssize_t reseed_count,
+               py::ssize_t mbsize,
+               py::ssize_t ncheckins,
+               py::ssize_t reseed_count,
                bool with_rep,
-               Py_ssize_t seed,
+               py::ssize_t seed,
                bool use_cs=true)
 {
     py::dict ret;
@@ -91,11 +91,10 @@ py::dict cpp_pycluster(const Matrix &mat, unsigned int k, double beta,
                uint64_t seed=13,
                unsigned lspprounds=0,
                bool use_exponential_skips=false,
-               size_t kmcrounds=1000,
                size_t kmeansmaxiter=1000,
-               Py_ssize_t mbsize=-1,
-               Py_ssize_t ncheckins=-1,
-               Py_ssize_t reseed_count=-1,
+               py::ssize_t mbsize=-1,
+               py::ssize_t ncheckins=-1,
+               py::ssize_t reseed_count=-1,
                bool with_rep=true)
 {
     blz::DV<FT> prior{FT(beta)};
@@ -108,7 +107,7 @@ py::dict cpp_pycluster(const Matrix &mat, unsigned int k, double beta,
         using ComputeT = std::conditional_t<(sizeof(typename Matrix::ElementType) <= 4), float, double>;
         return cmp::msr_with_prior<ComputeT>(measure, y, x, prior, psum, sum(y), sum(x));
     };
-    auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, kmcrounds, ntimes, lspprounds, use_exponential_skips, functor);
+    auto initial_sol = repeatedly_get_initial_centers(mat, rng, k, ntimes, lspprounds, use_exponential_skips, functor);
     auto &[idx, asn, costs] = initial_sol;
     std::vector<blz::CompressedVector<FT, blz::rowVector>> centers(k);
     for(unsigned i = 0; i < k; ++i) {
@@ -125,17 +124,16 @@ py::dict pycluster(const Matrix &smw, int k, double beta,
                int ntimes=3,
                uint64_t seed = 13,
                unsigned lspprounds=0,
-               size_t kmcrounds=1000,
                size_t kmeansmaxiter=1000,
-               Py_ssize_t mbsize=-1,
-               Py_ssize_t ncheckins=-1,
-               Py_ssize_t reseed_count=-1,
+               py::ssize_t mbsize=-1,
+               py::ssize_t ncheckins=-1,
+               py::ssize_t reseed_count=-1,
                bool with_rep=true)
 {
     assert(k >= 1);
     assert(beta > 0.);
     py::dict retdict;
-    smw.perform([&](auto &x) {retdict = cpp_pycluster(x, k, beta, measure, weights, eps, ntimes, seed, lspprounds, kmcrounds, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep);});
+    smw.perform([&](auto &x) {retdict = cpp_pycluster(x, k, beta, measure, weights, eps, ntimes, seed, lspprounds, kmeansmaxiter, mbsize, ncheckins, reseed_count, with_rep);});
     return retdict;
 }
 
@@ -147,8 +145,8 @@ py::object __py_cluster_from_centers(const Matrix &smw,
                     uint64_t kmeansmaxiter,
                     //size_t kmcrounds, int ntimes, int lspprounds,
                     uint64_t seed,
-                    Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                    Py_ssize_t reseed_count, bool with_rep, bool use_cs=false)
+                    py::ssize_t mbsize, py::ssize_t ncheckins,
+                    py::ssize_t reseed_count, bool with_rep, bool use_cs=false)
 {
     blz::DV<double> prior{double(beta)};
     const dist::DissimilarityMeasure measure = assure_dm(msr);

@@ -3,10 +3,10 @@
 
 #if BUILD_CSR_CLUSTERING
 
-py::object run_kmpp_noso(const PyCSparseMatrix &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+py::object run_kmpp_noso(const PyCSparseMatrix &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned ntimes,
                          py::ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
                          py::object weights) {
-    return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, nkmc, ntimes, lspp, use_exponential_skips, n_local_trials, weights);
+    return py_kmeanspp_noso(smw, msr, k, gamma_beta, seed, ntimes, lspp, use_exponential_skips, n_local_trials, weights);
 }
 #endif
 
@@ -34,7 +34,7 @@ void init_pycsparse(py::module &m) {
         py::array_t<uint64_t> retip(inf.size + 1);
         auto retipptr = (uint64_t *)retip.request().ptr;
         retipptr[0] = 0;
-        for(Py_ssize_t i = 0; i < inf.size; ++i) {
+        for(py::ssize_t i = 0; i < inf.size; ++i) {
             uint64_t ind;
             if(idxsel_type == 1) {
                 ind = ((uint32_t *)inf.ptr)[i];
@@ -85,11 +85,11 @@ void init_pycsparse(py::module &m) {
     }).def_static("from_items", [](py::object data, py::object idx, py::object indptr, py::object shape) -> PyCSparseMatrix {
         auto da = py::cast<py::array>(data), ia = py::cast<py::array>(idx), ipa = py::cast<py::array>(indptr);
         auto sseq = py::cast<py::sequence>(shape);
-        return PyCSparseMatrix(data, ia, ipa, sseq[0].cast<Py_ssize_t>(), sseq[1].cast<Py_ssize_t>(), da.request().size);
+        return PyCSparseMatrix(data, ia, ipa, sseq[0].cast<py::ssize_t>(), sseq[1].cast<py::ssize_t>(), da.request().size);
     }, py::arg("data"), py::arg("indices"), py::arg("indptr"), py::arg("shape"));
 
      m.def("kmeanspp", [](const PyCSparseMatrix &smw, const SumOpts &so, py::object weights) {
-        return run_kmpp_noso(smw, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, so.kmc2_rounds, std::max(int(so.extra_sample_tries) - 1, 0),
+        return run_kmpp_noso(smw, py::int_(int(so.dis)), py::int_(int(so.k)),  so.gamma, so.seed, std::max(int(so.extra_sample_tries) - 1, 0),
                        so.lspp, so.use_exponential_skips, so.n_local_trials, weights);
     },
     "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.",
@@ -98,21 +98,20 @@ void init_pycsparse(py::module &m) {
        py::arg("weights") = py::none()
     );
     m.def("kmeanspp",  run_kmpp_noso,
-       "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point."
-       "\nSet nkmc to -1 to perform streaming kmeans++ (kmc2 over the full dataset), which parallelizes better but may yield a lower-quality result.\n",
-       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("prior") = 0., py::arg("seed") = 0, py::arg("nkmc") = 0, py::arg("ntimes") = 1,
+       "Computes a selecion of points from the matrix pointed to by smw, returning indexes for selected centers, along with assignments and costs for each point.\n",
+       py::arg("smw"), py::arg("msr"), py::arg("k"), py::arg("prior") = 0., py::arg("seed") = 0, py::arg("ntimes") = 1,
        py::arg("lspp") = 0, py::arg("expskips") = false, py::arg("n_local_trials") = 1,
        py::arg("weights") = py::none()
     );
     m.def("greedy_select",  [](PyCSparseMatrix &smw, const SumOpts &so) {
         std::vector<uint64_t> centers;
-        const Py_ssize_t nr = smw.rows();
+        const py::ssize_t nr = smw.rows();
         std::vector<double> dret;
         smw.perform([&](auto &matrix) {
             std::tie(centers, dret) = m2greedysel(matrix, so);
         });
         auto dtstr = size2dtype(nr);
-        auto ret = py::array(py::dtype(dtstr), std::vector<Py_ssize_t>{nr});
+        auto ret = py::array(py::dtype(dtstr), std::vector<py::ssize_t>{nr});
         py::array_t<double> costs(smw.rows());
         auto rpi = ret.request(), cpi = costs.request();
         std::copy(dret.begin(), dret.end(), (double *)cpi.ptr);

@@ -25,7 +25,7 @@ void init_cmp(py::module &m) {
         blz::DV<double> priorc({priorv});
         lhs.perform([&](const auto &x){rsums = blz::sum<rowwise>(x);});
         if(inf.ndim == 1) {
-            if(inf.size != Py_ssize_t(lhs.columns())) throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
+            if(inf.size != py::ssize_t(lhs.columns())) throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
             py::array_t<float> ret(nr);
             auto v = blz::make_cv((float *)ret.request().ptr, nr);
             lhs.perform([&](auto &matrix) {
@@ -50,10 +50,10 @@ void init_cmp(py::module &m) {
             });
             return ret;
         } else if(inf.ndim == 2) {
-            const Py_ssize_t nc = inf.shape[1], ndr = inf.shape[0];
-            if(nc != Py_ssize_t(lhs.columns()))
+            const py::ssize_t nc = inf.shape[1], ndr = inf.shape[0];
+            if(nc != py::ssize_t(lhs.columns()))
                 throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
-            py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), ndr});
+            py::array_t<float> ret(std::vector<py::ssize_t>{py::ssize_t(nr), ndr});
             blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)ret.request().ptr, nr, ndr);
             lhs.perform([&](auto &matrix) {
                 using ET = typename std::decay_t<decltype(matrix)>::ElementType;
@@ -97,7 +97,8 @@ void init_cmp(py::module &m) {
         __builtin_unreachable();
         return py::array_t<float>();
     }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("prior") = 0., py::arg("reverse") = false);
-    m.def("cmp", [](const SparseMatrixWrapper &lhs, const SparseMatrixWrapper &rhs, py::object msr, py::object betaprior) {
+    m.def("cmp", [](const SparseMatrixWrapper &lhs, const SparseMatrixWrapper &rhs, py::object msr, py::object betaprior, bool reverse, int use_float=-1) {
+        if(use_float < 0) use_float = lhs.is_float() || rhs.is_float();
         const double priorv = betaprior.cast<double>(), priorsum = priorv * lhs.columns();
         const auto ms = assure_dm(msr);
         blz::DV<float> lrsums(lhs.rows());
@@ -106,38 +107,43 @@ void init_cmp(py::module &m) {
         if(lhs.columns() != rhs.columns()) throw std::invalid_argument("mismatched # columns");
         lhs.perform([&](const auto &x){lrsums = blz::sum<rowwise>(x);});
         rhs.perform([&](const auto &x){rrsums = blz::sum<rowwise>(x);});
-        const Py_ssize_t nr = lhs.rows(), nc = rhs.rows();
-        py::array ret(py::dtype("f"), std::vector<Py_ssize_t>{nr, nc});
+        const py::ssize_t nr = lhs.rows(), nc = rhs.rows();
+        py::array ret(py::dtype(use_float ? "f": "d"), std::vector<py::ssize_t>{nr, nc});
         auto retinf = ret.request();
         blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)retinf.ptr, nr, nc, nc);
+        blz::CustomMatrix<double, unaligned, unpadded, blz::rowMajor> cmd((double *)retinf.ptr, nr, nc, nc);
         const SparseMatrixWrapper *lhp = &lhs, *rhp = &rhs;
         if(lhs.is_float() != rhs.is_float() && rhs.is_float()) {
             std::swap(lhp, rhp);
         }
+#define __FUNC\
+        auto func = [&](auto lh, auto rh) -> double {\
+            auto lsum = lrsums[lh], rsum = rrsums[rh];\
+            auto lrow(row(lhr, lh, unchecked));\
+            auto rrow(row(rhr, rh, unchecked));\
+            return use_float ?\
+                ( reverse\
+                    ? cmp::msr_with_prior<float>(ms, lrow, rrow, priorc, priorsum, lsum, rsum)\
+                    : cmp::msr_with_prior<float>(ms, rrow, lrow, priorc, priorsum, rsum, lsum))\
+                : reverse\
+                    ? cmp::msr_with_prior<double>(ms, lrow, rrow, priorc, priorsum, lsum, rsum)\
+                    : cmp::msr_with_prior<double>(ms, rrow, lrow, priorc, priorsum, rsum, lsum);\
+        };
+#define DO_GEN(mat) mat = blaze::generate(nr, nc, func)
+#define DO_GEN_IF {__FUNC if(use_float) {DO_GEN(cm);} else {DO_GEN(cmd);}}
         if(lhs.is_float() && rhs.is_float()) {
-            auto &lhr = lhs.getfloat();
-            auto &rhr = rhs.getfloat();
-#define DO_GEN\
-            cm = blaze::generate(nr, nc, [&](auto lhid, auto rhid) -> float {\
-                return cmp::msr_with_prior<float>(ms, \
-                            blz::row(rhr, rhid, unchecked), \
-                            blz::row(lhr, lhid, unchecked), \
-                            priorc, priorsum,\
-                            rrsums[rhid], lrsums[lhid]);\
-            });
-            DO_GEN
+            auto &lhr = lhs.getfloat(), &rhr = rhs.getfloat();
+            DO_GEN_IF
         } else if(lhs.is_double() && rhs.is_double()) {
-            auto &lhr = lhs.getdouble();
-            auto &rhr = rhs.getdouble();
-            DO_GEN
+            auto &lhr = lhs.getdouble(); auto &rhr = rhs.getdouble();
+            DO_GEN_IF
         } else {
-            auto &lhr = lhp->getfloat();
-            auto &rhr = rhp->getdouble();
-            DO_GEN
+            auto &lhr = lhp->getfloat(); auto &rhr = rhp->getdouble();
+            DO_GEN_IF
         }
 #undef DO_GEN
         return ret;
-    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("prior") = 0.);
+    }, py::arg("matrix"), py::arg("data"), py::arg("msr") = 2, py::arg("prior") = 0., py::arg("reverse") = false, py::arg("use_float") = -1);
     m.def("cmp", [](const PyCSparseMatrix &lhs, py::array arr, py::object msr, py::object betaprior, py::object reverse) {
         const bool revb = reverse.cast<bool>();
         auto inf = arr.request();
@@ -150,7 +156,7 @@ void init_cmp(py::module &m) {
         blz::DV<double> priorc({priorv});
         lhs.perform([&](const auto &x){rsums = sum<rowwise>(x);});
         if(inf.ndim == 1) {
-            if(inf.size != Py_ssize_t(lhs.columns())) throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
+            if(inf.size != py::ssize_t(lhs.columns())) throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
             py::array_t<float> ret(nr);
             auto v = blz::make_cv((float *)ret.request().ptr, nr);
             lhs.perform([&](auto &matrix) {
@@ -175,10 +181,10 @@ void init_cmp(py::module &m) {
             });
             return ret;
         } else if(inf.ndim == 2) {
-            const Py_ssize_t nc = inf.shape[1], ndr = inf.shape[0];
-            if(nc != Py_ssize_t(lhs.columns()))
+            const py::ssize_t nc = inf.shape[1], ndr = inf.shape[0];
+            if(nc != py::ssize_t(lhs.columns()))
                 throw std::invalid_argument("Array must be of the same dimensionality as the matrix");
-            py::array_t<float> ret(std::vector<Py_ssize_t>{Py_ssize_t(nr), ndr});
+            py::array_t<float> ret(std::vector<py::ssize_t>{py::ssize_t(nr), ndr});
             blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)ret.request().ptr, nr, ndr);
             lhs.perform([&](auto &matrix) {
                 using ET = typename std::decay_t<decltype(matrix)>::ElementType;
@@ -229,8 +235,8 @@ void init_cmp(py::module &m) {
         if(lhs.columns() != rhs.columns()) throw std::invalid_argument("mismatched # columns");
         lhs.perform([&](const auto &x){lrsums = sum<rowwise>(x);});
         rhs.perform([&](const auto &x){rrsums = sum<rowwise>(x);});
-        const Py_ssize_t nr = lhs.rows(), nc = rhs.rows();
-        py::array ret(py::dtype("f"), std::vector<Py_ssize_t>{nr, nc});
+        const py::ssize_t nr = lhs.rows(), nc = rhs.rows();
+        py::array ret(py::dtype("f"), std::vector<py::ssize_t>{nr, nc});
         auto retinf = ret.request();
         blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)retinf.ptr, nr, nc, nc);
         lhs.perform(rhs, [&](auto &mat, auto &rmat) {
@@ -246,8 +252,8 @@ void init_cmp(py::module &m) {
         blz::DV<float> lrsums(lhs.rows());
         blz::DV<double> priorc({priorv});
         lhs.perform([&](const auto &x){lrsums = sum<rowwise>(x);});
-        const Py_ssize_t nr = lhs.rows(), nc2 = (nr * (nr - 1)) / 2;
-        py::array ret(py::dtype("f"), std::vector<Py_ssize_t>{nc2});
+        const py::ssize_t nr = lhs.rows(), nc2 = (nr * (nr - 1)) / 2;
+        py::array ret(py::dtype("f"), std::vector<py::ssize_t>{nc2});
         auto retinf = ret.request();
         blz::CustomVector<float, unaligned, unpadded, blz::rowMajor> cm((float *)retinf.ptr, nc2);
         lhs.perform([&](auto &mat) {
@@ -262,6 +268,72 @@ void init_cmp(py::module &m) {
                 }
             }
         });
+        return ret;
+    }, py::arg("matrix"), py::arg("msr") = 2, py::arg("prior") = 0., py::arg("use_float") = -1);
+    m.def("pcmp", [](py::array mat, py::object msr, py::object betaprior, py::ssize_t use_float) {
+        const double priorv = betaprior.cast<double>();
+        const auto ms = assure_dm(msr);
+        py::buffer_info bi = mat.request();
+        py::object cobj = py::none();
+        blz::DV<float> lrsums(bi.shape[0]);
+        if(bi.shape.size() != 2) throw std::invalid_argument("pcmp expects a 2-d numpy matrix");
+        void *mptr = nullptr;
+        std::vector<py::ssize_t> mshape;
+        py::ssize_t m_itemsize;
+        std::string m_fmt;
+        if(bi.format.front() == 'f') {
+            blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)bi.ptr, bi.shape[0], bi.shape[1]);
+            mptr = bi.ptr; mshape = bi.shape; m_itemsize = bi.itemsize; m_fmt = bi.format;
+            lrsums = blz::evaluate(blz::sum<blz::rowwise>(cm));
+        } else if(bi.format[0] == 'd') {
+            blz::CustomMatrix<double, unaligned, unpadded, blz::rowMajor> cm((double *)bi.ptr, bi.shape[0], bi.shape[1]);
+            mptr = bi.ptr; mshape = bi.shape; m_itemsize = bi.itemsize; m_fmt = bi.format;
+            lrsums = blz::evaluate(blz::sum<blz::rowwise>(cm));
+        } else {
+            py::array_t<float, py::array::c_style | py::array::forcecast> cmat(mat);
+            py::buffer_info mbi = cmat.request();
+            blz::CustomMatrix<float, unaligned, unpadded, blz::rowMajor> cm((float *)mbi.ptr, mbi.shape[0], mbi.shape[1]);
+            mptr = mbi.ptr; mshape = mbi.shape; m_itemsize = mbi.itemsize; m_fmt = mbi.format;
+            lrsums = blz::evaluate(blz::sum<blz::rowwise>(cm));
+            cobj = cmat;
+        }
+        blz::DV<double> priorc({priorv});
+        const py::ssize_t nr = mshape[0], nc = mshape[1], nc2 = (nr * (nr - 1)) / 2;
+        const double priorsum = priorv * nc;
+        const bool luf = use_float < 0 ? m_itemsize <= 4 : bool(use_float);
+        py::array ret(py::dtype(luf ? "f": "d"), std::vector<py::ssize_t>{nc2});
+        auto retinf = ret.request();
+        blz::CustomVector<float, unaligned, unpadded, blz::rowMajor> cm((float *)retinf.ptr, nc2);
+        blz::CustomVector<double, unaligned, unpadded, blz::rowMajor> cmd((double *)retinf.ptr, nc2);
+        for(py::ssize_t i = 0; i < nr - 1; ++i) {
+            const void *retoff = luf ? (const void *)&cm[nr * i - (i * (i + 1) / 2)]: (const void *)&cmd[nr * i - (i * (i + 1) / 2)];
+            const void *lrstart = (const void *)((const uint8_t *)mptr + i * nc * m_itemsize);
+            OMP_PFOR_DYN
+            for(py::ssize_t j = i + 1; j < nr; ++j) {
+                const void *rstart = (const void *)((const uint8_t *)mptr + j * nc * m_itemsize);
+                double tmpv;
+                auto makec = [&](auto x) {return blz::CustomVector<std::remove_pointer_t<decltype(x)>, unaligned, unpadded>(x, nc);};
+                if(m_fmt[0] == 'f') {
+                    if(luf) {
+                        tmpv = cmp::msr_with_prior<float>(ms, makec((float *)lrstart), makec((float *)rstart), priorc, priorsum, lrsums[i], lrsums[j]);
+                    } else {
+                        tmpv = cmp::msr_with_prior<double>(ms, makec((float *)lrstart), makec((float *)rstart), priorc, priorsum, lrsums[i], lrsums[j]);
+                    }
+                } else if(m_fmt[0] == 'd') {
+                    if(luf) {
+                        tmpv = cmp::msr_with_prior<float>(ms, makec((double *)lrstart), makec((double *)rstart), priorc, priorsum, lrsums[i], lrsums[j]);
+                    } else {
+                        tmpv = cmp::msr_with_prior<double>(ms, makec((double *)lrstart), makec((double *)rstart), priorc, priorsum, lrsums[i], lrsums[j]);
+                    }
+                } else {
+                    throw std::invalid_argument("m_fmt is not double or float");
+                }
+                if(luf)
+                    ((float *)retoff)[j - i - 1] = tmpv;
+                else
+                    ((double *)retoff)[j - i - 1] = tmpv;
+            }
+        }
         return ret;
     }, py::arg("matrix"), py::arg("msr") = 2, py::arg("prior") = 0., py::arg("use_float") = -1);
 }

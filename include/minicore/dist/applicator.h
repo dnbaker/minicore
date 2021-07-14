@@ -1621,6 +1621,14 @@ auto make_d2_coreset_sampler(const DissimilarityApplicator<MatrixType> &app, uns
     return cs;
 }
 
+template<typename T>
+static constexpr inline double getv(const T &x) {
+    if constexpr(std::is_arithmetic_v<T>) {return double(x);}
+    else {
+        return x[0];
+    }
+}
+
 template<typename FT=float, typename CtrT, typename MatrixRowT, typename PriorT, typename PriorSumT, typename SumT, typename OSumT>
 double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const MatrixRowT &mr, const PriorT &prior, PriorSumT prior_sum, SumT ctrsum, OSumT mrsum)
 {
@@ -1637,7 +1645,7 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
 #define SMALLEST_PRIOR 7.0069e-42f
 #endif
     FT smallest_pv = FT(SMALLEST_PRIOR) * (lhsum + rhsum);
-    const FT pv = std::max(FT(prior[0]), smallest_pv);
+    const FT pv = std::max(FT(getv(prior)), smallest_pv);
     prior_sum = pv * nd;
     lhsum = mrsum + prior_sum;
     rhsum = ctrsum + prior_sum;

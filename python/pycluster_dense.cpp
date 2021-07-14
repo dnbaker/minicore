@@ -8,8 +8,8 @@ py::object __py_cluster_from_centers_dense(py::array_t<FT, py::array::c_style | 
                     uint64_t kmeansmaxiter,
                     //size_t kmcrounds, int ntimes, int lspprounds,
                     uint64_t seed,
-                    Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                    Py_ssize_t reseed_count, bool with_rep, bool use_cs=false)
+                    py::ssize_t mbsize, py::ssize_t ncheckins,
+                    py::ssize_t reseed_count, bool with_rep, bool use_cs=false)
 {
     blz::DV<double> prior{double(beta)};
     const dist::DissimilarityMeasure measure = assure_dm(msr);
@@ -68,8 +68,8 @@ void init_clustering_dense(py::module &m) {
 
     m.def("hcluster", [](py::array dataset, py::object centers, double beta,
                          py::object msr, py::object weights, double eps,
-                         uint64_t kmeansmaxiter, uint64_t seed, Py_ssize_t mbsize, Py_ssize_t ncheckins,
-                         Py_ssize_t reseed_count, bool with_rep, bool use_cs) {
+                         uint64_t kmeansmaxiter, uint64_t seed, py::ssize_t mbsize, py::ssize_t ncheckins,
+                         py::ssize_t reseed_count, bool with_rep, bool use_cs) {
                             constexpr const int pyflags = py::array::c_style | py::array::forcecast;
                             py::object ret = py::none();
                             try {
@@ -104,9 +104,9 @@ void init_clustering_dense(py::module &m) {
     py::arg("eps") = 1e-10,
     py::arg("maxiter") = 100,
     py::arg("seed") = 0,
-    py::arg("mbsize") = Py_ssize_t(-1),
-    py::arg("ncheckins") = Py_ssize_t(-1),
-    py::arg("reseed_count") = Py_ssize_t(5),
+    py::arg("mbsize") = py::ssize_t(-1),
+    py::arg("ncheckins") = py::ssize_t(-1),
+    py::arg("reseed_count") = py::ssize_t(5),
     py::arg("with_rep") = false, py::arg("cs") = false,
     "Clusters a SparseMatrixWrapper object using settings and the centers provided above; set prior to < 0 for it to be 1 / ncolumns(). Performs seeding, followed by EM or minibatch k-means");
 } // init_clustering

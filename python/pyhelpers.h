@@ -45,19 +45,19 @@ void set_centers(VecT *vec, const py::buffer_info &bi) {
     auto &v = *vec;
     switch(bi.format.front()) {
         case 'L': case 'l':
-            for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint64_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
+            for(py::ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint64_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
         break;
         case 'I': case 'i':
-            for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint32_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
+            for(py::ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint32_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
         break;
         case 'B': case 'b':
-            for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint8_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
+            for(py::ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint8_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
         break;
-        case 'H': case 'h': for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint16_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
+        case 'H': case 'h': for(py::ssize_t i = 0; i < bi.shape[0]; ++i) v.emplace_back(trans(blz::make_cv((uint16_t *)bi.ptr + i * bi.shape[1], bi.shape[1])));
         break;
-        case 'f': for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {v.emplace_back(trans(blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1])));}
+        case 'f': for(py::ssize_t i = 0; i < bi.shape[0]; ++i) {v.emplace_back(trans(blz::make_cv((float *)bi.ptr + i * bi.shape[1], bi.shape[1])));}
         break;
-        case 'd': for(Py_ssize_t i = 0; i < bi.shape[0]; ++i) {v.emplace_back(trans(blz::make_cv((double *)bi.ptr + i * bi.shape[1], bi.shape[1])));}
+        case 'd': for(py::ssize_t i = 0; i < bi.shape[0]; ++i) {v.emplace_back(trans(blz::make_cv((double *)bi.ptr + i * bi.shape[1], bi.shape[1])));}
         break;
         default: throw std::invalid_argument(std::string("Invalid format string: ") + bi.format);
     }
@@ -147,7 +147,7 @@ inline std::vector<blz::CompressedVector<float, blz::rowVector>> obj2dvec(py::ob
             try {
             const size_t nc = mat.columns();
             for(auto item: py::cast<py::sequence>(x)) {
-                Py_ssize_t rownum = py::cast<py::int_>(item).cast<Py_ssize_t>();
+                py::ssize_t rownum = py::cast<py::int_>(item).cast<py::ssize_t>();
                 auto &v = dvecs.emplace_back();
                 v.resize(nc);
                 auto r = row(mat, rownum);
@@ -201,7 +201,7 @@ std::vector<blz::DynamicVector<FT, blz::rowVector>> obj2dvec(
             auto dbi = dataset.request();
             const size_t nc = dbi.shape[1];
             for(auto item: py::cast<py::sequence>(x)) {
-                const py::ssize_t rownum = py::cast<py::int_>(item).cast<Py_ssize_t>();
+                const py::ssize_t rownum = py::cast<py::int_>(item).cast<py::ssize_t>();
                 auto &v = dvecs.emplace_back();
                 v.resize(nc);
                 switch(standardize_dtype(dbi.format)[0]) {
@@ -217,7 +217,7 @@ std::vector<blz::DynamicVector<FT, blz::rowVector>> obj2dvec(
     return dvecs;
 }
 
-inline std::string size2dtype(Py_ssize_t n) {
+inline std::string size2dtype(py::ssize_t n) {
     if(n > 0xFFFFFFFFu) return "L";
     if(n > 0xFFFFu) return "I";
     if(n > 0xFFu) return "H";

@@ -24,8 +24,8 @@ py::dict cpp_scluster(const Matrix &mat, int, double beta,
                AsnT &asn,
                double temp,
                size_t kmeansmaxiter,
-               Py_ssize_t mbsize,
-               Py_ssize_t mbn,
+               py::ssize_t mbsize,
+               py::ssize_t mbn,
                void *weights=static_cast<void *>(nullptr),
                char wdtype='f')
 {
@@ -78,8 +78,8 @@ py::dict py_scluster(const Matrix &smw,
                double beta,
                double temp=1.,
                size_t kmeansmaxiter=1000,
-               Py_ssize_t mbsize=-1,
-               Py_ssize_t mbn=10,
+               py::ssize_t mbsize=-1,
+               py::ssize_t mbn=10,
                std::string savepref="",
                void *weights = (void *)nullptr,
                std::string wfmt="f")
@@ -89,7 +89,7 @@ py::dict py_scluster(const Matrix &smw,
     std::vector<blz::CompressedVector<float, blz::rowVector>> dvecs;
     smw.perform([&](auto &mat) {dvecs = obj2dvec(centers, mat);});
     const int k = dvecs.size();
-    std::vector<Py_ssize_t> shape{Py_ssize_t(smw.rows()), k};
+    std::vector<py::ssize_t> shape{py::ssize_t(smw.rows()), k};
     assert(k >= 1);
     if(!savepref.empty()) {
         std::fprintf(stderr, "Using savepref to mmap cost matrices diretly: %s\n", savepref.data());

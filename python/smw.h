@@ -177,7 +177,7 @@ public:
 };
 
 template<typename Mat>
-inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned ntimes,
                           py::ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
                           py::object weights)
     {
@@ -185,7 +185,6 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
             gamma_beta = 1. / smw.columns();
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
         }
-        if(nkmc > 1) std::fprintf(stderr, "Warning: nkmc been removed.\n");
         if(seed == 0) seed = std::mt19937_64(std::rand())();
         const void *wptr = nullptr;
         int kind = -1;
@@ -205,7 +204,7 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
                 }
             }
         }
-        auto ki = k.cast<Py_ssize_t>();
+        auto ki = k.cast<py::ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
         const auto psum = gamma_beta * smw.columns();
         const blz::StaticVector<double, 1> prior({gamma_beta});
@@ -291,21 +290,21 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
 
 template<typename Mat>
 inline py::tuple py_kmeanspp_so(const Mat &smw, const SumOpts &sm, py::object weights) {
-    return py_kmeanspp_noso(smw, py::int_((int)sm.dis), sm.k, sm.gamma, sm.seed, sm.kmc2_rounds, std::max(sm.extra_sample_tries - 1, 0u),
+    return py_kmeanspp_noso(smw, py::int_((int)sm.dis), sm.k, sm.gamma, sm.seed, std::max(sm.extra_sample_tries - 1, 0u),
                        sm.lspp, sm.use_exponential_skips, sm.n_local_trials, weights);
 }
 
 template<typename Mat>
-inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                          Py_ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
+inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned ntimes,
+                          py::ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
                           py::object weights)
     {
         if(gamma_beta < 0.) {
             gamma_beta = 1. / smw.columns();
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
         }
+        //std::fprintf(stderr, "Starting %s\n", __PRETTY_FUNCTION__);
         if(seed == 0) seed = std::mt19937_64(std::rand())();
-        if(nkmc > 1) std::fprintf(stderr, "Warning: nkmc been removed.\n");
         const void *wptr = nullptr;
         int kind = -1;
         const auto mmsr = assure_dm(msr);
@@ -323,7 +322,7 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
                 break;
             }
         }
-        auto ki = k.cast<Py_ssize_t>();
+        auto ki = k.cast<py::ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
         const auto psum = gamma_beta * smw.columns();
         const blz::StaticVector<double, 1> prior({gamma_beta});
@@ -336,10 +335,14 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
         } else if(ki <= 63356) {
             retasn = py::array_t<uint16_t>(nr);
             retasnbits = 16;
-        } else {
+        } else if(ki <= 0xFFFFFFFFu) {
             retasn = py::array_t<uint32_t>(nr);
             retasnbits = 32;
+        } else {
+            retasn = py::array_t<uint64_t>(nr);
+            retasnbits = 64;
         }
+        //std::fprintf(stderr, "retasnbits is %u\n", retasnbits);
         auto retai = py::cast<py::array>(retasn).request();
         auto rptr = (uint32_t *)ret.request().ptr;
         py::array_t<float> costs(smw.rows());
@@ -348,8 +351,23 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
         using FT = std::conditional_t<sizeof(TmpT) <= 4, float, double>;
         using minicore::util::sum;
         using blz::sum;
+        //std::fprintf(stderr, "Got pointers and info\n");
         blaze::DynamicVector<double> rsums(smw.rows());
-        rsums = sum<blaze::rowwise>(smw);
+        //std::fprintf(stderr, "Computing sum over the matrix\n");
+#if 0
+        if constexpr(blaze::IsCustom_v<Mat>) {
+            OMP_PFOR
+            for(size_t i = 0; i < smw.rows(); ++i) {
+                auto r(row(smw, i));
+                
+            }
+        } else {
+            rsums = sum<blaze::rowwise>(smw);
+        }
+#else
+            rsums = sum<blaze::rowwise>(smw);
+#endif
+        // std::fprintf(stderr, "Computed sum over the matrix\n");
         auto cmp = [&smw,measure=mmsr,rsums=rsums.data(),psum,&prior](size_t xi, size_t yi) {
             // Note that this has been transposed
             auto rx = row(smw, xi, blz::unchecked), ry = row(smw, yi, blz::unchecked);
@@ -361,45 +379,34 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
             case 'd': case -1: break;
             default: throw std::runtime_error("Unsupported dtype for weights");
         }
+        //std::fprintf(stderr, "Weights: %p\n", tmpw.get());
         auto sol = kmeanspp(cmp, rng, smw.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
+        //std::fprintf(stderr, "Performed first kmeans++\n");
         auto solc = sum(std::get<2>(sol));
         for(auto nt = 0u;nt < ntimes; ++nt) {
+            //std::fprintf(stderr, "Performing %dth kmeans++\n", nt + 1);
             auto sol2 = kmeanspp(cmp, rng, smw.rows(), ki, (double *)wptr, lspp, use_exponential_skips, true, n_local_trials);
             auto sol2c = sum(std::get<2>(sol2));
             if(sol2c < solc) {
                 std::swap(sol2, sol); std::swap(sol2c, solc);
-                std::fprintf(stderr, "Replaced old cost of %0.20g with %0.20g\n", sol2c, solc);
+                //std::fprintf(stderr, "Replaced old cost of %0.20g with %0.20g\n", sol2c, solc);
             }
         }
         auto &lidx = std::get<0>(sol);
         auto &lasn = std::get<1>(sol);
         auto &lcosts = std::get<2>(sol);
+        //std::fprintf(stderr, "Copying out\n");
         switch(retasnbits) {
-            case 8: {
-                auto raptr = (uint8_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
-            case 16: {
-                auto raptr = (uint16_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
-            case 32: {
-                auto raptr = (uint32_t *)retai.ptr;
-                OMP_PFOR
-                for(size_t i = 0; i < lasn.size(); ++i)
-                    raptr[i] = lasn[i];
-            } break;
+#define __C(N, T) case N: {std::copy(lasn.begin(), lasn.end(), (T *)retai.ptr);} break
+            __C(8, uint8_t);
+            __C(16, uint16_t);
+            __C(32, uint32_t);
+            __C(64, uint64_t);
+#undef __C
             default: __builtin_unreachable();
         }
-        //std::fprintf(stderr, "Computed initial centers\n");
-        for(size_t i = 0; i < lcosts.size(); ++i)
-            costp[i] = lcosts[i];
-        for(size_t i = 0; i < lidx.size(); ++i)
-            rptr[i] = lidx[i];
+        std::copy(lcosts.begin(), lcosts.end(), costp);
+        std::copy(lidx.begin(), lidx.end(), rptr);
         return py::make_tuple(ret, retasn, costs);
     }
 

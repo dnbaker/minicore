@@ -23,7 +23,7 @@ void init_coreset(py::module &m) {
                 dp = (double *)winf.ptr;
             else throw std::invalid_argument("Weights can only be double or float");
         }
-        const Py_ssize_t np = costs.shape(0);
+        const py::ssize_t np = costs.shape(0);
         switch(buf1.format[0]) {
             case 'f': if(dp) {
                         cs.make_sampler(np, ncenters, (float *)buf1.ptr, asnp, dp, seed, sens); break;
@@ -46,7 +46,7 @@ void init_coreset(py::module &m) {
         std::copy(cs.probs_.get(), cs.probs_.get() + cs.np_, (float *)ret.request().ptr);
         return ret;
     }, "Create a numpy array of sampling probabilities")
-    .def("sample", [](CSType &cs, Py_ssize_t size, Py_ssize_t seed, bool unique_samples, double eps) {
+    .def("sample", [](CSType &cs, py::ssize_t size, py::ssize_t seed, bool unique_samples, double eps) {
         if(cs.sampler_ == nullptr) throw std::invalid_argument("Can't sample without created sampler. Call make_ampler");
         if(seed == 0) seed = std::rand();
         auto ret = cs.sample(size, seed, eps, unique_samples);

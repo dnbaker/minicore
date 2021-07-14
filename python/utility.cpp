@@ -6,7 +6,7 @@ dist::DissimilarityMeasure obj2m(py::str o) {
     throw std::invalid_argument("invalid key");
 }
 dist::DissimilarityMeasure obj2m(py::int_ o) {
-    auto i = py::cast<Py_ssize_t>(o);
+    auto i = py::cast<py::ssize_t>(o);
     if(!dist::is_valid_measure((dist::DissimilarityMeasure)i)) {
         std::fprintf(stderr, "Warning: measure %td is not considered valid. Downstream work may break.\n", std::ptrdiff_t(i));
     }
@@ -21,7 +21,7 @@ coresets::SensitivityMethod obj2sm(py::str o) {
 }
 
 coresets::SensitivityMethod obj2sm(py::int_ o) {
-    auto i = py::cast<Py_ssize_t>(o);
+    auto i = py::cast<py::ssize_t>(o);
     return static_cast<coresets::SensitivityMethod>(i);
 }
 
