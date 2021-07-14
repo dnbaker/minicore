@@ -396,7 +396,6 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
         auto &lidx = std::get<0>(sol);
         auto &lasn = std::get<1>(sol);
         auto &lcosts = std::get<2>(sol);
-        const size_t e = lasn.size();
         //std::fprintf(stderr, "Copying out\n");
         switch(retasnbits) {
 #define __C(N, T) case N: {std::copy(lasn.begin(), lasn.end(), (T *)retai.ptr);} break
