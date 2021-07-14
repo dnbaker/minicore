@@ -6,8 +6,8 @@ py::dict py_scluster_arr(py::array matrix,
                double prior,
                double temp=1.,
                size_t kmeansmaxiter=1000,
-               Py_ssize_t mbsize=-1,
-               Py_ssize_t mbn=10,
+               py::ssize_t mbsize=-1,
+               py::ssize_t mbn=10,
                std::string savepref="",
                void *weights = (void *)nullptr,
                std::string wfmt="f")
@@ -30,7 +30,7 @@ py::dict py_scluster_arr(py::array matrix,
         nr = fmatinf.shape[0];
     }
     const int k = dvecs.size();
-    std::vector<Py_ssize_t> shape{nr, k};
+    std::vector<py::ssize_t> shape{nr, k};
     assert(k >= 1);
     if(!savepref.empty()) {
         std::fprintf(stderr, "Using savepref to mmap cost matrices diretly: %s\n", savepref.data());
@@ -65,7 +65,7 @@ py::dict py_scluster_arr(py::array matrix,
 void init_clustering_softdense(py::module &m) {
     m.def("scluster", [](py::array mat, py::object centers,
                     py::object measure, double prior, double temp,
-                    uint64_t kmeansmaxiter, Py_ssize_t mbsize, Py_ssize_t mbn,
+                    uint64_t kmeansmaxiter, py::ssize_t mbsize, py::ssize_t mbn,
                     py::object savepref, py::object weights) -> py::object
     {
         if(prior < 0.) prior = 0.;
@@ -84,8 +84,8 @@ void init_clustering_softdense(py::module &m) {
     py::arg("prior") = 0.,
     py::arg("temp") = 1.,
     py::arg("maxiter") = 1000,
-    py::arg("mbsize") = Py_ssize_t(-1),
-    py::arg("mbn") = Py_ssize_t(-1),
+    py::arg("mbsize") = py::ssize_t(-1),
+    py::arg("mbn") = py::ssize_t(-1),
     py::arg("savepref") = "",
     py::arg("weights") = py::none()
     );

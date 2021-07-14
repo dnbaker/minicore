@@ -6,7 +6,7 @@ template<typename FT>
 auto pygeomedian(py::array_t<FT, py::array::c_style | py::array::forcecast> data, py::object weights, FT eps) {
     auto dbuf = data.request();
     if(dbuf.ndim != 2) throw std::runtime_error("Expected 2-d array");
-    Py_ssize_t ndret = dbuf.shape[1];
+    py::ssize_t ndret = dbuf.shape[1];
     py::array_t<FT> ret(ndret);
     auto rbuf = ret.request();
     FT *retp = (FT *)rbuf.ptr;

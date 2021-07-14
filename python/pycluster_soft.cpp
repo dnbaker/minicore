@@ -3,7 +3,7 @@
 void init_clustering_soft(py::module &m) {
     m.def("scluster", [](const SparseMatrixWrapper &smw, py::object centers,
                     py::object measure, double beta, double temp,
-                    uint64_t kmeansmaxiter, Py_ssize_t mbsize, Py_ssize_t mbn,
+                    uint64_t kmeansmaxiter, py::ssize_t mbsize, py::ssize_t mbn,
                     py::object savepref, py::object weights) -> py::object
     {
         void *wptr = nullptr;
@@ -21,8 +21,8 @@ void init_clustering_soft(py::module &m) {
     py::arg("prior") = 0.,
     py::arg("temp") = 1.,
     py::arg("maxiter") = 1000,
-    py::arg("mbsize") = Py_ssize_t(-1),
-    py::arg("mbn") = Py_ssize_t(-1),
+    py::arg("mbsize") = py::ssize_t(-1),
+    py::arg("mbn") = py::ssize_t(-1),
     py::arg("savepref") = "",
     py::arg("weights") = py::none()
     );

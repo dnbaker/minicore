@@ -39,7 +39,7 @@ struct PyCSparseMatrix {
     std::string indptr_t_;
     size_t nr_, nc_, nnz_;
     template<typename DataT, typename IndicesT, typename IndPtrT>
-    PyCSparseMatrix(DataT *data, const IndicesT *indices, const IndPtrT *indptr, Py_ssize_t nr, Py_ssize_t nc, Py_ssize_t nnz):
+    PyCSparseMatrix(DataT *data, const IndicesT *indices, const IndPtrT *indptr, py::ssize_t nr, py::ssize_t nc, py::ssize_t nnz):
         datap_((void *)data),
         indicesp_((void *)indices),
         indptrp_((void *)indptr),
@@ -54,9 +54,9 @@ struct PyCSparseMatrix {
     PyCSparseMatrix(PyCSparseMatrix &&) = default;
     PyCSparseMatrix &operator=(const PyCSparseMatrix &) = default;
     PyCSparseMatrix &operator=(PyCSparseMatrix &&) = default;
-    PyCSparseMatrix(py::object obj): PyCSparseMatrix(py::cast<py::array>(obj.attr("data")), py::cast<py::array>(obj.attr("indices")), py::cast<py::array>(obj.attr("indptr")), py::int_(py::cast<py::sequence>(obj.attr("shape"))[0]).cast<Py_ssize_t>(),
-                                                    py::int_(py::cast<py::sequence>(obj.attr("shape"))[1]).cast<Py_ssize_t>(), obj.attr("nnz").cast<Py_ssize_t>()) {}
-    PyCSparseMatrix(py::array data, py::array indices, py::array indptr, Py_ssize_t nr, Py_ssize_t nc, Py_ssize_t nnz): nr_(nr), nc_(nc), nnz_(nnz)
+    PyCSparseMatrix(py::object obj): PyCSparseMatrix(py::cast<py::array>(obj.attr("data")), py::cast<py::array>(obj.attr("indices")), py::cast<py::array>(obj.attr("indptr")), py::int_(py::cast<py::sequence>(obj.attr("shape"))[0]).cast<py::ssize_t>(),
+                                                    py::int_(py::cast<py::sequence>(obj.attr("shape"))[1]).cast<py::ssize_t>(), obj.attr("nnz").cast<py::ssize_t>()) {}
+    PyCSparseMatrix(py::array data, py::array indices, py::array indptr, py::ssize_t nr, py::ssize_t nc, py::ssize_t nnz): nr_(nr), nc_(nc), nnz_(nnz)
     {
         auto datainf = data.request();
         auto indicesinf = indices.request();

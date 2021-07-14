@@ -177,7 +177,7 @@ public:
 };
 
 template<typename Mat>
-inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
+inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned ntimes,
                           py::ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
                           py::object weights)
     {
@@ -185,7 +185,6 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
             gamma_beta = 1. / smw.columns();
             std::fprintf(stderr, "Warning: unset beta prior defaults to 1 / # columns (%g)\n", gamma_beta);
         }
-        if(nkmc > 1) std::fprintf(stderr, "Warning: nkmc been removed.\n");
         if(seed == 0) seed = std::mt19937_64(std::rand())();
         const void *wptr = nullptr;
         int kind = -1;
@@ -205,7 +204,7 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
                 }
             }
         }
-        auto ki = k.cast<Py_ssize_t>();
+        auto ki = k.cast<py::ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
         const auto psum = gamma_beta * smw.columns();
         const blz::StaticVector<double, 1> prior({gamma_beta});
@@ -291,13 +290,13 @@ inline py::object py_kmeanspp_noso(Mat &smw, py::object msr, py::int_ k, double 
 
 template<typename Mat>
 inline py::tuple py_kmeanspp_so(const Mat &smw, const SumOpts &sm, py::object weights) {
-    return py_kmeanspp_noso(smw, py::int_((int)sm.dis), sm.k, sm.gamma, sm.seed, sm.kmc2_rounds, std::max(sm.extra_sample_tries - 1, 0u),
+    return py_kmeanspp_noso(smw, py::int_((int)sm.dis), sm.k, sm.gamma, sm.seed, std::max(sm.extra_sample_tries - 1, 0u),
                        sm.lspp, sm.use_exponential_skips, sm.n_local_trials, weights);
 }
 
 template<typename Mat>
-inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned nkmc, unsigned ntimes,
-                          Py_ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
+inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, double gamma_beta, uint64_t seed, unsigned ntimes,
+                          py::ssize_t lspp, bool use_exponential_skips, py::ssize_t n_local_trials,
                           py::object weights)
     {
         if(gamma_beta < 0.) {
@@ -323,7 +322,7 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
                 break;
             }
         }
-        auto ki = k.cast<Py_ssize_t>();
+        auto ki = k.cast<py::ssize_t>();
         wy::WyRand<uint64_t> rng(seed);
         const auto psum = gamma_beta * smw.columns();
         const blz::StaticVector<double, 1> prior({gamma_beta});
