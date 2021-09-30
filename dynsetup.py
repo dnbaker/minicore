@@ -7,16 +7,16 @@ from glob import glob
 import multiprocessing
 import multiprocessing.pool
 from subprocess import check_output, check_call
-SLEEFLIB=["libsleef.so", "libsleef.dylib"]
-sleefdir = environ.get("SLEEF_DIR", "sleef/build")
+DYNSLEEFLIBS=["libsleef.so", "libsleef.dylib"]
+dynsleefdir = environ.get("SLEEF_DIR", "sleef/dynbuild")
 
-def main():
+def dyn_main():
 
-    if not any(map(path.isfile, SLEEFLIB)):
+    if not any(map(path.isfile, DYNSLEEFLIBS)):
         print("Making sleef")
         check_call(f"make libsleef.dyn.gen", shell=True)
     sleeflibp = None
-    for dlib in SLEEFLIB:
+    for dlib in DYNSLEEFLIBS:
         if os.path.isfile(dlib):
             sleeflibp = dlib
             break
@@ -96,7 +96,7 @@ def main():
         get_pybind_include(user=True),
        "./",
        "./include",
-       sleefdir + "/include",
+       dynsleefdir + "/include",
        "./include/minicore",
        "./blaze",
        "./pybind11/include",
@@ -201,5 +201,7 @@ def main():
         packages=find_packages()
     )
 
+__all__ = ["dyn_main", "DYNSLEEFLIBS", "dynsleefdir"]
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(dyn_main())
+
