@@ -25,6 +25,9 @@ Python bindings require numpy, scipy, and a recent C++ compiler capable of compi
 See `python/README.md` for an example and installation instructions, or you can install by running `python3 setup.py`
 from the base directory.
 
+On some operating systems, SLEEF must be linked dynamically. If `python3 setup.py install` fails, try `python3 dynsetup.py install`, which will build a dynamic library.
+If you are using Conda, `dynsetup.py` will install the libsleef.so/dylib files as necessary, but otherwise you will need to add a directory containing one of these dynamic libraries to LD\_LIBRARY\_PATH or DYLD\_LIBRARY\_PATH.
+
 Because minicore compiles distance code for the destination hardware, it's difficult to distribute via PyPI, but can still be installed in a single command via pip:
 
 ```bash
