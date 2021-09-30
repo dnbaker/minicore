@@ -3,7 +3,7 @@
 #include "pyfgc.h"
 #include "blaze/util/Serialization.h"
 #include "minicore/util/csc.h"
-
+#include <variant>
 
 dist::DissimilarityMeasure assure_dm(py::object obj);
 
