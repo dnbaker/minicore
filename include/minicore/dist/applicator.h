@@ -1673,19 +1673,19 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
             case HELLINGER:
             {
                 ret = std::sqrt(
-                    libkl::helld_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc)
+                    libkl::helld_reduce(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc)
                 ) * M_SQRT1_2;
                 break;
             }
             case L2: case SQRL2:
             {
-                ret = libkl::sqrl2_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
+                ret = libkl::sqrl2_reduce(mr.data(), ctr.data(), nd, 1., 1., 0., 0.);
                 if(msr == L2) ret = std::sqrt(ret);
                 break;
             }
             case L1:
             {
-                ret = libkl::tvd_reduce_aligned(mr.data(), ctr.data(), nd, 1., 1., pv, pv) * 2.;
+                ret = libkl::tvd_reduce(mr.data(), ctr.data(), nd, 1., 1., pv, pv) * 2.;
                 break;
             }
             case COSINE_DISTANCE: case COSINE_SIMILARITY: case PROBABILITY_COSINE_DISTANCE: case PROBABILITY_COSINE_SIMILARITY:
@@ -1694,18 +1694,18 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                 FT rhmul = msr == COSINE_DISTANCE || msr == COSINE_SIMILARITY ? FT(1): rhrsi;
                 FT l_lhinc = msr == COSINE_DISTANCE || msr == COSINE_SIMILARITY ? FT(pv): lhinc;
                 FT l_rhinc = msr == COSINE_DISTANCE || msr == COSINE_SIMILARITY ? FT(pv): rhinc;
-                ret = libkl::cossim_reduce_aligned(mr.data(), ctr.data(), mr.size(), lhmul, rhmul, l_lhinc, l_rhinc);
+                ret = libkl::cossim_reduce(mr.data(), ctr.data(), mr.size(), lhmul, rhmul, l_lhinc, l_rhinc);
                 ret = std::max(std::min(ret, 1.), 0.);
                 if(msr == COSINE_DISTANCE || msr == PROBABILITY_COSINE_DISTANCE)
                     ret = std::acos(ret) * static_cast<FT>(0.31830988618379067153L);
                 break;
             }
             case TVD: {
-                ret = libkl::tvd_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
+                ret = libkl::tvd_reduce(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
                 break;
             }
             case BHATTACHARYYA_METRIC: case BHATTACHARYYA_DISTANCE: {
-                ret = libkl::bhattd_reduce_aligned(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
+                ret = libkl::bhattd_reduce(mr.data(), ctr.data(), nd, lhrsi, rhrsi, lhinc, rhinc);
                 if(FT(1.) - ret < FT(1e-8)) ret = 1.;
                 if(msr == BHATTACHARYYA_METRIC) ret = std::sqrt(std::max(1. - ret, 0.));
                 else ret = -std::log(ret);
@@ -1730,22 +1730,22 @@ double msr_with_prior(dist::DissimilarityMeasure msr, const CtrT &ctr, const Mat
                     tmpmuly = serial(ctr * rhrsi);
                 FT klc;
                 if(msr == MKL || msr == REVERSE_MKL) {
-                    klc = msr == MKL ? libkl::kl_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
-                                     : libkl::kl_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
+                    klc = msr == MKL ? libkl::kl_reduce(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
+                                     : libkl::kl_reduce(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
                 } else if(msr == JSD || msr == JSM ) {
-                    klc = libkl::jsd_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
+                    klc = libkl::jsd_reduce(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc);
                 } else if(msr == LLR || msr == UWLLR || msr == SRULRT || msr == SRLRT) {
-                    klc = libkl::llr_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhsum / (lhsum + rhsum), lhinc, rhinc);
+                    klc = libkl::llr_reduce(tmpmulx.data(), tmpmuly.data(), nd, lhsum / (lhsum + rhsum), lhinc, rhinc);
                 } else if(msr == ITAKURA_SAITO || msr == REVERSE_ITAKURA_SAITO) {
                     auto lhp = msr == ITAKURA_SAITO ? tmpmulx.data(): tmpmuly.data();
                     auto rhp = msr == ITAKURA_SAITO ? tmpmuly.data(): tmpmulx.data();
                     auto inc1 = msr == ITAKURA_SAITO ? lhinc: rhinc;
                     auto inc2 = msr == ITAKURA_SAITO ? rhinc: lhinc;
-                    klc = libkl::is_reduce_aligned(lhp, rhp, nd, inc1, inc2);
+                    klc = libkl::is_reduce(lhp, rhp, nd, inc1, inc2);
                 } else if(msr == SIS || msr == RSIS) {
                     klc = msr == SIS ?
-                            libkl::sis_reduce_aligned(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
-                          : libkl::sis_reduce_aligned(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
+                            libkl::sis_reduce(tmpmulx.data(), tmpmuly.data(), nd, lhinc, rhinc)
+                          : libkl::sis_reduce(tmpmuly.data(), tmpmulx.data(), nd, rhinc, lhinc);
                 } else __builtin_unreachable();
                 ret = klc;
                 if(msr == LLR || msr == SRLRT) {
