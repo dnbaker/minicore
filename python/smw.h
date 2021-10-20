@@ -359,7 +359,6 @@ inline py::object py_kmeanspp_noso_dense(Mat &smw, py::object msr, py::int_ k, d
             OMP_PFOR
             for(size_t i = 0; i < smw.rows(); ++i) {
                 auto r(row(smw, i));
-                
             }
         } else {
             rsums = sum<blaze::rowwise>(smw);
