@@ -25,7 +25,7 @@ template<typename VT, bool SO> decltype(auto) operator*(const blaze::Vector<VT, 
 template<typename MT, bool SO> decltype(auto) operator*(blaze::Matrix<MT, SO> &x) {return ~x;}
 template<typename VT, bool SO> decltype(auto) operator*(blaze::Vector<VT, SO> &x) {return ~x;}
 #endif
-    
+
 
 // These blaze adaptors exist for the purpose of
 // providing a pair of iterators.
