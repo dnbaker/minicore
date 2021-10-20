@@ -14,16 +14,20 @@ py::ssize_t threadgetter() {
 void threadsetter(py::ssize_t x) {
     if(x > 0) omp_set_num_threads(x);
 }
+#if 0
 struct OMPThreadNumManager {
     OMPThreadNumManager(int nthreads=-1) {set(nthreads);}
     void set(py::ssize_t nthreads) const {threadsetter(nthreads);}
     py::ssize_t get() const {return threadgetter();}
 };
+#endif
 
 void init_omp_helpers(py::module &m) {
     m.def("set_num_threads", threadsetter);
     m.def("get_num_threads", threadgetter);
-    py::class_<OMPThreadNumManager>(m, "Threading").def(py::init<>()).def(py::init<py::ssize_t>())
+#if 0
+    py::class_<OMPThreadNumManager>(m, "ThreadManager").def(py::init<>()).def(py::init<py::ssize_t>())
     .def_property("nthreads", &OMPThreadNumManager::get, &OMPThreadNumManager::set)
     .def_property("p", &OMPThreadNumManager::get, &OMPThreadNumManager::set);
+#endif
 }
