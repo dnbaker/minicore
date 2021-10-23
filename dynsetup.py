@@ -23,7 +23,7 @@ def dyn_main():
     if not sleeflibp:
         raise RuntimeError("Could not create libsleef")
     if 'CONDA_PREFIX' in environ:
-        check_call(f"cp {sleeflibp}* {environ['CONDA_PREFIX']}/lib", shell=True)
+        check_call(f"cp {sleeflibp}* {environ['CONDA_PREFIX']}/lib/", shell=True)
     else:
         print(f"Warning: you must add the directory containing {dlib}", file=sys.stderr)
     if not path.isfile("libkl.a"):
