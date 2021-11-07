@@ -23,6 +23,7 @@ void init_clustering_soft(py::module &m);
 void init_pydense(py::module &m);
 void init_arrcmp(py::module &m);
 void init_clustering_softdense(py::module &m);
+void init_counthist(py::module &m);
 //void init_hvg(py::module &m);
 
 

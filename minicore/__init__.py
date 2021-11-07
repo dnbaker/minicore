@@ -2,6 +2,7 @@ from pyminicore import kmeanspp as pykmpp
 from pyminicore import SumOpts, CSparseMatrix, CoresetSampler
 from pyminicore import pcmp, cmp
 from pyminicore import SparseMatrixWrapper as smw
+from pyminicore import get_counthist
 import pyminicore
 from .util import constants
 from .util.constants import CSR as csr_tuple, KMCRSV
