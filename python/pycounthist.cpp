@@ -107,7 +107,6 @@ T get_argmax(const py::dict input) {
 py::object get_counthist1d(const py::buffer_info &bi) {
     if(bi.ndim != 1) throw std::runtime_error("Expected 1-d Numpy Array");
     py::object ret = py::none();
-    std::fprintf(stderr, "counthist for dtype %s\n", bi.format.data());
     switch(standardize_dtype(bi.format).front()) {
         case 'f': ret = get_counthist((float *)bi.ptr, bi.size); break;
         case 'd': ret = get_counthist((double *)bi.ptr, bi.size); break;
