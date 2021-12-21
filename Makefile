@@ -35,7 +35,7 @@ LIBPATHS+=sleef/build/lib
 LIBPATHS+=sleef/dynbuild/lib
 endif
 
-LINKS+= -lsleef #-lkl -lsimdsampling
+LINKS+= # -lsleef #-lkl -lsimdsampling
 
 ifdef TBBDIR
 INCLUDE_PATHS+= $(TBBDIR)/include
