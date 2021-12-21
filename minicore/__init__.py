@@ -10,6 +10,7 @@ import numpy as np
 from .util.compute_variance import variance
 from .util import hvg
 import scipy.sparse as sp
+from minicore.recursive_cluster import hiercluster_kmeanspp
 
 
 def cluster_from_centers(*args, **kwargs):

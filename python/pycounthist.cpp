@@ -7,23 +7,44 @@
 
 
 template<typename T>
-shared::flat_hash_map<T, std::pair<std::vector<size_t>, std::unique_ptr<std::mutex>>> get_map(const T *items, const py::ssize_t nelem) {
-    shared::flat_hash_map<T, std::pair<std::vector<size_t>, std::unique_ptr<std::mutex>>> map;
-    //std::mutex global_lock;
+shared::flat_hash_map<T, std::vector<size_t>> get_map(const T *items, const py::ssize_t nelem) {
+    using MT = shared::flat_hash_map<T,std::vector<size_t>>;
+    int nt = 1;
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        nt = omp_get_num_threads();
+    }
+#endif
+    MT map;
+    if(nt == 1) {
+        for(py::ssize_t i = 0; i < nelem; ++i) {
+            map[items[i]].push_back(i);
+        }
+        return map;
+    }
+    std::vector<MT> maps(nt);
+    OMP_PFOR
     for(py::ssize_t i = 0; i < nelem; ++i) {
+        const int my_id = OMP_ELSE(omp_get_thread_num(), 0);
+        auto &mymap = maps[my_id];
         const T v = items[i];
-        auto it = map.find(v);
-        if(it == map.end()) {
-            std::pair<std::vector<size_t>, std::unique_ptr<std::mutex>> value({}, new std::mutex);
-            {
-                //std::lock_guard<std::mutex> lock(global_lock);
-                if(it == map.find(v); it == map.end())
-                    it = map.emplace(v, std::move(value)).first;
+        auto it = mymap.find(v);
+        if(it == mymap.end()) {
+            it = mymap.emplace(v, std::vector<size_t>{}).first;
+        }
+        it->second.push_back(i);
+    }
+    for(const auto &x: maps) {
+        for(const auto &pair: x) {
+            auto mit = map.find(pair.first);
+            if(mit == map.end()) {
+                map.emplace(pair.first, pair.second);
+                //mit[pair.first] = pair.second;
+            } else {
+                mit->second.insert(mit->second.end(), pair.second.begin(), pair.second.end());
             }
         }
-        auto &rhs = it->second;
-        //std::lock_guard<std::mutex> lock(*rhs.second);
-        rhs.first.push_back(i);
     }
     return map;
 }
@@ -58,12 +79,12 @@ py::dict get_counthist(const T *items, const py::ssize_t nelem) {
     //std::fprintf(stderr, "dt: %s\n", dt.data());
     py::dict ret;
     for(const auto &pair: map) {
-        const py::ssize_t nmatches = pair.second.first.size();
+        const py::ssize_t nmatches = pair.second.size();
         py::array cpy(retdt, std::vector<py::ssize_t>{nmatches});
         const auto bi = cpy.request();
         //std::fprintf(stderr, "Data = %s format\n", bi.format.data());
-        const size_t *startp = pair.second.first.data(), *endp = startp + nmatches;
-        assert(endp - startp == pair.second.first.size());
+        const size_t *startp = pair.second.data(), *endp = startp + nmatches;
+        assert(endp - startp == pair.second.size());
         //std::fprintf(stderr, "retdt %c. %zu matches\n", dt.front(), nmatches);
         switch(dt.front()) {
             case 'l': case 'L': std::copy(startp, endp, (uint64_t *)bi.ptr); break;
@@ -79,11 +100,11 @@ py::dict get_counthist(const T *items, const py::ssize_t nelem) {
 }
 
 template<typename T>
-T get_argmax(const shared::flat_hash_map<T, std::pair<std::vector<size_t>, std::unique_ptr<std::mutex>>> &input) {
+T get_argmax(const shared::flat_hash_map<T, std::vector<size_t>> &input) {
     size_t maxc = 0;
     T asn = std::numeric_limits<T>::max();
     for(const auto &item: input) {
-        if(const size_t ct = item.second.first.size(); ct > maxc) {
+        if(const size_t ct = item.second.size(); ct > maxc) {
             maxc = ct;
             asn = item.first;
         }
