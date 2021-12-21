@@ -9,16 +9,20 @@
 template<typename T>
 shared::flat_hash_map<T, std::pair<std::vector<size_t>, std::unique_ptr<std::mutex>>> get_map(const T *items, const py::ssize_t nelem) {
     shared::flat_hash_map<T, std::pair<std::vector<size_t>, std::unique_ptr<std::mutex>>> map;
-    OMP_PFOR
+    //std::mutex global_lock;
     for(py::ssize_t i = 0; i < nelem; ++i) {
         const T v = items[i];
         auto it = map.find(v);
         if(it == map.end()) {
             std::pair<std::vector<size_t>, std::unique_ptr<std::mutex>> value({}, new std::mutex);
-            it = map.emplace(v, std::move(value)).first;
+            {
+                //std::lock_guard<std::mutex> lock(global_lock);
+                if(it == map.find(v); it == map.end())
+                    it = map.emplace(v, std::move(value)).first;
+            }
         }
         auto &rhs = it->second;
-        std::lock_guard<std::mutex> lock(*rhs.second);
+        //std::lock_guard<std::mutex> lock(*rhs.second);
         rhs.first.push_back(i);
     }
     return map;
@@ -45,23 +49,30 @@ T get_argmaxcount(const char dt, const void *items, const py::ssize_t nelem) {
 
 template<typename T>
 py::dict get_counthist(const T *items, const py::ssize_t nelem) {
+    //std::fprintf(stderr, "Starting [%s]\n", __PRETTY_FUNCTION__);
+    //std::fprintf(stderr, "Read all %zu items\n", nelem);
     const auto map = get_map(items, nelem);
+    //std::fprintf(stderr, "Filled map of siz %zu\n", map.size());
     const std::string dt = size2dtype(nelem);
     const auto retdt = py::dtype(dt);
+    //std::fprintf(stderr, "dt: %s\n", dt.data());
     py::dict ret;
-    py::buffer_info bi;
     for(const auto &pair: map) {
         const py::ssize_t nmatches = pair.second.first.size();
         py::array cpy(retdt, std::vector<py::ssize_t>{nmatches});
-        bi = cpy.request();
+        const auto bi = cpy.request();
+        //std::fprintf(stderr, "Data = %s format\n", bi.format.data());
         const size_t *startp = pair.second.first.data(), *endp = startp + nmatches;
+        assert(endp - startp == pair.second.first.size());
+        //std::fprintf(stderr, "retdt %c. %zu matches\n", dt.front(), nmatches);
         switch(dt.front()) {
-            case 'L': std::copy(startp, endp, (uint64_t *)bi.ptr); break;
-            case 'I': std::copy(startp, endp, (uint32_t *)bi.ptr); break;
-            case 'H': std::copy(startp, endp, (uint16_t *)bi.ptr); break;
-            case 'B': std::copy(startp, endp, (uint8_t *)bi.ptr); break;
-            default: __builtin_unreachable();
+            case 'l': case 'L': std::copy(startp, endp, (uint64_t *)bi.ptr); break;
+            case 'i': case 'I': std::copy(startp, endp, (uint32_t *)bi.ptr); break;
+            case 'h': case 'H': std::copy(startp, endp, (uint16_t *)bi.ptr); break;
+            case 'b': case 'B': std::copy(startp, endp, (uint8_t *)bi.ptr); assert(bi.itemsize == 1); break;
+            default: std::fprintf(stderr, "datatype %s/%c found no match.\n", dt.data(), dt.front()); std::exit(1);
         }
+        //std::fprintf(stderr, "Copied over for key = %Lg\n", static_cast<long double>(pair.first));
         ret[py::cast(pair.first)] = cpy;
     }
     return ret;
@@ -96,12 +107,13 @@ T get_argmax(const py::dict input) {
 py::object get_counthist1d(const py::buffer_info &bi) {
     if(bi.ndim != 1) throw std::runtime_error("Expected 1-d Numpy Array");
     py::object ret = py::none();
+    std::fprintf(stderr, "counthist for dtype %s\n", bi.format.data());
     switch(standardize_dtype(bi.format).front()) {
         case 'f': ret = get_counthist((float *)bi.ptr, bi.size); break;
         case 'd': ret = get_counthist((double *)bi.ptr, bi.size); break;
         case 'B': case 'b': ret = get_counthist((uint8_t *)bi.ptr, bi.size); break;
         case 'H': case 'h': ret = get_counthist((uint16_t *)bi.ptr, bi.size); break;
-        case 'I': case 'i': ret = get_counthist((int32_t *)bi.ptr, bi.size); break;
+        case 'I': case 'i': ret = get_counthist((uint32_t *)bi.ptr, bi.size); break;
         case 'L': case 'l': ret = get_counthist((uint64_t *)bi.ptr, bi.size); break;
         default: throw std::invalid_argument(std::string("Unexpected dtype: ") + bi.format);
     }
