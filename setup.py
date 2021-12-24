@@ -10,7 +10,8 @@ SLEEFLIB="libsleef.a"
 sleefdir = environ.get("SLEEF_DIR", "sleef/build")
 
 def main():
-    if "CONDA_PREFIX" in environ:
+    if 0:
+        #if "CONDA_PREFIX" in environ:
         from dynsetup import dyn_main
         return dyn_main()
 
@@ -22,8 +23,8 @@ def main():
     if not path.isfile("libsimdsampling/libsimdsampling.a"):
         print("Making libss.a")
         check_call(f"make libsimdsampling/libsimdsampling.a", shell=True)
-    #if not path.isfile("libgomp.a"):
-    #    check_call(f"ln -s `{environ.get('CXX', 'g++')} --print-file-name=libgomp.a`", shell=True, executable="/bin/bash")
+    if not path.isfile("libgomp.a"):
+        check_call(f"ln -s `{environ.get('CXX', 'g++')} --print-file-name=libgomp.a`", shell=True, executable="/bin/bash")
 
     # from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
     # parallelizes extension compilation
@@ -49,7 +50,7 @@ def main():
     import distutils.ccompiler
     distutils.ccompiler.CCompiler.compile=parallelCCompile
 
-    LIBOBJS = [SLEEFLIB, "libkl.a", "libsimdsampling/libsimdsampling.a"]
+    LIBOBJS = [SLEEFLIB, "libkl.a", "libsimdsampling/libsimdsampling.a", "libgomp.a"]
     # On some systems, it seems that gomp needs to be statically linked ["libgomp.a"]
 
 
@@ -73,7 +74,7 @@ def main():
                           '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                           '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                           '-Wall', '-Wextra', '-Wformat',
-                          '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
+                          '-lz', '-fopenmp', "-DEXTERNAL_BOOST_IOSTREAMS=1",
                           "-DBLAZE_USE_SLEEF=1", "-pipe",
                           '-Wno-deprecated-declarations', '-O3']
 
@@ -136,7 +137,7 @@ def main():
         raise RuntimeError('Unsupported compiler -- at least C++11 support '
                            'is needed!')
 
-    extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1"] + LIBOBJS
+    extra_link_opts = ["-fopenmp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1"] + LIBOBJS
 
 
     class BuildExt(build_ext):
