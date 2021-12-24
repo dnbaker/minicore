@@ -1106,10 +1106,8 @@ decltype(auto) assign(blaze::SparseVector<VT, SO> &lhs, const CSparseVector<SVT,
     }
     assert((*lhs).size() == rhs.size());
     assert(i == rhs.nnz());
-#ifndef NDEBUG
     std::cerr << *lhs;
     std::cerr << rhs;
-#endif
     return *lhs;
 }
 
@@ -1139,31 +1137,82 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
     const size_t npoints = ptr ? nasn: mat.rows();
     using index_t = std::common_type_t<IT2, size_t>;
     blz::DV<double> costs(npoints);
+    int nt = 1;
+    blaze::DynamicMatrix<double> localsums;
+    blz::DV<double, blaze::TransposeFlag_v<RetT>> newcenter(mat.columns(), 0);
+#ifdef _OPENMP
+    #pragma omp parallel
+    {
+        nt = omp_get_num_threads();
+    }
+#endif
     for(;;) {
         static constexpr double MINVAL = 1e-80; // For the case of exactly lying on a current center
         costs = blaze::max(blaze::generate(npoints, [&](auto x) {return l2Dist(center, row(mat, ptr ? index_t(ptr[x]): index_t(x), blz::unchecked));}),
                            MINVAL);
         double current_cost = sum(costs);
         double dist = std::abs(prevcost - current_cost);
-        if(dist <= eps) break;
+        if(dist <= eps) {std::fprintf(stderr, "[%s] Dist %0.20g < eps %0.20g at iternum %zu (prev %0.20g, current %0.20g), breaking\n", __PRETTY_FUNCTION__, dist, eps, iternum, prevcost, current_cost); break;}
+        if(current_cost > prevcost) {
+            std::fprintf(stderr, "[%s] Current cost %0.20g > prevcost %0.20g at iteration %zu. Breaking\n", __PRETTY_FUNCTION__, current_cost, prevcost, iternum);
+            break;
+        }
         if(std::isnan(dist)) throw std::range_error("distance is nan");
         if(++iternum == 100000) {
             std::fprintf(stderr, "Failed to terminate: %g\n", dist);
             break;
         }
+        VERBOSE_ONLY(std::fprintf(stderr, "[%s] Working on iteration number %zu. prevcost %0.20g, current %0.20g\n", __PRETTY_FUNCTION__, iternum, prevcost, current_cost);)
         prevcost = current_cost;
         if(weights) costs = *weights / costs;
         else costs = 1. / costs;
         costs /= sum(costs);
-        blz::DV<double, blaze::TransposeFlag_v<RetT>> newcenter(mat.columns(), 0);
-        OMP_PFOR
-        for(size_t i = 0; i < npoints; ++i) {
-            for(const auto &pair: row(mat, ptr ? index_t(ptr[i]): index_t(i))) {
-                OMP_ATOMIC
-                newcenter[pair.index()] += pair.value() * costs[i];
+    
+        if(nt <= 1) {
+            newcenter = 0.;
+            for(index_t i = 0; i < npoints; ++i) {
+                const index_t ind = ptr ? index_t(ptr[i]): i;
+                //std::fprintf(stderr, "Index %zu is %zu\n", i, ind);
+                for(const auto &pair: row(mat, ind)) {
+                    //std::fprintf(stderr, "Row %zu has pair with values %zu/%g\n", ind, pair.index(), double(pair.value()));
+                    assert(pair.index() < newcenter.size());
+                    assert(ind < npoints);
+                    assert(ind < costs.size());
+                    //std::fprintf(stderr, "Updating index %zu with value %g and weight %g. Newcenter size: %zu\n", pair.index(), pair.value(), costs[ind], newcenter.size());
+                    newcenter[pair.index()] = std::fma(pair.value(), costs[ind], newcenter[pair.index()]);
+                }
+            }
+        } else {
+            if(localsums.rows() != uint32_t(nt) || mat.columns() != localsums.columns()) {
+                localsums.resize(nt, mat.columns());
+            }
+            localsums = 0.;
+            OMP_PFOR
+            for(index_t i = 0; i < npoints; ++i) {
+                const index_t ind = ptr ? index_t(ptr[i]): i;
+                auto myrow = row(localsums, OMP_ELSE(omp_get_thread_num(), 0));
+                for(const auto &pair: row(mat, ind)) {
+                    myrow[pair.index()] = std::fma(pair.value(), costs[ind], myrow[pair.index()]);
+                }
+            }
+            if constexpr(blaze::TransposeFlag_v<RetT> == blaze::TransposeFlag_v<decltype(row(localsums, 0))>) {
+                newcenter = blaze::sum<blaze::columnwise>(localsums);
+            } else {
+                newcenter = trans(blaze::sum<blaze::columnwise>(localsums));
             }
         }
-        assign(center, newcenter);
+        center = newcenter;
+#if 0
+        if constexpr (blaze::IsSparseVector_v<std::decay_t<RetT>>)  {
+            //DBG_ONLY(std::fprintf(stderr, "[%s] Reserved capacity %zu. Ret size: %zu\n", __PRETTY_FUNCTION__, center.capacity(), center.size());)
+            center = newcenter;
+            //center = blz::SV<double, blaze::TransposeFlag_v<RetT>>(newcenter);
+            //assign(center, newcenter);
+            //DBG_ONLY(std::fprintf(stderr, "[%s] After assign capacity %zu. Ret size: %zu\n", __PRETTY_FUNCTION__, center.capacity(), center.size());)
+        } else {
+            assign(center, newcenter);
+        }
+#endif
     }
 }
 

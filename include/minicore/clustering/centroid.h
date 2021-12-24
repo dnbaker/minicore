@@ -123,12 +123,12 @@ decltype(auto) elements(const std::vector<VT, Alloc> &w, IT *asp, size_t nasn) {
 template<typename CtrT, typename MT, typename IT, typename WeightT>
 void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, IT *asp, size_t nasn, WeightT *weights, double eps=0.) {
     auto rowsel = rows(mat, asp, nasn);
-    VERBOSE_ONLY(std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << center << '\n';)
+    std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << center << '\n';
     if(weights)
         blz::geomedian(rowsel, center, elements(*weights, asp, nasn), eps);
     else
         blz::geomedian(rowsel, center, eps);
-    VERBOSE_ONLY(std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';)
+    std::cerr << "Calculated geometric median; new values: " << center << '\n';
 }
 
 

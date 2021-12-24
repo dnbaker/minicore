@@ -2,6 +2,7 @@ from pyminicore import kmeanspp as pykmpp
 from pyminicore import SumOpts, CSparseMatrix, CoresetSampler
 from pyminicore import pcmp, cmp
 from pyminicore import SparseMatrixWrapper as smw
+from pyminicore import get_counthist, set_num_threads, get_num_threads
 import pyminicore
 from .util import constants
 from .util.constants import CSR as csr_tuple, KMCRSV
@@ -9,6 +10,7 @@ import numpy as np
 from .util.compute_variance import variance
 from .util import hvg
 import scipy.sparse as sp
+from minicore.recursive_cluster import hiercluster_kmeanspp
 
 
 def cluster_from_centers(*args, **kwargs):

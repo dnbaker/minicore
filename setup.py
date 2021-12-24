@@ -22,8 +22,8 @@ def main():
     if not path.isfile("libsimdsampling/libsimdsampling.a"):
         print("Making libss.a")
         check_call(f"make libsimdsampling/libsimdsampling.a", shell=True)
-    #if not path.isfile("libgomp.a"):
-    #    check_call(f"ln -s `{environ.get('CXX', 'g++')} --print-file-name=libgomp.a`", shell=True, executable="/bin/bash")
+    if not path.isfile("libgomp.a"):
+        check_call(f"ln -s `{environ.get('CXX', 'g++')} --print-file-name=libgomp.a`", shell=True, executable="/bin/bash")
 
     # from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
     # parallelizes extension compilation
@@ -73,7 +73,7 @@ def main():
                           '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                           '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                           '-Wall', '-Wextra', '-Wformat',
-                          '-lz', '-fopenmp', "-lgomp", "-DEXTERNAL_BOOST_IOSTREAMS=1",
+                          '-lz', '-fopenmp', "-DEXTERNAL_BOOST_IOSTREAMS=1", "-lgomp",
                           "-DBLAZE_USE_SLEEF=1", "-pipe",
                           '-Wno-deprecated-declarations', '-O3']
 
@@ -136,7 +136,7 @@ def main():
         raise RuntimeError('Unsupported compiler -- at least C++11 support '
                            'is needed!')
 
-    extra_link_opts = ["-fopenmp", "-lgomp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1"] + LIBOBJS
+    extra_link_opts = ["-fopenmp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1", "-lgomp"] + LIBOBJS
 
 
     class BuildExt(build_ext):

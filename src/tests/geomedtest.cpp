@@ -1,4 +1,5 @@
 #include "minicore/optim/kmedian.h"
+#include <set>
 #include <chrono>
 
 auto t() {return std::chrono::high_resolution_clock::now();}
@@ -82,5 +83,33 @@ int main(int c, char **a) {
             if(l1dist(m, tmpv) - cwmed2 <= 0)
                 std::fprintf(stderr, "feature %d. newv: %0.20g vs oldv %0.20g (diff %0.12g), pert = %g\n", feature, l1dist(m, tmpv), cwmed, l1dist(m, tmpv) - cwmed, pert);
         }
+    }
+    for(const auto eps: {0., 0.01}) {
+        const auto shape = std::make_pair(6000u, 60u);
+        const size_t nnz = 120000;
+        const auto [nr, nc] = shape;
+        std::vector<float> vals(nnz);
+        std::vector<uint32_t> indices(nnz);
+        std::vector<size_t> indptr(nr + 1);
+        const size_t nnz_each = (nnz / nr);
+        assert(nnz % nr == 0);
+        std::mt19937 rng;
+        for(size_t i = 0; i < 6000; ++i) {
+            indptr[i + 1] = indptr[i] + nnz_each;
+            std::set<uint32_t> to_add;
+            while(to_add.size() < nnz_each) to_add.insert(rng() % 60);
+            std::copy(to_add.begin(), to_add.end(), &indices[indptr[i]]);
+            for(size_t is = indptr[i]; is < indptr[i + 1]; ++is) vals[is] = rng() * 0x1.p-32;
+        }
+        minicore::util::CSparseMatrix<float, uint32_t, size_t> csm(vals.data(), indices.data(), indptr.data(), nr, nc, nnz);
+#if 0
+        for(size_t i = 0; i < csm.rows(); ++i) {
+            for(const auto &p: row(csm, i)) {
+                std::fprintf(stderr, "Row %zu has %zu/%g\n", i, p.index(), p.value());
+            }
+        }
+#endif
+        blz::SV<float> centroid(nc);
+        geomedian(csm, centroid, (int *)nullptr, 0, (int *)0, eps);
     }
 }
