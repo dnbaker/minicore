@@ -50,7 +50,7 @@ def main():
     import distutils.ccompiler
     distutils.ccompiler.CCompiler.compile=parallelCCompile
 
-    LIBOBJS = [SLEEFLIB, "libkl.a", "libsimdsampling/libsimdsampling.a", "libgomp.a"]
+    LIBOBJS = [SLEEFLIB, "libkl.a", "libsimdsampling/libsimdsampling.a"]
     # On some systems, it seems that gomp needs to be statically linked ["libgomp.a"]
 
 
@@ -74,7 +74,7 @@ def main():
                           '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                           '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                           '-Wall', '-Wextra', '-Wformat',
-                          '-lz', '-fopenmp', "-DEXTERNAL_BOOST_IOSTREAMS=1",
+                          '-lz', '-fopenmp', "-DEXTERNAL_BOOST_IOSTREAMS=1", "-lgomp",
                           "-DBLAZE_USE_SLEEF=1", "-pipe",
                           '-Wno-deprecated-declarations', '-O3']
 
@@ -137,7 +137,7 @@ def main():
         raise RuntimeError('Unsupported compiler -- at least C++11 support '
                            'is needed!')
 
-    extra_link_opts = ["-fopenmp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1"] + LIBOBJS
+    extra_link_opts = ["-fopenmp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1", "-lgomp"] + LIBOBJS
 
 
     class BuildExt(build_ext):
