@@ -111,6 +111,7 @@ void set_center(CtrT &ctr, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &
 
 template<typename CtrT, typename DataT, typename IndicesT, typename IndPtrT, typename IT, typename WeightT>
 void set_center_l2(CtrT &center, const util::CSparseMatrix<DataT, IndicesT, IndPtrT> &mat, IT *asp, size_t nasn, WeightT *weights, double eps=0.) {
+    std::fprintf(stderr, "Setting center via util::geomedian\n");
     util::geomedian(mat, center, asp, nasn, weights, eps);
 }
 
@@ -123,12 +124,12 @@ decltype(auto) elements(const std::vector<VT, Alloc> &w, IT *asp, size_t nasn) {
 template<typename CtrT, typename MT, typename IT, typename WeightT>
 void set_center_l2(CtrT &center, const blaze::Matrix<MT, blaze::rowMajor> &mat, IT *asp, size_t nasn, WeightT *weights, double eps=0.) {
     auto rowsel = rows(mat, asp, nasn);
-    VERBOSE_ONLY(std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << center << '\n';)
+    std::cerr << "Calculating geometric median for " << nasn << " rows and storing in " << center << '\n';
     if(weights)
         blz::geomedian(rowsel, center, elements(*weights, asp, nasn), eps);
     else
         blz::geomedian(rowsel, center, eps);
-    VERBOSE_ONLY(std::cerr << "Calculated geometric median; new values: " << ctrs[i] << '\n';)
+    std::cerr << "Calculated geometric median; new values: " << center << '\n';
 }
 
 
@@ -590,6 +591,7 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
     wy::WyRand<asn_t, 4> rng(costs.size());
     blaze::SmallArray<asn_t, 16> sa;
     for(unsigned i = 0; i < k; ++i) if(assigned[i].empty()) blz::push_back(sa, i);
+    std::fprintf(stderr, "Setting centroids; %zu empty\n", sa.size());
     while(!sa.empty()) {
         // Compute partial sum
         std::vector<uint32_t> idxleft;
@@ -632,11 +634,13 @@ void set_centroids_l2(const Mat &mat, AsnT &asn, CostsT &costs, CtrsT &ctrs, Wei
         }
         for(const auto &subasn: assigned) if(subasn.empty()) sa.pushBack(&subasn - assigned.data());
     }
+    std::fprintf(stderr, "reseeded empty\n");
     for(unsigned i = 0; i < k; ++i) {
         const auto nasn = assigned[i].size();
         const auto asp = assigned[i].data();
         MINOCORE_VALIDATE(nasn != 0);
         if(nasn == 1) {
+            std::fprintf(stderr, "Setting centroid for cluster of size 1 to the only representative.\n");
             set_center(ctrs[i], row(mat, *asp));
         } else {
             set_center_l2(ctrs[i], mat, asp, nasn, weights, eps);

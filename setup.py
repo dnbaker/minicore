@@ -70,13 +70,13 @@ def main():
 
     #EXTRAS = environ.get("EXTRA", "")
 
-    extra_compile_args = ['-march=native', '-DNDEBUG',
+    extra_compile_args = ['-march=native', '-UNDEBUG',
                           '-Wno-char-subscripts', '-Wno-unused-function', '-Wno-ignored-qualifiers',
                           '-Wno-strict-aliasing', '-Wno-ignored-attributes', '-fno-wrapv',
                           '-Wall', '-Wextra', '-Wformat',
                           '-lz', '-fopenmp', "-DEXTERNAL_BOOST_IOSTREAMS=1",
                           "-DBLAZE_USE_SLEEF=1", "-pipe",
-                          '-Wno-deprecated-declarations', '-O3']
+                          '-Wno-deprecated-declarations', '-O0']
 
     if 'BOOST_DIR' in environ:
         extra_compile_args.append("-I%s" % environ['BOOST_DIR'])
