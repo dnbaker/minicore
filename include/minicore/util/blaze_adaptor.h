@@ -684,8 +684,7 @@ auto &geomedian(const Matrix<MT, SO> &mat, Vector<VT, !SO> &dv, const WeightType
         } else {
             costs = weights / costs;
         }
-        double denom = 1. / sum(costs);
-        *dv = trans(costs * denom) * *mat;
+        *dv = trans(costs * (1. / sum(costs))) * *mat;
         prevcost = current_cost;
     }
     return *dv;
