@@ -106,10 +106,10 @@ STATIC_LIBS=libsleef.a
 #ls libsimdsampling/libsimdsampling.a 2>/dev/null || (cd libsimdsampling && $(MAKE) libsimdsampling.a INCLUDE_PATHS="../sleef/build/include" LINK_PATHS="../sleef/build/lib" && cd ..)
 
 %: src/tests/%.o $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
-	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -DNDEBUG $(OMP_STR) $(STATIC_LIBS) libkl/libkl.a libsimdsampling/libsimdsampling.a
+	$(CXX) $(CXXFLAGS) $< -o $@ -pthread -UNDEBUG $(OMP_STR) $(STATIC_LIBS) libkl/libkl.a libsimdsampling/libsimdsampling.a
 
 src/tests/%.o: src/tests/%.cpp $(HEADERS) $(STATIC_LIBS) libsleef.dyn.gen
-	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread -DNDEBUG $(OMP_STR) $(STATIC_LIBS)
+	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread -UNDEBUG $(OMP_STR) $(STATIC_LIBS)
 
 %.dbgo: %.cpp $(HEADERS) $(STATIC_LIBS)  libsleef.dyn.gen
 	$(CXX) $(CXXFLAGS) -c $< -o $@ -pthread  $(OMP_STR) $(STATIC_LIBS)  -O1
