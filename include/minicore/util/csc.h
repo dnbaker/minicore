@@ -16,11 +16,7 @@ namespace util {
 
 template<typename T>
 INLINE T abs_diff(T x, T y) {
-    if constexpr(std::is_unsigned_v<T>) {
-        return std::max(x, y) - std::min(x, y);
-    } else {
-        return std::abs(x - y);
-    }
+    return std::max(x, y) - std::min(x, y);
 }
 
 template<typename T, typename T2>
@@ -481,18 +477,17 @@ auto l2Dist(const ProdCSparseVector<VT1, IT1> &lhs, const blaze::DenseVector<VT2
     using CT = std::common_type_t<VT1, blaze::ElementType_t<VT2>>;
     CT ret = 0;
     size_t si = 0, di = 0;
-    for(;si != lhs.n_ || di != (*rhs).size(); ++di) {
+    for(;si != lhs.n_ || di != (*rhs).size();) {
         if(si == lhs.n_) {
-            ret += sum(subvector(*rhs, di, (*rhs).size() - di));
+            ret += sum(abs(subvector(*rhs, di, (*rhs).size() - di)));
             break;
         } else if(di == (*rhs).size()) {
-            ret += sum(blz::make_cv(&lhs.data_[si], lhs.n_ - si)) * lhs.prod_;
+            ret += sum(abs(blz::make_cv(&lhs.data_[si], lhs.n_ - si))) * lhs.prod_;
             break;
         } else {
             ret += sum(abs(subvector(*rhs, di, si - di)));
             di = si;
-            ret += abs_diff((*rhs)[di], lhs.data_[si]);
-            ++si;
+            ret += abs_diff((*rhs)[di++], lhs.data_[si++]);
         }
     }
     return ret;
@@ -505,17 +500,17 @@ auto l2Dist(const CSparseVector<VT1, IT1> &lhs, const blaze::DenseVector<VT2, TF
     size_t si = 0, di = 0;
     for(;si != lhs.n_ || di != (*rhs).size(); ++di) {
         if(si == lhs.n_) {
-            ret += sum(subvector(*rhs, di, (*rhs).size() - di));
+            ret += sum(abs(subvector(*rhs, di, (*rhs).size() - di)));
             break;
         } else if(di == (*rhs).size()) {
-            ret += sum(blz::make_cv(&lhs.data_[si], lhs.n_ - si));
+            ret += sum(abs(blz::make_cv(&lhs.data_[si], lhs.n_ - si)));
+            ++si;
             break;
         } else {
             while(di < lhs.indices_[si]) {
                 ret += std::abs((*rhs)[di++]);
             }
-            ret += abs_diff((*rhs)[di], lhs.data_[si]);
-            ++si;
+            ret += abs_diff((*rhs)[di], lhs.data_[si++]);
         }
     }
     return ret;
@@ -1148,7 +1143,7 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
 #endif
     for(;;) {
         static constexpr double MINVAL = 1e-80; // For the case of exactly lying on a current center
-        costs = blaze::max(blaze::generate(npoints, [&](auto x) {return l2Dist(center, row(mat, ptr ? index_t(ptr[x]): index_t(x), blz::unchecked));}),
+        costs = blaze::max(blaze::generate(npoints, [&](auto x) {index_t ind = ptr ? index_t(ptr[x]): x; return l2Dist(center, row(mat, ind, blz::unchecked));}),
                            MINVAL);
         double current_cost = sum(costs);
         double dist = std::abs(prevcost - current_cost);

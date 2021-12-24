@@ -99,7 +99,7 @@ int main(int c, char **a) {
             std::set<uint32_t> to_add;
             while(to_add.size() < nnz_each) to_add.insert(rng() % 60);
             std::copy(to_add.begin(), to_add.end(), &indices[indptr[i]]);
-            for(size_t is = indptr[i]; is < indptr[i + 1]; ++is) vals[is] = rng() * 0x1.p-32;
+            for(size_t is = indptr[i]; is < indptr[i + 1]; ++is) vals[is] = std::pow(-std::log1p(rng() * 0x1.p-32), 4);
         }
         minicore::util::CSparseMatrix<float, uint32_t, size_t> csm(vals.data(), indices.data(), indptr.data(), nr, nc, nnz);
 #if 0
@@ -111,5 +111,6 @@ int main(int c, char **a) {
 #endif
         blz::SV<float> centroid(nc);
         geomedian(csm, centroid, (int *)nullptr, 0, (int *)0, eps);
+        std::cerr << centroid;
     }
 }

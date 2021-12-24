@@ -12,7 +12,7 @@ def hiercluster_kmeanspp(dataset, radix=5, msr="JSD", n_local_trials=2, lspp=0, 
         centers = out['centers']
         assignments = out['asn']
         costs = out['costs']
-    print(centers)
+    # print(centers)
     base = {"dataset": dataset, "radix": radix, "msr": msr, "centerids": centers,"asn": assignments, "costs:": costs, "hierdepth": hierdepth}
     if isinstance(centers, np.ndarray) and centers.ndim == 1:
         base["centers"] = dataset[centers].copy()
@@ -45,6 +45,6 @@ if __name__ == "__main__":
     subsubsets = list(itertools.chain.from_iterable(list(x['children'].items()) for x in vals))
     subkeys = [k for k, v in subsubsets]
     subvals = [v for k, v in subsubsets]
-    print(subsubsets[0])
+    #print(subsubsets[0])
     for subk, v in zip(subkeys, subvals):
         print(f"Subset for subsub label {subk} has {v['dataset'].shape}-shaped dataset")
