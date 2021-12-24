@@ -10,8 +10,7 @@ SLEEFLIB="libsleef.a"
 sleefdir = environ.get("SLEEF_DIR", "sleef/build")
 
 def main():
-    if 0:
-        #if "CONDA_PREFIX" in environ:
+    if "CONDA_PREFIX" in environ:
         from dynsetup import dyn_main
         return dyn_main()
 

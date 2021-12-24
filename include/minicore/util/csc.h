@@ -1167,9 +1167,9 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
         if(weights) costs = *weights / costs;
         else costs = 1. / costs;
         costs /= sum(costs);
-        newcenter = 0.;
     
         if(nt <= 1) {
+            newcenter = 0.;
             for(index_t i = 0; i < npoints; ++i) {
                 const index_t ind = ptr ? index_t(ptr[i]): i;
                 //std::fprintf(stderr, "Index %zu is %zu\n", i, ind);
@@ -1201,15 +1201,18 @@ void geomedian(const CSparseMatrix<VT, IT, IPtrT> &mat, RetT &center, IT2 *ptr =
                 newcenter = trans(blaze::sum<blaze::columnwise>(localsums));
             }
         }
+        center = newcenter;
+#if 0
         if constexpr (blaze::IsSparseVector_v<std::decay_t<RetT>>)  {
-            //const size_t nz = nonZeros(newcenter);
             //DBG_ONLY(std::fprintf(stderr, "[%s] Reserved capacity %zu. Ret size: %zu\n", __PRETTY_FUNCTION__, center.capacity(), center.size());)
-            center = blz::SV<double, blaze::TransposeFlag_v<RetT>>(newcenter);
+            center = newcenter;
+            //center = blz::SV<double, blaze::TransposeFlag_v<RetT>>(newcenter);
             //assign(center, newcenter);
             //DBG_ONLY(std::fprintf(stderr, "[%s] After assign capacity %zu. Ret size: %zu\n", __PRETTY_FUNCTION__, center.capacity(), center.size());)
         } else {
             assign(center, newcenter);
         }
+#endif
     }
 }
 
