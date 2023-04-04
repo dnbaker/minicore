@@ -181,7 +181,7 @@ perform_hard_clustering(const MT &mat,
  * Returns True if a center was restarted; for this case, we don't force termination of
  * the clustering algorithm
  */
-template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=blz::DV<FT>, typename SumT>
+template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT, typename SumT>
 bool set_centroids_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,
@@ -231,7 +231,7 @@ bool set_centroids_hard(const Mat &mat,
     return ctrs_restarted;
 }
 
-template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT=CtrT, typename SumT>
+template<typename FT, typename Mat, typename PriorT, typename CtrT, typename CostsT, typename AsnT, typename WeightT, typename SumT>
 void assign_points_hard(const Mat &mat,
                         const dist::DissimilarityMeasure measure,
                         const PriorT &prior,

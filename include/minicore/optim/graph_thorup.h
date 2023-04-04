@@ -211,7 +211,7 @@ thorup_d(Graph &x, RNG &rng, size_t nperround, size_t maxnumrounds,
     return std::make_pair(std::move(F), cost);
 }
 
-template<typename Graph, typename BBoxContainer=std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>>
+template<typename Graph, typename BBoxContainer>
 std::vector<typename boost::graph_traits<Graph>::vertex_descriptor>
 &sample_from_graph(Graph &x, size_t samples_per_round, size_t iterations,
                    std::vector<typename boost::graph_traits<Graph>::vertex_descriptor> &container, uint64_t seed,
