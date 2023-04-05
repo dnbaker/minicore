@@ -139,6 +139,8 @@ def main():
                            'is needed!')
 
     extra_link_opts = ["-fopenmp", "-lz", "-DEXTERNAL_BOOST_IOSTREAMS=1", "-lgomp"] + LIBOBJS
+    if 'MINICORE_STATIC' in os.environ:
+        extra_link_opts += "-static-libstdc++ -static-libgcc".split()
 
 
     class BuildExt(build_ext):

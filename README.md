@@ -180,3 +180,17 @@ We also support Varadarajan-Xiao, Feldman Langberg, and Bachem et al., methods f
 
 We use a modified iterative version of the sampling from [Thorup](https://epubs.siam.org/doi/pdf/10.1137/S0097539701388884) paper from 2005
 for an initial graph bicriteria approximation, which is described in the above Baker, et al. This can be found for shortest-paths graph metrics and oracle metrics in minicore/bicriteria.h.
+
+
+
+## Static build for python bindings
+
+By default, we use dynamic linking for gcc and libstdc++. If this causes runtime issues on your machine, you can install the python bindings after setting the `MINICORE_STATIC` variable.
+
+```bash
+cd python
+export MINICORE_STATIC=1
+python3 setup.py install
+# or
+MINICORE_STATIC=1 python3 setup.py install
+```
