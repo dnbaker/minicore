@@ -2,6 +2,7 @@
 #include "minicore/utility.h"
 #include "minicore/optim.h"
 #include "minicore/dist/distance.h"
+#include "minicore/dist/applicator.h"
 
 namespace minicore {
 

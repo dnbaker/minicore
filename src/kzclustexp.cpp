@@ -305,7 +305,7 @@ void print_header(std::ofstream &ofs, char **argv, unsigned nsamples, unsigned k
 }
 
 void usage(const char *ex) {
-    std::fprintf(stderr, "usage: %s <opts> [input file or ../data/dolphins.graph]\n"
+    std::fprintf(stderr, "usage: %s <opts> [input file or paper2020/dolphins.graph]\n"
                          "-k\tset k [12]\n"
                          "-z\tset z [1.]\n"
                          "-c\tAppend coreset size. Default: {5, 10, 15, 20, 25, 50, 75, 100, 125, 250, 375, 500, 625, 1250, 1875, 2500, 3125, 3750} (if empty)\n"
@@ -455,7 +455,7 @@ int main(int argc, char **argv) {
     if(output_prefix.empty())
         output_prefix = std::to_string(seed);
     output_prefix += '.' + std::to_string(k) + '.';
-    std::string input = argc == optind ? "../data/dolphins.graph": const_cast<const char *>(argv[optind]);
+    std::string input = argc == optind ? "paper2020/dolphins.graph": const_cast<const char *>(argv[optind]);
     std::srand(seed);
     std::fprintf(stderr, "Reading from file: %s\n", input.data());
     std::vector<latlon_t> coordinates;

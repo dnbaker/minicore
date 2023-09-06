@@ -1,5 +1,5 @@
 #pragma once
-#include "robin-hood-hashing/src/include/robin_hood.h"
+#include "unordered_dense/include/ankerl/unordered_dense.h"
 #include "thirdparty/kxsort.h"
 #include "thirdparty/pdqsort.h"
 #include "aesctr/wy.h"
@@ -29,12 +29,12 @@ template<typename T> class TD; // Debugging only
 
 
 namespace shared {
-template <typename Key, typename T, typename Hash = robin_hood::hash<Key>,
+template <typename Key, typename T, typename Hash = ankerl::unordered_dense::hash<Key>,
           typename KeyEqual = std::equal_to<Key>>
-using flat_hash_map = robin_hood::unordered_flat_map<Key, T, Hash, KeyEqual, FGC_MAX_HASH_LOAD_FACTOR>;
+using flat_hash_map = ankerl::unordered_dense::map<Key, T, Hash, KeyEqual>;
 
-template<typename T, typename H = robin_hood::hash<T>, typename E = std::equal_to<T>>
-using flat_hash_set = robin_hood::unordered_flat_set<T, H, E, FGC_MAX_HASH_LOAD_FACTOR>;
+template<typename T, typename H = ankerl::unordered_dense::hash<T>, typename E = std::equal_to<T>>
+using flat_hash_set = ankerl::unordered_dense::set<T, H, E>;
 
 using ssize_t = std::ptrdiff_t;
 
