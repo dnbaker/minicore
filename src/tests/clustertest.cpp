@@ -34,7 +34,7 @@ int metamain(int argc, char **argv) {
 
     std::cerr << "Parsed matrix of " << pointmat.rows() << " rows and "
               << pointmat.columns() << " columns, with k = " << k << " clusters\n";
-    auto jsdapp = make_probdiv_applicator(pointmat, blz::SQRL2);
+    auto jsdapp = make_probdiv_applicator(pointmat, minicore::distance::SQRL2);
     std::cerr << "Made probdiv applicator\n";
     auto clusterdata = clustering::perform_clustering<
         is_hard ? clustering::HARD: clustering::SOFT, clustering::EXTRINSIC>(jsdapp, k);

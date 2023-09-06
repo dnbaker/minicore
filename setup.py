@@ -24,8 +24,8 @@ def main():
     if not path.isfile("libsimdsampling/libsimdsampling.a"):
         print("Making libss.a")
         check_call(f"make libsimdsampling/libsimdsampling.a", shell=True)
-    if not path.isfile("libgomp.a"):
-        check_call(f"ln -s `{environ.get('CXX', 'g++')} --print-file-name=libgomp.a`", shell=True, executable="/bin/bash")
+    # if not path.isfile("libgomp.a"):
+    check_call(f"ls libgomp.a || ln -s `{environ.get('CXX', 'g++')} --print-file-name=libgomp.a`", shell=True, executable="/bin/bash")
 
     # from https://stackoverflow.com/questions/11013851/speeding-up-build-process-with-distutils
     # parallelizes extension compilation

@@ -27,7 +27,7 @@ struct ExhaustiveSearcher {
     blaze::SmallArray<IType, N> bestsol_;
     double current_cost_;
     const unsigned k_;
-    ExhaustiveSearcher(const MatType &mat, unsigned k): mat_(mat), bestsol_(k_), current_cost_(std::numeric_limits<double>::max()), k_(k) {}
+    ExhaustiveSearcher(const MatType &mat, unsigned k): mat_(mat), bestsol_(k), current_cost_(std::numeric_limits<double>::max()), k_(k) {}
     void run() {
         blaze::SmallArray<IType, N> csol(k_);
         const size_t nr = mat_.rows();

@@ -1,7 +1,9 @@
 #ifndef MINOCORE_CLUSTERING_CENTROID_H__
 #define MINOCORE_CLUSTERING_CENTROID_H__
+#include "minicore/util/macros.h"
 #include "minicore/util/blaze_adaptor.h"
 #include "minicore/util/csc.h"
+#include "minicore/util/macros.h"
 #include "minicore/dist.h"
 #include "minicore/optim/kmedian.h"
 

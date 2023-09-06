@@ -34,7 +34,6 @@ void usage() {
                          "-R: Use reverse multinomial KL divergence\n"
                          "-j: Use multinomial Jensen-Shannon divergence\n"
                          "-J: Use multinomial Jensen-Shannon metric (square root of JSD)\n"
-                         "-P: Use probability squared L2 norm\n"
                          "-Q: Use probability L2 norm\n"
                          "-T: Use total variation distance\n"
                          "-i: Use Itakura-Saito distance\n"
